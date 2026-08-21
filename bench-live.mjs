@@ -1,4 +1,4 @@
-import { expandPoints } from './bench-points.mjs'
+import { expandPoints, functionTag, isWritableFunction, normalizeWriteValues, writeTargetOf } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 
@@ -40,6 +40,7 @@ export function createLiveView(React, t, post, hooks) {
     const [health, setHealth] = React.useState({})
     const [modbus, setModbus] = React.useState({ segments: [], values: [], polling: { enabled: false, intervalMs: 1000 } })
     const [tickError, setTickError] = React.useState('')
+    const [edit, setEdit] = React.useState(null)
 
     React.useEffect(() => {
       let stop = false
@@ -123,8 +124,40 @@ export function createLiveView(React, t, post, hooks) {
           key: (device.id || 'd') + ':' + point.key,
           name: (device.name || '') + ' / ' + point.name,
           rec: valueMap[point.key],
+          deviceId: device.id,
+          fn: point.function,
+          address: point.address,
+          writable: isWritableFunction(point.function),
         })
       }
+    }
+    const openEdit = (row) => {
+      setEdit({ rowKey: row.key, name: row.name, deviceId: row.deviceId, fn: row.fn, address: row.address, text: '', busy: false, result: null })
+    }
+    const submitEdit = () => {
+      if (!edit || !cwd) return
+      const kind = writeTargetOf(edit.fn).kind
+      const values = kind === 'coil'
+        ? [Number(edit.text) ? 1 : 0]
+        : [Number(edit.text)]
+      const check = normalizeWriteValues(edit.fn, values, 1)
+      if (!check.ok) {
+        setEdit((prev) => ({ ...prev, result: { ok: false, error: check.error } }))
+        return
+      }
+      setEdit((prev) => ({ ...prev, busy: true, result: null }))
+      post('/dsh-vision-bench/modbus/write', {
+        cwd,
+        source: 'user',
+        deviceId: edit.deviceId,
+        function: edit.fn,
+        address: edit.address,
+        values,
+      }, 60000).then((data) => {
+        setEdit((prev) => ({ ...prev, busy: false, result: data }))
+      }).catch((err) => {
+        setEdit((prev) => ({ ...prev, busy: false, result: { ok: false, error: String((err && err.message) || t('fail')) } }))
+      })
     }
     const kind = !cwd || !rows.length || !canWatch
       ? 'idle'
@@ -171,8 +204,65 @@ export function createLiveView(React, t, post, hooks) {
             'data-ok': rec ? (rec.ok ? 'true' : 'false') : '',
           },
             el('span', { className: 'dvb-live-name', title: row.name }, row.name),
-            el('span', { className: 'dvb-val' }, rec && rec.ok === false && rec.error ? rec.error : formatPointValue(rec)))
+            el('span', { className: 'dvb-val' }, rec && rec.ok === false && rec.error ? rec.error : formatPointValue(rec)),
+            row.writable
+              ? el('button', {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-write dvb-live-edit' + (edit && edit.rowKey === row.key ? ' is-on' : ''),
+                title: t('writeTitle'),
+                disabled: !!edit && edit.busy,
+                onClick() { openEdit(row) },
+              }, '✎')
+              : null)
         }))
+        : null,
+      edit
+        ? el('div', { className: 'dvb-write-panel dvb-write-inline' },
+          el('div', { className: 'dvb-write-head' },
+            el('span', { className: 'dvb-write-title' }, t('writeTitle') + ' · ' + edit.name),
+            el('button', {
+              type: 'button', className: 'dvb-btn',
+              disabled: edit.busy,
+              onClick() { setEdit(null) },
+            }, t('writeClose'))),
+          el('div', { className: 'dvb-write-form' },
+            writeTargetOf(edit.fn).kind === 'coil'
+              ? el('select', {
+                className: 'dvb-input',
+                value: String(Number(edit.text) ? 1 : 0),
+                disabled: edit.busy,
+                onChange(event) { setEdit((prev) => ({ ...prev, text: event.target.value })) },
+              },
+                el('option', { value: '0' }, t('coilOff')),
+                el('option', { value: '1' }, t('coilOn')))
+              : el('input', {
+                className: 'dvb-input dvb-input-mono',
+                type: 'number',
+                min: 0,
+                max: 65535,
+                value: edit.text,
+                disabled: edit.busy,
+                spellCheck: false,
+                onChange(event) { setEdit((prev) => ({ ...prev, text: event.target.value })) },
+                onKeyDown(event) {
+                  if (event.key === 'Enter' && !edit.busy) submitEdit()
+                },
+              }),
+            el('button', {
+              type: 'button',
+              className: 'dvb-btn dvb-btn-primary dvb-btn-write',
+              disabled: !cwd || edit.busy,
+              onClick: submitEdit,
+            }, edit.busy ? t('writing') : t('writeConfirm'))),
+          edit.result
+            ? (edit.result.ok === false
+              ? el('div', { className: 'dvb-write-result', 'data-kind': 'err' }, edit.result.error || t('fail'))
+              : el('div', { className: 'dvb-write-result', 'data-kind': 'ok' },
+                functionTag(edit.fn) + edit.address + ': '
+                  + (edit.result.before && edit.result.before[0] !== null && edit.result.before[0] !== undefined ? String(edit.result.before[0]) : '—')
+                  + ' → ' + String(edit.result.target && edit.result.target[0])
+                  + ' → ' + (edit.result.readback && edit.result.readback[0] !== undefined ? String(edit.result.readback[0]) : '—')))
+            : null)
         : null)
   }
 }

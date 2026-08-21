@@ -150,6 +150,21 @@ const COPY = {
     simOn: '仿真中',
     simName: '仿真',
     simHint: '仿真：数值由本机生成，不访问现场设备。',
+    writableTag: '· 可写',
+    readOnlyTag: '只读',
+    writeSegment: '写入',
+    writeTitle: '写入点',
+    writeAddr: '写入地址',
+    writeValue: '值',
+    writeValuesCsv: '批量值（逗号分隔）',
+    writeConfirm: '确认写入',
+    writing: '写入中…',
+    writeClose: '收起',
+    coilOn: '1（ON）',
+    coilOff: '0（OFF）',
+    writeBefore: '写前',
+    writeReadback: '回读',
+    writeRangeErr: '地址或数量超出段范围',
   },
   en: {
     nav: 'Bench',
@@ -289,6 +304,21 @@ const COPY = {
     simOn: 'Sim on',
     simName: 'Sim',
     simHint: 'Simulation: values are generated locally, no field device.',
+    writableTag: '· writable',
+    readOnlyTag: 'read-only',
+    writeSegment: 'Write',
+    writeTitle: 'Write point',
+    writeAddr: 'Address',
+    writeValue: 'Value',
+    writeValuesCsv: 'Values (comma separated)',
+    writeConfirm: 'Confirm write',
+    writing: 'Writing…',
+    writeClose: 'Collapse',
+    coilOn: '1 (ON)',
+    coilOff: '0 (OFF)',
+    writeBefore: 'before',
+    writeReadback: 'readback',
+    writeRangeErr: 'Address or count out of segment range',
   },
 }
 
@@ -423,6 +453,20 @@ const CSS = [
   'body[' + ATTR + '] .dvb-live-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.78}',
   'body[' + ATTR + '] .dvb-live-row[data-ok="false"] .dvb-val{color:var(--dsw-alias-label-danger,#c62828)}',
   'body[' + ATTR + '] .dvb-live-close{height:24px;width:24px;padding:0;border:0;opacity:.65}',
+  'body[' + ATTR + '] .dvb-btn-write{color:var(--dsw-alias-label-warning,#b45309)}',
+  'body[' + ATTR + '] .dvb-btn-write.is-on,body[' + ATTR + '] .dvb-btn-write.dvb-btn-primary{font-weight:600;border-color:currentColor}',
+  'body[' + ATTR + '] .dvb-write-panel{border-color:var(--dsw-alias-border-l1,rgba(128,128,128,.55))}',
+  'body[' + ATTR + '] .dvb-write-inline{display:flex;flex-direction:column;gap:6px;padding:8px 10px;font-size:12px}',
+  'body[' + ATTR + '] .dvb-write-head{display:flex;gap:8px;align-items:center;justify-content:space-between}',
+  'body[' + ATTR + '] .dvb-write-title{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+  'body[' + ATTR + '] .dvb-write-form{display:flex;gap:6px;align-items:center}',
+  'body[' + ATTR + '] .dvb-write-form .dvb-input{flex:1;min-width:0;height:26px}',
+  'body[' + ATTR + '] .dvb-write-result{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;word-break:break-all}',
+  'body[' + ATTR + '] .dvb-write-result[data-kind="ok"]{color:var(--dsw-alias-label-success,#2e7d32)}',
+  'body[' + ATTR + '] .dvb-write-result[data-kind="err"]{color:var(--dsw-alias-label-danger,#c62828)}',
+  'body[' + ATTR + '] .dvb-write-note{display:block;font-family:inherit;opacity:.65;margin-top:2px}',
+  'body[' + ATTR + '] .dvb-live-edit{height:20px;width:22px;padding:0;font-size:11px;line-height:1;flex:none;align-self:center}',
+  'body[' + ATTR + '] .dvb-live-row .dvb-live-name{flex:1}',
   'body[' + ATTR + '] .dvb-map-meta{font-size:11px;opacity:.55}',
   'body[' + ATTR + '] .dvb-map-block{display:flex;flex-direction:column;gap:3px;margin:4px 0}',
   'body[' + ATTR + '] .dvb-map-label{font-size:11px;font-weight:600;opacity:.7}',
@@ -1420,10 +1464,8 @@ function pickModbus(modbus, patch) {
 }
 
 function fnOptionLabel(t, fn) {
-  if (fn === 1) return t('fnCoil')
-  if (fn === 2) return t('fnDiscrete')
-  if (fn === 4) return t('fnInput')
-  return t('fnHolding')
+  const key = fn === 1 ? 'fnCoil' : fn === 2 ? 'fnDiscrete' : fn === 4 ? 'fnInput' : 'fnHolding'
+  return t(key) + (isWritableFunction(fn) ? ' ' + t('writableTag') : '')
 }
 
 function createHmiView(React, t, post, openLive) {
@@ -1437,6 +1479,7 @@ function createHmiView(React, t, post, openLive) {
     const [busy, setBusy] = React.useState('')
     const [error, setError] = React.useState('')
     const [draft, setDraft] = React.useState({ name: '', function: 3, address: 0, count: 10 })
+    const [writeState, setWriteState] = React.useState(null)
     const [ports, setPorts] = React.useState([])
     const [scanning, setScanning] = React.useState(false)
     const workspaceRef = React.useRef(workspace)
@@ -1582,6 +1625,73 @@ function createHmiView(React, t, post, openLive) {
       }).finally(() => setBusy(''))
     }
 
+    function openWrite(segment) {
+      setError('')
+      setWriteState({
+        segmentId: segment.id,
+        address: segment.address,
+        qty: 1,
+        text: '',
+        busy: false,
+        result: null,
+      })
+    }
+
+    function closeWrite() {
+      setWriteState(null)
+    }
+
+    function patchWrite(patch) {
+      setWriteState((prev) => ({ ...prev, ...patch }))
+    }
+
+    function submitWrite() {
+      const seg = segments.find((item) => item.id === writeState.segmentId)
+      if (!seg || !cwd) return
+      const last = seg.address + seg.count - 1
+      const qty = Math.max(1, Math.min(Number(writeState.qty) || 1, seg.count))
+      const address = Math.max(seg.address, Math.min(Number(writeState.address) || seg.address, last - qty + 1))
+      if (address + qty - 1 > last) {
+        patchWrite({ result: { ok: false, error: t('writeRangeErr') } })
+        return
+      }
+      let values
+      if (qty === 1 && writeTargetOf(seg.function).kind === 'coil') {
+        values = [Number(writeState.text) ? 1 : 0]
+      } else {
+        values = String(writeState.text || '').split(',').map((part) => part.trim()).filter(Boolean).map(Number)
+      }
+      const check = normalizeWriteValues(seg.function, values, qty)
+      if (!check.ok) {
+        patchWrite({ result: { ok: false, error: check.error } })
+        return
+      }
+      patchWrite({ busy: true, result: null })
+      post('/dsh-vision-bench/modbus/write', {
+        cwd,
+        source: 'user',
+        sessionId,
+        deviceId: m.id,
+        function: seg.function,
+        address,
+        values,
+      }, 60000).then((data) => {
+        patchWrite({ busy: false, result: data })
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then((data) => {
+        if (!data) return
+        setJournal(pickJournal(data))
+        if (data.workspace && data.workspace.modbus) {
+          setModbus({
+            segments: data.workspace.modbus.segments,
+            values: data.workspace.modbus.values,
+          })
+        }
+      }).catch((err) => {
+        patchWrite({ busy: false, result: { ok: false, error: String((err && err.message) || t('fail')) } })
+      })
+    }
+
     const pythonReady = statusKind(health.python) === 'ready'
     const pack = normalizeModbus(workspace.modbus)
     const m = pack
@@ -1620,6 +1730,15 @@ function createHmiView(React, t, post, openLive) {
             disabled: !cwd || !canDevice || connMissing || readBusy,
             onClick() { readRanges(segment.id) },
           }, busy === segment.id ? t('reading') : t('readSegment')),
+          isWritableFunction(segment.function)
+            ? el('button', {
+              type: 'button',
+              className: 'dvb-btn dvb-btn-write' + (writeState && writeState.segmentId === segment.id ? ' is-on' : ''),
+              disabled: !cwd || !canDevice || connMissing || !!busy,
+              title: t('writeTitle'),
+              onClick() { openWrite(segment) },
+            }, t('writeSegment'))
+            : null,
           el('button', {
             type: 'button', className: 'dvb-btn', disabled: !!busy,
             onClick() { dropRange(segment.id) },
@@ -1804,12 +1923,91 @@ function createHmiView(React, t, post, openLive) {
         : el('div', { className: 'dvb-empty' }, t('emptySegments')),
       el('div', { className: 'dvb-hint' }, t('pointsHint'))) : null
 
+    const writeSeg = writeState ? segments.find((item) => item.id === writeState.segmentId) : null
+    const writeTarget = writeSeg ? writeTargetOf(writeSeg.function) : null
+    const writeQty = writeState ? Math.max(1, Math.min(Number(writeState.qty) || 1, writeSeg.count)) : 1
+    const writeResultLine = (result) => {
+      if (!result) return null
+      if (result.ok === false) {
+        return el('div', { className: 'dvb-write-result', 'data-kind': 'err' }, result.error || t('fail'))
+      }
+      const parts = (result.target || []).map((tv, i) => {
+        const before = result.before && result.before[i] !== null && result.before[i] !== undefined
+          ? String(result.before[i])
+          : '—'
+        const back = result.readback && result.readback[i] !== undefined ? String(result.readback[i]) : '—'
+        return functionTag(result.function) + (result.address + i) + ': '
+          + before + ' → ' + String(tv) + ' → ' + back
+      })
+      return el('div', { className: 'dvb-write-result', 'data-kind': result.ok ? 'ok' : 'err' },
+        parts.join('；'),
+        el('span', { className: 'dvb-write-note' }, result.summary || ''))
+    }
+    const writePanel = writeState && writeSeg && writeTarget
+      ? el('div', { className: 'dvb-panel dvb-write-panel' },
+        el('div', { className: 'dvb-panel-head' },
+          el('span', { className: 'dvb-panel-title' }, t('writeTitle') + ' · ' + (writeSeg.name || defaultSegmentName(writeSeg))),
+          el('button', {
+            type: 'button', className: 'dvb-btn',
+            disabled: writeState.busy,
+            onClick: closeWrite,
+          }, t('writeClose'))),
+        el('div', { className: 'dvb-seg-add' },
+          field(t('writeAddr'), el('input', {
+            className: 'dvb-input dvb-input-mono',
+            type: 'number',
+            value: writeState.address,
+            min: writeSeg.address,
+            max: writeSeg.address + writeSeg.count - 1,
+            disabled: writeState.busy,
+            onChange(event) { patchWrite({ address: Number(event.target.value) }) },
+          })),
+          field(t('quantity'), el('input', {
+            className: 'dvb-input dvb-input-mono',
+            type: 'number',
+            value: writeQty,
+            min: 1,
+            max: writeSeg.count,
+            disabled: writeState.busy,
+            onChange(event) { patchWrite({ qty: Number(event.target.value) }) },
+          })),
+          writeQty === 1 && writeTarget.kind === 'coil'
+            ? field(t('writeValue'), el('select', {
+              className: 'dvb-input',
+              value: String(Number(writeState.text) ? 1 : 0),
+              disabled: writeState.busy,
+              onChange(event) { patchWrite({ text: event.target.value }) },
+            },
+              el('option', { value: '0' }, t('coilOff')),
+              el('option', { value: '1' }, t('coilOn'))))
+            : field(writeQty === 1 ? t('writeValue') : t('writeValuesCsv'), el('input', {
+              className: 'dvb-input dvb-input-mono',
+              value: writeState.text,
+              placeholder: writeQty === 1 ? '' : '1,0,1',
+              disabled: writeState.busy,
+              spellCheck: false,
+              autoComplete: 'off',
+              onChange(event) { patchWrite({ text: event.target.value }) },
+              onKeyDown(event) {
+                if (event.key === 'Enter' && !writeState.busy) submitWrite()
+              },
+            })),
+          field('\u00a0', el('button', {
+            type: 'button',
+            className: 'dvb-btn dvb-btn-primary dvb-btn-write',
+            disabled: !cwd || !canDevice || connMissing || writeState.busy,
+            onClick: submitWrite,
+          }, writeState.busy ? t('writing') : t('writeConfirm')))),
+        writeResultLine(writeState.result))
+      : null
+
     return el('div', { className: 'dvb-page' },
       statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
       deviceBar,
       connPanel,
       segPanel,
+      writePanel,
       journalPanel(el, t, journal))
   }
 }
@@ -1852,6 +2050,7 @@ function createLiveView(React, t, post, hooks) {
     const [health, setHealth] = React.useState({})
     const [modbus, setModbus] = React.useState({ segments: [], values: [], polling: { enabled: false, intervalMs: 1000 } })
     const [tickError, setTickError] = React.useState('')
+    const [edit, setEdit] = React.useState(null)
 
     React.useEffect(() => {
       let stop = false
@@ -1935,8 +2134,40 @@ function createLiveView(React, t, post, hooks) {
           key: (device.id || 'd') + ':' + point.key,
           name: (device.name || '') + ' / ' + point.name,
           rec: valueMap[point.key],
+          deviceId: device.id,
+          fn: point.function,
+          address: point.address,
+          writable: isWritableFunction(point.function),
         })
       }
+    }
+    const openEdit = (row) => {
+      setEdit({ rowKey: row.key, name: row.name, deviceId: row.deviceId, fn: row.fn, address: row.address, text: '', busy: false, result: null })
+    }
+    const submitEdit = () => {
+      if (!edit || !cwd) return
+      const kind = writeTargetOf(edit.fn).kind
+      const values = kind === 'coil'
+        ? [Number(edit.text) ? 1 : 0]
+        : [Number(edit.text)]
+      const check = normalizeWriteValues(edit.fn, values, 1)
+      if (!check.ok) {
+        setEdit((prev) => ({ ...prev, result: { ok: false, error: check.error } }))
+        return
+      }
+      setEdit((prev) => ({ ...prev, busy: true, result: null }))
+      post('/dsh-vision-bench/modbus/write', {
+        cwd,
+        source: 'user',
+        deviceId: edit.deviceId,
+        function: edit.fn,
+        address: edit.address,
+        values,
+      }, 60000).then((data) => {
+        setEdit((prev) => ({ ...prev, busy: false, result: data }))
+      }).catch((err) => {
+        setEdit((prev) => ({ ...prev, busy: false, result: { ok: false, error: String((err && err.message) || t('fail')) } }))
+      })
     }
     const kind = !cwd || !rows.length || !canWatch
       ? 'idle'
@@ -1983,8 +2214,65 @@ function createLiveView(React, t, post, hooks) {
             'data-ok': rec ? (rec.ok ? 'true' : 'false') : '',
           },
             el('span', { className: 'dvb-live-name', title: row.name }, row.name),
-            el('span', { className: 'dvb-val' }, rec && rec.ok === false && rec.error ? rec.error : formatPointValue(rec)))
+            el('span', { className: 'dvb-val' }, rec && rec.ok === false && rec.error ? rec.error : formatPointValue(rec)),
+            row.writable
+              ? el('button', {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-write dvb-live-edit' + (edit && edit.rowKey === row.key ? ' is-on' : ''),
+                title: t('writeTitle'),
+                disabled: !!edit && edit.busy,
+                onClick() { openEdit(row) },
+              }, '✎')
+              : null)
         }))
+        : null,
+      edit
+        ? el('div', { className: 'dvb-write-panel dvb-write-inline' },
+          el('div', { className: 'dvb-write-head' },
+            el('span', { className: 'dvb-write-title' }, t('writeTitle') + ' · ' + edit.name),
+            el('button', {
+              type: 'button', className: 'dvb-btn',
+              disabled: edit.busy,
+              onClick() { setEdit(null) },
+            }, t('writeClose'))),
+          el('div', { className: 'dvb-write-form' },
+            writeTargetOf(edit.fn).kind === 'coil'
+              ? el('select', {
+                className: 'dvb-input',
+                value: String(Number(edit.text) ? 1 : 0),
+                disabled: edit.busy,
+                onChange(event) { setEdit((prev) => ({ ...prev, text: event.target.value })) },
+              },
+                el('option', { value: '0' }, t('coilOff')),
+                el('option', { value: '1' }, t('coilOn')))
+              : el('input', {
+                className: 'dvb-input dvb-input-mono',
+                type: 'number',
+                min: 0,
+                max: 65535,
+                value: edit.text,
+                disabled: edit.busy,
+                spellCheck: false,
+                onChange(event) { setEdit((prev) => ({ ...prev, text: event.target.value })) },
+                onKeyDown(event) {
+                  if (event.key === 'Enter' && !edit.busy) submitEdit()
+                },
+              }),
+            el('button', {
+              type: 'button',
+              className: 'dvb-btn dvb-btn-primary dvb-btn-write',
+              disabled: !cwd || edit.busy,
+              onClick: submitEdit,
+            }, edit.busy ? t('writing') : t('writeConfirm'))),
+          edit.result
+            ? (edit.result.ok === false
+              ? el('div', { className: 'dvb-write-result', 'data-kind': 'err' }, edit.result.error || t('fail'))
+              : el('div', { className: 'dvb-write-result', 'data-kind': 'ok' },
+                functionTag(edit.fn) + edit.address + ': '
+                  + (edit.result.before && edit.result.before[0] !== null && edit.result.before[0] !== undefined ? String(edit.result.before[0]) : '—')
+                  + ' → ' + String(edit.result.target && edit.result.target[0])
+                  + ' → ' + (edit.result.readback && edit.result.readback[0] !== undefined ? String(edit.result.readback[0]) : '—')))
+            : null)
         : null)
   }
 }

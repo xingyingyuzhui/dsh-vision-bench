@@ -436,6 +436,7 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       address,
       before,
       target: check.values,
+      readback: extra.readback || [],
       simulated: !!extra.simulated,
       ...(ok ? {} : { error: summary }),
     }
@@ -451,7 +452,7 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     const devices = pack.devices.map((item) => item.id === m.id
       ? { ...item, values: vals, sim: false }
       : item)
-    return done(true, label + '（本地生效）', { devices, simulated: m.sim === true })
+    return done(true, label + '（本地生效）', { devices, simulated: m.sim === true, readback: check.values.slice() })
   }
 
   const ran = await runPythonScript(bindings.python, 'modbus_write.py', conn.args.concat([
@@ -481,7 +482,7 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   const summary = label + (readbackOk
     ? (mismatch ? '，回读不一致：' + JSON.stringify(raw) : '，回读一致')
     : ('，回读失败 ' + (readbackRan.error || '')))
-  return done(readbackOk && !mismatch, summary, { devices })
+  return done(readbackOk && !mismatch, summary, { devices, readback: readbackOk ? raw : [] })
 }
 
 export const modbusPoll = async (home, cwd, opts) => {
