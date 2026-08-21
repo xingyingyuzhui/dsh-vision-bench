@@ -88,10 +88,15 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
   if (action === 'status') {
     const workspace = loadWorkspace(home, room.cwd)
     const journal = journalView(workspace)
+    const boundId = workspace.session && workspace.session.boundId ? workspace.session.boundId : ''
     return {
       ok: true,
       action,
       cwd: room.cwd,
+      session: {
+        boundId,
+        isBound: !!boundId && boundId === origin.sessionId,
+      },
       keil: workspace.keil,
       modbus: {
         mode: workspace.modbus.mode,

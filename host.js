@@ -1,6 +1,7 @@
 import { keilBuild, keilMap, keilScan, keilTargets, listDir, modbusPoll, modbusRead, modbusWrite } from './bench-actions.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
 import {
+  bindSession,
   defaultDshHome,
   journalView,
   loadBindings,
@@ -9,7 +10,9 @@ import {
   saveBindings,
   saveWorkspace,
   sweepStaleTasks,
+  unbindSession,
 } from './bench-store.mjs'
+import { maybeNotifyResult, setAgentsRegistry } from './bench-notify.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import { applyPointWrite, segmentCovering } from './bench-points.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
@@ -144,6 +147,9 @@ export function apply(ctx, config = {}) {
   try {
     sweepStaleTasks(dshHome)
   } catch { /* sweep is best-effort */ }
+  try {
+    setAgentsRegistry(ctx.get ? ctx.get('agents') : null)
+  } catch { /* agent registry is optional */ }
   const rows = [
     route('/dsh-vision-bench/state', async (req) => {
       const body = await readJsonBody(req)
@@ -186,7 +192,9 @@ export function apply(ctx, config = {}) {
     }),
     route('/dsh-vision-bench/keil/build', async (req) => {
       const body = await readJsonBody(req)
-      return keilBuild(dshHome, body && body.cwd, body)
+      const ran = await keilBuild(dshHome, body && body.cwd, body)
+      maybeNotifyResult(dshHome, body && body.cwd, '编译', ran)
+      return ran
     }),
     route('/dsh-vision-bench/modbus/read', async (req) => {
       const body = await readJsonBody(req)
@@ -194,7 +202,17 @@ export function apply(ctx, config = {}) {
     }),
     route('/dsh-vision-bench/modbus/write', async (req) => {
       const body = await readJsonBody(req)
-      return modbusWrite(dshHome, body && body.cwd, body)
+      const ran = await modbusWrite(dshHome, body && body.cwd, body)
+      maybeNotifyResult(dshHome, body && body.cwd, '写点', ran)
+      return ran
+    }),
+    route('/dsh-vision-bench/session/bind', async (req) => {
+      const body = await readJsonBody(req)
+      return bindSession(dshHome, body && body.cwd, body && body.sessionId)
+    }),
+    route('/dsh-vision-bench/session/unbind', async (req) => {
+      const body = await readJsonBody(req)
+      return unbindSession(dshHome, body && body.cwd)
     }),
     route('/dsh-vision-bench/modbus/poll', async (req) => {
       const body = await readJsonBody(req)

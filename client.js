@@ -165,6 +165,14 @@ const COPY = {
     writeBefore: '写前',
     writeReadback: '回读',
     writeRangeErr: '地址或数量超出段范围',
+    bindChip: '通知绑定',
+    bindState_none: '无会话',
+    bindState_open: '未绑定',
+    bindState_self: '本会话',
+    bindState_other: '其他会话',
+    bindOn: '绑定本会话',
+    bindOff: '解绑',
+    bindHint: '绑定后，编译失败、写点结果等台架事件会以通知进入当前会话',
   },
   en: {
     nav: 'Bench',
@@ -319,6 +327,14 @@ const COPY = {
     writeBefore: 'before',
     writeReadback: 'readback',
     writeRangeErr: 'Address or count out of segment range',
+    bindChip: 'Notify bind',
+    bindState_none: 'no session',
+    bindState_open: 'unbound',
+    bindState_self: 'this session',
+    bindState_other: 'other session',
+    bindOn: 'Bind this session',
+    bindOff: 'Unbind',
+    bindHint: 'When bound, bench events such as build failures and write results reach this session as notices',
   },
 }
 
@@ -467,6 +483,7 @@ const CSS = [
   'body[' + ATTR + '] .dvb-write-note{display:block;font-family:inherit;opacity:.65;margin-top:2px}',
   'body[' + ATTR + '] .dvb-live-edit{height:20px;width:22px;padding:0;font-size:11px;line-height:1;flex:none;align-self:center}',
   'body[' + ATTR + '] .dvb-live-row .dvb-live-name{flex:1}',
+  'body[' + ATTR + '] .dvb-bindbar{display:flex;gap:8px;align-items:center}',
   'body[' + ATTR + '] .dvb-map-meta{font-size:11px;opacity:.55}',
   'body[' + ATTR + '] .dvb-map-block{display:flex;flex-direction:column;gap:3px;margin:4px 0}',
   'body[' + ATTR + '] .dvb-map-label{font-size:11px;font-weight:600;opacity:.7}',
@@ -1194,7 +1211,11 @@ function createDebugView(React, t, post, openProject) {
           if (stop) return
           if (data && data.health) setHealth(data.health)
           if (data && data.workspace) {
-            setWorkspace((prev) => ({ ...prev, keil: { ...prev.keil, ...(data.workspace.keil || {}) } }))
+            setWorkspace((prev) => ({
+              ...prev,
+              keil: { ...prev.keil, ...(data.workspace.keil || {}) },
+              session: data.workspace.session || prev.session,
+            }))
             const project = data.workspace.keil && data.workspace.keil.project
             if (project && project !== projectRef.current) {
               projectRef.current = project
@@ -1213,6 +1234,29 @@ function createDebugView(React, t, post, openProject) {
 
     function setKeil(patch) {
       setWorkspace((prev) => ({ ...prev, keil: { ...prev.keil, ...patch } }))
+    }
+
+    const boundId = workspace.session && workspace.session.boundId ? workspace.session.boundId : ''
+    const bindState = !sessionId
+      ? 'none'
+      : (boundId === sessionId ? 'self' : (boundId ? 'other' : 'open'))
+
+    function bindToSelf() {
+      if (!cwd || !sessionId) return
+      post('/dsh-vision-bench/session/bind', { cwd, sessionId }, 15000).then(() => {
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then((data) => {
+        if (data && data.workspace) {
+          setWorkspace((prev) => ({ ...prev, session: data.workspace.session || prev.session }))
+        }
+      }).catch(() => { /* chip refreshes on next poll */ })
+    }
+
+    function unbindBench() {
+      if (!cwd) return
+      post('/dsh-vision-bench/session/unbind', { cwd }, 15000).then(() => {
+        setWorkspace((prev) => ({ ...prev, session: { boundId: '' } }))
+      }).catch(() => { /* chip refreshes on next poll */ })
     }
 
     function persist(next) {
@@ -1357,6 +1401,26 @@ function createDebugView(React, t, post, openProject) {
         { key: 'python', health: health.python },
         { key: 'uv4', health: health.uv4 },
       ]),
+      sessionId
+        ? el('div', { className: 'dvb-bindbar' },
+          el('span', {
+            className: 'dvb-chip',
+            'data-kind': bindState === 'self' ? 'ready' : 'unbound',
+          }, t('bindChip') + ' · ' + t('bindState_' + bindState)),
+          bindState === 'self'
+            ? el('button', {
+              type: 'button', className: 'dvb-btn',
+              disabled: !cwd,
+              onClick: unbindBench,
+            }, t('bindOff'))
+            : el('button', {
+              type: 'button',
+              className: 'dvb-btn' + (bindState === 'open' ? ' dvb-btn-primary' : ''),
+              disabled: !cwd,
+              title: t('bindHint'),
+              onClick: bindToSelf,
+            }, t('bindOn')))
+        : null,
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
       el('div', { className: 'dvb-split' },
         el('div', { className: 'dvb-panel' },

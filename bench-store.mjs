@@ -4,9 +4,9 @@ import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { emptyLog, mergeLog, normalizeEvent } from './bench-prompt.mjs'
 import { normalizeModbus, patchActiveDevice } from './bench-devices.mjs'
+import { requireWorkspaceCwd } from './bench-paths.mjs'
 import {
   MAX_TASKS,
-  MAX_TIMELINE,
   compactTasks,
   compactTimeline,
   newId,
@@ -16,9 +16,15 @@ import {
   normalizeTimelineEvent,
   prepend,
   runningTasks,
+  trimTimeline,
 } from './bench-journal.mjs'
 
 export const BINDING_KEYS = ['python', 'uv4', 'openocd']
+
+const TIMELINE_WINDOW = 360
+
+const pushEvent = (timeline, event) =>
+  trimTimeline(prepend(timeline, event, TIMELINE_WINDOW))
 
 export const emptyBindings = () => ({ python: '', uv4: '', openocd: '' })
 
@@ -87,6 +93,7 @@ export const emptyWorkspace = () => ({
   log: emptyLog(),
   tasks: [],
   timeline: [],
+  session: { boundId: '' },
   modbus: normalizeModbus({}),
 })
 
@@ -109,6 +116,8 @@ export const normalizeWorkspace = (input) => {
   out.log = rawLog.map(normalizeEvent).slice(0, 8)
   out.tasks = normalizeTasks(input && input.tasks)
   out.timeline = normalizeTimeline(input && input.timeline)
+  const session = input && input.session && typeof input.session === 'object' ? input.session : {}
+  out.session = { boundId: typeof session.boundId === 'string' ? session.boundId.trim() : '' }
   out.modbus = normalizeModbus(modbus)
   return out
 }
@@ -138,6 +147,7 @@ export const saveWorkspace = (home, cwd, input) => {
     log: input && input.log !== undefined ? input.log : prev.log,
     tasks: input && input.tasks !== undefined ? input.tasks : prev.tasks,
     timeline: input && input.timeline !== undefined ? input.timeline : prev.timeline,
+    session: { ...prev.session, ...(input && input.session) },
   }
   const workspace = normalizeWorkspace(merged)
   const keilProject = workspace.keil.project
@@ -155,13 +165,13 @@ export const saveWorkspace = (home, cwd, input) => {
       ok: true,
       summary,
     })
-    workspace.timeline = prepend(workspace.timeline, normalizeTimelineEvent({
+    workspace.timeline = pushEvent(workspace.timeline, normalizeTimelineEvent({
       kind: 'select-project',
       source: origin.source,
       sessionId: origin.sessionId,
       ok: true,
       summary,
-    }), MAX_TIMELINE)
+    }))
   }
   mkdirSync(join(storeDir(home), 'workspaces'), { recursive: true })
   writeFileSync(workspacePath(home, cwd), JSON.stringify(workspace, null, 2) + '\n')
@@ -184,7 +194,7 @@ export const recordBenchEvent = (home, cwd, event, extra = {}) => {
     keil: { ...prev.keil, ...(extra.keil || {}) },
     modbus: { ...prev.modbus, ...(extra.modbus || {}) },
     log: mergeLog(prev.log, event),
-    timeline: prepend(prev.timeline, timelineEvent, MAX_TIMELINE),
+    timeline: pushEvent(prev.timeline, timelineEvent),
   })
 }
 
@@ -212,7 +222,7 @@ export const openTask = (home, cwd, spec) => {
   })
   saveWorkspace(home, cwd, {
     tasks: prepend(prev.tasks, task, MAX_TASKS),
-    timeline: prepend(prev.timeline, event, MAX_TIMELINE),
+    timeline: pushEvent(prev.timeline, event),
   })
   return task
 }
@@ -232,6 +242,8 @@ export const finishTask = (home, cwd, taskId, patch) => {
       summary: summary || item.summary,
       logFile: patch && patch.logFile !== undefined ? patch.logFile : item.logFile,
       phase: patch && patch.phase !== undefined ? patch.phase : item.phase,
+      stage: patch && patch.stage !== undefined ? patch.stage : item.stage,
+      progress: patch && patch.progress !== undefined ? patch.progress : item.progress,
       errors: patch && patch.errors !== undefined ? patch.errors : item.errors,
     })
   })
@@ -248,7 +260,7 @@ export const finishTask = (home, cwd, taskId, patch) => {
   })
   return saveWorkspace(home, cwd, {
     tasks,
-    timeline: prepend(prev.timeline, event, MAX_TIMELINE),
+    timeline: pushEvent(prev.timeline, event),
     keil: patch && patch.keil,
     modbus: patch && patch.modbus,
     log: patch && patch.log !== undefined ? patch.log : mergeLog(prev.log, {
@@ -264,6 +276,28 @@ export const journalView = (workspace) => ({
   running: compactTasks(runningTasks(workspace && workspace.tasks)),
   timeline: compactTimeline(workspace && workspace.timeline),
 })
+
+export const bindSession = (home, cwd, sessionId) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const id = String(sessionId || '').trim()
+  if (!id) return { ok: false, error: '缺少会话 id' }
+  const saved = saveWorkspace(home, room.cwd, { session: { boundId: id } })
+  if (!saved.ok) return saved
+  return {
+    ok: true,
+    boundId: saved.workspace.session.boundId,
+    prevBoundId: (saved.prev && saved.prev.session && saved.prev.session.boundId) || '',
+  }
+}
+
+export const unbindSession = (home, cwd) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const saved = saveWorkspace(home, room.cwd, { session: { boundId: '' } })
+  if (!saved.ok) return saved
+  return { ok: true, boundId: '' }
+}
 
 export const sweepStaleTasks = (home) => {
   const dir = join(storeDir(home), 'workspaces')
@@ -290,12 +324,12 @@ export const sweepStaleTasks = (home) => {
           summary: (item.summary || item.type + ' 任务') + '（上次运行中断）',
         })
         : item)
-      const timeline = prepend(workspace.timeline, normalizeTimelineEvent({
+      const timeline = pushEvent(workspace.timeline, normalizeTimelineEvent({
         kind: 'sweep',
         source: 'system',
         ok: false,
         summary: '启动清扫：' + stale.length + ' 个中断任务已标记失败',
-      }), MAX_TIMELINE)
+      }))
       writeFileSync(path, JSON.stringify({ ...workspace, tasks, timeline }, null, 2) + '\n')
       swept += stale.length
     } catch { /* skip unreadable workspace */ }

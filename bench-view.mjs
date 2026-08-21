@@ -197,7 +197,11 @@ export function createDebugView(React, t, post, openProject) {
           if (stop) return
           if (data && data.health) setHealth(data.health)
           if (data && data.workspace) {
-            setWorkspace((prev) => ({ ...prev, keil: { ...prev.keil, ...(data.workspace.keil || {}) } }))
+            setWorkspace((prev) => ({
+              ...prev,
+              keil: { ...prev.keil, ...(data.workspace.keil || {}) },
+              session: data.workspace.session || prev.session,
+            }))
             const project = data.workspace.keil && data.workspace.keil.project
             if (project && project !== projectRef.current) {
               projectRef.current = project
@@ -216,6 +220,29 @@ export function createDebugView(React, t, post, openProject) {
 
     function setKeil(patch) {
       setWorkspace((prev) => ({ ...prev, keil: { ...prev.keil, ...patch } }))
+    }
+
+    const boundId = workspace.session && workspace.session.boundId ? workspace.session.boundId : ''
+    const bindState = !sessionId
+      ? 'none'
+      : (boundId === sessionId ? 'self' : (boundId ? 'other' : 'open'))
+
+    function bindToSelf() {
+      if (!cwd || !sessionId) return
+      post('/dsh-vision-bench/session/bind', { cwd, sessionId }, 15000).then(() => {
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then((data) => {
+        if (data && data.workspace) {
+          setWorkspace((prev) => ({ ...prev, session: data.workspace.session || prev.session }))
+        }
+      }).catch(() => { /* chip refreshes on next poll */ })
+    }
+
+    function unbindBench() {
+      if (!cwd) return
+      post('/dsh-vision-bench/session/unbind', { cwd }, 15000).then(() => {
+        setWorkspace((prev) => ({ ...prev, session: { boundId: '' } }))
+      }).catch(() => { /* chip refreshes on next poll */ })
     }
 
     function persist(next) {
@@ -360,6 +387,26 @@ export function createDebugView(React, t, post, openProject) {
         { key: 'python', health: health.python },
         { key: 'uv4', health: health.uv4 },
       ]),
+      sessionId
+        ? el('div', { className: 'dvb-bindbar' },
+          el('span', {
+            className: 'dvb-chip',
+            'data-kind': bindState === 'self' ? 'ready' : 'unbound',
+          }, t('bindChip') + ' · ' + t('bindState_' + bindState)),
+          bindState === 'self'
+            ? el('button', {
+              type: 'button', className: 'dvb-btn',
+              disabled: !cwd,
+              onClick: unbindBench,
+            }, t('bindOff'))
+            : el('button', {
+              type: 'button',
+              className: 'dvb-btn' + (bindState === 'open' ? ' dvb-btn-primary' : ''),
+              disabled: !cwd,
+              title: t('bindHint'),
+              onClick: bindToSelf,
+            }, t('bindOn')))
+        : null,
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
       el('div', { className: 'dvb-split' },
         el('div', { className: 'dvb-panel' },

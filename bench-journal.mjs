@@ -1,8 +1,65 @@
 export const MAX_TASKS = 20
-export const MAX_TIMELINE = 50
-const TASK_TYPES = new Set(['build', 'read', 'write'])
+export const MAX_TIMELINE = 120
+export const MAX_TIMELINE_MINOR = 60
+
+const TASK_TYPES = {
+  build: { label: '编译' },
+  read: { label: '读点' },
+  write: { label: '写点' },
+  download: { label: '下载' },
+  verify: { label: '验证' },
+}
+const TASK_TYPE_KEYS = new Set(Object.keys(TASK_TYPES))
 const SOURCES = new Set(['user', 'agent'])
 const STATUSES = new Set(['running', 'ok', 'error', 'cancelled'])
+
+export const taskTypeLabel = (type) => {
+  const meta = TASK_TYPES[type]
+  return meta ? meta.label : String(type || '任务')
+}
+
+export const isTaskType = (type) => TASK_TYPE_KEYS.has(type)
+
+// Timeline kinds marked major survive minor-trimming when the list runs over budget.
+const MAJOR_KINDS = new Set([
+  'select-project',
+  'sweep',
+  'build-end',
+  'write-end',
+  'download-end',
+  'verify-end',
+])
+
+export const isMajorKind = (kind) => MAJOR_KINDS.has(String(kind || ''))
+
+export const trimTimeline = (list, max = MAX_TIMELINE, minorBudget = MAX_TIMELINE_MINOR) => {
+  let events = Array.isArray(list) ? list.slice(0, max * 3) : []
+  if (events.length <= max) return events
+  const minors = events.filter((item) => item && !isMajorKind(item.kind)).length
+  let dropMinor = Math.min(minors, Math.max(0, events.length - max))
+  const keepMinor = Math.max(0, minors - dropMinor)
+  const out = []
+  let seenMinor = 0
+  for (let i = events.length - 1; i >= 0; i--) {
+    const item = events[i]
+    if (!item) continue
+    if (!isMajorKind(item.kind)) {
+      seenMinor += 1
+      if (seenMinor <= keepMinor) out.push(item)
+      continue
+    }
+    out.push(item)
+  }
+  events = out.reverse()
+  dropMinor = 0
+  while (events.length > max) {
+    const idx = events.findIndex((item) => !isMajorKind(item.kind))
+    if (idx < 0) break
+    events.splice(idx, 1)
+    dropMinor += 1
+  }
+  return events.slice(0, max)
+}
 
 export const newId = (prefix) =>
   prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
@@ -21,9 +78,10 @@ export const normalizeTask = (input) => {
   const startedAt = Number(input && input.startedAt)
   const endedAt = Number(input && input.endedAt)
   const status = STATUSES.has(input && input.status) ? input.status : 'error'
+  const progress = Number(input && input.progress)
   return {
     id: text(input && input.id, newId('t')),
-    type: TASK_TYPES.has(input && input.type) ? input.type : 'build',
+    type: TASK_TYPE_KEYS.has(input && input.type) ? input.type : 'build',
     source: SOURCES.has(input && input.source) ? input.source : 'user',
     sessionId: text(input && input.sessionId, ''),
     status,
@@ -32,6 +90,8 @@ export const normalizeTask = (input) => {
     summary: text(input && input.summary, '').slice(0, 240),
     logFile: text(input && input.logFile, '').slice(0, 260),
     phase: text(input && input.phase, '').slice(0, 32),
+    stage: text(input && input.stage, '').slice(0, 32),
+    progress: Number.isFinite(progress) && progress >= 0 && progress <= 100 ? Math.trunc(progress) : null,
     errors: Array.isArray(input && input.errors)
       ? input.errors.map((item) => String(item || '').slice(0, 240)).filter(Boolean).slice(0, 8)
       : [],
@@ -59,7 +119,7 @@ export const normalizeTasks = (list) => {
 
 export const normalizeTimeline = (list) => {
   if (!Array.isArray(list)) return []
-  return list.map(normalizeTimelineEvent).slice(0, MAX_TIMELINE)
+  return trimTimeline(list.map(normalizeTimelineEvent))
 }
 
 export const prepend = (list, item, max) => [item].concat(Array.isArray(list) ? list : []).slice(0, max)
@@ -79,6 +139,8 @@ export const compactTasks = (tasks) =>
     summary: item.summary,
     logFile: item.logFile || '',
     phase: item.phase || '',
+    stage: item.stage || '',
+    progress: item.progress === null || item.progress === undefined ? null : item.progress,
     errors: Array.isArray(item.errors) ? item.errors : [],
   }))
 

@@ -106,6 +106,7 @@ export const CSS = [
   'body[' + ATTR + '] .dvb-write-note{display:block;font-family:inherit;opacity:.65;margin-top:2px}',
   'body[' + ATTR + '] .dvb-live-edit{height:20px;width:22px;padding:0;font-size:11px;line-height:1;flex:none;align-self:center}',
   'body[' + ATTR + '] .dvb-live-row .dvb-live-name{flex:1}',
+  'body[' + ATTR + '] .dvb-bindbar{display:flex;gap:8px;align-items:center}',
   'body[' + ATTR + '] .dvb-map-meta{font-size:11px;opacity:.55}',
   'body[' + ATTR + '] .dvb-map-block{display:flex;flex-direction:column;gap:3px;margin:4px 0}',
   'body[' + ATTR + '] .dvb-map-label{font-size:11px;font-weight:600;opacity:.7}',
