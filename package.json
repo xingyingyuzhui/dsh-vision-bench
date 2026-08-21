@@ -1,7 +1,7 @@
 {
   "name": "dsh-vision-bench",
-  "version": "0.11.0",
-  "description": "Vision 台架：会话区调试/上位机点表（按段添加地址），Modbus 读点和受控写点（FC05/06/15/16），共享任务与时间线，会话绑定与台架事件通知，并安装「台架模式」Agent 预设。",
+  "version": "0.12.0",
+  "description": "Vision 台架：会话区调试/上位机点表，Keil 编译与日志、产物哈希、OpenOCD 烧录确认、串口监视，Modbus 读点和受控写点（FC05/06/15/16），共享任务与时间线，会话绑定与台架事件通知，并安装「台架模式」Agent 预设。",
   "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "bench", "keil", "modbus"],
   "license": "MIT",
   "type": "module",
@@ -39,6 +39,8 @@
     "runtime/keil_build.py",
     "runtime/modbus_read.py",
     "runtime/modbus_write.py",
+    "runtime/openocd_flash.py",
+    "runtime/serial_monitor.py",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"

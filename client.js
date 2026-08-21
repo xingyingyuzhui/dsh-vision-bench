@@ -173,6 +173,29 @@ const COPY = {
     bindOn: '绑定本会话',
     bindOff: '解绑',
     bindHint: '绑定后，编译失败、写点结果等台架事件会以通知进入当前会话',
+    serialTitle: '串口日志',
+    serialOpen: '打开串口',
+    serialClose: '关闭串口',
+    serialFilter: '过滤关键字',
+    serialPause: '暂停滚动',
+    serialResume: '恢复滚动',
+    serialCopy: '复制给 Agent',
+    serialCopied: '已复制',
+    serialEmpty: '暂无日志，打开串口后显示',
+    baud: '波特率',
+    flashTitle: '烧录下载',
+    flashIface: '调试器',
+    flashTarget: '目标芯片',
+    flashBtn: '下载固件',
+    flashing: '烧录中…',
+    flashConfirmTitle: '确认烧录',
+    flashConfirmHint: '烧录将改写设备 Flash。确认调试器、目标与固件：',
+    flashApprove: '批准下载',
+    flashCancel: '取消',
+    flashNeedArtifact: '没有可用固件产物，请先编译',
+    needOpenocd: '请先在设置 → 台架 绑定 OpenOCD',
+    flashDone: '烧录完成',
+    flashFail: '烧录失败',
   },
   en: {
     nav: 'Bench',
@@ -335,6 +358,29 @@ const COPY = {
     bindOn: 'Bind this session',
     bindOff: 'Unbind',
     bindHint: 'When bound, bench events such as build failures and write results reach this session as notices',
+    serialTitle: 'Serial log',
+    serialOpen: 'Open port',
+    serialClose: 'Close port',
+    serialFilter: 'Filter keyword',
+    serialPause: 'Pause scroll',
+    serialResume: 'Resume scroll',
+    serialCopy: 'Copy for Agent',
+    serialCopied: 'Copied',
+    serialEmpty: 'No log yet, open a port first',
+    baud: 'Baudrate',
+    flashTitle: 'Flash download',
+    flashIface: 'Debugger',
+    flashTarget: 'Target MCU',
+    flashBtn: 'Download firmware',
+    flashing: 'Flashing…',
+    flashConfirmTitle: 'Confirm flash',
+    flashConfirmHint: 'Flashing overwrites device Flash. Verify debugger, target and firmware:',
+    flashApprove: 'Approve download',
+    flashCancel: 'Cancel',
+    flashNeedArtifact: 'No firmware artifact yet, build first',
+    needOpenocd: 'Bind OpenOCD in Settings → Bench first',
+    flashDone: 'Flash done',
+    flashFail: 'Flash failed',
   },
 }
 
@@ -484,6 +530,10 @@ const CSS = [
   'body[' + ATTR + '] .dvb-live-edit{height:20px;width:22px;padding:0;font-size:11px;line-height:1;flex:none;align-self:center}',
   'body[' + ATTR + '] .dvb-live-row .dvb-live-name{flex:1}',
   'body[' + ATTR + '] .dvb-bindbar{display:flex;gap:8px;align-items:center}',
+  'body[' + ATTR + '] .dvb-serial-log{display:flex;flex-direction:column;max-height:260px}',
+  'body[' + ATTR + '] .dvb-serial-line{white-space:pre-wrap;word-break:break-all}',
+  'body[' + ATTR + '] .dvb-serial-line[data-kind="err"]{color:var(--dsw-alias-label-danger,#c62828)}',
+  'body[' + ATTR + '] .dvb-serial-line[data-kind="warn"]{color:var(--dsw-alias-label-warning,#b45309)}',
   'body[' + ATTR + '] .dvb-map-meta{font-size:11px;opacity:.55}',
   'body[' + ATTR + '] .dvb-map-block{display:flex;flex-direction:column;gap:3px;margin:4px 0}',
   'body[' + ATTR + '] .dvb-map-label{font-size:11px;font-weight:600;opacity:.7}',
@@ -1187,6 +1237,25 @@ function statusBar(el, t, cwd, rows) {
       : el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('needWorkspace')))
 }
 
+const FLASH_IFACES = ['cmsis-dap', 'stlink', 'jlink', 'ftdi', 'dap']
+const FLASH_TARGETS = [
+  'stm32f1x', 'stm32f2x', 'stm32f4x', 'stm32f7x', 'stm32g0x', 'stm32g4x',
+  'stm32h7x', 'stm32l0x', 'stm32l4x', 'nrf51', 'nrf52', 'rp2040', 'lpc55',
+  'kinetis', 'efm32', 'at91samd',
+]
+
+const clockOf = (ms) => {
+  const d = new Date(Number(ms) || Date.now())
+  const pad = (n) => String(n).padStart(2, '0')
+  return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())
+}
+
+const lineKind = (line) => {
+  if (/(assert|panic|fault|hardfault|error|错误|失败|exception)/i.test(line)) return 'err'
+  if (/(warn|警告)/i.test(line)) return 'warn'
+  return ''
+}
+
 function createDebugView(React, t, post, openProject) {
   return function DebugView(props) {
     const el = React.createElement
@@ -1202,7 +1271,48 @@ function createDebugView(React, t, post, openProject) {
     const [lastResult, setLastResult] = React.useState(null)
     const [copied, setCopied] = React.useState(false)
     const [picker, setPicker] = React.useState(null)
+    const [flash, setFlash] = React.useState({ interface: 'cmsis-dap', target: 'stm32f1x', busy: false, confirm: null, result: null })
+    const [serial, setSerial] = React.useState({ open: false, port: '', baudrate: 115200, lines: [], filter: '', paused: false, error: '', lastId: 0 })
+    const [ports, setPorts] = React.useState([])
+    const [scanning, setScanning] = React.useState(false)
+    const [copiedSerial, setCopiedSerial] = React.useState(false)
+    const serialRef = React.useRef(serial)
+    serialRef.current = serial
     const projectRef = React.useRef('')
+
+    function scanPorts() {
+      setScanning(true)
+      post('/dsh-vision-bench/serial/ports', {}, 30000).then((data) => {
+        setPorts((data && Array.isArray(data.ports)) ? data.ports : [])
+      }).catch(() => {
+        setPorts([])
+      }).finally(() => setScanning(false))
+    }
+
+    React.useEffect(() => {
+      if (!cwd || !serial.open) return undefined
+      let stop = false
+      const timer = setInterval(() => {
+        post('/dsh-vision-bench/serial/feed', { cwd, since: serialRef.current.lastId }, 10000).then((data) => {
+          if (stop || !data) return
+          setSerial((prev) => ({
+            ...prev,
+            open: data.open !== false,
+            error: data.error || '',
+            lastId: data.lastId || prev.lastId,
+            lines: Array.isArray(data.lines) && data.lines.length
+              ? prev.lines.concat(data.lines).slice(-1000)
+              : prev.lines,
+          }))
+        }).catch(() => { /* next tick retries */ })
+      }, 700)
+      return () => { stop = true; clearInterval(timer) }
+    }, [cwd, serial.open])
+
+    React.useEffect(() => {
+      if (!cwd) return
+      scanPorts()
+    }, [cwd])
 
     React.useEffect(() => {
       let stop = false
@@ -1257,6 +1367,95 @@ function createDebugView(React, t, post, openProject) {
       post('/dsh-vision-bench/session/unbind', { cwd }, 15000).then(() => {
         setWorkspace((prev) => ({ ...prev, session: { boundId: '' } }))
       }).catch(() => { /* chip refreshes on next poll */ })
+    }
+
+    function mergeState(data) {
+      if (data && data.workspace) {
+        setWorkspace((prev) => ({
+          ...prev,
+          keil: { ...prev.keil, ...(data.workspace.keil || {}) },
+          session: data.workspace.session || prev.session,
+        }))
+      }
+      if (data) setJournal(pickJournal(data))
+      return data
+    }
+
+    function startFlash() {
+      if (!cwd) return
+      setFlash((prev) => ({ ...prev, busy: true, result: null }))
+      post('/dsh-vision-bench/keil/download', {
+        cwd,
+        source: 'user',
+        sessionId,
+        interface: flash.interface,
+        target: flash.target,
+      }, 20000).then((data) => {
+        if (data && data.needsConfirm) {
+          setFlash((prev) => ({ ...prev, busy: false, confirm: data.request }))
+          return null
+        }
+        setFlash((prev) => ({ ...prev, busy: false, confirm: null, result: data }))
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then(mergeState).catch((err) => {
+        setFlash((prev) => ({ ...prev, busy: false, result: { ok: false, error: String((err && err.message) || t('fail')) } }))
+      })
+    }
+
+    function approveFlash() {
+      const req = flash.confirm
+      if (!req || !cwd) return
+      setFlash((prev) => ({ ...prev, busy: true }))
+      post('/dsh-vision-bench/keil/download', {
+        cwd,
+        source: 'user',
+        sessionId,
+        interface: req.interface,
+        target: req.target,
+        path: req.file,
+        confirm: true,
+      }, 180000).then((data) => {
+        setFlash((prev) => ({ ...prev, busy: false, confirm: null, result: data }))
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then(mergeState).catch((err) => {
+        setFlash((prev) => ({ ...prev, busy: false, confirm: null, result: { ok: false, error: String((err && err.message) || t('fail')) } }))
+      })
+    }
+
+    function openSerial() {
+      if (!cwd) return
+      post('/dsh-vision-bench/serial/open', {
+        cwd,
+        port: serial.port,
+        baudrate: Number(serial.baudrate) || 115200,
+      }, 15000).then((data) => {
+        if (!data || data.ok === false) {
+          setSerial((prev) => ({ ...prev, error: (data && data.error) || t('fail') }))
+          return
+        }
+        setSerial((prev) => ({ ...prev, open: true, error: '', lines: [], lastId: 0 }))
+      }).catch((err) => {
+        setSerial((prev) => ({ ...prev, error: String((err && err.message) || t('fail')) }))
+      })
+    }
+
+    function closeSerial() {
+      if (!cwd) return
+      post('/dsh-vision-bench/serial/close', { cwd }, 10000).catch(() => { /* ignore */ })
+      setSerial((prev) => ({ ...prev, open: false, lines: [], lastId: 0, error: '' }))
+    }
+
+    function copySerial() {
+      const filterText = serial.filter.trim().toLowerCase()
+      const visible = filterText
+        ? serial.lines.filter((item) => item.line.toLowerCase().includes(filterText))
+        : serial.lines
+      const text = visible.map((item) => '[' + clockOf(item.t) + '] ' + item.line).join('\n')
+      if (!text) return
+      navigator.clipboard.writeText(text).then(() => {
+        setCopiedSerial(true)
+        setTimeout(() => setCopiedSerial(false), 1500)
+      }).catch(() => { /* clipboard unavailable */ })
     }
 
     function persist(next) {
@@ -1396,6 +1595,137 @@ function createDebugView(React, t, post, openProject) {
           ? el('div', { className: 'dvb-hint' }, t('pickerEmpty'))
           : null)) : null
 
+    const openocdReady = statusKind(health.openocd) === 'ready'
+    const artifactPath = workspace.keil.download || ''
+    const flashReq = flash.confirm
+    const flashPanel = el('div', { className: 'dvb-panel' },
+      el('div', { className: 'dvb-panel-head' },
+        el('span', { className: 'dvb-panel-title' }, t('flashTitle')),
+        !openocdReady ? el('span', { className: 'dvb-need' }, t('needOpenocd')) : null),
+      el('div', { className: 'dvb-toolbar' },
+        field(t('flashIface'), el('select', {
+          className: 'dvb-input',
+          value: flash.interface,
+          disabled: flash.busy,
+          onChange(event) { setFlash((prev) => ({ ...prev, interface: event.target.value })) },
+        }, FLASH_IFACES.map((name) => el('option', { key: name, value: name }, name)))),
+        field(t('flashTarget'), el('select', {
+          className: 'dvb-input',
+          value: flash.target,
+          disabled: flash.busy,
+          onChange(event) { setFlash((prev) => ({ ...prev, target: event.target.value })) },
+        }, FLASH_TARGETS.map((name) => el('option', { key: name, value: name }, name))))),
+      el('div', { className: 'dvb-file' },
+        el('div', { className: 'dvb-path', 'data-empty': artifactPath ? '0' : '1' },
+          artifactPath || t('flashNeedArtifact'))),
+      flashReq
+        ? el('div', { className: 'dvb-write-panel dvb-flash-confirm' },
+          el('div', { className: 'dvb-write-title' }, t('flashConfirmTitle')),
+          el('div', { className: 'dvb-hint' }, t('flashConfirmHint')),
+          el('div', { className: 'dvb-cwd' }, flashReq.target + ' · ' + flashReq.interface + '\n' + flashReq.file),
+          el('div', { className: 'dvb-hint' },
+            Math.max(1, Math.round(flashReq.size / 1024)) + ' KB'
+            + (flashReq.sha256 ? ' · sha256 ' + flashReq.sha256.slice(0, 16) + '…' : '')),
+          el('div', { className: 'dvb-actions' },
+            el('button', {
+              type: 'button',
+              className: 'dvb-btn dvb-btn-primary dvb-btn-write',
+              disabled: flash.busy,
+              onClick: approveFlash,
+            }, flash.busy ? t('flashing') : t('flashApprove')),
+            el('button', {
+              type: 'button', className: 'dvb-btn',
+              disabled: flash.busy,
+              onClick() { setFlash((prev) => ({ ...prev, confirm: null })) },
+            }, t('flashCancel'))))
+        : el('button', {
+          type: 'button',
+          className: 'dvb-btn dvb-btn-write',
+          disabled: !cwd || !openocdReady || !artifactPath || flash.busy,
+          onClick: startFlash,
+        }, flash.busy ? t('flashing') : t('flashBtn')),
+      flash.result
+        ? el('div', {
+          className: 'dvb-msg',
+          'data-kind': flash.result.ok ? 'ok' : 'err',
+        }, flash.result.summary || flash.result.error || (flash.result.ok ? t('flashDone') : t('flashFail')))
+        : null)
+
+    const serialFilterText = serial.filter.trim().toLowerCase()
+    const serialLines = serialFilterText
+      ? serial.lines.filter((item) => item.line.toLowerCase().includes(serialFilterText))
+      : serial.lines
+    const serialPanel = el('div', { className: 'dvb-panel' },
+      el('div', { className: 'dvb-panel-head' },
+        el('span', { className: 'dvb-panel-title' }, t('serialTitle')),
+        el('span', { className: 'dvb-live-dot', 'data-kind': serial.open ? (serial.error ? 'err' : 'live') : 'idle' }),
+        serial.open && serial.port ? el('span', { className: 'dvb-map-meta' }, serial.port + ' @ ' + serial.baudrate) : null,
+        serial.error ? el('span', { className: 'dvb-need' }, serial.error) : null,
+        el('button', {
+          type: 'button', className: 'dvb-btn',
+          disabled: !serial.open || !serialLines.length,
+          onClick: copySerial,
+        }, copiedSerial ? t('serialCopied') : t('serialCopy')),
+        el('button', {
+          type: 'button', className: 'dvb-btn',
+          disabled: !serial.open,
+          onClick() { setSerial((prev) => ({ ...prev, paused: !prev.paused })) },
+        }, serial.paused ? t('serialResume') : t('serialPause'))),
+      el('div', { className: 'dvb-toolbar' },
+        field(t('serial'), el('div', { className: 'dvb-combo' },
+          el('select', {
+            className: 'dvb-input dvb-input-mono',
+            value: serial.port,
+            disabled: scanning || serial.open,
+            onChange(event) { setSerial((prev) => ({ ...prev, port: event.target.value })) },
+          },
+            el('option', { value: '' }, scanning ? t('serialScanning') : (ports.length ? t('serialPick') : t('serialNone'))),
+            serial.port && !ports.some((item) => item.path === serial.port)
+              ? el('option', { value: serial.port }, serial.port + ' · ' + t('serialGone'))
+              : null,
+            ports.map((item) => el('option', { key: item.path, value: item.path }, item.label || item.path))),
+          el('button', {
+            type: 'button', className: 'dvb-btn',
+            disabled: scanning || serial.open,
+            title: t('serialScan'),
+            onClick: scanPorts,
+          }, t('serialScan')))),
+        field(t('baud'), el('input', {
+          className: 'dvb-input dvb-input-mono',
+          type: 'number',
+          value: serial.baudrate,
+          disabled: serial.open,
+          onChange(event) { setSerial((prev) => ({ ...prev, baudrate: Number(event.target.value) })) },
+        })),
+        field('\u00a0', serial.open
+          ? el('button', { type: 'button', className: 'dvb-btn', onClick: closeSerial }, t('serialClose'))
+          : el('button', {
+            type: 'button',
+            className: 'dvb-btn dvb-btn-primary',
+            disabled: !cwd || !serial.port,
+            onClick: openSerial,
+          }, t('serialOpen')))),
+      field(t('serialFilter'), el('input', {
+        className: 'dvb-input',
+        value: serial.filter,
+        placeholder: 'error, assert…',
+        spellCheck: false,
+        autoComplete: 'off',
+        onChange(event) { setSerial((prev) => ({ ...prev, filter: event.target.value })) },
+      })),
+      serialLines.length
+        ? el('pre', {
+          className: 'dvb-log dvb-serial-log',
+          ref: (node) => {
+            if (node && !serial.paused) node.scrollTop = node.scrollHeight
+          },
+        }, serialLines.map((item) => el('div', {
+          key: item.id,
+          className: 'dvb-serial-line',
+          'data-kind': lineKind(item.line),
+        }, '[' + clockOf(item.t) + '] ' + item.line)))
+        : el('div', { className: 'dvb-empty' }, t('serialEmpty')))
+
     return el('div', { className: 'dvb-page' },
       statusBar(el, t, cwd, [
         { key: 'python', health: health.python },
@@ -1481,6 +1811,8 @@ function createDebugView(React, t, post, openProject) {
           buildOut
             ? el('pre', { className: 'dvb-log' }, buildOut)
             : el('div', { className: 'dvb-empty' }, t('outputEmpty')))),
+      flashPanel,
+      serialPanel,
       journalPanel(el, t, journal),
       pickerEl)
   }

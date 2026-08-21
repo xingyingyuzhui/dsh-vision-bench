@@ -28,7 +28,9 @@
 ## 当前能用
 
 - 设置页绑定 Python / UV4 / OpenOCD（绝对路径）
-- **调试**：工作区资源管理器选 `.uvprojx`（暂不支持 `.uvmpw` 多工程），选 Target 和输出格式，再编译。失败时编译输出给出错误数、前几条错误原文、阶段和日志路径。Agent 失败编译会把 `logFile` / `phase` / `errors` 写入共享任务。右侧「工程」页跟随当前 Session 的工程和 Target；只解析工作区内的 C/H，映射过大时标明截断。`vision_bench map` 返回同一份结构
+- **调试**：工作区资源管理器选 `.uvprojx`（暂不支持 `.uvmpw` 多工程），选 Target 和输出格式，再编译。失败时编译输出给出错误数、前几条错误原文、阶段和日志路径；「查看完整日志」在应用内打开日志（尾部 256KB，支持搜索）。Agent 失败编译会把 `logFile` / `phase` / `errors` 写入共享任务。右侧「工程」页跟随当前 Session 的工程和 Target；只解析工作区内的 C/H，映射过大时标明截断。`vision_bench map` 返回同一份结构
+- **烧录下载**：绑定 OpenOCD 后选调试器（cmsis-dap/stlink/jlink…）和目标芯片（stm32f1x/stm32f4x/nrf52…），一键烧录走 **确认卡**：显示目标、固件、大小和 sha256，批准后才执行 `program verify reset exit`。下载进入 `download` 任务和时间线
+- **串口日志**：选串口和波特率打开监视，实时时间戳行、关键字过滤、error/warn 高亮、暂停滚动、复制给 Agent；服务端保留最近 2000 行
 
 - **上位机**：设备 / 连接 / 寄存器段。RTU 串口扫描本机已连接 COM 口，下拉选择。真读真写需要绑定 Python（`pymodbus`，RTU 再加 `pyserial`）；仿真不需要。功能码下拉标注可写性：01 线圈、03 保持寄存器可写（FC05/06 单点、FC15/16 批量），02/04 只读。段表行内「写入」打开写入面板：地址限段内、线圈 ON/OFF 或寄存器值、批量逗号分隔，确认后显示 **写前值 → 目标值 → 回读值**。侧栏点表可写点位行内 ✎ 直接单点写
 - **从机**：本机 TCP 监听支持 FC01–06/15/16；对仿真从机写入会自动退出仿真并持久化写入值；越界地址回异常码
@@ -36,7 +38,7 @@
 - **会话绑定与通知**：调试页「通知绑定 · 绑定本会话」后，编译失败、写点失败或 Agent 发起的任务完成会以 notice 进入绑定会话（`agent.followup`，不可用时退回 `steer`）。`vision_bench status` 返回 `session.isBound`。任务类型注册表已预留 `download` / `verify`；时间线分级保留（重要事件优先）
 - **右侧栏**：和 Excel 预览一样挂在 `dsh-better-sidebar`。监视打开「点表」Tab；曲线、告警先占位
 
-还没做：烧录、串口/CAN 监视、OpenOCD。
+还没做：CAN 监视、验证流程（verify）。
 
 ## 安装
 

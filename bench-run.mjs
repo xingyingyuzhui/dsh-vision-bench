@@ -8,6 +8,8 @@ const SCRIPTS = {
   'keil_project.py': join(RUNTIME_DIR, 'keil_project.py'),
   'keil_build.py': join(RUNTIME_DIR, 'keil_build.py'),
   'modbus_read.py': join(RUNTIME_DIR, 'modbus_read.py'),
+  'modbus_write.py': join(RUNTIME_DIR, 'modbus_write.py'),
+  'openocd_flash.py': join(RUNTIME_DIR, 'openocd_flash.py'),
 }
 
 const pythonArgv = (pythonBin, extra) => {

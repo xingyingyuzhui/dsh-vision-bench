@@ -1,4 +1,5 @@
-import { keilBuild, keilMap, keilScan, keilTargets, listDir, modbusPoll, modbusRead, modbusWrite } from './bench-actions.mjs'
+import { keilBuild, keilMap, keilScan, keilTargets, listDir, modbusPoll, modbusRead, modbusWrite, openocdDownload } from './bench-actions.mjs'
+import { artifactInfo, readBuildLog } from './bench-fs.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
 import {
   bindSession,
@@ -19,6 +20,7 @@ import { normalizeModbus } from './bench-devices.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
 import { stopAllSlaves, syncDeviceSlaves, withListenRuntime } from './bench-slave.mjs'
 import { listSerialPorts } from './bench-serial.mjs'
+import { closeSerialMonitor, openSerialMonitor, serialFeed, serialState, stopAllSerialMonitors } from './bench-serial-monitor.mjs'
 
 export const name = 'dsh-vision-bench'
 export const inject = ['webServer', 'tools', 'agentPresets']
@@ -178,6 +180,20 @@ export function apply(ctx, config = {}) {
       const body = await readJsonBody(req)
       return listDir(body && body.cwd, body && body.path)
     }),
+    route('/dsh-vision-bench/keil/log', async (req) => {
+      const body = await readJsonBody(req)
+      return readBuildLog(dshHome, body && body.logFile)
+    }),
+    route('/dsh-vision-bench/keil/artifact', async (req) => {
+      const body = await readJsonBody(req)
+      return artifactInfo(body && body.cwd, body && body.path)
+    }),
+    route('/dsh-vision-bench/keil/download', async (req) => {
+      const body = await readJsonBody(req)
+      const ran = await openocdDownload(dshHome, body && body.cwd, body)
+      if (ran && !ran.needsConfirm) maybeNotifyResult(dshHome, body && body.cwd, '烧录', ran)
+      return ran
+    }),
     route('/dsh-vision-bench/keil/scan', async (req) => {
       const body = await readJsonBody(req)
       return keilScan(dshHome, body && body.cwd)
@@ -221,12 +237,32 @@ export function apply(ctx, config = {}) {
       return ran
     }),
     route('/dsh-vision-bench/serial/ports', async () => listSerialPorts()),
+    route('/dsh-vision-bench/serial/open', async (req) => {
+      const body = await readJsonBody(req)
+      const room = requireWorkspaceCwd(body && body.cwd)
+      if (room.error) return { ok: false, error: room.error }
+      const bindings = loadBindings(dshHome)
+      return openSerialMonitor(bindings.python, room.cwd, body || {})
+    }),
+    route('/dsh-vision-bench/serial/close', async (req) => {
+      const body = await readJsonBody(req)
+      const room = requireWorkspaceCwd(body && body.cwd)
+      if (room.error) return { ok: false, error: room.error }
+      return closeSerialMonitor(room.cwd)
+    }),
+    route('/dsh-vision-bench/serial/feed', async (req) => {
+      const body = await readJsonBody(req)
+      const room = requireWorkspaceCwd(body && body.cwd)
+      if (room.error) return { ok: false, error: room.error }
+      return serialFeed(room.cwd, body && body.since)
+    }),
   ]
   const disposers = rows.map((entry) => ctx.webServer.register(entry))
   void seedVisionBenchPreset(ctx.agentPresets, dshHome).catch(() => { /* roster copy is best-effort */ })
   ctx.effect(() => () => {
     for (const dispose of disposers) dispose()
     stopAllSlaves()
+    stopAllSerialMonitors()
   })
 }
 
