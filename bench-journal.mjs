@@ -1,6 +1,6 @@
 export const MAX_TASKS = 20
 export const MAX_TIMELINE = 50
-const TASK_TYPES = new Set(['build', 'read'])
+const TASK_TYPES = new Set(['build', 'read', 'write'])
 const SOURCES = new Set(['user', 'agent'])
 const STATUSES = new Set(['running', 'ok', 'error', 'cancelled'])
 

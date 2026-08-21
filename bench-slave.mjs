@@ -61,7 +61,7 @@ export const handlePdu = (device, pdu, at = Date.now(), onWrite = null) => {
     const raw = u16(pdu, 3)
     const value = fc === 5 ? (raw === 0xff00 ? 1 : raw === 0x0000 ? 0 : -1) : raw
     if (value < 0) return exception(fc, 3)
-    return writePoints(device, fc, addr, [value], at, onWrite)
+    return writePoints(device, fc, addr, [value], at, onWrite, raw)
   }
   if (fc === 15 || fc === 16) {
     if (pdu.length < 6) return exception(fc, 3)
@@ -78,7 +78,7 @@ export const handlePdu = (device, pdu, at = Date.now(), onWrite = null) => {
       if (fc === 15) values.push((pdu[6 + (i >> 3)] >> (i & 7)) & 1)
       else values.push(u16(pdu, 6 + i * 2))
     }
-    return writePoints(device, fc, addr, values, at, onWrite)
+    return writePoints(device, fc, addr, values, at, onWrite, qty)
   }
   if (pdu.length < 5) return exception(fc, 3)
   const addr = u16(pdu, 1)
@@ -89,7 +89,7 @@ export const handlePdu = (device, pdu, at = Date.now(), onWrite = null) => {
   return exception(fc, 1)
 }
 
-const writePoints = (device, fc, address, values, at, onWrite) => {
+const writePoints = (device, fc, address, values, at, onWrite, echoWord) => {
   const fn = fc === 5 || fc === 15 ? 1 : 3
   const segments = Array.isArray(device.segments) ? device.segments : []
   for (let i = 0; i < values.length; i++) {
@@ -99,7 +99,7 @@ const writePoints = (device, fc, address, values, at, onWrite) => {
   const out = Buffer.alloc(5)
   out[0] = fc
   out.writeUInt16BE(address, 1)
-  out.writeUInt16BE(values.length, 3)
+  out.writeUInt16BE(echoWord & 0xffff, 3)
   return out
 }
 

@@ -21,27 +21,44 @@ def error_result(code: str, message: str) -> dict:
 
 
 def call_write(client, function: int, address: int, values: list[int], slave: int):
+    """Call a write method across pymodbus 3.15+ (device_id), 3.x (slave) and 2.x (unit)."""
     if function == 5:
-        payload = bool(values[0])
-        try:
-            return client.write_coil(address, payload, slave=slave)
-        except TypeError:
-            return client.write_coil(address, payload, unit=slave)
-    if function == 6:
-        try:
-            return client.write_register(address, values[0], slave=slave)
-        except TypeError:
-            return client.write_register(address, values[0], unit=slave)
-    if function == 15:
+        payloads = (
+            ((address,), {"value": bool(values[0]), "device_id": slave}),
+            ((address,), {"value": bool(values[0]), "slave": slave}),
+            ((address,), {"value": bool(values[0]), "unit": slave}),
+        )
+        names = ("write_coil", "write_coil", "write_coil")
+    elif function == 6:
+        payloads = (
+            ((address,), {"value": values[0], "device_id": slave}),
+            ((address,), {"value": values[0], "slave": slave}),
+            ((address,), {"value": values[0], "unit": slave}),
+        )
+        names = ("write_register", "write_register", "write_register")
+    elif function == 15:
         payload = [bool(v) for v in values]
+        payloads = (
+            ((address,), {"values": payload, "device_id": slave}),
+            ((address,), {"values": payload, "slave": slave}),
+            ((address,), {"values": payload, "unit": slave}),
+        )
+        names = ("write_coils", "write_coils", "write_coils")
+    else:
+        payloads = (
+            ((address,), {"values": values, "device_id": slave}),
+            ((address,), {"values": values, "slave": slave}),
+            ((address,), {"values": values, "unit": slave}),
+        )
+        names = ("write_registers", "write_registers", "write_registers")
+    last = None
+    for name, (args, kwargs) in zip(names, payloads):
+        method = getattr(client, name)
         try:
-            return client.write_coils(address, payload, slave=slave)
-        except TypeError:
-            return client.write_coils(address, payload, unit=slave)
-    try:
-        return client.write_registers(address, values, slave=slave)
-    except TypeError:
-        return client.write_registers(address, values, unit=slave)
+            return method(*args, **kwargs)
+        except TypeError as exc:
+            last = exc
+    raise last
 
 
 def main() -> int:

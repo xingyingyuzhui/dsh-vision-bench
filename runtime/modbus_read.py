@@ -21,6 +21,7 @@ def error_result(code: str, message: str) -> dict:
 
 
 def call_read(client, function: int, address: int, count: int, slave: int):
+    """Call a read method across pymodbus 3.15+ (device_id), 3.x (slave) and 2.x (unit)."""
     names = {
         1: "read_coils",
         2: "read_discrete_inputs",
@@ -28,10 +29,18 @@ def call_read(client, function: int, address: int, count: int, slave: int):
         4: "read_input_registers",
     }
     method = getattr(client, names[function])
-    try:
-        return method(address, count=count, slave=slave)
-    except TypeError:
-        return method(address, count, unit=slave)
+    attempts = (
+        {"count": count, "device_id": slave},
+        {"count": count, "slave": slave},
+        {"count": count, "unit": slave},
+    )
+    last = None
+    for kwargs in attempts:
+        try:
+            return method(address, **kwargs)
+        except TypeError as exc:
+            last = exc
+    raise last
 
 
 def main() -> int:
