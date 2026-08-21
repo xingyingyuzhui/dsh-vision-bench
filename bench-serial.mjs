@@ -1,5 +1,8 @@
 import { readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { runExecFile } from './bench-run.mjs'
+
+const winRegExe = () => join(process.env.SystemRoot || process.env.windir || 'C:\\Windows', 'System32', 'reg.exe')
 
 const COM_ID = /^COM(\d+)$/i
 const UNIX_KEEP = /^(cu\.usb|cu\.wchusb|cu\.SLAB_USBtoUART|cu\.usbserial|cu\.usbmodem|ttyUSB|ttyACM)/
@@ -78,13 +81,6 @@ export const listUnixPortsFromNames = (names) => {
   return ports
 }
 
-const labelOf = (id, pnp) => {
-  const full = pnp[id]
-  if (!full) return id
-  const chip = full.replace(/\s*\(COM\d+\)\s*$/i, '').trim()
-  return chip && chip !== id ? id + ' · ' + chip : id
-}
-
 const execOut = async (execFileFn, bin, args, timeoutMs) => {
   const ran = await execFileFn(bin, args, { timeoutMs })
   return String((ran && ran.stdout) || '')
@@ -93,7 +89,7 @@ const execOut = async (execFileFn, bin, args, timeoutMs) => {
 const listWindowsPorts = async (execFileFn) => {
   let ids = []
   try {
-    ids = parseRegSerialComm(await execOut(execFileFn, 'reg.exe', [
+    ids = parseRegSerialComm(await execOut(execFileFn, winRegExe(), [
       'query', 'HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM',
     ], 4000))
   } catch { ids = [] }
@@ -105,15 +101,7 @@ const listWindowsPorts = async (execFileFn) => {
       ], 5000))
     } catch { ids = [] }
   }
-  let pnp = {}
-  try {
-    pnp = parsePnpPortLabels(await execOut(execFileFn, 'powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-      '-Command',
-      "[Console]::OutputEncoding=[Text.UTF8Encoding]::new(); Get-CimInstance Win32_PnPEntity | Where-Object { $_.Name -match '\\(COM\\d+\\)' } | Select-Object Name | ConvertTo-Json -Compress",
-    ], 8000))
-  } catch { pnp = {} }
-  return ids.map((id) => ({ path: id, label: labelOf(id, pnp) }))
+  return ids.map((id) => ({ path: id, label: id }))
 }
 
 export const listSerialPorts = async (opts = {}) => {

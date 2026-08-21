@@ -24,6 +24,7 @@ test('generated client keeps the factory contract', () => {
   assert.match(src, /needBindingsBuild/)
   assert.match(src, /serialPh/)
   assert.match(src, /serial\/ports/)
+  assert.match(src, /30000/)
   assert.match(src, /serialScan/)
   assert.match(src, /addSegment/)
   assert.match(src, /pointTable/)

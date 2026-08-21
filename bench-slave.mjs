@@ -75,13 +75,17 @@ const frameResponse = (trans, unit, pdu) => {
 
 export const startDeviceSlave = (cwd, device, getDevice) => {
   const id = keyOf(cwd, device.id)
+  const host = device.host || '127.0.0.1'
+  const port = Number(device.tcpPort) || 1502
   const prev = servers.get(id)
+  if (prev && prev.dshHost === host && prev.dshPort === port && prev.listening) {
+    prev.dshGet = getDevice
+    return Promise.resolve({ ok: true, host, port, deviceId: device.id, reused: true })
+  }
   if (prev) {
     try { prev.close() } catch { /* already closed */ }
     servers.delete(id)
   }
-  const host = device.host || '127.0.0.1'
-  const port = Number(device.tcpPort) || 1502
   const server = createServer((socket) => {
     let buf = Buffer.alloc(0)
     socket.on('data', (chunk) => {
@@ -93,13 +97,17 @@ export const startDeviceSlave = (cwd, device, getDevice) => {
         const unit = buf[6]
         const pdu = buf.subarray(7, 6 + len)
         buf = buf.subarray(6 + len)
-        const current = getDevice() || device
+        const getter = server.dshGet || getDevice
+        const current = (typeof getter === 'function' && getter()) || device
         const resp = handlePdu(current, pdu)
         socket.write(frameResponse(trans, unit, resp))
       }
     })
     socket.on('error', () => { /* drop */ })
   })
+  server.dshHost = host
+  server.dshPort = port
+  server.dshGet = getDevice
   return new Promise((resolve, reject) => {
     server.once('error', reject)
     server.listen(port, host, () => {

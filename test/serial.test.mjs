@@ -57,24 +57,21 @@ test('listUnixPortsFromNames keeps USB serial and drops Bluetooth', () => {
   ])
 })
 
-test('listSerialPorts on win32 uses registry then pnp labels', async () => {
+test('listSerialPorts on win32 uses registry COM names', async () => {
   const ran = await listSerialPorts({
     platform: 'win32',
-    execFile: async (bin, args) => {
-      if (bin === 'reg.exe') {
+    execFile: async (bin) => {
+      if (String(bin).replace(/\\/g, '/').endsWith('reg.exe')) {
         return { stdout: '    \\Device\\VCP0    REG_SZ    COM3\r\n    \\Device\\Serial0    REG_SZ    COM1\r\n' }
       }
-      if (bin === 'powershell.exe' && String(args[args.length - 1]).indexOf('Win32_PnPEntity') >= 0) {
-        return { stdout: JSON.stringify([{ Name: 'USB-SERIAL CH340 (COM3)' }]) }
-      }
-      return { stdout: '' }
+      throw new Error('unexpected ' + bin)
     },
   })
   assert.equal(ran.ok, true)
   assert.equal(ran.ports.length, 2)
   assert.equal(ran.ports[0].path, 'COM1')
   assert.equal(ran.ports[1].path, 'COM3')
-  assert.equal(ran.ports[1].label, 'COM3 · USB-SERIAL CH340')
+  assert.equal(ran.ports[1].label, 'COM3')
 })
 
 test('listSerialPorts on darwin uses injected /dev names', async () => {

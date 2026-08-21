@@ -1261,9 +1261,9 @@ function formatPointValue(item) {
 }
 
 function pickModbus(modbus, patch) {
-  if (patch && Array.isArray(patch.devices)) return patch
+  if (patch && Array.isArray(patch.devices)) return normalizeModbus(patch)
   if (patch && patch.activeId && Object.keys(patch).length === 1) {
-    return { ...modbus, activeId: patch.activeId }
+    return normalizeModbus({ ...modbus, activeId: patch.activeId })
   }
   return patchActiveDevice(modbus, patch || {})
 }
@@ -1288,10 +1288,13 @@ function createHmiView(React, t, post, openLive) {
     const [draft, setDraft] = React.useState({ name: '', function: 3, address: 0, count: 10 })
     const [ports, setPorts] = React.useState([])
     const [scanning, setScanning] = React.useState(false)
+    const workspaceRef = React.useRef(workspace)
+    const persistSeq = React.useRef(0)
+    workspaceRef.current = workspace
 
     function scanPorts() {
       setScanning(true)
-      post('/dsh-vision-bench/serial/ports').then((data) => {
+      post('/dsh-vision-bench/serial/ports', {}, 30000).then((data) => {
         setPorts((data && Array.isArray(data.ports)) ? data.ports : [])
       }).catch(() => {
         setPorts([])
@@ -1305,19 +1308,24 @@ function createHmiView(React, t, post, openLive) {
     React.useEffect(() => {
       let stop = false
       function pull(first) {
+        const seq = persistSeq.current
         post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
           if (stop) return
           if (data && data.health) setHealth(data.health)
+          setJournal(pickJournal(data))
+          if (seq !== persistSeq.current) return
           if (data && data.workspace && data.workspace.modbus) {
-            if (first) setWorkspace(data.workspace)
-            else {
-              setWorkspace((prev) => ({
-                ...prev,
-                modbus: data.workspace.modbus || prev.modbus,
-              }))
+            if (first) {
+              workspaceRef.current = data.workspace
+              setWorkspace(data.workspace)
+            } else {
+              setWorkspace((prev) => {
+                const next = { ...prev, modbus: data.workspace.modbus || prev.modbus }
+                workspaceRef.current = next
+                return next
+              })
             }
           }
-          setJournal(pickJournal(data))
         }).catch((err) => {
           if (first && !stop) setError(String((err && err.message) || t('loadFail')))
         })
@@ -1328,16 +1336,26 @@ function createHmiView(React, t, post, openLive) {
     }, [cwd])
 
     function setModbus(patch) {
-      setWorkspace((prev) => ({ ...prev, modbus: { ...prev.modbus, ...patch } }))
+      setWorkspace((prev) => {
+        const next = { ...prev, modbus: { ...prev.modbus, ...patch } }
+        workspaceRef.current = next
+        return next
+      })
     }
 
     function persist(patch) {
       if (!cwd) return Promise.resolve()
-      const modbus = pickModbus(workspace.modbus, patch)
-      setWorkspace((prev) => ({ ...prev, modbus }))
+      const seq = ++persistSeq.current
+      const modbus = pickModbus(workspaceRef.current.modbus, patch)
+      const next = { ...workspaceRef.current, modbus }
+      workspaceRef.current = next
+      setWorkspace(next)
       return post('/dsh-vision-bench/workspace', { cwd, modbus }).then((data) => {
+        if (seq !== persistSeq.current) return
         if (data && data.workspace && data.workspace.modbus) {
-          setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus }))
+          const saved = { ...workspaceRef.current, modbus: data.workspace.modbus }
+          workspaceRef.current = saved
+          setWorkspace(saved)
         }
         if (data) setJournal(pickJournal(data))
       })

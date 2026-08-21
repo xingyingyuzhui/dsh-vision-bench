@@ -4,7 +4,7 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { handlePdu } from '../bench-slave.mjs'
+import { handlePdu, startDeviceSlave, stopDeviceSlave, _internal } from '../bench-slave.mjs'
 import { addDevice, recipePair, normalizeModbus, patchActiveDevice } from '../bench-devices.mjs'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
 import { modbusPoll } from '../bench-actions.mjs'
@@ -48,6 +48,20 @@ test('slave handlePdu returns holding registers from sim map', () => {
   assert.equal(resp[0], 3)
   assert.equal(resp[1], 4)
   assert.ok(resp.length >= 6)
+})
+
+test('startDeviceSlave reuses the same TCP listen', async () => {
+  const cwd = join(tmpdir(), 'dvb-slave-' + process.pid)
+  const device = { id: 'd-listen', host: '127.0.0.1', tcpPort: 0, role: 'slave' }
+  try {
+    const first = await startDeviceSlave(cwd, device, () => device)
+    assert.equal(first.ok, true)
+    const second = await startDeviceSlave(cwd, device, () => device)
+    assert.equal(second.reused, true)
+    assert.equal(_internal.servers.size, 1)
+  } finally {
+    stopDeviceSlave(cwd, device.id)
+  }
 })
 
 test('saveWorkspace migrates segments onto devices', async () => {
