@@ -2,7 +2,7 @@ import { existsSync, lstatSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { extname, isAbsolute, parse, relative, resolve } from 'node:path'
 
-const KEIL_EXT = new Set(['.uvprojx', '.uvmpw'])
+const KEIL_EXT = new Set(['.uvprojx'])
 
 export const realPath = (file) => {
   try {
@@ -67,6 +67,6 @@ export const requireKeilProject = (cwd, project) => {
   if (!file.isFile()) return { error: '不是工程文件' }
   const real = realPath(raw)
   if (!pathInside(room.cwd, real)) return { error: '工程必须在当前工作区内' }
-  if (!KEIL_EXT.has(extname(real).toLowerCase())) return { error: '需要 .uvprojx 或 .uvmpw' }
+  if (!KEIL_EXT.has(extname(real).toLowerCase())) return { error: '需要 .uvprojx' }
   return { cwd: room.cwd, project: raw }
 }

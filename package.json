@@ -1,6 +1,6 @@
 {
   "name": "dsh-vision-bench",
-  "version": "0.7.0",
+  "version": "0.9.1",
   "description": "Vision 台架：会话区调试/上位机点表（按段添加地址），共享任务与时间线，并安装「台架模式」Agent 预设。",
   "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "bench", "keil", "modbus"],
   "license": "MIT",
@@ -28,6 +28,7 @@
     "bench-view.mjs",
     "bench-hmi.mjs",
     "bench-live.mjs",
+    "bench-map.mjs",
     "bench-points.mjs",
     "bench-devices.mjs",
     "bench-slave.mjs",

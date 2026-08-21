@@ -27,6 +27,7 @@ test('agent role registers vision_bench and skips HTTP routes', () => {
   assert.equal(tools.length, 1)
   assert.equal(tools[0].name, 'vision_bench')
   assert.equal(tools[0].parameters.type, 'object')
+  assert.ok(tools[0].parameters.properties.action.enum.includes('map'))
   assert.ok(tools[0].parameters.required.includes('action'))
 })
 

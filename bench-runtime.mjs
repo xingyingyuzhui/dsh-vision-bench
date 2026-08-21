@@ -3,6 +3,7 @@ import { ATTR, CSS } from './bench-styles.mjs'
 import { createSettingsPage, registerSettings } from './bench-settings.mjs'
 import { createHmiView } from './bench-hmi.mjs'
 import { closeBetterTab, createLiveView, openModbusTab, registerLive } from './bench-live.mjs'
+import { createMapView, openProjectTab, registerMap } from './bench-map.mjs'
 import { createDebugView, registerView } from './bench-view.mjs'
 
 export function apply(ctx) {
@@ -39,32 +40,37 @@ export function apply(ctx) {
       cache: 'no-store',
       signal: AbortSignal.timeout(timeoutMs || 15000),
     }).then((res) => res.json().then((data) => {
-      if (!res.ok && (!data || data.ok !== true)) throw new Error((data && data.error) || ('http ' + res.status))
-      if (data && data.ok === false) throw new Error(data.error || t('fail'))
+      if (!res.ok) throw new Error((data && data.error) || ('http ' + res.status))
       return data
     }))
   }
 
   let openLiveImpl = function () {}
+  let openProjectImpl = function () {}
   let closeTabImpl = function () {}
   function openLive() { openLiveImpl() }
+  function openProject() { openProjectImpl() }
   const SettingsPage = createSettingsPage(React, t, post)
-  const DebugView = createDebugView(React, t, post)
+  const DebugView = createDebugView(React, t, post, openProject)
   const HmiView = createHmiView(React, t, post, openLive)
   const LivePage = createLiveView(React, t, post, {
     openLive,
     closeTab(id) { closeTabImpl(id) },
   })
+  const MapPage = createMapView(React, t, post)
   const stopSettings = registerSettings(ctx, React, t, SettingsPage)
   const stopView = registerView(ctx, React, t, DebugView, HmiView)
 
   if (typeof ctx.inject === 'function') {
     ctx.inject(['betterSidebar'], (side) => {
       openLiveImpl = function () { openModbusTab(side) }
+      openProjectImpl = function () { openProjectTab(side) }
       closeTabImpl = function (id) { closeBetterTab(side, id) }
       const stopLive = registerLive(side, React, t, LivePage)
+      const stopMap = registerMap(side, React, t, MapPage)
       side.effect(() => () => {
         if (typeof stopLive === 'function') stopLive()
+        if (typeof stopMap === 'function') stopMap()
       })
     })
   }

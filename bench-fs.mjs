@@ -3,7 +3,7 @@ import { dirname, join, resolve } from 'node:path'
 import { pathInside, realPath, requireWorkspaceCwd } from './bench-paths.mjs'
 
 const SKIP = new Set(['.git', '.svn', '.hg', 'node_modules', '.venv', 'venv', '__pycache__', '.dsh'])
-const KEIL_EXT = new Set(['.uvprojx', '.uvmpw'])
+const KEIL_EXT = new Set(['.uvprojx'])
 export const ARTIFACTS = ['hex', 'bin', 'axf', 'elf']
 const ARTIFACT_FILE = {
   hex: 'hex_file',
@@ -64,7 +64,7 @@ export const listWorkspaceDir = (cwd, requested) => {
       if (SKIP.has(name)) continue
       dirs.push({ name, path: full })
     } else if (isFile && KEIL_EXT.has(extOf(name))) {
-      files.push({ name, path: full, type: extOf(name) === '.uvmpw' ? 'workspace' : 'project' })
+      files.push({ name, path: full, type: 'project' })
     }
   }
   dirs.sort((a, b) => a.name.localeCompare(b.name))

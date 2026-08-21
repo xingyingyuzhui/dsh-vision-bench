@@ -48,6 +48,7 @@ test('apply registers state and bindings routes and disposes them', () => {
   assert.ok(paths.includes('/dsh-vision-bench/state'))
   assert.ok(paths.includes('/dsh-vision-bench/fs/list'))
   assert.ok(paths.includes('/dsh-vision-bench/keil/build'))
+  assert.ok(paths.includes('/dsh-vision-bench/keil/map'))
   assert.ok(paths.includes('/dsh-vision-bench/modbus/read'))
   assert.ok(paths.includes('/dsh-vision-bench/modbus/poll'))
   assert.ok(paths.includes('/dsh-vision-bench/serial/ports'))

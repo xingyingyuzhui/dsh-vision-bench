@@ -1,23 +1,42 @@
 import { NS } from './bench-i18n.mjs'
 import { statusKind } from './bench-settings.mjs'
 
-function formatResult(result) {
+export function formatResult(result) {
   if (!result) return ''
-  if (result.summary) {
-    const download = result.download && result.download.path
-      ? '\n' + result.download.wanted + ': ' + result.download.path
-      : (result.download && result.download.wanted
-        ? '\n未生成 ' + result.download.wanted + (result.download.available && result.download.available.length
-          ? '（已有 ' + result.download.available.join(', ') + '）'
-          : '')
-        : '')
-    const extra = !download && result.details && result.details.flash_file ? '\n' + result.details.flash_file : download
-    const value = result.details && result.details.value !== undefined
-      ? '\nvalue=' + JSON.stringify(result.details.value)
-      : ''
-    return result.summary + extra + value
+  const details = result.details || {}
+  const metrics = result.metrics || {}
+  const lines = []
+  if (result.summary) lines.push(result.summary)
+  if (metrics.compile_errors != null || metrics.after_build_errors != null) {
+    lines.push(
+      '编译/链接 ' + String(metrics.compile_errors || 0)
+      + ' · 后处理 ' + String(metrics.after_build_errors || 0)
+      + ' · 警告 ' + String(metrics.warnings || 0),
+    )
+  } else if (metrics.errors != null) {
+    lines.push('errors=' + metrics.errors + ' warnings=' + metrics.warnings)
   }
-  return JSON.stringify(result, null, 2)
+  if (details.phase && details.phase !== 'ok') {
+    lines.push(details.phase === 'after_build' ? '阶段: 后处理' : '阶段: 编译/链接')
+  }
+  const errs = Array.isArray(details.errors) ? details.errors : []
+  if (errs.length) {
+    lines.push('错误:')
+    for (const item of errs.slice(0, 8)) lines.push('  ' + item)
+  }
+  if (details.log_file) lines.push('日志: ' + details.log_file)
+  if (result.download && result.download.path) {
+    lines.push(result.download.wanted + ': ' + result.download.path)
+  } else if (result.download && result.download.wanted) {
+    lines.push('未生成 ' + result.download.wanted
+      + (result.download.available && result.download.available.length
+        ? '（已有 ' + result.download.available.join(', ') + '）'
+        : ''))
+  } else if (details.flash_file) {
+    lines.push(details.flash_file)
+  }
+  if (details.value !== undefined) lines.push('value=' + JSON.stringify(details.value))
+  return lines.filter(Boolean).join('\n') || JSON.stringify(result, null, 2)
 }
 
 function agentNote(cwd, workspace, result) {
@@ -32,7 +51,13 @@ function agentNote(cwd, workspace, result) {
     '输出格式: ' + (keil.artifact || 'hex'),
     download.path ? '输出: ' + download.path : (result ? '输出: 未生成所选格式' : ''),
     result && result.summary ? '结果: ' + result.summary : '',
-    metrics.errors != null ? 'errors=' + metrics.errors + ' warnings=' + metrics.warnings : '',
+    metrics.compile_errors != null
+      ? '编译/链接=' + metrics.compile_errors + ' 后处理=' + metrics.after_build_errors + ' warnings=' + metrics.warnings
+      : (metrics.errors != null ? 'errors=' + metrics.errors + ' warnings=' + metrics.warnings : ''),
+    result && result.details && result.details.log_file ? '日志: ' + result.details.log_file : '',
+    result && result.details && Array.isArray(result.details.errors) && result.details.errors.length
+      ? '错误: ' + result.details.errors.slice(0, 4).join(' | ')
+      : '',
   ].filter(Boolean).join('\n')
 }
 
@@ -120,7 +145,10 @@ function journalPanel(el, t, journal) {
       el('span', { className: 'dvb-badge', 'data-source': item.source }, sourceLabel(t, item.source)),
       el('span', null, typeLabel(t, item.type)),
       el('span', { className: 'dvb-badge' }, statusLabel(t, item.status)),
-      el('span', { className: 'dvb-hint' }, item.summary || ''))),
+      el('span', {
+        className: 'dvb-hint',
+        title: [item.logFile, item.phase].concat(Array.isArray(item.errors) ? item.errors : []).filter(Boolean).join('\n'),
+      }, item.summary || (item.errors && item.errors[0]) || ''))),
     timeline.length ? el('div', { className: 'dvb-journal-title' }, t('timeline')) : null,
     timeline.slice(0, 8).map((item) => el('div', {
       key: item.id,
@@ -145,7 +173,7 @@ function statusBar(el, t, cwd, rows) {
       : el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('needWorkspace')))
 }
 
-export function createDebugView(React, t, post) {
+export function createDebugView(React, t, post, openProject) {
   return function DebugView(props) {
     const el = React.createElement
     const cwd = useSessionCwd(React, props)
@@ -211,7 +239,10 @@ export function createDebugView(React, t, post) {
       }
       setBusy(name)
       setError('')
-      return post(path, Object.assign({ cwd }, payload || {}), timeoutMs).then((data) => data).catch((err) => {
+      return post(path, Object.assign({ cwd }, payload || {}), timeoutMs).then((data) => {
+        if (data && data.ok === false) setError(data.error || t('fail'))
+        return data
+      }).catch((err) => {
         setError(String((err && err.message) || t('fail')))
         return null
       }).finally(() => setBusy(''))
@@ -234,8 +265,10 @@ export function createDebugView(React, t, post) {
     function chooseProject(path) {
       setPicker(null)
       setKeil({ project: path, target: '' })
-      persist({ ...workspace, keil: { ...workspace.keil, project: path, target: '' } })
-      loadTargets(path)
+      persist({ ...workspace, keil: { ...workspace.keil, project: path, target: '' } }).then(() => {
+        loadTargets(path)
+        if (typeof openProject === 'function') openProject()
+      })
     }
 
     function loadTargets(project) {
@@ -264,6 +297,7 @@ export function createDebugView(React, t, post) {
         setLastResult(data.result)
         setBuildOut(formatResult(data.result))
         setCopied(false)
+        if (data.ok === false && typeof openProject === 'function') openProject()
         return post('/dsh-vision-bench/state', { cwd })
       }).then((data) => {
         if (!data) return
@@ -327,59 +361,65 @@ export function createDebugView(React, t, post) {
         { key: 'uv4', health: health.uv4 },
       ]),
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
-      el('div', { className: 'dvb-panel' },
-        el('div', { className: 'dvb-panel-head' },
-          el('span', { className: 'dvb-panel-title' }, t('project')),
-          el('button', {
-            type: 'button', className: 'dvb-btn', disabled: !cwd || !!busy,
-            onClick() { openPicker(cwd) },
-          }, busy === 'picker' ? t('opening') : t('browse'))),
-        el('div', { className: 'dvb-file' },
-          el('div', { className: 'dvb-path', 'data-empty': workspace.keil.project ? '0' : '1' },
-            workspace.keil.project || t('pickProject'))),
-        el('div', { className: 'dvb-toolbar' },
-          field(t('target'), el('select', {
-            className: 'dvb-input',
-            value: workspace.keil.target,
-            disabled: !workspace.keil.project || busy === 'targets',
-            onChange(event) {
-              const target = event.target.value
-              setKeil({ target })
-              persist({ ...workspace, keil: { ...workspace.keil, target } })
+      el('div', { className: 'dvb-split' },
+        el('div', { className: 'dvb-panel' },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, t('project')),
+            el('button', {
+              type: 'button', className: 'dvb-btn', disabled: !cwd || !!busy,
+              onClick() { openPicker(cwd) },
+            }, busy === 'picker' ? t('opening') : t('browse')),
+            el('button', {
+              type: 'button', className: 'dvb-btn',
+              disabled: !cwd || !workspace.keil.project,
+              onClick() { if (typeof openProject === 'function') openProject() },
+            }, t('mapOpen'))),
+          el('div', { className: 'dvb-file' },
+            el('div', { className: 'dvb-path', 'data-empty': workspace.keil.project ? '0' : '1' },
+              workspace.keil.project || t('pickProject'))),
+          el('div', { className: 'dvb-toolbar' },
+            field(t('target'), el('select', {
+              className: 'dvb-input',
+              value: workspace.keil.target,
+              disabled: !workspace.keil.project || busy === 'targets',
+              onChange(event) {
+                const target = event.target.value
+                setKeil({ target })
+                persist({ ...workspace, keil: { ...workspace.keil, target } })
+              },
+            }, [el('option', { key: '', value: '' }, t('pickTarget'))].concat(
+              targets.map((item) => el('option', { key: item.name, value: item.name }, item.name))))),
+            field(t('artifact'), el('select', {
+              className: 'dvb-input',
+              value: workspace.keil.artifact || 'hex',
+              disabled: !workspace.keil.project,
+              onChange(event) {
+                const artifact = event.target.value
+                setKeil({ artifact })
+                persist({ ...workspace, keil: { ...workspace.keil, artifact } })
+              },
             },
-          }, [el('option', { key: '', value: '' }, t('pickTarget'))].concat(
-            targets.map((item) => el('option', { key: item.name, value: item.name }, item.name))))),
-          field(t('artifact'), el('select', {
-            className: 'dvb-input',
-            value: workspace.keil.artifact || 'hex',
-            disabled: !workspace.keil.project,
-            onChange(event) {
-              const artifact = event.target.value
-              setKeil({ artifact })
-              persist({ ...workspace, keil: { ...workspace.keil, artifact } })
-            },
-          },
-            el('option', { value: 'hex' }, '.hex'),
-            el('option', { value: 'bin' }, '.bin'),
-            el('option', { value: 'axf' }, '.axf'),
-            el('option', { value: 'elf' }, '.elf'))),
-          el('button', {
-            type: 'button',
-            className: 'dvb-btn dvb-btn-primary',
-            disabled: !cwd || !pythonReady || !uv4Ready || !workspace.keil.project || buildBusy,
-            onClick: build,
-          }, buildLabel),
-          lastResult
-            ? el('button', { type: 'button', className: 'dvb-btn', onClick: copyForAgent },
-              copied ? t('copied') : t('copyAgent'))
-            : null,
-          !buildBusy && buildBlock ? el('span', { className: 'dvb-need' }, buildBlock) : null)),
-      el('div', { className: 'dvb-panel dvb-panel-fill' },
-        el('div', { className: 'dvb-panel-head' },
-          el('span', { className: 'dvb-panel-title' }, t('outputLog'))),
-        buildOut
-          ? el('pre', { className: 'dvb-log' }, buildOut)
-          : el('div', { className: 'dvb-empty' }, t('outputEmpty'))),
+              el('option', { value: 'hex' }, '.hex'),
+              el('option', { value: 'bin' }, '.bin'),
+              el('option', { value: 'axf' }, '.axf'),
+              el('option', { value: 'elf' }, '.elf'))),
+            el('button', {
+              type: 'button',
+              className: 'dvb-btn dvb-btn-primary',
+              disabled: !cwd || !pythonReady || !uv4Ready || !workspace.keil.project || buildBusy,
+              onClick: build,
+            }, buildLabel),
+            lastResult
+              ? el('button', { type: 'button', className: 'dvb-btn', onClick: copyForAgent },
+                copied ? t('copied') : t('copyAgent'))
+              : null,
+            !buildBusy && buildBlock ? el('span', { className: 'dvb-need' }, buildBlock) : null)),
+        el('div', { className: 'dvb-panel dvb-panel-fill' },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, t('outputLog'))),
+          buildOut
+            ? el('pre', { className: 'dvb-log' }, buildOut)
+            : el('div', { className: 'dvb-empty' }, t('outputEmpty')))),
       journalPanel(el, t, journal),
       pickerEl)
   }

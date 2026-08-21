@@ -30,6 +30,11 @@ export const normalizeTask = (input) => {
     startedAt: Number.isFinite(startedAt) && startedAt > 0 ? startedAt : Date.now(),
     endedAt: Number.isFinite(endedAt) && endedAt > 0 ? endedAt : null,
     summary: text(input && input.summary, '').slice(0, 240),
+    logFile: text(input && input.logFile, '').slice(0, 260),
+    phase: text(input && input.phase, '').slice(0, 32),
+    errors: Array.isArray(input && input.errors)
+      ? input.errors.map((item) => String(item || '').slice(0, 240)).filter(Boolean).slice(0, 8)
+      : [],
   }
 }
 
@@ -72,6 +77,9 @@ export const compactTasks = (tasks) =>
     startedAt: item.startedAt,
     endedAt: item.endedAt,
     summary: item.summary,
+    logFile: item.logFile || '',
+    phase: item.phase || '',
+    errors: Array.isArray(item.errors) ? item.errors : [],
   }))
 
 export const compactTimeline = (timeline) =>

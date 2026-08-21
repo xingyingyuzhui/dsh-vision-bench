@@ -1,4 +1,4 @@
-import { keilBuild, keilScan, keilTargets, listDir, modbusPoll, modbusRead } from './bench-actions.mjs'
+import { keilBuild, keilMap, keilScan, keilTargets, listDir, modbusPoll, modbusRead } from './bench-actions.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
 import {
   defaultDshHome,
@@ -153,6 +153,10 @@ export function apply(ctx, config = {}) {
     route('/dsh-vision-bench/keil/targets', async (req) => {
       const body = await readJsonBody(req)
       return keilTargets(dshHome, body && body.cwd, body && body.project)
+    }),
+    route('/dsh-vision-bench/keil/map', async (req) => {
+      const body = await readJsonBody(req)
+      return keilMap(dshHome, body && body.cwd, body && body.project, body && body.target)
     }),
     route('/dsh-vision-bench/keil/build', async (req) => {
       const body = await readJsonBody(req)

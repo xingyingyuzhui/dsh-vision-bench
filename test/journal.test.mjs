@@ -43,6 +43,22 @@ test('compact helpers cap and keep running', () => {
   ]
   assert.equal(runningTasks(tasks).length, 1)
   assert.equal(compactTasks(tasks)[0].id, 'a')
+  const kept = compactTasks([{
+    id: 'c',
+    type: 'build',
+    source: 'agent',
+    sessionId: 's',
+    status: 'error',
+    startedAt: 1,
+    endedAt: 2,
+    summary: '编译失败',
+    logFile: '/tmp/t.log',
+    phase: 'compile',
+    errors: ['main.c(12): error: foo'],
+  }])[0]
+  assert.equal(kept.logFile, '/tmp/t.log')
+  assert.equal(kept.phase, 'compile')
+  assert.deepEqual(kept.errors, ['main.c(12): error: foo'])
   assert.equal(compactTimeline([{ id: 'e', at: 1, kind: 'build-end', source: 'user', sessionId: '', taskId: 'b', ok: true, summary: 'ok' }])[0].kind, 'build-end')
 })
 
@@ -145,6 +161,34 @@ test('keilBuild records agent source when the compile itself fails', async () =>
     assert.equal(ws.tasks[0].status, 'error')
     assert.ok(ws.timeline.some((item) => item.kind === 'build-start' && item.source === 'agent'))
     assert.ok(ws.timeline.some((item) => item.kind === 'build-end' && item.ok === false))
+    assert.ok(ran.result)
+    assert.equal(typeof ran.result.summary, 'string')
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('finishTask stores logFile, phase and errors for Agent builds', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-j-log-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    const task = openTask(home, cwd, { type: 'build', source: 'agent', sessionId: 's', summary: '编译 Debug' })
+    finishTask(home, cwd, task.id, {
+      ok: false,
+      summary: '编译失败 identifier foo',
+      logFile: '/tmp/vision-bench/logs/t9.log',
+      phase: 'compile',
+      errors: ['main.c(12): error: #20: identifier "foo" is undefined'],
+    })
+    const ws = loadWorkspace(home, cwd)
+    assert.equal(ws.tasks[0].status, 'error')
+    assert.equal(ws.tasks[0].logFile, '/tmp/vision-bench/logs/t9.log')
+    assert.equal(ws.tasks[0].phase, 'compile')
+    assert.equal(ws.tasks[0].errors[0].includes('foo'), true)
+    const view = journalView(ws)
+    assert.equal(view.tasks[0].logFile, '/tmp/vision-bench/logs/t9.log')
+    assert.deepEqual(view.tasks[0].errors, ws.tasks[0].errors)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

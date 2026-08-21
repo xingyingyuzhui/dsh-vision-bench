@@ -18,15 +18,17 @@
 | action | 作用 |
 |---|---|
 | `status` | 当前工程、Target、下载包、进行中任务、时间线 |
-| `ls` | 列出工作区内目录和 `.uvprojx` |
+| `ls` | 列出工作区内目录和 `.uvprojx`（不含 `.uvmpw`） |
 | `select` | 选定工程 |
 | `build` | 编译 |
+| `map` | 当前 Target 的组、源文件、包含关系和函数名；超出上限时带 `truncated` |
 | `read` | 不传 address 则读点表全部段；传入则单次读 |
 
 ## 当前能用
 
 - 设置页绑定 Python / UV4 / OpenOCD（绝对路径）
-- **调试**：工作区资源管理器选 `.uvprojx`，选 Target 和输出格式，再编译；有任务时才显示任务列表
+- **调试**：工作区资源管理器选 `.uvprojx`（暂不支持 `.uvmpw` 多工程），选 Target 和输出格式，再编译。失败时编译输出给出错误数、前几条错误原文、阶段和日志路径。Agent 失败编译会把 `logFile` / `phase` / `errors` 写入共享任务。右侧「工程」页跟随当前 Session 的工程和 Target；只解析工作区内的 C/H，映射过大时标明截断。`vision_bench map` 返回同一份结构
+
 - **上位机**：设备 / 连接 / 寄存器段。RTU 串口扫描本机已连接 COM 口，下拉选择。真读需要绑定 Python（`pymodbus`，RTU 再加 `pyserial`）；仿真不需要
 - **多设备**：主机询问控制板；从机在本机 TCP 监听。可用「主从示例」一键仿真双机
 - **右侧栏**：和 Excel 预览一样挂在 `dsh-better-sidebar`。监视打开「点表」Tab；曲线、告警先占位

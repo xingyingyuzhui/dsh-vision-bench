@@ -230,6 +230,9 @@ export const finishTask = (home, cwd, taskId, patch) => {
       status,
       endedAt: Date.now(),
       summary: summary || item.summary,
+      logFile: patch && patch.logFile !== undefined ? patch.logFile : item.logFile,
+      phase: patch && patch.phase !== undefined ? patch.phase : item.phase,
+      errors: patch && patch.errors !== undefined ? patch.errors : item.errors,
     })
   })
   const current = tasks.find((item) => item.id === taskId)

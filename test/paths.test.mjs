@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import test from 'node:test'
-import { isBroadCwd, pathInside, requireWorkspaceCwd } from '../bench-paths.mjs'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { isBroadCwd, pathInside, requireKeilProject, requireWorkspaceCwd } from '../bench-paths.mjs'
 import { runExecFile, _internal } from '../bench-run.mjs'
 
 test('pathInside rejects parents and relatives', () => {
@@ -40,4 +42,17 @@ test('parseJsonStdout reads trailing JSON after noise', () => {
   const hit = _internal.parseJsonStdout('noise\n{"status":"ok","action":"scan"}\n')
   assert.equal(hit.data.status, 'ok')
   assert.equal(_internal.parseJsonStdout('').error, '脚本没有输出')
+})
+
+test('requireKeilProject rejects .uvmpw until map supports it', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'dvb-uvmpw-'))
+  try {
+    const file = join(cwd, 'suite.uvmpw')
+    await mkdir(cwd, { recursive: true })
+    await writeFile(file, '<Workspace/>')
+    const ran = requireKeilProject(cwd, file)
+    assert.match(ran.error, /\.uvprojx/)
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
 })

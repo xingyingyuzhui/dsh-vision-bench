@@ -43,7 +43,7 @@ const COPY = {
     opening: '打开中…',
     pickerUp: '上级',
     pickerClose: '关闭',
-    pickerEmpty: '当前目录没有 Keil 工程（.uvprojx / .uvmpw）',
+    pickerEmpty: '当前目录没有 Keil 工程（.uvprojx）',
     build: '编译',
     building: '编译中…',
     copyAgent: '复制摘要',
@@ -131,6 +131,18 @@ const COPY = {
     liveStop: '停止',
     liveEmpty: '无监视点。先添加寄存器段。',
     liveClose: '关闭',
+    projectMap: '工程',
+    projectMapEmpty: '先在调试页选择 Keil 工程。',
+    projectMapNeed: '未绑定 Python，无法解析工程结构。',
+    mapIncludes: '包含路径',
+    mapDefines: '宏',
+    mapMissing: '缺失',
+    mapUnreadable: '不可读',
+    mapOutside: '工作区外',
+    mapOpen: '结构',
+    mapIncludesOf: '包含',
+    mapFunctions: '函数',
+    mapTruncated: '工程较大，结果已截断，并非完整文件树。',
     chartSoon: '曲线尚未实现。',
     alarmSoon: '告警尚未实现。',
     sim: '仿真',
@@ -170,7 +182,7 @@ const COPY = {
     opening: 'Opening…',
     pickerUp: 'Up',
     pickerClose: 'Close',
-    pickerEmpty: 'No Keil project (.uvprojx / .uvmpw) in this directory',
+    pickerEmpty: 'No Keil project (.uvprojx) in this directory',
     build: 'Build',
     building: 'Building…',
     copyAgent: 'Copy summary',
@@ -258,6 +270,18 @@ const COPY = {
     liveStop: 'Stop',
     liveEmpty: 'No points. Add a register range first.',
     liveClose: 'Close',
+    projectMap: 'Project',
+    projectMapEmpty: 'Choose a Keil project on the Debug tab.',
+    projectMapNeed: 'Python is not bound, so the project map cannot be parsed.',
+    mapIncludes: 'Include paths',
+    mapDefines: 'Defines',
+    mapMissing: 'Missing',
+    mapUnreadable: 'Unreadable',
+    mapOutside: 'Outside workspace',
+    mapOpen: 'Map',
+    mapIncludesOf: 'Includes',
+    mapFunctions: 'Functions',
+    mapTruncated: 'Project is large; this map is truncated and not the full tree.',
     chartSoon: 'Charts are not implemented.',
     alarmSoon: 'Alarms are not implemented.',
     sim: 'Sim',
@@ -340,7 +364,7 @@ const CSS = [
   'body[' + ATTR + '] .dvb-msg{font-size:12px}',
   'body[' + ATTR + '] .dvb-msg[data-kind="ok"]{color:var(--dsw-alias-label-success,#2e7d32)}',
   'body[' + ATTR + '] .dvb-msg[data-kind="err"]{color:var(--dsw-alias-label-danger,#c62828)}',
-  'body[' + ATTR + '] .dvb-log{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap;word-break:break-all;min-height:140px;max-height:280px;overflow:auto;padding:8px 10px}',
+  'body[' + ATTR + '] .dvb-log{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap;word-break:break-all;min-height:88px;max-height:220px;overflow:auto;padding:8px 10px}',
   'body[' + ATTR + '] .dvb-path{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}',
   'body[' + ATTR + '] .dvb-path[data-empty="1"]{opacity:.4}',
   'body[' + ATTR + '] .dvb-mask{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)}',
@@ -360,7 +384,9 @@ const CSS = [
   'body[' + ATTR + '] .dvb-panel{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.35));border-radius:6px;min-width:0}',
   'body[' + ATTR + '] .dvb-panel-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:28px}',
   'body[' + ATTR + '] .dvb-panel-title{font-size:12px;font-weight:600;margin-right:auto}',
-  'body[' + ATTR + '] .dvb-panel-fill{min-height:180px}',
+  'body[' + ATTR + '] .dvb-panel-fill{min-height:0;flex:1}',
+  'body[' + ATTR + '] .dvb-split{display:grid;grid-template-columns:minmax(240px,.92fr) minmax(0,1.2fr);gap:10px;align-items:stretch;width:100%;min-width:0}',
+  'body[' + ATTR + '] .dvb-split>.dvb-panel{min-width:0}',
   'body[' + ATTR + '] .dvb-toolbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end}',
   'body[' + ATTR + '] .dvb-inline{display:flex;flex-direction:column;gap:3px;min-width:0}',
   'body[' + ATTR + '] .dvb-inline .dvb-input{min-width:7.5rem}',
@@ -397,7 +423,21 @@ const CSS = [
   'body[' + ATTR + '] .dvb-live-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.78}',
   'body[' + ATTR + '] .dvb-live-row[data-ok="false"] .dvb-val{color:var(--dsw-alias-label-danger,#c62828)}',
   'body[' + ATTR + '] .dvb-live-close{height:24px;width:24px;padding:0;border:0;opacity:.65}',
-  '@media (max-width:720px){body[' + ATTR + '] .dvb-conn,body[' + ATTR + '] .dvb-seg-add{grid-template-columns:repeat(2,minmax(0,1fr))}}',
+  'body[' + ATTR + '] .dvb-map-meta{font-size:11px;opacity:.55}',
+  'body[' + ATTR + '] .dvb-map-block{display:flex;flex-direction:column;gap:3px;margin:4px 0}',
+  'body[' + ATTR + '] .dvb-map-label{font-size:11px;font-weight:600;opacity:.7}',
+  'body[' + ATTR + '] .dvb-map-path,.dvb-map-file{font-size:12px;line-height:1.4;padding:2px 0;display:flex;gap:8px;justify-content:space-between}',
+  'body[' + ATTR + '] .dvb-map-path{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;opacity:.8}',
+  'body[' + ATTR + '] .dvb-map-defs{font-size:11px;opacity:.78;line-height:1.45}',
+  'body[' + ATTR + '] .dvb-map-group{margin-top:8px}',
+  'body[' + ATTR + '] .dvb-map-group-name{font-size:12px;font-weight:600;padding:4px 0}',
+  'body[' + ATTR + '] .dvb-map-file-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+  'body[' + ATTR + '] .dvb-map-file-mark{font-size:11px;opacity:.65;flex:none}',
+  'body[' + ATTR + '] .dvb-map-funcs{font-size:11px;opacity:.62;padding:0 0 4px 8px;line-height:1.4}',
+  'body[' + ATTR + '] .dvb-map-file[data-kind="missing"] .dvb-map-file-name,body[' + ATTR + '] .dvb-map-path[data-kind="missing"]{color:var(--dsw-alias-label-danger,#c62828)}',
+  'body[' + ATTR + '] .dvb-map-file[data-kind="unread"] .dvb-map-file-name{opacity:.55}',
+  'body[' + ATTR + '] .dvb-map-file[data-kind="out"] .dvb-map-file-name,body[' + ATTR + '] .dvb-map-path[data-kind="out"]{opacity:.6}',
+  '@media (max-width:720px){body[' + ATTR + '] .dvb-conn,body[' + ATTR + '] .dvb-seg-add{grid-template-columns:repeat(2,minmax(0,1fr))}body[' + ATTR + '] .dvb-split{grid-template-columns:1fr}}',
 ].join('\n')
 
 const FIELDS = [
@@ -854,21 +894,40 @@ const compactDevices = (modbus) =>
 
 function formatResult(result) {
   if (!result) return ''
-  if (result.summary) {
-    const download = result.download && result.download.path
-      ? '\n' + result.download.wanted + ': ' + result.download.path
-      : (result.download && result.download.wanted
-        ? '\n未生成 ' + result.download.wanted + (result.download.available && result.download.available.length
-          ? '（已有 ' + result.download.available.join(', ') + '）'
-          : '')
-        : '')
-    const extra = !download && result.details && result.details.flash_file ? '\n' + result.details.flash_file : download
-    const value = result.details && result.details.value !== undefined
-      ? '\nvalue=' + JSON.stringify(result.details.value)
-      : ''
-    return result.summary + extra + value
+  const details = result.details || {}
+  const metrics = result.metrics || {}
+  const lines = []
+  if (result.summary) lines.push(result.summary)
+  if (metrics.compile_errors != null || metrics.after_build_errors != null) {
+    lines.push(
+      '编译/链接 ' + String(metrics.compile_errors || 0)
+      + ' · 后处理 ' + String(metrics.after_build_errors || 0)
+      + ' · 警告 ' + String(metrics.warnings || 0),
+    )
+  } else if (metrics.errors != null) {
+    lines.push('errors=' + metrics.errors + ' warnings=' + metrics.warnings)
   }
-  return JSON.stringify(result, null, 2)
+  if (details.phase && details.phase !== 'ok') {
+    lines.push(details.phase === 'after_build' ? '阶段: 后处理' : '阶段: 编译/链接')
+  }
+  const errs = Array.isArray(details.errors) ? details.errors : []
+  if (errs.length) {
+    lines.push('错误:')
+    for (const item of errs.slice(0, 8)) lines.push('  ' + item)
+  }
+  if (details.log_file) lines.push('日志: ' + details.log_file)
+  if (result.download && result.download.path) {
+    lines.push(result.download.wanted + ': ' + result.download.path)
+  } else if (result.download && result.download.wanted) {
+    lines.push('未生成 ' + result.download.wanted
+      + (result.download.available && result.download.available.length
+        ? '（已有 ' + result.download.available.join(', ') + '）'
+        : ''))
+  } else if (details.flash_file) {
+    lines.push(details.flash_file)
+  }
+  if (details.value !== undefined) lines.push('value=' + JSON.stringify(details.value))
+  return lines.filter(Boolean).join('\n') || JSON.stringify(result, null, 2)
 }
 
 function agentNote(cwd, workspace, result) {
@@ -883,7 +942,13 @@ function agentNote(cwd, workspace, result) {
     '输出格式: ' + (keil.artifact || 'hex'),
     download.path ? '输出: ' + download.path : (result ? '输出: 未生成所选格式' : ''),
     result && result.summary ? '结果: ' + result.summary : '',
-    metrics.errors != null ? 'errors=' + metrics.errors + ' warnings=' + metrics.warnings : '',
+    metrics.compile_errors != null
+      ? '编译/链接=' + metrics.compile_errors + ' 后处理=' + metrics.after_build_errors + ' warnings=' + metrics.warnings
+      : (metrics.errors != null ? 'errors=' + metrics.errors + ' warnings=' + metrics.warnings : ''),
+    result && result.details && result.details.log_file ? '日志: ' + result.details.log_file : '',
+    result && result.details && Array.isArray(result.details.errors) && result.details.errors.length
+      ? '错误: ' + result.details.errors.slice(0, 4).join(' | ')
+      : '',
   ].filter(Boolean).join('\n')
 }
 
@@ -971,7 +1036,10 @@ function journalPanel(el, t, journal) {
       el('span', { className: 'dvb-badge', 'data-source': item.source }, sourceLabel(t, item.source)),
       el('span', null, typeLabel(t, item.type)),
       el('span', { className: 'dvb-badge' }, statusLabel(t, item.status)),
-      el('span', { className: 'dvb-hint' }, item.summary || ''))),
+      el('span', {
+        className: 'dvb-hint',
+        title: [item.logFile, item.phase].concat(Array.isArray(item.errors) ? item.errors : []).filter(Boolean).join('\n'),
+      }, item.summary || (item.errors && item.errors[0]) || ''))),
     timeline.length ? el('div', { className: 'dvb-journal-title' }, t('timeline')) : null,
     timeline.slice(0, 8).map((item) => el('div', {
       key: item.id,
@@ -996,7 +1064,7 @@ function statusBar(el, t, cwd, rows) {
       : el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('needWorkspace')))
 }
 
-function createDebugView(React, t, post) {
+function createDebugView(React, t, post, openProject) {
   return function DebugView(props) {
     const el = React.createElement
     const cwd = useSessionCwd(React, props)
@@ -1062,7 +1130,10 @@ function createDebugView(React, t, post) {
       }
       setBusy(name)
       setError('')
-      return post(path, Object.assign({ cwd }, payload || {}), timeoutMs).then((data) => data).catch((err) => {
+      return post(path, Object.assign({ cwd }, payload || {}), timeoutMs).then((data) => {
+        if (data && data.ok === false) setError(data.error || t('fail'))
+        return data
+      }).catch((err) => {
         setError(String((err && err.message) || t('fail')))
         return null
       }).finally(() => setBusy(''))
@@ -1085,8 +1156,10 @@ function createDebugView(React, t, post) {
     function chooseProject(path) {
       setPicker(null)
       setKeil({ project: path, target: '' })
-      persist({ ...workspace, keil: { ...workspace.keil, project: path, target: '' } })
-      loadTargets(path)
+      persist({ ...workspace, keil: { ...workspace.keil, project: path, target: '' } }).then(() => {
+        loadTargets(path)
+        if (typeof openProject === 'function') openProject()
+      })
     }
 
     function loadTargets(project) {
@@ -1115,6 +1188,7 @@ function createDebugView(React, t, post) {
         setLastResult(data.result)
         setBuildOut(formatResult(data.result))
         setCopied(false)
+        if (data.ok === false && typeof openProject === 'function') openProject()
         return post('/dsh-vision-bench/state', { cwd })
       }).then((data) => {
         if (!data) return
@@ -1178,59 +1252,65 @@ function createDebugView(React, t, post) {
         { key: 'uv4', health: health.uv4 },
       ]),
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
-      el('div', { className: 'dvb-panel' },
-        el('div', { className: 'dvb-panel-head' },
-          el('span', { className: 'dvb-panel-title' }, t('project')),
-          el('button', {
-            type: 'button', className: 'dvb-btn', disabled: !cwd || !!busy,
-            onClick() { openPicker(cwd) },
-          }, busy === 'picker' ? t('opening') : t('browse'))),
-        el('div', { className: 'dvb-file' },
-          el('div', { className: 'dvb-path', 'data-empty': workspace.keil.project ? '0' : '1' },
-            workspace.keil.project || t('pickProject'))),
-        el('div', { className: 'dvb-toolbar' },
-          field(t('target'), el('select', {
-            className: 'dvb-input',
-            value: workspace.keil.target,
-            disabled: !workspace.keil.project || busy === 'targets',
-            onChange(event) {
-              const target = event.target.value
-              setKeil({ target })
-              persist({ ...workspace, keil: { ...workspace.keil, target } })
+      el('div', { className: 'dvb-split' },
+        el('div', { className: 'dvb-panel' },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, t('project')),
+            el('button', {
+              type: 'button', className: 'dvb-btn', disabled: !cwd || !!busy,
+              onClick() { openPicker(cwd) },
+            }, busy === 'picker' ? t('opening') : t('browse')),
+            el('button', {
+              type: 'button', className: 'dvb-btn',
+              disabled: !cwd || !workspace.keil.project,
+              onClick() { if (typeof openProject === 'function') openProject() },
+            }, t('mapOpen'))),
+          el('div', { className: 'dvb-file' },
+            el('div', { className: 'dvb-path', 'data-empty': workspace.keil.project ? '0' : '1' },
+              workspace.keil.project || t('pickProject'))),
+          el('div', { className: 'dvb-toolbar' },
+            field(t('target'), el('select', {
+              className: 'dvb-input',
+              value: workspace.keil.target,
+              disabled: !workspace.keil.project || busy === 'targets',
+              onChange(event) {
+                const target = event.target.value
+                setKeil({ target })
+                persist({ ...workspace, keil: { ...workspace.keil, target } })
+              },
+            }, [el('option', { key: '', value: '' }, t('pickTarget'))].concat(
+              targets.map((item) => el('option', { key: item.name, value: item.name }, item.name))))),
+            field(t('artifact'), el('select', {
+              className: 'dvb-input',
+              value: workspace.keil.artifact || 'hex',
+              disabled: !workspace.keil.project,
+              onChange(event) {
+                const artifact = event.target.value
+                setKeil({ artifact })
+                persist({ ...workspace, keil: { ...workspace.keil, artifact } })
+              },
             },
-          }, [el('option', { key: '', value: '' }, t('pickTarget'))].concat(
-            targets.map((item) => el('option', { key: item.name, value: item.name }, item.name))))),
-          field(t('artifact'), el('select', {
-            className: 'dvb-input',
-            value: workspace.keil.artifact || 'hex',
-            disabled: !workspace.keil.project,
-            onChange(event) {
-              const artifact = event.target.value
-              setKeil({ artifact })
-              persist({ ...workspace, keil: { ...workspace.keil, artifact } })
-            },
-          },
-            el('option', { value: 'hex' }, '.hex'),
-            el('option', { value: 'bin' }, '.bin'),
-            el('option', { value: 'axf' }, '.axf'),
-            el('option', { value: 'elf' }, '.elf'))),
-          el('button', {
-            type: 'button',
-            className: 'dvb-btn dvb-btn-primary',
-            disabled: !cwd || !pythonReady || !uv4Ready || !workspace.keil.project || buildBusy,
-            onClick: build,
-          }, buildLabel),
-          lastResult
-            ? el('button', { type: 'button', className: 'dvb-btn', onClick: copyForAgent },
-              copied ? t('copied') : t('copyAgent'))
-            : null,
-          !buildBusy && buildBlock ? el('span', { className: 'dvb-need' }, buildBlock) : null)),
-      el('div', { className: 'dvb-panel dvb-panel-fill' },
-        el('div', { className: 'dvb-panel-head' },
-          el('span', { className: 'dvb-panel-title' }, t('outputLog'))),
-        buildOut
-          ? el('pre', { className: 'dvb-log' }, buildOut)
-          : el('div', { className: 'dvb-empty' }, t('outputEmpty'))),
+              el('option', { value: 'hex' }, '.hex'),
+              el('option', { value: 'bin' }, '.bin'),
+              el('option', { value: 'axf' }, '.axf'),
+              el('option', { value: 'elf' }, '.elf'))),
+            el('button', {
+              type: 'button',
+              className: 'dvb-btn dvb-btn-primary',
+              disabled: !cwd || !pythonReady || !uv4Ready || !workspace.keil.project || buildBusy,
+              onClick: build,
+            }, buildLabel),
+            lastResult
+              ? el('button', { type: 'button', className: 'dvb-btn', onClick: copyForAgent },
+                copied ? t('copied') : t('copyAgent'))
+              : null,
+            !buildBusy && buildBlock ? el('span', { className: 'dvb-need' }, buildBlock) : null)),
+        el('div', { className: 'dvb-panel dvb-panel-fill' },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, t('outputLog'))),
+          buildOut
+            ? el('pre', { className: 'dvb-log' }, buildOut)
+            : el('div', { className: 'dvb-empty' }, t('outputEmpty')))),
       journalPanel(el, t, journal),
       pickerEl)
   }
@@ -1900,6 +1980,158 @@ function closeBetterTab(ctx, tabId) {
 
 const _internal = { TAB_TABLE, TAB_CHART, TAB_ALARM, getBetterSidebar }
 
+const TAB_MAP = 'dsh-vision-bench:project'
+
+function fileMark(t, file) {
+  if (!file.inside) return t('mapOutside')
+  if (!file.exists) return t('mapMissing')
+  if (!file.readable) return t('mapUnreadable')
+  return ''
+}
+
+function truncated(mapped) {
+  const flags = mapped && mapped.truncated && typeof mapped.truncated === 'object' ? mapped.truncated : {}
+  return !!(flags.files || flags.includes || flags.defines || flags.include_edges || flags.functions)
+}
+
+function createMapView(React, t, post) {
+  return function MapView(props) {
+    const el = React.createElement
+    const cwd = sessionCwd(props)
+    const [keil, setKeil] = React.useState({ project: '', target: '' })
+    const [mapped, setMapped] = React.useState(null)
+    const [error, setError] = React.useState('')
+    const [busy, setBusy] = React.useState(false)
+
+    React.useEffect(() => {
+      let stop = false
+      function pull() {
+        if (!cwd) {
+          setKeil({ project: '', target: '' })
+          setMapped(null)
+          return
+        }
+        post('/dsh-vision-bench/state', { cwd }).then((data) => {
+          if (stop) return
+          if (data && data.ok === false) {
+            setError(data.error || t('loadFail'))
+            return
+          }
+          const next = data && data.workspace && data.workspace.keil ? data.workspace.keil : {}
+          const project = next.project || ''
+          const target = next.target || ''
+          setKeil((prev) => (prev.project === project && prev.target === target ? prev : { project, target }))
+        }).catch((err) => {
+          if (!stop) setError(String((err && err.message) || t('loadFail')))
+        })
+      }
+      pull()
+      const timer = setInterval(pull, 2000)
+      return () => { stop = true; clearInterval(timer) }
+    }, [cwd])
+
+    React.useEffect(() => {
+      let stop = false
+      if (!cwd || !keil.project) {
+        setMapped(null)
+        return undefined
+      }
+      setBusy(true)
+      setError('')
+      post('/dsh-vision-bench/keil/map', { cwd, project: keil.project, target: keil.target }).then((data) => {
+        if (stop) return
+        if (data && data.ok === false) {
+          setMapped(null)
+          setError(data.error || t('loadFail'))
+          return
+        }
+        setError('')
+        setMapped(data && data.result && data.result.details ? data.result.details : null)
+      }).catch((err) => {
+        if (!stop) {
+          setMapped(null)
+          setError(String((err && err.message) || t('loadFail')))
+        }
+      }).finally(() => { if (!stop) setBusy(false) })
+      return () => { stop = true }
+    }, [cwd, keil.project, keil.target])
+
+    const counts = mapped && mapped.counts ? mapped.counts : {}
+    const groups = mapped && Array.isArray(mapped.groups) ? mapped.groups : []
+
+    return el('div', { className: 'dvb-live dvb-map' },
+      el('div', { className: 'dvb-live-head' },
+        el('span', { className: 'dvb-live-title' }, t('projectMap')),
+        mapped ? el('span', { className: 'dvb-map-meta' },
+          (mapped.target || '') + ' · ' + String(counts.files || 0)) : null),
+      !cwd
+        ? el('div', { className: 'dvb-hint' }, t('needWorkspace'))
+        : (!keil.project
+          ? el('div', { className: 'dvb-hint' }, t('projectMapEmpty'))
+          : null),
+      error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
+      mapped && truncated(mapped) ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('mapTruncated')) : null,
+      busy ? el('div', { className: 'dvb-hint' }, t('opening')) : null,
+      mapped && Array.isArray(mapped.includes) && mapped.includes.length
+        ? el('div', { className: 'dvb-map-block' },
+          el('div', { className: 'dvb-map-label' }, t('mapIncludes')),
+          mapped.includes.map((item, index) => el('div', {
+            key: 'i' + index,
+            className: 'dvb-map-path',
+            'data-kind': item.exists ? (item.inside ? 'ok' : 'out') : 'missing',
+          }, item.path)))
+        : null,
+      mapped && Array.isArray(mapped.defines) && mapped.defines.length
+        ? el('div', { className: 'dvb-map-block' },
+          el('div', { className: 'dvb-map-label' }, t('mapDefines')),
+          el('div', { className: 'dvb-map-defs' }, mapped.defines.join(', ')))
+        : null,
+      mapped && Array.isArray(mapped.include_edges) && mapped.include_edges.length
+        ? el('div', { className: 'dvb-map-block' },
+          el('div', { className: 'dvb-map-label' }, t('mapIncludesOf') + ' · ' + String(counts.include_edges || mapped.include_edges.length)),
+          mapped.include_edges.slice(0, 80).map((edge, index) => el('div', {
+            key: 'e' + index,
+            className: 'dvb-map-path',
+            'data-kind': edge.resolved ? 'ok' : 'missing',
+          }, (edge.from || '') + ' → ' + (edge.to || edge.name || ''))))
+        : null,
+      groups.map((group, gi) => el('div', { key: 'g' + gi, className: 'dvb-map-group' },
+        el('div', { className: 'dvb-map-group-name' },
+          (group.name || '') + ' · ' + String((group.files || []).length)),
+        (group.files || []).map((file, fi) => {
+          const mark = fileMark(t, file)
+          return el('div', { key: 'f' + fi },
+            el('div', {
+              className: 'dvb-map-file',
+              'data-kind': !file.inside ? 'out' : (!file.exists ? 'missing' : (!file.readable ? 'unread' : 'ok')),
+              title: file.rel || file.name,
+            },
+              el('span', { className: 'dvb-map-file-name' }, file.name),
+              mark ? el('span', { className: 'dvb-map-file-mark' }, mark) : null),
+            file.functions && file.functions.length
+              ? el('div', { className: 'dvb-map-funcs' },
+                t('mapFunctions') + ': ' + file.functions.map((fn) => fn.name).join(', '))
+              : null)
+        }))))
+  }
+}
+
+function registerMap(ctx, React, t, MapPage) {
+  const bs = ctx.betterSidebar
+  return bs.registerTab({
+    id: TAB_MAP,
+    title() { return t('projectMap') },
+    single: true,
+    order: 69,
+    component: MapPage,
+  })
+}
+
+function openProjectTab(ctx) {
+  const bs = getBetterSidebar(ctx)
+  if (bs && typeof bs.openTab === 'function') bs.openTab({ type: TAB_MAP })
+}
+
 function apply(ctx) {
   const React = require('react')
   const slots = ctx.get('slots')
@@ -1934,32 +2166,37 @@ function apply(ctx) {
       cache: 'no-store',
       signal: AbortSignal.timeout(timeoutMs || 15000),
     }).then((res) => res.json().then((data) => {
-      if (!res.ok && (!data || data.ok !== true)) throw new Error((data && data.error) || ('http ' + res.status))
-      if (data && data.ok === false) throw new Error(data.error || t('fail'))
+      if (!res.ok) throw new Error((data && data.error) || ('http ' + res.status))
       return data
     }))
   }
 
   let openLiveImpl = function () {}
+  let openProjectImpl = function () {}
   let closeTabImpl = function () {}
   function openLive() { openLiveImpl() }
+  function openProject() { openProjectImpl() }
   const SettingsPage = createSettingsPage(React, t, post)
-  const DebugView = createDebugView(React, t, post)
+  const DebugView = createDebugView(React, t, post, openProject)
   const HmiView = createHmiView(React, t, post, openLive)
   const LivePage = createLiveView(React, t, post, {
     openLive,
     closeTab(id) { closeTabImpl(id) },
   })
+  const MapPage = createMapView(React, t, post)
   const stopSettings = registerSettings(ctx, React, t, SettingsPage)
   const stopView = registerView(ctx, React, t, DebugView, HmiView)
 
   if (typeof ctx.inject === 'function') {
     ctx.inject(['betterSidebar'], (side) => {
       openLiveImpl = function () { openModbusTab(side) }
+      openProjectImpl = function () { openProjectTab(side) }
       closeTabImpl = function (id) { closeBetterTab(side, id) }
       const stopLive = registerLive(side, React, t, LivePage)
+      const stopMap = registerMap(side, React, t, MapPage)
       side.effect(() => () => {
         if (typeof stopLive === 'function') stopLive()
+        if (typeof stopMap === 'function') stopMap()
       })
     })
   }

@@ -80,6 +80,26 @@ export const keilTargets = async (home, cwd, project, opts) => {
   })
 }
 
+export const keilMap = async (home, cwd, project, target, opts) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const bindings = loadBindings(home)
+  const missing = needPython(bindings)
+  if (missing) return { ok: false, error: missing }
+  const workspace = loadWorkspace(home, room.cwd)
+  const picked = project || (workspace.keil && workspace.keil.project)
+  const keil = requireKeilProject(room.cwd, picked)
+  if (keil.error) return { ok: false, error: keil.error }
+  const name = (target || (workspace.keil && workspace.keil.target) || '').trim()
+  return runPythonScript(bindings.python, 'keil_project.py', [
+    'map', '--project', keil.project, '--target', name, '--root', room.cwd, '--json',
+  ], {
+    cwd: room.cwd,
+    timeoutMs: 20000,
+    signal: signalOf(null, opts),
+  })
+}
+
 export const keilBuild = async (home, cwd, body, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -109,27 +129,35 @@ export const keilBuild = async (home, cwd, body, opts) => {
     '--project', keil.project,
     '--target', target || '',
     '--log-dir', join(storeDir(home), 'logs'),
+    '--task-id', task.id,
     '--json',
   ], { cwd: room.cwd, timeoutMs: 620000, signal })
   if (ran.cancelled) {
     finishTask(home, room.cwd, task.id, { cancelled: true, summary: '编译已取消', keil: { project: keil.project, target, artifact } })
     return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source }
   }
-  if (!ran.ok) {
-    const summary = '编译失败 ' + (ran.error || '')
-    finishTask(home, room.cwd, task.id, { ok: false, summary, keil: { project: keil.project, target, artifact } })
-    return { ...ran, taskId: task.id, source: origin.source }
-  }
   const details = ran.result && ran.result.details ? ran.result.details : {}
   const download = pickArtifact(details, artifact)
-  const ok = !ran.result || ran.result.status !== 'error'
-  const summary = ((ran.result && ran.result.summary) || (ok ? '编译成功' : '编译失败'))
+  const ok = ran.ok && (!ran.result || ran.result.status !== 'error')
+  const summary = ((ran.result && ran.result.summary) || (ok ? '编译成功' : ('编译失败 ' + (ran.error || ''))))
     + (download.path ? ' → ' + download.path : '')
   finishTask(home, room.cwd, task.id, {
     ok,
     summary,
+    logFile: details.log_file || '',
+    phase: details.phase || '',
+    errors: Array.isArray(details.errors) ? details.errors : [],
     keil: { project: keil.project, target, artifact, download: download.path || '' },
   })
+  if (!ok) {
+    return {
+      ...ran,
+      ok: false,
+      taskId: task.id,
+      source: origin.source,
+      result: ran.result ? { ...ran.result, download } : { summary, details, download },
+    }
+  }
   return {
     ...ran,
     taskId: task.id,
@@ -333,15 +361,21 @@ export const modbusPoll = async (home, cwd, opts) => {
     return { ok: true, skipped: true, busy: true, polling: pack.polling, values: pack.values, devices }
   }
   const outer = signalOf(null, opts)
-  const budget = AbortSignal.timeout(POLL_BUDGET_MS)
+  const budgetMs = Number(opts && opts.budgetMs)
+  const budget = AbortSignal.timeout(Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : POLL_BUDGET_MS)
   const signal = outer ? AbortSignal.any([outer, budget]) : budget
   const lives = new Map()
   pollLocks.set(room.cwd, lives)
   let ok = true
+  let timedOut = false
   try {
     const python = loadBindings(home).python
     for (const device of devices) {
-      if (aborted(signal)) break
+      if (aborted(signal)) {
+        timedOut = true
+        ok = false
+        break
+      }
       if (!device.segments.length) continue
       if (device.role === 'slave') {
         if (device.sim && device.listen) {
@@ -363,7 +397,15 @@ export const modbusPoll = async (home, cwd, opts) => {
         continue
       }
       const ran = await readSegments(device.sim ? '' : python, device, device.segments, room.cwd, 4000, signal)
-      if (ran.cancelled) break
+      if (ran.cancelled || aborted(signal)) {
+        timedOut = true
+        ok = false
+        lives.set(device.id, {
+          values: device.values,
+          polling: { lastAt: Date.now(), lastOk: false, error: '轮询超时' },
+        })
+        break
+      }
       if (!ran.ok) ok = false
       lives.set(device.id, {
         values: ran.values,
@@ -373,6 +415,15 @@ export const modbusPoll = async (home, cwd, opts) => {
           error: ran.ok ? '' : (ran.error || ''),
         },
       })
+    }
+    if (timedOut) {
+      for (const device of devices) {
+        if (!device.polling || !device.polling.enabled || lives.has(device.id)) continue
+        lives.set(device.id, {
+          values: device.values,
+          polling: { lastAt: Date.now(), lastOk: false, error: '轮询超时' },
+        })
+      }
     }
     const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
     const merged = latest.devices.map((item) => {
@@ -388,10 +439,12 @@ export const modbusPoll = async (home, cwd, opts) => {
     return {
       ok,
       skipped: false,
+      partial: timedOut,
+      timedOut,
       values: saved.workspace.modbus.values,
       polling: saved.workspace.modbus.polling,
       devices: saved.workspace.modbus.devices,
-      error: ok ? undefined : merged.map((item) => item.polling.error).filter(Boolean)[0],
+      error: ok ? undefined : (timedOut ? '轮询超时' : merged.map((item) => item.polling.error).filter(Boolean)[0]),
     }
   } finally {
     pollLocks.delete(room.cwd)

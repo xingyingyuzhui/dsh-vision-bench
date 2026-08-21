@@ -7,7 +7,7 @@ const TAB_CHART = 'dsh-vision-bench:charts'
 const TAB_ALARM = 'dsh-vision-bench:alarms'
 const INTERVALS = [500, 1000, 2000, 5000]
 
-function sessionCwd(props) {
+export function sessionCwd(props) {
   if (props && props.scope && props.scope.cwd) return props.scope.cwd
   const sessionId = (props && props.scope && props.scope.sessionId) || (props && props.sessionId)
   return props && props.useSessions
@@ -23,7 +23,7 @@ function healthReady(health) {
   return !!(health && health.python && health.python.bound && health.python.exists)
 }
 
-function getBetterSidebar(ctx) {
+export function getBetterSidebar(ctx) {
   try {
     return (ctx && ctx.betterSidebar) || (ctx && ctx.get && ctx.get('betterSidebar')) || null
   } catch {

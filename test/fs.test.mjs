@@ -16,6 +16,10 @@ test('listWorkspaceDir stays inside the workspace and lists Keil files', async (
     assert.equal(listed.ok, true)
     assert.equal(listed.files.length, 1)
     assert.equal(listed.files[0].name, 'app.uvprojx')
+    await writeFile(join(root, 'src', 'suite.uvmpw'), '<Workspace/>')
+    const again = listWorkspaceDir(root, join(root, 'src'))
+    assert.equal(again.ok, true)
+    assert.equal(again.files.some((item) => item.name === 'suite.uvmpw'), false)
     const escaped = listWorkspaceDir(root, join(root, '..'))
     assert.equal(escaped.ok, false)
   } finally {

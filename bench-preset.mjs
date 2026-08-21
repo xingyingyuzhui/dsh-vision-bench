@@ -7,7 +7,7 @@ const MARKER = '.dsh-vision-bench'
 
 export const PRESET_PERSONA =
   'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. '
-  + '现场工程、编译产物、进行中任务和时间线以 vision_bench 工具为准：先 action=status，再 ls/select/build/read。不要猜测用户选了哪个工程。'
+  + '现场工程、编译产物、进行中任务和时间线以 vision_bench 工具为准：先 action=status，再 map 看当前 Target 的文件树，然后 ls/select/build/read。不要猜测用户选了哪个工程或有哪些源文件。'
 
 const TOOL_ROW = [
   '',

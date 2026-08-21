@@ -82,3 +82,46 @@ test('saveWorkspace migrates segments onto devices', async () => {
     await rm(home, { recursive: true, force: true })
   }
 })
+
+test('modbusPoll reports timeout instead of ok after the budget', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-poll-to-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveWorkspace(home, cwd, {
+      modbus: {
+        devices: [
+          {
+            id: 'a',
+            name: 'A',
+            role: 'master',
+            sim: true,
+            polling: { enabled: true },
+            segments: [{ function: 3, address: 0, count: 2 }],
+          },
+          {
+            id: 'b',
+            name: 'B',
+            role: 'master',
+            sim: true,
+            polling: { enabled: true },
+            segments: [{ function: 3, address: 10, count: 2 }],
+          },
+        ],
+        activeId: 'a',
+      },
+    })
+    const ac = new AbortController()
+    ac.abort()
+    const polled = await modbusPoll(home, cwd, { signal: ac.signal })
+    assert.equal(polled.ok, false)
+    assert.equal(polled.timedOut, true)
+    assert.equal(polled.partial, true)
+    assert.match(polled.error, /超时/)
+    assert.equal(polled.devices[0].polling.lastOk, false)
+    assert.equal(polled.devices[1].polling.lastOk, false)
+    assert.match(polled.devices[1].polling.error, /超时/)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
