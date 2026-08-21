@@ -1,5 +1,22 @@
 import { NS } from './bench-i18n.mjs'
 import { clockOf } from './bench-points.mjs'
+import {
+  emptyJournal,
+  emptyWorkspace,
+  field as sharedField,
+  formatClock,
+  journalPanel,
+  pickJournal,
+  POLL_MS,
+  runningOf,
+  runningSource,
+  sourceLabel,
+  statusBar,
+  statusLabel,
+  subscribeState,
+  typeLabel,
+  useSessionCwd,
+} from './bench-shared.mjs'
 import { statusKind } from './bench-settings.mjs'
 
 export function formatResult(result) {
@@ -62,122 +79,6 @@ function agentNote(cwd, workspace, result) {
   ].filter(Boolean).join('\n')
 }
 
-function useSessionCwd(React, props) {
-  const sessionId = props && props.sessionId
-  return props && props.useSessions
-    ? props.useSessions((s) => (s.byId && sessionId && s.byId[sessionId] && s.byId[sessionId].cwd) || '')
-    : ''
-}
-
-function emptyWorkspace() {
-  return {
-    keil: { project: '', target: '', artifact: 'hex' },
-    modbus: { mode: 'rtu', port: '', baudrate: 9600, host: '', tcpPort: 502, slave: 1, function: 3, address: 0, count: 1, segments: [], values: [] },
-  }
-}
-
-const POLL_MS = 2000
-
-function emptyJournal() {
-  return { tasks: [], running: [], timeline: [] }
-}
-
-function pickJournal(data) {
-  if (data && data.journal) return data.journal
-  const workspace = data && data.workspace
-  const tasks = workspace && Array.isArray(workspace.tasks) ? workspace.tasks : []
-  const timeline = workspace && Array.isArray(workspace.timeline) ? workspace.timeline : []
-  return {
-    tasks,
-    running: tasks.filter((item) => item && item.status === 'running'),
-    timeline,
-  }
-}
-
-function runningOf(journal, type) {
-  const list = journal && Array.isArray(journal.running) ? journal.running : []
-  return list.some((item) => item && item.type === type && item.status === 'running')
-}
-
-function runningSource(journal, type) {
-  const list = journal && Array.isArray(journal.running) ? journal.running : []
-  const hit = list.find((item) => item && item.type === type && item.status === 'running')
-  return hit ? hit.source : ''
-}
-
-function formatClock(at) {
-  const n = Number(at)
-  if (!Number.isFinite(n) || n <= 0) return ''
-  try {
-    return new Date(n).toLocaleTimeString(undefined, { hour12: false })
-  } catch {
-    return ''
-  }
-}
-
-function sourceLabel(t, source) {
-  return source === 'agent' ? t('sourceAgent') : t('sourceUser')
-}
-
-function statusLabel(t, status) {
-  if (status === 'running') return t('statusRunning')
-  if (status === 'ok') return t('statusOk')
-  if (status === 'cancelled') return t('statusCancelled')
-  return t('statusError')
-}
-
-function typeLabel(t, type) {
-  return type === 'read' ? t('taskRead') : t('taskBuild')
-}
-
-function journalPanel(el, t, journal) {
-  const tasks = journal && Array.isArray(journal.tasks) ? journal.tasks : []
-  const timeline = journal && Array.isArray(journal.timeline) ? journal.timeline : []
-  if (!tasks.length && !timeline.length) return null
-  return el('div', { className: 'dvb-journal' },
-    tasks.length ? el('div', { className: 'dvb-journal-title' }, t('tasks')) : null,
-    tasks.slice(0, 6).map((item) => el('div', {
-      key: item.id,
-      className: 'dvb-task',
-      'data-status': item.status,
-      'data-source': item.source,
-    },
-      el('span', { className: 'dvb-badge' }, formatClock(item.startedAt)),
-      el('span', { className: 'dvb-badge', 'data-source': item.source }, sourceLabel(t, item.source)),
-      el('span', null, typeLabel(t, item.type)),
-      el('span', { className: 'dvb-badge' }, statusLabel(t, item.status)),
-      el('span', {
-        className: 'dvb-hint',
-        title: [item.logFile, item.phase].concat(Array.isArray(item.errors) ? item.errors : []).filter(Boolean).join('\n'),
-      }, item.summary || (item.errors && item.errors[0]) || ''),
-      item.frames && (item.frames.request || item.frames.response)
-        ? el('div', { className: 'dvb-frames', title: (item.frames.trace || []).join('\n') },
-          item.frames.request ? el('div', null, '→ ' + item.frames.request) : null,
-          item.frames.response ? el('div', null, '← ' + item.frames.response) : null)
-        : null)),
-    timeline.length ? el('div', { className: 'dvb-journal-title' }, t('timeline')) : null,
-    timeline.slice(0, 8).map((item) => el('div', {
-      key: item.id,
-      className: 'dvb-event',
-      'data-source': item.source,
-      'data-ok': item.ok === false ? 'false' : item.ok === true ? 'true' : '',
-    },
-      el('span', { className: 'dvb-badge' }, formatClock(item.at)),
-      el('span', { className: 'dvb-badge', 'data-source': item.source }, sourceLabel(t, item.source)),
-      el('span', { className: 'dvb-hint' }, item.summary || item.kind))))
-}
-
-function statusBar(el, t, cwd, rows) {
-  return el('div', { className: 'dvb-bar' },
-    el('div', { className: 'dvb-health' }, rows.map((row) => el('span', {
-      key: row.key,
-      className: 'dvb-chip',
-      'data-kind': statusKind(row.health),
-    }, t(row.key) + ' · ' + t(statusKind(row.health))))),
-    cwd
-      ? el('div', { className: 'dvb-cwd' }, t('workspace') + '  ' + cwd)
-      : el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('needWorkspace')))
-}
 
 const FLASH_IFACES = ['cmsis-dap', 'stlink', 'jlink', 'ftdi', 'dap']
 const FLASH_TARGETS = [
@@ -198,6 +99,7 @@ export function createDebugView(React, t, post, openProject) {
     const el = React.createElement
     const cwd = useSessionCwd(React, props)
     const sessionId = (props && props.sessionId) || ''
+    const field = (label, control) => sharedField(el, label, control)
     const [health, setHealth] = React.useState({})
     const [workspace, setWorkspace] = React.useState(emptyWorkspace)
     const [journal, setJournal] = React.useState(emptyJournal)
@@ -253,36 +155,26 @@ export function createDebugView(React, t, post, openProject) {
       scanPorts()
     }, [cwd])
 
-    React.useEffect(() => {
-      let stop = false
-      function pull(first) {
-        post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
-          if (stop) return
-          if (data && data.health) setHealth(data.health)
-          if (data && data.workspace) {
-            setWorkspace((prev) => ({
-              ...prev,
-              keil: { ...prev.keil, ...(data.workspace.keil || {}) },
-              session: data.workspace.session || prev.session,
-              manualRequests: Array.isArray(data.workspace.manualRequests)
-                ? data.workspace.manualRequests
-                : prev.manualRequests,
-            }))
-            const project = data.workspace.keil && data.workspace.keil.project
-            if (project && project !== projectRef.current) {
-              projectRef.current = project
-              loadTargets(project)
-            }
-          }
-          setJournal(pickJournal(data))
-        }).catch((err) => {
-          if (first && !stop) setError(String((err && err.message) || t('loadFail')))
-        })
+    React.useEffect(() => subscribeState(post, cwd, (data) => {
+      if (!data) return
+      if (data.health) setHealth(data.health)
+      if (data.workspace) {
+        setWorkspace((prev) => ({
+          ...prev,
+          keil: { ...prev.keil, ...(data.workspace.keil || {}) },
+          session: data.workspace.session || prev.session,
+          manualRequests: Array.isArray(data.workspace.manualRequests)
+            ? data.workspace.manualRequests
+            : prev.manualRequests,
+        }))
+        const project = data.workspace.keil && data.workspace.keil.project
+        if (project && project !== projectRef.current) {
+          projectRef.current = project
+          loadTargets(project)
+        }
       }
-      pull(true)
-      const timer = setInterval(() => pull(false), POLL_MS)
-      return () => { stop = true; clearInterval(timer) }
-    }, [cwd])
+      setJournal(pickJournal(data))
+    }), [cwd, post])
 
     function setKeil(patch) {
       setWorkspace((prev) => ({ ...prev, keil: { ...prev.keil, ...patch } }))
@@ -535,12 +427,6 @@ export function createDebugView(React, t, post, openProject) {
       if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => setCopied(false))
       }
-    }
-
-    function field(label, control) {
-      return el('div', { className: 'dvb-row' },
-        el('div', { className: 'dvb-label' }, el('span', null, label)),
-        control)
     }
 
     const pythonReady = statusKind(health.python) === 'ready'

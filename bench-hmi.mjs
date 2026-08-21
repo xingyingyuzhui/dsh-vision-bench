@@ -1,5 +1,17 @@
 import { addSegment, csvToSegments, defaultSegmentName, functionTag, isWritableFunction, normalizeWriteValues, removeSegment, segmentsToCsv, writeTargetOf } from './bench-points.mjs'
 import { addDevice, normalizeModbus, patchActiveDevice, recipePair, removeDevice } from './bench-devices.mjs'
+import {
+  emptyJournal,
+  emptyWorkspace,
+  field as sharedField,
+  journalPanel,
+  pickJournal,
+  runningOf,
+  runningSource,
+  statusBar,
+  subscribeState,
+  useSessionCwd,
+} from './bench-shared.mjs'
 import { statusKind } from './bench-settings.mjs'
 
 function formatPointValue(item) {
@@ -56,36 +68,21 @@ export function createHmiView(React, t, post, openLive) {
       scanPorts()
     }, [cwd])
 
-    React.useEffect(() => {
-      let stop = false
-      function pull(first) {
-        const seq = persistSeq.current
-        post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
-          if (stop) return
-          if (data && data.health) setHealth(data.health)
-          if (data && Array.isArray(data.pendingWrites)) setPending(data.pendingWrites)
-          setJournal(pickJournal(data))
-          if (seq !== persistSeq.current) return
-          if (data && data.workspace && data.workspace.modbus) {
-            if (first) {
-              workspaceRef.current = data.workspace
-              setWorkspace(data.workspace)
-            } else {
-              setWorkspace((prev) => {
-                const next = { ...prev, modbus: data.workspace.modbus || prev.modbus }
-                workspaceRef.current = next
-                return next
-              })
-            }
-          }
-        }).catch((err) => {
-          if (first && !stop) setError(String((err && err.message) || t('loadFail')))
+    React.useEffect(() => subscribeState(post, cwd, (data) => {
+      if (!data) return
+      const seq = persistSeq.current
+      if (data.health) setHealth(data.health)
+      if (Array.isArray(data.pendingWrites)) setPending(data.pendingWrites)
+      setJournal(pickJournal(data))
+      if (seq !== persistSeq.current) return
+      if (data.workspace && data.workspace.modbus) {
+        setWorkspace((prev) => {
+          const next = { ...prev, modbus: data.workspace.modbus || prev.modbus }
+          workspaceRef.current = next
+          return next
         })
       }
-      pull(true)
-      const timer = setInterval(() => pull(false), POLL_MS)
-      return () => { stop = true; clearInterval(timer) }
-    }, [cwd])
+    }), [cwd, post])
 
     function setModbus(patch) {
       setWorkspace((prev) => {
@@ -113,11 +110,7 @@ export function createHmiView(React, t, post, openLive) {
       })
     }
 
-    function field(label, control) {
-      return el('div', { className: 'dvb-row' },
-        el('div', { className: 'dvb-label' }, el('span', null, label)),
-        control)
-    }
+    const field = (label, control) => sharedField(el, label, control)
 
     function showLive() {
       if (typeof openLive === 'function') openLive()

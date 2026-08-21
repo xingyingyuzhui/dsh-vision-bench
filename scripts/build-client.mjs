@@ -31,6 +31,7 @@ const parts = [
   'bench-settings.mjs',
   'bench-points.mjs',
   'bench-devices.mjs',
+  'bench-shared.mjs',
   'bench-view.mjs',
   'bench-hmi.mjs',
   'bench-live.mjs',

@@ -1,8 +1,7 @@
 import { NS } from './bench-i18n.mjs'
 import { clockOf } from './bench-points.mjs'
+import { field as sharedField, subscribeState } from './bench-shared.mjs'
 import { statusKind } from './bench-settings.mjs'
-
-const OVERVIEW_POLL_MS = 2000
 
 function overviewEmptyWorkspace() {
   return {
@@ -35,20 +34,12 @@ export function createOverviewView(React, t, post, hooks) {
     const [pendingWrites, setPendingWrites] = React.useState([])
     const [copied, setCopied] = React.useState(false)
 
-    React.useEffect(() => {
-      let stop = false
-      function pull() {
-        post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
-          if (stop) return
-          if (data && data.health) setHealth(data.health)
-          if (data && Array.isArray(data.pendingWrites)) setPendingWrites(data.pendingWrites)
-          if (data && data.workspace) setWorkspace(data.workspace)
-        }).catch(() => { /* next tick retries */ })
-      }
-      pull()
-      const timer = setInterval(pull, OVERVIEW_POLL_MS)
-      return () => { stop = true; clearInterval(timer) }
-    }, [cwd])
+    React.useEffect(() => subscribeState(post, cwd, (data) => {
+      if (!data) return
+      if (data.health) setHealth(data.health)
+      if (Array.isArray(data.pendingWrites)) setPendingWrites(data.pendingWrites)
+      if (data.workspace) setWorkspace(data.workspace)
+    }), [cwd, post])
 
     const keil = workspace.keil || {}
     const modbus = workspace.modbus || {}
@@ -86,11 +77,7 @@ export function createOverviewView(React, t, post, hooks) {
       }).catch(() => { /* clipboard unavailable */ })
     }
 
-    function field(label, node) {
-      return el('div', { className: 'dvb-row' },
-        el('div', { className: 'dvb-label' }, el('span', null, label)),
-        node)
-    }
+    const field = (label, node) => sharedField(el, label, node)
 
     const rows = [
       { key: 'python', health: health.python },

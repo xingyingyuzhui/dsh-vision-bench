@@ -1,3 +1,4 @@
+import { subscribeState } from './bench-shared.mjs'
 import { clockOf, decodeValue, expandPoints, functionTag, isWritableFunction, normalizeWriteValues, writeTargetOf } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
@@ -442,21 +443,13 @@ export function createAlarmPage(React, t, post) {
     const el = React.createElement
     const cwd = sessionCwd(props)
     const [events, setEvents] = React.useState([])
-    React.useEffect(() => {
-      let stop = false
-      function pull() {
-        post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
-          if (stop) return
-          const timeline = data && data.journal && Array.isArray(data.journal.timeline)
-            ? data.journal.timeline
-            : []
-          setEvents(timeline.filter((item) => item.kind === 'alarm' || item.kind === 'alarm-clear'))
-        }).catch(() => { /* next tick retries */ })
-      }
-      pull()
-      const timer = setInterval(pull, 2000)
-      return () => { stop = true; clearInterval(timer) }
-    }, [cwd])
+    React.useEffect(() => subscribeState(post, cwd, (data) => {
+      if (!data) return
+      const timeline = data.journal && Array.isArray(data.journal.timeline)
+        ? data.journal.timeline
+        : []
+      setEvents(timeline.filter((item) => item.kind === 'alarm' || item.kind === 'alarm-clear'))
+    }), [cwd, post])
     return el('div', { className: 'dvb-live' },
       el('div', { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('liveAlarm'))),

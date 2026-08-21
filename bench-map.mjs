@@ -24,31 +24,19 @@ export function createMapView(React, t, post) {
     const [busy, setBusy] = React.useState(false)
 
     React.useEffect(() => {
-      let stop = false
-      function pull() {
-        if (!cwd) {
-          setKeil({ project: '', target: '' })
-          setMapped(null)
-          return
-        }
-        post('/dsh-vision-bench/state', { cwd }).then((data) => {
-          if (stop) return
-          if (data && data.ok === false) {
-            setError(data.error || t('loadFail'))
-            return
-          }
-          const next = data && data.workspace && data.workspace.keil ? data.workspace.keil : {}
-          const project = next.project || ''
-          const target = next.target || ''
-          setKeil((prev) => (prev.project === project && prev.target === target ? prev : { project, target }))
-        }).catch((err) => {
-          if (!stop) setError(String((err && err.message) || t('loadFail')))
-        })
+      if (!cwd) {
+        setKeil({ project: '', target: '' })
+        setMapped(null)
+        return undefined
       }
-      pull()
-      const timer = setInterval(pull, 2000)
-      return () => { stop = true; clearInterval(timer) }
-    }, [cwd])
+      return subscribeState(post, cwd, (data) => {
+        if (!data || data.ok === false) return
+        const next = data.workspace && data.workspace.keil ? data.workspace.keil : {}
+        const project = next.project || ''
+        const target = next.target || ''
+        setKeil((prev) => (prev.project === project && prev.target === target ? prev : { project, target }))
+      })
+    }, [cwd, post])
 
     React.useEffect(() => {
       let stop = false

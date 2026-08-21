@@ -69,7 +69,6 @@ const COPY = {
     agentReading: 'Agent 正在读取',
     mode: '模式',
     serial: '串口',
-    serialPh: 'COMx',
     serialScan: '刷新',
     serialPick: '选择串口',
     serialNone: '未发现串口',
@@ -96,11 +95,9 @@ const COPY = {
     recipeTitle: '主机（控制板）+ 从机（采集板），本机 TCP 仿真',
     removeDevice: '删除',
     connection: '连接',
-    pointTable: '点表',
     segments: '寄存器段',
     addSegment: '添加',
     segmentName: '段名',
-    segmentNamePh: '段名',
     startAddr: '起始地址',
     quantity: '数量',
     readAll: '读取',
@@ -109,8 +106,6 @@ const COPY = {
     colName: '名称',
     colFn: '功能码',
     colAddr: '地址',
-    colValue: '值',
-    colTime: '时间',
     emptySegments: '无寄存器段',
     emptyDevices: '尚未添加设备',
     unnamed: '未命名',
@@ -123,7 +118,6 @@ const COPY = {
     needSegments: '未添加寄存器段',
     pointsHint: '每段对应一帧报文。监视在右侧打开实时点表。',
     live: '实时',
-    liveShort: '监',
     liveTable: '点表',
     liveChart: '曲线',
     liveAlarm: '告警',
@@ -133,7 +127,6 @@ const COPY = {
     liveClose: '关闭',
     projectMap: '工程',
     projectMapEmpty: '先在调试页选择 Keil 工程。',
-    projectMapNeed: '未绑定 Python，无法解析工程结构。',
     mapIncludes: '包含路径',
     mapDefines: '宏',
     mapMissing: '缺失',
@@ -146,12 +139,9 @@ const COPY = {
     chartSoon: '曲线尚未实现。',
     alarmSoon: '告警尚未实现。',
     sim: '仿真',
-    simOff: '仿真',
-    simOn: '仿真中',
     simName: '仿真',
     simHint: '仿真：数值由本机生成，不访问现场设备。',
     writableTag: '· 可写',
-    readOnlyTag: '只读',
     writeSegment: '写入',
     writeTitle: '写入点',
     writeAddr: '写入地址',
@@ -162,8 +152,6 @@ const COPY = {
     writeClose: '收起',
     coilOn: '1（ON）',
     coilOff: '0（OFF）',
-    writeBefore: '写前',
-    writeReadback: '回读',
     writeRangeErr: '地址或数量超出段范围',
     bindChip: '通知绑定',
     bindState_none: '无会话',
@@ -283,7 +271,6 @@ const COPY = {
     agentReading: 'Agent is reading',
     mode: 'Mode',
     serial: 'Serial',
-    serialPh: 'COMx',
     serialScan: 'Refresh',
     serialPick: 'Select port',
     serialNone: 'No serial port',
@@ -310,11 +297,9 @@ const COPY = {
     recipeTitle: 'Master + listening slave on local TCP, simulation on',
     removeDevice: 'Remove',
     connection: 'Connection',
-    pointTable: 'Points',
     segments: 'Register ranges',
     addSegment: 'Add',
     segmentName: 'Name',
-    segmentNamePh: 'Name',
     startAddr: 'Start',
     quantity: 'Quantity',
     readAll: 'Read',
@@ -323,8 +308,6 @@ const COPY = {
     colName: 'Name',
     colFn: 'FC',
     colAddr: 'Addr',
-    colValue: 'Value',
-    colTime: 'Time',
     emptySegments: 'No register ranges',
     emptyDevices: 'No devices',
     unnamed: 'Untitled',
@@ -337,7 +320,6 @@ const COPY = {
     needSegments: 'No register range',
     pointsHint: 'Each range is one PDU. Watch opens the live table on the right.',
     live: 'Live',
-    liveShort: 'MB',
     liveTable: 'Points',
     liveChart: 'Charts',
     liveAlarm: 'Alarms',
@@ -347,7 +329,6 @@ const COPY = {
     liveClose: 'Close',
     projectMap: 'Project',
     projectMapEmpty: 'Choose a Keil project on the Debug tab.',
-    projectMapNeed: 'Python is not bound, so the project map cannot be parsed.',
     mapIncludes: 'Include paths',
     mapDefines: 'Defines',
     mapMissing: 'Missing',
@@ -360,12 +341,9 @@ const COPY = {
     chartSoon: 'Charts are not implemented.',
     alarmSoon: 'Alarms are not implemented.',
     sim: 'Sim',
-    simOff: 'Sim',
-    simOn: 'Sim on',
     simName: 'Sim',
     simHint: 'Simulation: values are generated locally, no field device.',
     writableTag: '· writable',
-    readOnlyTag: 'read-only',
     writeSegment: 'Write',
     writeTitle: 'Write point',
     writeAddr: 'Address',
@@ -376,8 +354,6 @@ const COPY = {
     writeClose: 'Collapse',
     coilOn: '1 (ON)',
     coilOff: '0 (OFF)',
-    writeBefore: 'before',
-    writeReadback: 'readback',
     writeRangeErr: 'Address or count out of segment range',
     bindChip: 'Notify bind',
     bindState_none: 'no session',
@@ -497,7 +473,6 @@ const CSS = [
   'body[' + ATTR + '] .dvb-status{opacity:.7;font-size:12px}',
   'body[' + ATTR + '] .dvb-status[data-kind="ready"]{color:var(--dsw-alias-label-success,#2e7d32)}',
   'body[' + ATTR + '] .dvb-status[data-kind="missing"]{color:var(--dsw-alias-label-danger,#c62828)}',
-  'body[' + ATTR + '] .dvb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:8px 10px}',
   'body[' + ATTR + '] .dvb-input{height:28px;width:100%;box-sizing:border-box;padding:0 8px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.4));border-radius:6px;background:transparent;color:inherit;font:inherit;font-size:12px;transition:border-color .15s ease}',
   'body[' + ATTR + '] .dvb-input:focus-visible{outline:none;border-color:var(--dsw-alias-label-info,#4f8ef7)}',
   'body[' + ATTR + '] .dvb-input::placeholder{opacity:.28;font-style:normal;color:inherit}',
@@ -533,7 +508,6 @@ const CSS = [
   'body[' + ATTR + '] .dvb-task[data-status="error"],body[' + ATTR + '] .dvb-event[data-ok="false"]{color:var(--dsw-alias-label-danger,#c62828)}',
   'body[' + ATTR + '] .dvb-badge{font-size:11px;opacity:.7}',
   'body[' + ATTR + '] .dvb-badge[data-source="agent"]{opacity:1}',
-  'body[' + ATTR + '] .dvb-section{font-size:11px;font-weight:600;opacity:.8}',
   'body[' + ATTR + '] .dvb-panel{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.35));border-radius:6px;min-width:0}',
   'body[' + ATTR + '] .dvb-panel-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:28px}',
   'body[' + ATTR + '] .dvb-panel-title{font-size:12px;font-weight:600;margin-right:auto}',
@@ -541,8 +515,6 @@ const CSS = [
   'body[' + ATTR + '] .dvb-split{display:grid;grid-template-columns:minmax(240px,.92fr) minmax(0,1.2fr);gap:10px;align-items:stretch;width:100%;min-width:0}',
   'body[' + ATTR + '] .dvb-split>.dvb-panel{min-width:0}',
   'body[' + ATTR + '] .dvb-toolbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end}',
-  'body[' + ATTR + '] .dvb-inline{display:flex;flex-direction:column;gap:3px;min-width:0}',
-  'body[' + ATTR + '] .dvb-inline .dvb-input{min-width:7.5rem}',
   'body[' + ATTR + '] .dvb-devbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
   'body[' + ATTR + '] .dvb-devbar-add{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}',
   'body[' + ATTR + '] .dvb-devbar.is-empty .dvb-devbar-add{margin-left:0}',
@@ -1293,6 +1265,167 @@ const compactDevices = (modbus) =>
     segments: item.segments.length,
   }))
 
+// Shared client widgets and helpers for every conversation view.
+// Everything here is explicitly imported by its consumers — no hidden
+// strip-concat scope sharing.
+const POLL_MS = 2000
+
+function useSessionCwd(React, props) {
+  const sessionId = props && props.sessionId
+  return props && props.useSessions
+    ? props.useSessions((s) => (s.byId && sessionId && s.byId[sessionId] && s.byId[sessionId].cwd) || '')
+    : ''
+}
+
+function emptyWorkspace() {
+  return {
+    keil: { project: '', target: '', artifact: 'hex' },
+    modbus: { mode: 'rtu', port: '', baudrate: 9600, host: '', tcpPort: 502, slave: 1, function: 3, address: 0, count: 1, segments: [], values: [] },
+  }
+}
+
+function emptyJournal() {
+  return { tasks: [], running: [], timeline: [] }
+}
+
+function pickJournal(data) {
+  if (data && data.journal) return data.journal
+  const workspace = data && data.workspace
+  const tasks = workspace && Array.isArray(workspace.tasks) ? workspace.tasks : []
+  const timeline = workspace && Array.isArray(workspace.timeline) ? workspace.timeline : []
+  return {
+    tasks,
+    running: tasks.filter((item) => item && item.status === 'running'),
+    timeline,
+  }
+}
+
+function runningOf(journal, type) {
+  const list = journal && Array.isArray(journal.running) ? journal.running : []
+  return list.some((item) => item && item.type === type && item.status === 'running')
+}
+
+function runningSource(journal, type) {
+  const list = journal && Array.isArray(journal.running) ? journal.running : []
+  const hit = list.find((item) => item && item.type === type && item.status === 'running')
+  return hit ? hit.source : ''
+}
+
+function formatClock(at) {
+  const n = Number(at)
+  if (!Number.isFinite(n) || n <= 0) return ''
+  try {
+    return new Date(n).toLocaleTimeString(undefined, { hour12: false })
+  } catch {
+    return ''
+  }
+}
+
+function sourceLabel(t, source) {
+  if (source === 'agent') return t('sourceAgent')
+  if (source === 'system') return t('sourceSystem')
+  return t('sourceUser')
+}
+
+function statusLabel(t, status) {
+  if (status === 'running') return t('statusRunning')
+  if (status === 'ok') return t('statusOk')
+  if (status === 'cancelled') return t('statusCancelled')
+  return t('statusError')
+}
+
+function typeLabel(t, type) {
+  return type === 'read' ? t('taskRead') : t('taskBuild')
+}
+
+function field(el, label, control) {
+  return el('div', { className: 'dvb-row' },
+    el('div', { className: 'dvb-label' }, el('span', null, label)),
+    control)
+}
+
+function statusBar(el, t, cwd, rows) {
+  return el('div', { className: 'dvb-bar' },
+    el('div', { className: 'dvb-health' }, rows.map((row) => el('span', {
+      key: row.key,
+      className: 'dvb-chip',
+      'data-kind': statusKind(row.health),
+    }, t(row.key) + ' · ' + t(statusKind(row.health))))),
+    cwd
+      ? el('div', { className: 'dvb-cwd' }, t('workspace') + '  ' + cwd)
+      : el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('needWorkspace')))
+}
+
+function journalPanel(el, t, journal) {
+  const tasks = journal && Array.isArray(journal.tasks) ? journal.tasks : []
+  const timeline = journal && Array.isArray(journal.timeline) ? journal.timeline : []
+  if (!tasks.length && !timeline.length) return null
+  return el('div', { className: 'dvb-journal' },
+    tasks.length ? el('div', { className: 'dvb-journal-title' }, t('tasks')) : null,
+    tasks.slice(0, 6).map((item) => el('div', {
+      key: item.id,
+      className: 'dvb-task',
+      'data-status': item.status,
+      'data-source': item.source,
+    },
+      el('span', { className: 'dvb-badge' }, formatClock(item.startedAt)),
+      el('span', { className: 'dvb-badge', 'data-source': item.source }, sourceLabel(t, item.source)),
+      el('span', null, typeLabel(t, item.type)),
+      el('span', { className: 'dvb-badge' }, statusLabel(t, item.status)),
+      el('span', {
+        className: 'dvb-hint',
+        title: [item.logFile, item.phase].concat(Array.isArray(item.errors) ? item.errors : []).filter(Boolean).join('\n'),
+      }, item.summary || (item.errors && item.errors[0]) || ''),
+      item.frames && (item.frames.request || item.frames.response)
+        ? el('div', { className: 'dvb-frames', title: (item.frames.trace || []).join('\n') },
+          item.frames.request ? el('div', null, '→ ' + item.frames.request) : null,
+          item.frames.response ? el('div', null, '← ' + item.frames.response) : null)
+        : null)),
+    timeline.length ? el('div', { className: 'dvb-journal-title' }, t('timeline')) : null,
+    timeline.slice(0, 8).map((item) => el('div', {
+      key: item.id,
+      className: 'dvb-event',
+      'data-source': item.source,
+      'data-ok': item.ok === false ? 'false' : item.ok === true ? 'true' : '',
+    },
+      el('span', { className: 'dvb-badge' }, formatClock(item.at)),
+      el('span', { className: 'dvb-badge', 'data-source': item.source }, sourceLabel(t, item.source)),
+      el('span', { className: 'dvb-hint' }, item.summary || item.kind))))
+}
+
+// One shared /state poller per cwd instead of six independent loops.
+const STATE_BUS = { cwd: '', data: null, subs: new Set(), timer: 0, seq: 0 }
+
+function busPull(post) {
+  const seq = ++STATE_BUS.seq
+  post('/dsh-vision-bench/state', { cwd: STATE_BUS.cwd }).then((data) => {
+    if (seq !== STATE_BUS.seq) return
+    STATE_BUS.data = data
+    for (const sub of STATE_BUS.subs) {
+      try { sub(data) } catch { /* subscriber errors stay isolated */ }
+    }
+  }).catch(() => { /* next tick retries */ })
+}
+
+function subscribeState(post, cwd, cb) {
+  if (!cwd) {
+    cb(null)
+    return function () {}
+  }
+  if (STATE_BUS.cwd !== cwd) {
+    STATE_BUS.cwd = cwd
+    STATE_BUS.data = null
+    clearInterval(STATE_BUS.timer)
+    busPull(post)
+    STATE_BUS.timer = setInterval(() => busPull(post), POLL_MS)
+  }
+  if (STATE_BUS.data) cb(STATE_BUS.data)
+  STATE_BUS.subs.add(cb)
+  return function () {
+    STATE_BUS.subs.delete(cb)
+  }
+}
+
 function formatResult(result) {
   if (!result) return ''
   const details = result.details || {}
@@ -1353,122 +1486,6 @@ function agentNote(cwd, workspace, result) {
   ].filter(Boolean).join('\n')
 }
 
-function useSessionCwd(React, props) {
-  const sessionId = props && props.sessionId
-  return props && props.useSessions
-    ? props.useSessions((s) => (s.byId && sessionId && s.byId[sessionId] && s.byId[sessionId].cwd) || '')
-    : ''
-}
-
-function emptyWorkspace() {
-  return {
-    keil: { project: '', target: '', artifact: 'hex' },
-    modbus: { mode: 'rtu', port: '', baudrate: 9600, host: '', tcpPort: 502, slave: 1, function: 3, address: 0, count: 1, segments: [], values: [] },
-  }
-}
-
-const POLL_MS = 2000
-
-function emptyJournal() {
-  return { tasks: [], running: [], timeline: [] }
-}
-
-function pickJournal(data) {
-  if (data && data.journal) return data.journal
-  const workspace = data && data.workspace
-  const tasks = workspace && Array.isArray(workspace.tasks) ? workspace.tasks : []
-  const timeline = workspace && Array.isArray(workspace.timeline) ? workspace.timeline : []
-  return {
-    tasks,
-    running: tasks.filter((item) => item && item.status === 'running'),
-    timeline,
-  }
-}
-
-function runningOf(journal, type) {
-  const list = journal && Array.isArray(journal.running) ? journal.running : []
-  return list.some((item) => item && item.type === type && item.status === 'running')
-}
-
-function runningSource(journal, type) {
-  const list = journal && Array.isArray(journal.running) ? journal.running : []
-  const hit = list.find((item) => item && item.type === type && item.status === 'running')
-  return hit ? hit.source : ''
-}
-
-function formatClock(at) {
-  const n = Number(at)
-  if (!Number.isFinite(n) || n <= 0) return ''
-  try {
-    return new Date(n).toLocaleTimeString(undefined, { hour12: false })
-  } catch {
-    return ''
-  }
-}
-
-function sourceLabel(t, source) {
-  return source === 'agent' ? t('sourceAgent') : t('sourceUser')
-}
-
-function statusLabel(t, status) {
-  if (status === 'running') return t('statusRunning')
-  if (status === 'ok') return t('statusOk')
-  if (status === 'cancelled') return t('statusCancelled')
-  return t('statusError')
-}
-
-function typeLabel(t, type) {
-  return type === 'read' ? t('taskRead') : t('taskBuild')
-}
-
-function journalPanel(el, t, journal) {
-  const tasks = journal && Array.isArray(journal.tasks) ? journal.tasks : []
-  const timeline = journal && Array.isArray(journal.timeline) ? journal.timeline : []
-  if (!tasks.length && !timeline.length) return null
-  return el('div', { className: 'dvb-journal' },
-    tasks.length ? el('div', { className: 'dvb-journal-title' }, t('tasks')) : null,
-    tasks.slice(0, 6).map((item) => el('div', {
-      key: item.id,
-      className: 'dvb-task',
-      'data-status': item.status,
-      'data-source': item.source,
-    },
-      el('span', { className: 'dvb-badge' }, formatClock(item.startedAt)),
-      el('span', { className: 'dvb-badge', 'data-source': item.source }, sourceLabel(t, item.source)),
-      el('span', null, typeLabel(t, item.type)),
-      el('span', { className: 'dvb-badge' }, statusLabel(t, item.status)),
-      el('span', {
-        className: 'dvb-hint',
-        title: [item.logFile, item.phase].concat(Array.isArray(item.errors) ? item.errors : []).filter(Boolean).join('\n'),
-      }, item.summary || (item.errors && item.errors[0]) || ''),
-      item.frames && (item.frames.request || item.frames.response)
-        ? el('div', { className: 'dvb-frames', title: (item.frames.trace || []).join('\n') },
-          item.frames.request ? el('div', null, '→ ' + item.frames.request) : null,
-          item.frames.response ? el('div', null, '← ' + item.frames.response) : null)
-        : null)),
-    timeline.length ? el('div', { className: 'dvb-journal-title' }, t('timeline')) : null,
-    timeline.slice(0, 8).map((item) => el('div', {
-      key: item.id,
-      className: 'dvb-event',
-      'data-source': item.source,
-      'data-ok': item.ok === false ? 'false' : item.ok === true ? 'true' : '',
-    },
-      el('span', { className: 'dvb-badge' }, formatClock(item.at)),
-      el('span', { className: 'dvb-badge', 'data-source': item.source }, sourceLabel(t, item.source)),
-      el('span', { className: 'dvb-hint' }, item.summary || item.kind))))
-}
-
-function statusBar(el, t, cwd, rows) {
-  return el('div', { className: 'dvb-bar' },
-    el('div', { className: 'dvb-health' }, rows.map((row) => el('span', {
-      key: row.key,
-      className: 'dvb-chip',
-      'data-kind': statusKind(row.health),
-    }, t(row.key) + ' · ' + t(statusKind(row.health))))),
-    cwd
-      ? el('div', { className: 'dvb-cwd' }, t('workspace') + '  ' + cwd)
-      : el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('needWorkspace')))
-}
 
 const FLASH_IFACES = ['cmsis-dap', 'stlink', 'jlink', 'ftdi', 'dap']
 const FLASH_TARGETS = [
@@ -1489,6 +1506,7 @@ function createDebugView(React, t, post, openProject) {
     const el = React.createElement
     const cwd = useSessionCwd(React, props)
     const sessionId = (props && props.sessionId) || ''
+    const field = (label, control) => sharedField(el, label, control)
     const [health, setHealth] = React.useState({})
     const [workspace, setWorkspace] = React.useState(emptyWorkspace)
     const [journal, setJournal] = React.useState(emptyJournal)
@@ -1544,36 +1562,26 @@ function createDebugView(React, t, post, openProject) {
       scanPorts()
     }, [cwd])
 
-    React.useEffect(() => {
-      let stop = false
-      function pull(first) {
-        post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
-          if (stop) return
-          if (data && data.health) setHealth(data.health)
-          if (data && data.workspace) {
-            setWorkspace((prev) => ({
-              ...prev,
-              keil: { ...prev.keil, ...(data.workspace.keil || {}) },
-              session: data.workspace.session || prev.session,
-              manualRequests: Array.isArray(data.workspace.manualRequests)
-                ? data.workspace.manualRequests
-                : prev.manualRequests,
-            }))
-            const project = data.workspace.keil && data.workspace.keil.project
-            if (project && project !== projectRef.current) {
-              projectRef.current = project
-              loadTargets(project)
-            }
-          }
-          setJournal(pickJournal(data))
-        }).catch((err) => {
-          if (first && !stop) setError(String((err && err.message) || t('loadFail')))
-        })
+    React.useEffect(() => subscribeState(post, cwd, (data) => {
+      if (!data) return
+      if (data.health) setHealth(data.health)
+      if (data.workspace) {
+        setWorkspace((prev) => ({
+          ...prev,
+          keil: { ...prev.keil, ...(data.workspace.keil || {}) },
+          session: data.workspace.session || prev.session,
+          manualRequests: Array.isArray(data.workspace.manualRequests)
+            ? data.workspace.manualRequests
+            : prev.manualRequests,
+        }))
+        const project = data.workspace.keil && data.workspace.keil.project
+        if (project && project !== projectRef.current) {
+          projectRef.current = project
+          loadTargets(project)
+        }
       }
-      pull(true)
-      const timer = setInterval(() => pull(false), POLL_MS)
-      return () => { stop = true; clearInterval(timer) }
-    }, [cwd])
+      setJournal(pickJournal(data))
+    }), [cwd, post])
 
     function setKeil(patch) {
       setWorkspace((prev) => ({ ...prev, keil: { ...prev.keil, ...patch } }))
@@ -1826,12 +1834,6 @@ function createDebugView(React, t, post, openProject) {
       if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => setCopied(false))
       }
-    }
-
-    function field(label, control) {
-      return el('div', { className: 'dvb-row' },
-        el('div', { className: 'dvb-label' }, el('span', null, label)),
-        control)
     }
 
     const pythonReady = statusKind(health.python) === 'ready'
@@ -2173,36 +2175,21 @@ function createHmiView(React, t, post, openLive) {
       scanPorts()
     }, [cwd])
 
-    React.useEffect(() => {
-      let stop = false
-      function pull(first) {
-        const seq = persistSeq.current
-        post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
-          if (stop) return
-          if (data && data.health) setHealth(data.health)
-          if (data && Array.isArray(data.pendingWrites)) setPending(data.pendingWrites)
-          setJournal(pickJournal(data))
-          if (seq !== persistSeq.current) return
-          if (data && data.workspace && data.workspace.modbus) {
-            if (first) {
-              workspaceRef.current = data.workspace
-              setWorkspace(data.workspace)
-            } else {
-              setWorkspace((prev) => {
-                const next = { ...prev, modbus: data.workspace.modbus || prev.modbus }
-                workspaceRef.current = next
-                return next
-              })
-            }
-          }
-        }).catch((err) => {
-          if (first && !stop) setError(String((err && err.message) || t('loadFail')))
+    React.useEffect(() => subscribeState(post, cwd, (data) => {
+      if (!data) return
+      const seq = persistSeq.current
+      if (data.health) setHealth(data.health)
+      if (Array.isArray(data.pendingWrites)) setPending(data.pendingWrites)
+      setJournal(pickJournal(data))
+      if (seq !== persistSeq.current) return
+      if (data.workspace && data.workspace.modbus) {
+        setWorkspace((prev) => {
+          const next = { ...prev, modbus: data.workspace.modbus || prev.modbus }
+          workspaceRef.current = next
+          return next
         })
       }
-      pull(true)
-      const timer = setInterval(() => pull(false), POLL_MS)
-      return () => { stop = true; clearInterval(timer) }
-    }, [cwd])
+    }), [cwd, post])
 
     function setModbus(patch) {
       setWorkspace((prev) => {
@@ -2230,11 +2217,7 @@ function createHmiView(React, t, post, openLive) {
       })
     }
 
-    function field(label, control) {
-      return el('div', { className: 'dvb-row' },
-        el('div', { className: 'dvb-label' }, el('span', null, label)),
-        control)
-    }
+    const field = (label, control) => sharedField(el, label, control)
 
     function showLive() {
       if (typeof openLive === 'function') openLive()
@@ -3218,21 +3201,13 @@ function createAlarmPage(React, t, post) {
     const el = React.createElement
     const cwd = sessionCwd(props)
     const [events, setEvents] = React.useState([])
-    React.useEffect(() => {
-      let stop = false
-      function pull() {
-        post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
-          if (stop) return
-          const timeline = data && data.journal && Array.isArray(data.journal.timeline)
-            ? data.journal.timeline
-            : []
-          setEvents(timeline.filter((item) => item.kind === 'alarm' || item.kind === 'alarm-clear'))
-        }).catch(() => { /* next tick retries */ })
-      }
-      pull()
-      const timer = setInterval(pull, 2000)
-      return () => { stop = true; clearInterval(timer) }
-    }, [cwd])
+    React.useEffect(() => subscribeState(post, cwd, (data) => {
+      if (!data) return
+      const timeline = data.journal && Array.isArray(data.journal.timeline)
+        ? data.journal.timeline
+        : []
+      setEvents(timeline.filter((item) => item.kind === 'alarm' || item.kind === 'alarm-clear'))
+    }), [cwd, post])
     return el('div', { className: 'dvb-live' },
       el('div', { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('liveAlarm'))),
@@ -3319,31 +3294,19 @@ function createMapView(React, t, post) {
     const [busy, setBusy] = React.useState(false)
 
     React.useEffect(() => {
-      let stop = false
-      function pull() {
-        if (!cwd) {
-          setKeil({ project: '', target: '' })
-          setMapped(null)
-          return
-        }
-        post('/dsh-vision-bench/state', { cwd }).then((data) => {
-          if (stop) return
-          if (data && data.ok === false) {
-            setError(data.error || t('loadFail'))
-            return
-          }
-          const next = data && data.workspace && data.workspace.keil ? data.workspace.keil : {}
-          const project = next.project || ''
-          const target = next.target || ''
-          setKeil((prev) => (prev.project === project && prev.target === target ? prev : { project, target }))
-        }).catch((err) => {
-          if (!stop) setError(String((err && err.message) || t('loadFail')))
-        })
+      if (!cwd) {
+        setKeil({ project: '', target: '' })
+        setMapped(null)
+        return undefined
       }
-      pull()
-      const timer = setInterval(pull, 2000)
-      return () => { stop = true; clearInterval(timer) }
-    }, [cwd])
+      return subscribeState(post, cwd, (data) => {
+        if (!data || data.ok === false) return
+        const next = data.workspace && data.workspace.keil ? data.workspace.keil : {}
+        const project = next.project || ''
+        const target = next.target || ''
+        setKeil((prev) => (prev.project === project && prev.target === target ? prev : { project, target }))
+      })
+    }, [cwd, post])
 
     React.useEffect(() => {
       let stop = false
@@ -3447,8 +3410,6 @@ function openProjectTab(ctx) {
   if (bs && typeof bs.openTab === 'function') bs.openTab({ type: TAB_MAP })
 }
 
-const OVERVIEW_POLL_MS = 2000
-
 function overviewEmptyWorkspace() {
   return {
     keil: { project: '', target: '', artifact: 'hex', download: '' },
@@ -3480,20 +3441,12 @@ function createOverviewView(React, t, post, hooks) {
     const [pendingWrites, setPendingWrites] = React.useState([])
     const [copied, setCopied] = React.useState(false)
 
-    React.useEffect(() => {
-      let stop = false
-      function pull() {
-        post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
-          if (stop) return
-          if (data && data.health) setHealth(data.health)
-          if (data && Array.isArray(data.pendingWrites)) setPendingWrites(data.pendingWrites)
-          if (data && data.workspace) setWorkspace(data.workspace)
-        }).catch(() => { /* next tick retries */ })
-      }
-      pull()
-      const timer = setInterval(pull, OVERVIEW_POLL_MS)
-      return () => { stop = true; clearInterval(timer) }
-    }, [cwd])
+    React.useEffect(() => subscribeState(post, cwd, (data) => {
+      if (!data) return
+      if (data.health) setHealth(data.health)
+      if (Array.isArray(data.pendingWrites)) setPendingWrites(data.pendingWrites)
+      if (data.workspace) setWorkspace(data.workspace)
+    }), [cwd, post])
 
     const keil = workspace.keil || {}
     const modbus = workspace.modbus || {}
@@ -3531,11 +3484,7 @@ function createOverviewView(React, t, post, hooks) {
       }).catch(() => { /* clipboard unavailable */ })
     }
 
-    function field(label, node) {
-      return el('div', { className: 'dvb-row' },
-        el('div', { className: 'dvb-label' }, el('span', null, label)),
-        node)
-    }
+    const field = (label, node) => sharedField(el, label, node)
 
     const rows = [
       { key: 'python', health: health.python },
