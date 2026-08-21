@@ -1,8 +1,11 @@
 import { addSegment, csvToSegments, defaultSegmentName, functionTag, isWritableFunction, normalizeWriteValues, removeSegment, segmentsToCsv, writeTargetOf } from './bench-points.mjs'
 import { addDevice, normalizeModbus, patchActiveDevice, recipePair, removeDevice } from './bench-devices.mjs'
 import {
+  clearFramesLog,
   clockOf,
+  getFramesLog,
   lineKind,
+  pushFramesLog,
 } from './bench-shared.mjs'
 import {
   emptyJournal,
@@ -53,6 +56,7 @@ export function createHmiView(React, t, post, openLive) {
     const [csvNote, setCsvNote] = React.useState('')
     const [pending, setPending] = React.useState([])
     const [serial, setSerial] = React.useState({ open: false, port: '', baudrate: 115200, lines: [], filter: '', paused: false, error: '', lastId: 0 })
+    const [logMode, setLogMode] = React.useState('serial')
     const [copiedSerial, setCopiedSerial] = React.useState(false)
     const serialRef = React.useRef(serial)
     serialRef.current = serial
@@ -285,6 +289,7 @@ export function createHmiView(React, t, post, openLive) {
         segmentId: segmentId || undefined,
       }, 120000)).then((data) => {
         if (!data) return
+        pushFramesLog(cwd, data.framesLog)
         if (Array.isArray(data.values)) setModbus({ values: data.values })
         return post('/dsh-vision-bench/state', { cwd })
       }).then((data) => {
@@ -353,6 +358,7 @@ export function createHmiView(React, t, post, openLive) {
         values,
       }, 60000).then((data) => {
         patchWrite({ busy: false, result: data })
+        pushFramesLog(cwd, (data && data.framesLog) || [])
         return post('/dsh-vision-bench/state', { cwd })
       }).then((data) => {
         if (!data) return
@@ -715,20 +721,90 @@ export function createHmiView(React, t, post, openLive) {
     const serialLines = serialFilterText
       ? serial.lines.filter((item) => item.line.toLowerCase().includes(serialFilterText))
       : serial.lines
+    const framesAll = getFramesLog(cwd)
+    const frameRows = framesAll.map((item) => ({
+      t: item.t,
+      tx: '\u2192 ' + (item.request || '(\u65e0\u5e27)') + ' \u00b7 ' + item.label + (item.deviceName ? ' \u00b7 ' + item.deviceName : ''),
+      rx: item.response ? '\u2190 ' + item.response : '',
+    }))
+    const visibleFrameRows = serialFilterText
+      ? frameRows.filter((item) => (item.tx + item.rx).toLowerCase().includes(serialFilterText))
+      : frameRows
+
+    function copyLogText() {
+      const text = logMode === 'serial'
+        ? serialLines.map((item) => '[' + clockOf(item.t) + '] ' + item.line).join('\n')
+        : visibleFrameRows.map((item) => '[' + clockOf(item.t) + '] ' + item.tx + (item.rx ? '\n  ' + item.rx : '')).join('\n')
+      if (!text) return
+      navigator.clipboard.writeText(text).then(() => {
+        setCopiedSerial(true)
+        setTimeout(() => setCopiedSerial(false), 1500)
+      }).catch(() => { /* clipboard unavailable */ })
+    }
+
+    function logBody() {
+      if (logMode === 'frames') {
+        if (!visibleFrameRows.length) return el('div', { className: 'dvb-empty' }, t('framesEmpty'))
+        return el('pre', {
+          className: 'dvb-log dvb-serial-log',
+          ref: (node) => {
+            if (node && !serial.paused) node.scrollTop = node.scrollHeight
+          },
+        }, visibleFrameRows.map((item, idx) => el('div', {
+          key: item.t + ':' + idx,
+          className: 'dvb-serial-line',
+        },
+          '[' + clockOf(item.t) + '] ' + item.tx,
+          item.rx ? el('div', null, '  ' + item.rx) : null)))
+      }
+      if (!serialLines.length) return el('div', { className: 'dvb-empty' }, t('serialEmpty'))
+      return el('pre', {
+        className: 'dvb-log dvb-serial-log',
+        ref: (node) => {
+          if (node && !serial.paused) node.scrollTop = node.scrollHeight
+        },
+      }, serialLines.map((item) => el('div', {
+        key: item.id,
+        className: 'dvb-serial-line',
+        'data-kind': lineKind(item.line),
+      }, '[' + clockOf(item.t) + '] ' + item.line)))
+    }
+
     const serialPanel = el('div', { className: 'dvb-panel' },
       el('div', { className: 'dvb-panel-head' },
-        el('span', { className: 'dvb-panel-title' }, t('serialTitle')),
-        el('span', { className: 'dvb-live-dot', 'data-kind': serial.open ? (serial.error ? 'err' : 'live') : 'idle' }),
-        serial.open && serial.port ? el('span', { className: 'dvb-map-meta' }, serial.port + ' @ ' + serial.baudrate) : null,
-        serial.error ? el('span', { className: 'dvb-need' }, serial.error) : null,
+        el('span', { className: 'dvb-panel-title' }, logMode === 'frames' ? t('framesTitle') : t('serialTitle')),
+        el('button', {
+          type: 'button',
+          className: 'dvb-btn' + (logMode === 'serial' ? ' is-on' : ''),
+          onClick() { setLogMode('serial') },
+        }, t('logTabSerial')),
+        el('button', {
+          type: 'button',
+          className: 'dvb-btn' + (logMode === 'frames' ? ' is-on' : ''),
+          onClick() { setLogMode('frames') },
+        }, t('logTabFrames')),
+        logMode === 'frames'
+          ? el('button', {
+            type: 'button', className: 'dvb-btn',
+            onClick() { clearFramesLog(cwd) },
+          }, t('framesClear'))
+          : null,
+        el('div', { style: { flex: 1 } }),
+        logMode === 'serial'
+          ? el('span', { className: 'dvb-live-dot', 'data-kind': serial.open ? (serial.error ? 'err' : 'live') : 'idle' })
+          : null,
+        logMode === 'serial' && serial.open && serial.port ? el('span', { className: 'dvb-map-meta' }, serial.port + ' @ ' + serial.baudrate) : null,
+        logMode === 'serial' && serial.error ? el('span', { className: 'dvb-need' }, serial.error) : null,
         el('button', {
           type: 'button', className: 'dvb-btn',
-          disabled: !serial.open || !serialLines.length,
-          onClick: copySerial,
+          disabled: logMode === 'serial'
+            ? (!serial.open || !serialLines.length)
+            : (!frameRows.length),
+          onClick: copyLogText,
         }, copiedSerial ? t('serialCopied') : t('serialCopy')),
         el('button', {
           type: 'button', className: 'dvb-btn',
-          disabled: !serial.open,
+          disabled: logMode === 'serial' && !serial.open,
           onClick() { setSerial((prev) => ({ ...prev, paused: !prev.paused })) },
         }, serial.paused ? t('serialResume') : t('serialPause'))),
       el('div', { className: 'dvb-toolbar' },
@@ -773,18 +849,8 @@ export function createHmiView(React, t, post, openLive) {
         autoComplete: 'off',
         onChange(event) { setSerial((prev) => ({ ...prev, filter: event.target.value })) },
       })),
-      serialLines.length
-        ? el('pre', {
-          className: 'dvb-log dvb-serial-log',
-          ref: (node) => {
-            if (node && !serial.paused) node.scrollTop = node.scrollHeight
-          },
-        }, serialLines.map((item) => el('div', {
-          key: item.id,
-          className: 'dvb-serial-line',
-          'data-kind': lineKind(item.line),
-        }, '[' + clockOf(item.t) + '] ' + item.line)))
-        : el('div', { className: 'dvb-empty' }, t('serialEmpty')))
+      logBody())
+
 
     return el('div', { className: 'dvb-page' },
       statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),

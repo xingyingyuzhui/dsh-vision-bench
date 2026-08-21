@@ -99,3 +99,20 @@ test('compactValues decodes with segment metadata for the agent', () => {
   assert.equal(out[0].raw, 255)
   assert.equal(out[0].unit, '°C')
 })
+
+test('pushFramesLog keeps a per-cwd ring buffer with a hard cap', async () => {
+  const shared = await import('../bench-shared.mjs')
+  const cwd = '/tmp/dvb-frames-cap'
+  const big = []
+  for (let i = 0; i < 800; i++) {
+    big.push({ t: i, deviceName: 'd', label: 'L' + i, request: 'r' + i, response: 's' + i })
+  }
+  shared.pushFramesLog(cwd, big)
+  const items = shared.getFramesLog(cwd)
+  assert.equal(items.length, 500)
+  assert.equal(items[0].label, 'L300')
+  assert.equal(items[499].label, 'L799')
+  // switching cwd resets the buffer
+  shared.pushFramesLog('/tmp/other-cwd', [])
+  assert.equal(shared.getFramesLog(cwd).length, 0)
+})

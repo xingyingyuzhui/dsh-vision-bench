@@ -1,4 +1,4 @@
-import { subscribeState } from './bench-shared.mjs'
+import { pushFramesLog, subscribeState } from './bench-shared.mjs'
 import { clockOf, decodeValue, expandPoints, functionTag, isWritableFunction, normalizeWriteValues, writeTargetOf } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
@@ -127,6 +127,9 @@ export function createLiveView(React, t, post, hooks) {
               if (stop) return
               if (polled && Array.isArray(polled.values)) {
                 setModbus((prev) => ({ ...prev, values: polled.values, polling: polled.polling || prev.polling }))
+              }
+              if (polled && Array.isArray(polled.framesLog)) {
+                pushFramesLog(cwd, polled.framesLog)
               }
               setTickError(polled && polled.ok === false && !polled.skipped ? (polled.error || t('fail')) : '')
               await wait(interval)

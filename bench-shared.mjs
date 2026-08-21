@@ -132,6 +132,46 @@ export function journalPanel(el, t, journal) {
 // One shared /state poller per cwd instead of six independent loops.
 const STATE_BUS = { cwd: '', data: null, subs: new Set(), timer: 0, seq: 0 }
 
+// Modbus frame stream for the HMI 报文 view. Ring buffer keyed by cwd; fed by
+// read / write / poll responses from any surface (HMI actions and the live
+// polling loop).
+const FRAME_LOG = { cwd: '', items: [] }
+const FRAME_LOG_CAP = 500
+
+export function pushFramesLog(cwd, logArray) {
+  if (!cwd) return
+  if (FRAME_LOG.cwd !== cwd) {
+    FRAME_LOG.cwd = cwd
+    FRAME_LOG.items = []
+  }
+  const list = Array.isArray(logArray) ? logArray : []
+  for (const entry of list) {
+    if (!entry) continue
+    FRAME_LOG.items.push({
+      t: Number(entry.t) || Date.now(),
+      deviceName: String(entry.deviceName || ''),
+      label: String(entry.label || ''),
+      request: String(entry.request || ''),
+      response: String(entry.response || ''),
+    })
+  }
+  if (FRAME_LOG.items.length > FRAME_LOG_CAP) {
+    FRAME_LOG.items.splice(0, FRAME_LOG.items.length - FRAME_LOG_CAP)
+  }
+}
+
+export function getFramesLog(cwd) {
+  return FRAME_LOG.cwd === cwd ? FRAME_LOG.items : []
+}
+
+export function clearFramesLog(cwd) {
+  if (FRAME_LOG.cwd === cwd) FRAME_LOG.items = []
+}
+
+export function framesLogCount() {
+  return FRAME_LOG.items.length
+}
+
 function busPull(post) {
   const seq = ++STATE_BUS.seq
   post('/dsh-vision-bench/state', { cwd: STATE_BUS.cwd }).then((data) => {

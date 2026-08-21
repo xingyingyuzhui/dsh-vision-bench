@@ -10,6 +10,11 @@ import { withPortLock } from './bench-portlock.mjs'
 import { findMonitoredPort } from './bench-serial-monitor.mjs'
 import { notifyBenchEvent } from './bench-notify.mjs'
 
+const needPython = (bindings) => {
+  if (!bindings.python) return '请先在设置 → 台架 绑定 Python'
+  return null
+}
+
 const pollLocks = new Map()
 const POLL_BUDGET_MS = 30000
 
@@ -69,6 +74,17 @@ const framesOf = (ran) => {
   }
 }
 
+// Uniform frame-log entry shape shared by read / write / poll responses.
+const frameEntry = (device, label, frames, at = Date.now()) => ({
+  t: at,
+  deviceId: device.id,
+  deviceName: device.name || '',
+  label,
+  request: frames ? frames.request : '',
+  response: frames ? frames.response : '',
+  trace: frames ? frames.trace : [],
+})
+
 
 const runSegment = (python, conn, segment, cwd, timeoutMs, signal, port) => runModbusScript(python, 'modbus_read.py', conn.concat([
   '--function', String(segment.function),
@@ -86,27 +102,32 @@ const readSegmentsSim = (m, list) => {
     values = applySegmentRead(values, segment, simulateSegmentRan(segment, at))
     results.push({ segmentId: segment.id, ok: true, error: '', count: segment.count })
   }
-  return { ok: true, values, okCount: list.length, results, error: '', simulated: true }
+  return { ok: true, values, okCount: list.length, results, error: '', simulated: true, framesLog: [] }
 }
 
 
 const readSegments = async (python, m, list, cwd, timeoutMs, signal) => {
-  if (m.role === 'slave') return m.sim ? readSegmentsSim(m, list) : { ok: true, values: m.values || [], okCount: list.length, results: [], error: '' }
+  if (m.role === 'slave') return m.sim ? readSegmentsSim(m, list) : { ok: true, values: m.values || [], okCount: list.length, results: [], error: '', framesLog: [] }
   if (m.sim) return readSegmentsSim(m, list)
   const conn = connectionArgs(m)
-  if (conn.error) return { ok: false, error: conn.error, values: m.values || [], okCount: 0 }
+  if (conn.error) return { ok: false, error: conn.error, values: m.values || [], okCount: 0, framesLog: [] }
   let values = m.values || []
   let okCount = 0
   let lastError = ''
   let lastFrames = null
   const results = []
+  const framesLog = []
   const port = m.mode === 'rtu' ? m.port : ''
   for (const segment of list) {
-    if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消', values, okCount, results }
+    if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消', values, okCount, results, framesLog }
     const ran = await runSegment(python, conn.args, segment, cwd, timeoutMs, signal, port)
-    if (ran.cancelled) return { ok: false, cancelled: true, error: '已取消', values, okCount, results }
+    if (ran.cancelled) return { ok: false, cancelled: true, error: '已取消', values, okCount, results, framesLog }
     values = applySegmentRead(values, segment, ran)
-    lastFrames = framesOf(ran) || lastFrames
+    const f = framesOf(ran)
+    if (f) {
+      lastFrames = f
+      framesLog.push(frameEntry(m, '读 ' + functionTag(segment.function) + segment.address + '×' + segment.count, f))
+    }
     results.push({
       segmentId: segment.id,
       ok: !!ran.ok,
@@ -122,6 +143,7 @@ const readSegments = async (python, m, list, cwd, timeoutMs, signal) => {
     okCount,
     results,
     frames: lastFrames,
+    framesLog,
     error: lastError,
   }
 }
@@ -186,6 +208,7 @@ export const modbusRead = async (home, cwd, body, opts) => {
       summary,
       results: ran.results,
       values: ran.values,
+      framesLog: ran.framesLog || [],
       simulated: sim,
       error: ran.ok ? undefined : ran.error,
     }
@@ -234,8 +257,9 @@ export const modbusRead = async (home, cwd, body, opts) => {
   const summary = ran.ok
     ? ('Modbus 读 f' + m.function + '@' + m.address + ' = ' + JSON.stringify(value))
     : ('Modbus 读失败 ' + (ran.error || ''))
-  finishTask(home, room.cwd, task.id, { ok: !!ran.ok, summary, frames: framesOf(ran) })
-  return { ...ran, taskId: task.id, source: origin.source }
+  const f = framesOf(ran)
+  finishTask(home, room.cwd, task.id, { ok: !!ran.ok, summary, frames: f })
+  return { ...ran, taskId: task.id, source: origin.source, framesLog: [frameEntry(m, '读 ' + functionTag(m.function) + m.address + '×' + m.count, f)] }
 }
 
 
@@ -466,6 +490,7 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       target: check.values,
       readback: extra.readback || [],
       frames: extra.frames || null,
+      framesLog: [frameEntry(m, label, extra.frames)],
       simulated: !!extra.simulated,
       ...(ok ? {} : { error: summary }),
     }
@@ -575,6 +600,7 @@ export const modbusPoll = async (home, cwd, opts) => {
   const alarmActive = new Map()
   const firedAll = []
   const clearedAll = []
+  const pollFramesLog = []
   pollLocks.set(room.cwd, lives)
   let ok = true
   let timedOut = false
@@ -619,6 +645,9 @@ export const modbusPoll = async (home, cwd, opts) => {
       if (!ran.ok) ok = false
       const alarms = deviceAlarms(device, ran.values)
       alarmActive.set(device.id, alarms.next)
+      for (const entry of (ran.framesLog || [])) {
+        pollFramesLog.push({ ...entry, label: entry.label + '（监视）' })
+      }
       firedAll.push(...alarms.fired)
       clearedAll.push(...alarms.cleared)
       lives.set(device.id, {
@@ -675,6 +704,7 @@ export const modbusPoll = async (home, cwd, opts) => {
       values: saved.workspace.modbus.values,
       polling: saved.workspace.modbus.polling,
       devices: saved.workspace.modbus.devices,
+      framesLog: pollFramesLog,
       error: ok ? undefined : (timedOut ? '轮询超时' : merged.map((item) => item.polling.error).filter(Boolean)[0]),
     }
   } finally {

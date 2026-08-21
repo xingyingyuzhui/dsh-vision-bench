@@ -1,6 +1,6 @@
 {
   "name": "dsh-vision-bench",
-  "version": "0.17.3",
+  "version": "0.17.4",
   "description": "Vision 台架：会话区调试/上位机点表（倍率/单位/告警上下限、CSV 导入导出、趋势曲线），Keil 编译与日志、产物哈希、OpenOCD 烧录确认、串口监视，Modbus 读点和受控写点（Agent 写点需界面批准），人工操作请求卡，共享任务与时间线，会话绑定与台架事件通知，并安装「台架模式」Agent 预设。",
   "keywords": [
     "dsh",
