@@ -1,7 +1,7 @@
 // Shared client widgets and helpers for every conversation view.
 // Everything here is explicitly imported by its consumers — no hidden
 // strip-concat scope sharing.
-import { clockOf } from './bench-points.mjs'
+export { clockOf } from './bench-points.mjs'
 import { statusKind } from './bench-settings.mjs'
 
 export const POLL_MS = 2000
@@ -160,4 +160,10 @@ export function subscribeState(post, cwd, cb) {
   return function () {
     STATE_BUS.subs.delete(cb)
   }
+}
+
+export function lineKind(line) {
+  if (/(assert|panic|fault|hardfault|error|错误|失败|exception)/i.test(line)) return 'err'
+  if (/(warn|警告)/i.test(line)) return 'warn'
+  return ''
 }

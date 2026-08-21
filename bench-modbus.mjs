@@ -42,7 +42,7 @@ const connectionArgs = (m) => {
 }
 
 
-const MONITOR_BUSY_MSG = '串口正被日志监视占用，请先在调试页关闭串口日志；要看总线报文可改用第二个只听适配器接另一个 COM'
+const MONITOR_BUSY_MSG = '串口正被日志监视占用，请先在上位机页关闭串口日志；要看总线报文可改用第二个只听适配器接另一个 COM'
 
 // Every pymodbus spawn goes through here: RTU ports are exclusive on Windows,
 // so transactions queue on a per-port lock and refuse while the log monitor

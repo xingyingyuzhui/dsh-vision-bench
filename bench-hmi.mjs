@@ -1,6 +1,10 @@
 import { addSegment, csvToSegments, defaultSegmentName, functionTag, isWritableFunction, normalizeWriteValues, removeSegment, segmentsToCsv, writeTargetOf } from './bench-points.mjs'
 import { addDevice, normalizeModbus, patchActiveDevice, recipePair, removeDevice } from './bench-devices.mjs'
 import {
+  clockOf,
+  lineKind,
+} from './bench-shared.mjs'
+import {
   emptyJournal,
   emptyWorkspace,
   journalPanel,
@@ -48,6 +52,10 @@ export function createHmiView(React, t, post, openLive) {
     const [csvText, setCsvText] = React.useState('')
     const [csvNote, setCsvNote] = React.useState('')
     const [pending, setPending] = React.useState([])
+    const [serial, setSerial] = React.useState({ open: false, port: '', baudrate: 115200, lines: [], filter: '', paused: false, error: '', lastId: 0 })
+    const [copiedSerial, setCopiedSerial] = React.useState(false)
+    const serialRef = React.useRef(serial)
+    serialRef.current = serial
     const [ports, setPorts] = React.useState([])
     const [scanning, setScanning] = React.useState(false)
     const workspaceRef = React.useRef(workspace)
@@ -66,6 +74,26 @@ export function createHmiView(React, t, post, openLive) {
     React.useEffect(() => {
       scanPorts()
     }, [cwd])
+
+    React.useEffect(() => {
+      if (!cwd || !serial.open) return undefined
+      let stop = false
+      const timer = setInterval(() => {
+        post('/dsh-vision-bench/serial/feed', { cwd, since: serialRef.current.lastId }, 10000).then((data) => {
+          if (stop || !data) return
+          setSerial((prev) => ({
+            ...prev,
+            open: data.open !== false,
+            error: data.error || '',
+            lastId: data.lastId || prev.lastId,
+            lines: Array.isArray(data.lines) && data.lines.length
+              ? prev.lines.concat(data.lines).slice(-1000)
+              : prev.lines,
+          }))
+        }).catch(() => { /* next tick retries */ })
+      }, 700)
+      return () => { stop = true; clearInterval(timer) }
+    }, [cwd, serial.open])
 
     React.useEffect(() => subscribeState(post, cwd, (data) => {
       if (!data) return
@@ -185,6 +213,42 @@ export function createHmiView(React, t, post, openLive) {
             onClick() { resolveWrite(req.id, false) },
           }, t('rejectWrite')))))
       : null
+
+    function openSerial() {
+      if (!cwd) return
+      post('/dsh-vision-bench/serial/open', {
+        cwd,
+        port: serial.port,
+        baudrate: Number(serial.baudrate) || 115200,
+      }, 15000).then((data) => {
+        if (!data || data.ok === false) {
+          setSerial((prev) => ({ ...prev, error: (data && data.error) || t('fail') }))
+          return
+        }
+        setSerial((prev) => ({ ...prev, open: true, error: '', lines: [], lastId: 0 }))
+      }).catch((err) => {
+        setSerial((prev) => ({ ...prev, error: String((err && err.message) || t('fail')) }))
+      })
+    }
+
+    function closeSerial() {
+      if (!cwd) return
+      post('/dsh-vision-bench/serial/close', { cwd }, 10000).catch(() => { /* ignore */ })
+      setSerial((prev) => ({ ...prev, open: false, lines: [], lastId: 0, error: '' }))
+    }
+
+    function copySerial() {
+      const filterText = serial.filter.trim().toLowerCase()
+      const visible = filterText
+        ? serial.lines.filter((item) => item.line.toLowerCase().includes(filterText))
+        : serial.lines
+      const text = visible.map((item) => '[' + clockOf(item.t) + '] ' + item.line).join('\n')
+      if (!text) return
+      navigator.clipboard.writeText(text).then(() => {
+        setCopiedSerial(true)
+        setTimeout(() => setCopiedSerial(false), 1500)
+      }).catch(() => { /* clipboard unavailable */ })
+    }
 
     function exportCsv() {
       navigator.clipboard.writeText(segmentsToCsv(m.segments)).then(() => {
@@ -647,6 +711,81 @@ export function createHmiView(React, t, post, openLive) {
         writeResultLine(writeState.result))
       : null
 
+    const serialFilterText = serial.filter.trim().toLowerCase()
+    const serialLines = serialFilterText
+      ? serial.lines.filter((item) => item.line.toLowerCase().includes(serialFilterText))
+      : serial.lines
+    const serialPanel = el('div', { className: 'dvb-panel' },
+      el('div', { className: 'dvb-panel-head' },
+        el('span', { className: 'dvb-panel-title' }, t('serialTitle')),
+        el('span', { className: 'dvb-live-dot', 'data-kind': serial.open ? (serial.error ? 'err' : 'live') : 'idle' }),
+        serial.open && serial.port ? el('span', { className: 'dvb-map-meta' }, serial.port + ' @ ' + serial.baudrate) : null,
+        serial.error ? el('span', { className: 'dvb-need' }, serial.error) : null,
+        el('button', {
+          type: 'button', className: 'dvb-btn',
+          disabled: !serial.open || !serialLines.length,
+          onClick: copySerial,
+        }, copiedSerial ? t('serialCopied') : t('serialCopy')),
+        el('button', {
+          type: 'button', className: 'dvb-btn',
+          disabled: !serial.open,
+          onClick() { setSerial((prev) => ({ ...prev, paused: !prev.paused })) },
+        }, serial.paused ? t('serialResume') : t('serialPause'))),
+      el('div', { className: 'dvb-toolbar' },
+        field(t('serial'), el('div', { className: 'dvb-combo' },
+          el('select', {
+            className: 'dvb-input dvb-input-mono',
+            value: serial.port,
+            disabled: scanning || serial.open,
+            onChange(event) { setSerial((prev) => ({ ...prev, port: event.target.value })) },
+          },
+            el('option', { value: '' }, scanning ? t('serialScanning') : (ports.length ? t('serialPick') : t('serialNone'))),
+            serial.port && !ports.some((item) => item.path === serial.port)
+              ? el('option', { value: serial.port }, serial.port + ' · ' + t('serialGone'))
+              : null,
+            ports.map((item) => el('option', { key: item.path, value: item.path }, item.label || item.path))),
+          el('button', {
+            type: 'button', className: 'dvb-btn',
+            disabled: scanning || serial.open,
+            title: t('serialScan'),
+            onClick: scanPorts,
+          }, t('serialScan')))),
+        field(t('baud'), el('input', {
+          className: 'dvb-input dvb-input-mono',
+          type: 'number',
+          value: serial.baudrate,
+          disabled: serial.open,
+          onChange(event) { setSerial((prev) => ({ ...prev, baudrate: Number(event.target.value) })) },
+        })),
+        field('\u00a0', serial.open
+          ? el('button', { type: 'button', className: 'dvb-btn', onClick: closeSerial }, t('serialClose'))
+          : el('button', {
+            type: 'button',
+            className: 'dvb-btn dvb-btn-primary',
+            disabled: !cwd || !serial.port,
+            onClick: openSerial,
+          }, t('serialOpen')))),
+      field(t('serialFilter'), el('input', {
+        className: 'dvb-input',
+        value: serial.filter,
+        placeholder: 'error, assert…',
+        spellCheck: false,
+        autoComplete: 'off',
+        onChange(event) { setSerial((prev) => ({ ...prev, filter: event.target.value })) },
+      })),
+      serialLines.length
+        ? el('pre', {
+          className: 'dvb-log dvb-serial-log',
+          ref: (node) => {
+            if (node && !serial.paused) node.scrollTop = node.scrollHeight
+          },
+        }, serialLines.map((item) => el('div', {
+          key: item.id,
+          className: 'dvb-serial-line',
+          'data-kind': lineKind(item.line),
+        }, '[' + clockOf(item.t) + '] ' + item.line)))
+        : el('div', { className: 'dvb-empty' }, t('serialEmpty')))
+
     return el('div', { className: 'dvb-page' },
       statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
@@ -655,6 +794,7 @@ export function createHmiView(React, t, post, openLive) {
       pendingPanel,
       segPanel,
       writePanel,
+      serialPanel,
       journalPanel(el, t, journal))
   }
 }

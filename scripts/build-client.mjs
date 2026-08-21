@@ -23,6 +23,9 @@ function stripModule(src) {
     })
     .replace(/^import\s+([A-Za-z_$][\w$]*)\s+from\s*'[^']+'\n+/gm, 'var $1 = $1;\n')
     .replace(/^import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s*'[^']+'\n+/gm, '')
+    // Re-exports contribute no new factory-scope bindings: the underlying
+    // symbol already exists in its defining module.
+    .replace(/^export\s*\{[^}]*\}\s*from\s*'[^']+'\n+/gm, '')
     .replace(/^import[\s\S]*?from '[^']+'\n+/gm, '')
     .replace(/^export /gm, '')
 }
