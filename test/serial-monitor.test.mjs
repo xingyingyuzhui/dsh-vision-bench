@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -11,6 +11,8 @@ import {
   serialState,
 } from '../bench-serial-monitor.mjs'
 import { findPython } from './python.mjs'
+import { journalView, loadWorkspace, saveBindings, saveWorkspace } from '../bench-store.mjs'
+
 
 test('serial monitor guards bindings, port and unknown cwd', async () => {
   const cwd = '/tmp/dvb-serial-none'
@@ -92,4 +94,44 @@ test('openocd_flash.py validates inputs before spawning', () => {
   assert.equal(badIface.error.code, 'bad_interface')
   const badTarget = run(['--openocd', '/bin/sh', '--interface', 'cmsis-dap', '--target', 'nope', '--file', '/etc/hosts', '--json'])
   assert.equal(badTarget.error.code, 'bad_target')
+})
+
+test('openocdDownload refuses when firmware changed after confirmation', async () => {
+  const { writeFileSync } = await import('node:fs')
+  const { openocdDownload } = await import('../bench-flash.mjs')
+  const home = await mkdtemp(join(tmpdir(), 'dvb-flash-toctou-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    const pythonBin = findPython() || process.execPath
+    saveBindings(home, { python: process.execPath, uv4: '', openocd: '/bin/echo' })
+    const fw = join(cwd, 'app.hex')
+    writeFileSync(fw, 'v1')
+    saveWorkspace(home, cwd, {
+      keil: { download: fw },
+      modbus: {},
+    })
+    const first = await openocdDownload(home, cwd, {
+      interface: 'cmsis-dap',
+      target: 'stm32f1x',
+    })
+    assert.equal(first.needsConfirm, true)
+    assert.ok(first.request.sha256, 'expected a hash for a small file')
+    // Firmware replaced under the same path after the card was shown.
+    writeFileSync(fw, 'v2-with-different-bytes')
+    const ran = await openocdDownload(home, cwd, {
+      interface: 'cmsis-dap',
+      target: 'stm32f1x',
+      path: first.request.file,
+      sha256: first.request.sha256,
+      size: first.request.size,
+      confirm: true,
+    })
+    assert.equal(ran.ok, false)
+    assert.match(ran.error, /固件已变化/)
+    const ws = loadWorkspace(home, cwd)
+    assert.equal(journalView(ws).tasks.filter((item) => item.type === 'download').length, 0)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
 })

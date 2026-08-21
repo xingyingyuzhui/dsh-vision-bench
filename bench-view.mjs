@@ -284,6 +284,8 @@ export function createDebugView(React, t, post, openProject) {
         interface: req.interface,
         target: req.target,
         path: req.file,
+        sha256: req.sha256 || '',
+        size: req.size || 0,
         confirm: true,
       }, 180000).then((data) => {
         setFlash((prev) => ({ ...prev, busy: false, confirm: null, result: data }))

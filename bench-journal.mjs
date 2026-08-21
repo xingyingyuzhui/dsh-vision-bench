@@ -33,32 +33,29 @@ const MAJOR_KINDS = new Set([
 export const isMajorKind = (kind) => MAJOR_KINDS.has(String(kind || ''))
 
 export const trimTimeline = (list, max = MAX_TIMELINE, minorBudget = MAX_TIMELINE_MINOR) => {
-  let events = Array.isArray(list) ? list.slice(0, max * 3) : []
-  if (events.length <= max) return events
-  const minors = events.filter((item) => item && !isMajorKind(item.kind)).length
-  let dropMinor = Math.min(minors, Math.max(0, events.length - max))
-  const keepMinor = Math.max(0, minors - dropMinor)
+  void minorBudget
+  const events = Array.isArray(list) ? list : []
+  // events are newest-first (prepend). Keep the newest `max` events as-is,
+  // then rescue major events older than that window so important evidence
+  // (build failures, writes, sweeps) survives long read bursts.
   const out = []
-  let seenMinor = 0
-  for (let i = events.length - 1; i >= 0; i--) {
+  let windowEnd = -1
+  for (let i = 0; i < events.length && out.length < max; i++) {
     const item = events[i]
     if (!item) continue
-    if (!isMajorKind(item.kind)) {
-      seenMinor += 1
-      if (seenMinor <= keepMinor) out.push(item)
-      continue
-    }
     out.push(item)
+    windowEnd = i
   }
-  events = out.reverse()
-  dropMinor = 0
-  while (events.length > max) {
-    const idx = events.findIndex((item) => !isMajorKind(item.kind))
-    if (idx < 0) break
-    events.splice(idx, 1)
-    dropMinor += 1
+  if (windowEnd < 0 || events.length <= max) return out
+  let rescued = 0
+  for (let i = windowEnd + 1; i < events.length && rescued < max; i++) {
+    const item = events[i]
+    if (item && isMajorKind(item.kind)) {
+      out.push(item)
+      rescued += 1
+    }
   }
-  return events.slice(0, max)
+  return out
 }
 
 export const newId = (prefix) =>

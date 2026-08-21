@@ -37,19 +37,43 @@ test('task type registry accepts reserved types and rejects unknown ones', () =>
   assert.equal(clamped.progress, null)
 })
 
-test('trimTimeline keeps majors and drops oldest minors first', () => {
+test('trimTimeline keeps newest events and drops oldest minors first', () => {
+  // Timeline is stored newest-first: index 0 is the most recent event.
   const event = (i, kind) => ({ id: 'e' + i, at: i, kind, source: 'user', sessionId: '', taskId: '', ok: true, summary: '' })
   const events = []
-  for (let i = 0; i < 200; i++) events.push(event(i, i % 10 === 0 ? 'build-end' : 'read-start'))
+  for (let i = 199; i >= 0; i--) {
+    // Push oldest first so the array ends up newest-first like prepend().
+    // Every 10th timestamp is a major build-end.
+    events.push(event(i, i % 10 === 0 ? 'build-end' : 'read-start'))
+  }
   const trimmed = trimTimeline(events)
-  assert.ok(trimmed.length <= MAX_TIMELINE)
-  const kinds = trimmed.map((item) => item.kind)
-  assert.equal(kinds.filter((kind) => kind === 'build-end').length, 20)
+  // Newest window (120) plus rescued majors from older history (bounded by
+  // another 120) — never unbounded growth.
+  assert.ok(trimmed.length <= MAX_TIMELINE * 2)
+  // The very newest event must survive.
+  assert.equal(trimmed[0].at, 199)
+  // All 20 majors survive: 12 inside the newest-120 window, 8 rescued from
+  // older history.
+  assert.equal(trimmed.filter((item) => item.kind === 'build-end').length, 20)
+  // The OLDEST major (at 0, far outside the window) is rescued, not dropped.
+  assert.ok(trimmed.some((item) => item.kind === 'build-end' && item.at === 0))
+  // Newest minor right after the newest major must also survive.
+  assert.ok(trimmed.slice(0, 5).some((item) => item.kind === 'read-start'))
   assert.ok(isMajorKind('write-end'))
   assert.ok(!isMajorKind('read-start'))
+
   const allMinor = trimTimeline(events.map((item) => ({ ...item, kind: 'read-start' })))
   assert.equal(allMinor.length, MAX_TIMELINE)
-  assert.equal(allMinor[0].at, 80)
+  // Newest-first kept the NEWEST 120 minors (at 199 down to 80).
+  assert.equal(allMinor[0].at, 199)
+  assert.equal(allMinor[allMinor.length - 1].at, 80)
+
+  // Once full, fresh minor events must not be evicted in favour of old ones:
+  // simulate a saturated list and prepend a brand-new minor.
+  const saturated = allMinor
+  const fresh = { id: 'fresh', at: 500, kind: 'read-start', source: 'user', sessionId: '', taskId: '', ok: true, summary: '' }
+  const after = trimTimeline([fresh].concat(saturated))
+  assert.equal(after[0].id, 'fresh')
 })
 
 test('bindSession and unbindSession persist the bound session id', async () => {
@@ -161,6 +185,50 @@ test('manual requests persist, resolve and notify', async () => {
     assert.ok(ws.timeline.some((item) => item.kind === 'manual-done' && item.ok === true))
     const twice = resolveManualRequest(home, cwd, created.request.id, false)
     assert.equal(twice.ok, false)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('explicit origin sessionId wins over the workspace binding', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-notify-orig-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    const delivered = []
+    const registry = {
+      get(id) {
+        if (id !== 'sess-origin') return null
+        return { followup(message) { delivered.push({ to: id, message }); return Promise.resolve() } }
+      },
+    }
+    setAgentsRegistry(registry)
+    await bindSession(home, cwd, 'sess-other')
+    const ran = await notifyBenchEvent(home, cwd, '写点完成', '', { sessionId: 'sess-origin' })
+    assert.equal(ran.ok, true)
+    assert.equal(delivered.length, 1)
+    assert.equal(delivered[0].to, 'sess-origin')
+    // Without an explicit origin the binding stays the default target.
+    setAgentsRegistry({
+      get(id) {
+        if (id !== 'sess-other') return null
+        return { followup() { return Promise.resolve() } }
+      },
+    })
+    const fallback = await notifyBenchEvent(home, cwd, '台架告警')
+    assert.equal(fallback.ok, true)
+    assert.equal(fallback.boundId, 'sess-other')
+    // Explicit origin that no longer exists is reported as missing, never
+    // silently rerouted to the bound session.
+    setAgentsRegistry({
+      get(id) {
+        if (id !== 'sess-other') return null
+        return { followup() { return Promise.resolve() } }
+      },
+    })
+    const miss = await notifyBenchEvent(home, cwd, 'x', '', { sessionId: 'sess-gone' })
+    assert.equal(miss.skipped, 'agent-missing')
+    setAgentsRegistry(null)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

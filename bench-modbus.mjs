@@ -294,19 +294,62 @@ const prunePendingWrites = (cwd) => {
 }
 
 
+const endpointFingerprint = (m) => ({
+  mode: m.mode,
+  port: (m.port || '').trim(),
+  host: (m.host || '').trim(),
+  tcpPort: Number(m.tcpPort) || 0,
+  slave: Number(m.slave) || 0,
+  baudrate: Number(m.baudrate) || 0,
+})
+
+export const endpointLabel = (m) => m.mode === 'rtu'
+  ? ((m.port || '?') + ' @ ' + (m.baudrate || 0) + ' · 站号 ' + (m.slave || 0))
+  : ((m.host || '?') + ':' + (m.tcpPort || 0) + ' · 站号 ' + (m.slave || 0))
+
+const sameEndpoint = (a, b) =>
+  !!a && !!b
+    && a.mode === b.mode
+    && a.port === b.port
+    && a.host === b.host
+    && a.tcpPort === b.tcpPort
+    && a.slave === b.slave
+    && a.baudrate === b.baudrate
+
 export const resolvePendingWrite = async (home, cwd, id, approved) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
   const entry = popPendingWrite(room.cwd, id)
   if (!entry) return { ok: false, error: '请求不存在或已过期' }
-  if (!approved) {
+  if (approved !== true) {
     recordBenchEvent(home, room.cwd, {
       action: 'write-reject',
       ok: false,
       summary: '拒绝 Agent 写点：' + entry.params.label,
     }, { source: 'user' })
-    void notifyBenchEvent(home, room.cwd, '用户拒绝了写点请求：' + entry.params.label).catch(() => {})
+    void notifyBenchEvent(home, room.cwd,
+      '用户拒绝了写点请求：' + entry.params.label,
+      '', { sessionId: entry.params.sessionId }).catch(() => {})
     return { ok: true, rejected: true }
+  }
+  // The user approved a write to the endpoint they saw on the card. If the
+  // device connection changed since, refuse instead of writing somewhere else.
+  const workspace = loadWorkspace(home, room.cwd)
+  const pack = normalizeModbus(workspace.modbus)
+  const device = pack.devices.find((item) => item.id === entry.params.deviceId)
+  if (!device) {
+    return { ok: false, error: '请求的目标设备已不存在，请让 Agent 重新发起请求' }
+  }
+  if (!sameEndpoint(endpointFingerprint(device), entry.params.endpoint)) {
+    recordBenchEvent(home, room.cwd, {
+      action: 'write-stale',
+      ok: false,
+      summary: '写点请求过期（设备连接已变更）：' + entry.params.label,
+    }, { source: 'system' })
+    void notifyBenchEvent(home, room.cwd,
+      '写点请求已失效：设备连接在批准前发生了变化，请让 Agent 重新发起',
+      '', { sessionId: entry.params.sessionId }).catch(() => {})
+    return { ok: false, error: '设备连接已变更，原批准已失效，请让 Agent 重新发起请求' }
   }
   return modbusWrite(home, room.cwd, {
     ...entry.params,
@@ -373,6 +416,8 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       deviceName: m.name || '',
       label,
       sessionId: origin.sessionId,
+      endpoint: endpointFingerprint(m),
+      endpointLabelStr: endpointLabel(m),
     })
     return {
       ok: false,
@@ -390,9 +435,20 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     sessionId: origin.sessionId,
     summary: label,
   })
+  // Merge-only completion: reload the freshest device list and patch ONLY the
+  // target device's values (and sim flag for local writes). A real write plus
+  // readback can take tens of seconds; rebuilding the whole device array from
+  // a pre-write snapshot would clobber concurrent config edits.
   const done = (ok, summary, extra = {}) => {
     const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
-    const devices = extra.devices || latest.devices.map((item) => item.id === m.id ? { ...item, ...extra.devicePatch } : item)
+    const devices = latest.devices.map((item) => {
+      if (item.id !== m.id) return item
+      return {
+        ...item,
+        values: extra.values !== undefined ? extra.values : item.values,
+        sim: extra.exitSim ? false : item.sim,
+      }
+    })
     finishTask(home, room.cwd, task.id, {
       ok,
       summary,
@@ -422,10 +478,12 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       const seg = segmentCovering(m.segments, fn, address + i)
       vals = applyPointWrite(vals, seg, address + i, check.values[i], at)
     }
-    const devices = pack.devices.map((item) => item.id === m.id
-      ? { ...item, values: vals, sim: false }
-      : item)
-    return done(true, label + '（本地生效）', { devices, simulated: m.sim === true, readback: check.values.slice() })
+    return done(true, label + '（本地生效）', {
+      values: vals,
+      exitSim: true,
+      simulated: m.sim === true,
+      readback: check.values.slice(),
+    })
   }
 
   const writePort = m.mode === 'rtu' ? m.port : ''
@@ -452,13 +510,12 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     const seg = segmentCovering(m.segments, fn, address + i) || { id: 'write', function: fn, address: address + i, count: 1 }
     vals = applyPointWrite(vals, seg, address + i, raw[i] !== undefined ? raw[i] : null, Date.now())
   }
-  const devices = pack.devices.map((item) => item.id === m.id ? { ...item, values: vals } : item)
   const mismatch = readbackOk && raw.some((value, i) => Number(value) !== Number(check.values[i]))
   const summary = label + (readbackOk
     ? (mismatch ? '，回读不一致：' + JSON.stringify(raw) : '，回读一致')
     : ('，回读失败 ' + (readbackRan.error || '')))
   return done(readbackOk && !mismatch, summary, {
-    devices,
+    values: vals,
     readback: readbackOk ? raw : [],
     frames: framesOf(ran) || framesOf(readbackRan),
   })

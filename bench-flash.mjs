@@ -36,7 +36,18 @@ export const openocdDownload = async (home, cwd, body, opts) => {
   if (hasRunning(workspace, 'download')) {
     return { ok: false, error: '已有下载任务进行中' }
   }
-  if (!(body && body.confirm === true)) {
+  // The user approved a specific artifact; re-verify it byte-for-byte before
+  // flashing so a rebuild between confirm and approval cannot slip through.
+  if (body && body.confirm === true) {
+    const expectedSha = typeof body.sha256 === 'string' ? body.sha256 : ''
+    const expectedSize = Number(body.size)
+    if (expectedSize > 0 && info.size !== expectedSize) {
+      return { ok: false, error: '固件已变化（大小不匹配），请重新确认后烧录' }
+    }
+    if (expectedSha && info.sha256 && info.sha256 !== expectedSha) {
+      return { ok: false, error: '固件已变化（sha256 不匹配），请重新确认后烧录' }
+    }
+  } else {
     return {
       ok: false,
       needsConfirm: true,

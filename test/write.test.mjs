@@ -353,3 +353,104 @@ test('approving a pending write whose device vanished fails cleanly', async () =
     await rm(home, { recursive: true, force: true })
   }
 })
+
+test('approval refuses when the device endpoint drifted', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-write-drift-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveWorkspace(home, cwd, {
+      modbus: {
+        devices: [
+          { id: 'm1', name: '主板', role: 'master', mode: 'tcp', host: '10.0.0.8', tcpPort: 502, slave: 1, segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }] },
+        ],
+        activeId: 'm1',
+      },
+    })
+    const first = await runVisionBench(home, {
+      action: 'write',
+      function: 3,
+      address: 0,
+      values: [5],
+    }, cwd, { source: 'agent', sessionId: 's-origin' })
+    assert.equal(first.needsConfirm, true)
+    // User repoints the device at another controller before approving.
+    saveWorkspace(home, cwd, {
+      modbus: {
+        devices: [
+          { id: 'm1', name: '主板', role: 'master', mode: 'tcp', host: '10.9.9.9', tcpPort: 502, slave: 1, segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }] },
+        ],
+        activeId: 'm1',
+      },
+    })
+    const ran = await resolvePendingWrite(home, cwd, first.requestId, true)
+    assert.equal(ran.ok, false)
+    assert.match(ran.error, /设备连接已变更/)
+    const ws = loadWorkspace(home, cwd)
+    assert.equal(((ws.modbus.devices[0].values) || []).length, 0)
+    assert.ok(ws.timeline.some((item) => item.kind === 'write-stale'))
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('same-endpoint approval still executes', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-write-same-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveWorkspace(home, cwd, {
+      modbus: {
+        devices: [
+          { id: 'm1', name: '主板', role: 'master', sim: true, segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }] },
+        ],
+        activeId: 'm1',
+      },
+    })
+    const first = await runVisionBench(home, {
+      action: 'write',
+      function: 3,
+      address: 1,
+      values: [6],
+    }, cwd, { source: 'agent', sessionId: 's-origin' })
+    assert.equal(first.needsConfirm, true)
+    // Touch unrelated workspace state; the endpoint fingerprint must not care.
+    saveWorkspace(home, cwd, { keil: { target: 'Debug' } })
+    const ran = await resolvePendingWrite(home, cwd, first.requestId, true)
+    assert.equal(ran.ok, true)
+    assert.deepEqual(ran.readback, [6])
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('missing approved field fails closed instead of approving', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-write-closed-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveWorkspace(home, cwd, {
+      modbus: {
+        devices: [
+          { id: 'm1', name: '主板', role: 'master', sim: true, segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }] },
+        ],
+        activeId: 'm1',
+      },
+    })
+    const first = await runVisionBench(home, {
+      action: 'write',
+      function: 3,
+      address: 0,
+      values: [1],
+    }, cwd, { source: 'agent', sessionId: 's1' })
+    assert.equal(first.needsConfirm, true)
+    // Route-level semantics: resolvePendingWrite treats anything but exactly
+    // true as a rejection.
+    const ran = await resolvePendingWrite(home, cwd, first.requestId, undefined)
+    assert.equal(ran.rejected, true)
+    const ws = loadWorkspace(home, cwd)
+    assert.equal(((ws.modbus.devices[0].values) || []).length, 0)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})

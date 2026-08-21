@@ -1691,6 +1691,8 @@ function createDebugView(React, t, post, openProject) {
         interface: req.interface,
         target: req.target,
         path: req.file,
+        sha256: req.sha256 || '',
+        size: req.size || 0,
         confirm: true,
       }, 180000).then((data) => {
         setFlash((prev) => ({ ...prev, busy: false, confirm: null, result: data }))
@@ -2276,7 +2278,9 @@ function createHmiView(React, t, post, openLive) {
           el('span', { className: 'dvb-panel-title' }, t('pendingWrites'))),
         pending.map((req) => el('div', { key: req.id, className: 'dvb-task' },
           el('span', { className: 'dvb-badge', 'data-source': 'agent' }, 'Agent'),
-          el('span', { className: 'dvb-hint' }, req.label + (req.deviceName ? ' · ' + req.deviceName : '')),
+          el('span', { className: 'dvb-hint' }, req.label
+            + (req.deviceName ? ' · ' + req.deviceName : '')
+            + (req.endpointLabelStr ? ' · ' + req.endpointLabelStr : '')),
           el('button', {
             type: 'button',
             className: 'dvb-btn dvb-btn-primary dvb-btn-write',

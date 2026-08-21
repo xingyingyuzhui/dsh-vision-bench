@@ -153,8 +153,9 @@ export function apply(ctx, config = {}) {
   try {
     sweepStaleTasks(dshHome)
   } catch { /* sweep is best-effort */ }
+  // Lazy resolver: the agents service may register after this plugin applies.
   try {
-    setAgentsRegistry(ctx.get ? ctx.get('agents') : null)
+    setAgentsRegistry(() => (ctx.get ? ctx.get('agents') : null))
   } catch { /* agent registry is optional */ }
   const rows = [
     route('/dsh-vision-bench/state', async (req) => {
@@ -230,7 +231,7 @@ export function apply(ctx, config = {}) {
       const body = await readJsonBody(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
-      const ran = await resolvePendingWrite(dshHome, room.cwd, body && body.id, body && body.approved !== false)
+      const ran = await resolvePendingWrite(dshHome, room.cwd, body && body.id, (body && body.approved) === true)
       maybeNotifyResult(dshHome, room.cwd, '写点', ran)
       return ran
     }),
@@ -249,7 +250,8 @@ export function apply(ctx, config = {}) {
       const ran = resolveManualRequest(dshHome, room.cwd, body && body.id, body && body.done !== false)
       if (ran.ok && ran.request) {
         void notifyBenchEvent(dshHome, room.cwd,
-          '人工操作' + (ran.request.status === 'done' ? '已完成' : '无法完成') + '：' + ran.request.text).catch(() => {})
+          '人工操作' + (ran.request.status === 'done' ? '已完成' : '无法完成') + '：' + ran.request.text,
+          '', { sessionId: ran.request.sessionId }).catch(() => {})
       }
       return ran
     }),
