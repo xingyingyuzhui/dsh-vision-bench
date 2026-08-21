@@ -14,9 +14,11 @@ import {
 } from '../bench-journal.mjs'
 import {
   bindSession,
+  createManualRequest,
   journalView,
   loadWorkspace,
   openTask,
+  resolveManualRequest,
   unbindSession,
 } from '../bench-store.mjs'
 import { notifyBenchEvent, setAgentsRegistry, _internal } from '../bench-notify.mjs'
@@ -134,4 +136,32 @@ test('notice builder falls back to a literal plugin-source message', async () =>
   assert.equal(message.source.kind, 'plugin')
   assert.equal(message.source.form, 'notice')
   assert.equal(message.source.summary, '摘要')
+})
+
+test('manual requests persist, resolve and notify', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-manual-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    const missing = createManualRequest(home, cwd, { text: '' })
+    assert.equal(missing.ok, false)
+    const created = createManualRequest(home, cwd, { text: '请断电后重新上电', sessionId: 's1', source: 'agent' })
+    assert.equal(created.ok, true)
+    let ws = loadWorkspace(home, cwd)
+    assert.equal(ws.manualRequests.length, 1)
+    assert.equal(ws.manualRequests[0].status, 'pending')
+    assert.ok(ws.timeline.some((item) => item.kind === 'manual-request'))
+    const again = resolveManualRequest(home, cwd, 'nope', true)
+    assert.equal(again.ok, false)
+    const done = resolveManualRequest(home, cwd, created.request.id, true)
+    assert.equal(done.ok, true)
+    assert.equal(done.request.status, 'done')
+    ws = loadWorkspace(home, cwd)
+    assert.equal(ws.manualRequests[0].status, 'done')
+    assert.ok(ws.timeline.some((item) => item.kind === 'manual-done' && item.ok === true))
+    const twice = resolveManualRequest(home, cwd, created.request.id, false)
+    assert.equal(twice.ok, false)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
 })

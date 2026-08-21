@@ -451,6 +451,71 @@ const pointBefore = (device, fn, address) => {
   return rec && rec.value !== null && rec.value !== undefined ? rec.value : null
 }
 
+const PENDING_TTL_MS = 5 * 60 * 1000
+const pendingWrites = new Map()
+let pendingSeq = 0
+
+export const createPendingWrite = (cwd, params) => {
+  const id = 'pw' + Date.now().toString(36) + (++pendingSeq).toString(36)
+  pendingWrites.set(cwd + ':' + id, {
+    id,
+    cwd,
+    createdAt: Date.now(),
+    params,
+  })
+  prunePendingWrites(cwd)
+  return { id, ...params }
+}
+
+export const popPendingWrite = (cwd, id) => {
+  prunePendingWrites(cwd)
+  const key = String(cwd) + ':' + String(id || '')
+  const entry = pendingWrites.get(key)
+  if (!entry) return null
+  pendingWrites.delete(key)
+  return entry
+}
+
+export const listPendingWrites = (cwd) => {
+  prunePendingWrites(cwd)
+  const out = []
+  for (const entry of pendingWrites.values()) {
+    if (entry.cwd === cwd) out.push({ id: entry.id, ...entry.params })
+  }
+  return out
+}
+
+const prunePendingWrites = (cwd) => {
+  const now = Date.now()
+  void cwd
+  for (const [key, entry] of pendingWrites) {
+    if (now - entry.createdAt > PENDING_TTL_MS) {
+      pendingWrites.delete(key)
+    }
+  }
+}
+
+export const resolvePendingWrite = async (home, cwd, id, approved) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const entry = popPendingWrite(room.cwd, id)
+  if (!entry) return { ok: false, error: '请求不存在或已过期' }
+  if (!approved) {
+    recordBenchEvent(home, room.cwd, {
+      action: 'write-reject',
+      ok: false,
+      summary: '拒绝 Agent 写点：' + entry.params.label,
+    }, { source: 'user' })
+    void notifyBenchEvent(home, room.cwd, '用户拒绝了写点请求：' + entry.params.label).catch(() => {})
+    return { ok: true, rejected: true }
+  }
+  return modbusWrite(home, room.cwd, {
+    ...entry.params,
+    source: 'agent',
+    confirm: true,
+  })
+}
+
 export const modbusWrite = async (home, cwd, body, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -482,17 +547,35 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   if (hasRunning(workspace, 'write')) {
     return { ok: false, error: '已有写入任务进行中' }
   }
+  const origin = originOf(body)
   const bindings = m.sim ? { python: '' } : loadBindings(home)
   let conn = null
   if (!m.sim) {
     conn = connectionArgs(m)
     if (conn.error) return { ok: false, error: conn.error }
   }
-  const origin = originOf(body)
   const tag = functionTag(fn)
   const label = count === 1
     ? ('写 ' + tag + address + ' = ' + check.values[0])
     : ('批量写 ' + tag + address + '–' + (address + count - 1) + '（' + count + ' 点）')
+  if (origin.source === 'agent' && !(body && body.confirm === true)) {
+    const request = createPendingWrite(room.cwd, {
+      function: fn,
+      address,
+      values: check.values.slice(),
+      deviceId: m.id,
+      deviceName: m.name || '',
+      label,
+      sessionId: origin.sessionId,
+    })
+    return {
+      ok: false,
+      needsConfirm: true,
+      requestId: request.id,
+      request,
+      error: 'Agent 写点是高影响操作，需要用户在界面上批准',
+    }
+  }
   const before = []
   for (let i = 0; i < count; i++) before.push(pointBefore(m, fn, address + i))
   const task = openTask(home, room.cwd, {

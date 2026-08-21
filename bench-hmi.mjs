@@ -36,6 +36,7 @@ export function createHmiView(React, t, post, openLive) {
     const [csvOpen, setCsvOpen] = React.useState(false)
     const [csvText, setCsvText] = React.useState('')
     const [csvNote, setCsvNote] = React.useState('')
+    const [pending, setPending] = React.useState([])
     const [ports, setPorts] = React.useState([])
     const [scanning, setScanning] = React.useState(false)
     const workspaceRef = React.useRef(workspace)
@@ -62,6 +63,7 @@ export function createHmiView(React, t, post, openLive) {
         post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
           if (stop) return
           if (data && data.health) setHealth(data.health)
+          if (data && Array.isArray(data.pendingWrites)) setPending(data.pendingWrites)
           setJournal(pickJournal(data))
           if (seq !== persistSeq.current) return
           if (data && data.workspace && data.workspace.modbus) {
@@ -148,6 +150,43 @@ export function createHmiView(React, t, post, openLive) {
       const next = removeSegment(m.segments, m.values, id)
       persist({ segments: next.segments, values: next.values })
     }
+
+    function resolveWrite(id, approved) {
+      post('/dsh-vision-bench/modbus/write/approve', { cwd, id, approved }, 120000).then((data) => {
+        setPending((prev) => prev.filter((item) => item.id !== id))
+        if (data && data.ok === false && !data.rejected) setError(data.error || t('fail'))
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then((data) => {
+        if (!data) return
+        setJournal(pickJournal(data))
+        if (data.workspace && data.workspace.modbus) {
+          setModbus({
+            segments: data.workspace.modbus.segments,
+            values: data.workspace.modbus.values,
+          })
+        }
+      }).catch((err) => {
+        setError(String((err && err.message) || t('fail')))
+      })
+    }
+
+    const pendingPanel = pending.length
+      ? el('div', { className: 'dvb-panel dvb-write-panel' },
+        el('div', { className: 'dvb-panel-head' },
+          el('span', { className: 'dvb-panel-title' }, t('pendingWrites'))),
+        pending.map((req) => el('div', { key: req.id, className: 'dvb-task' },
+          el('span', { className: 'dvb-badge', 'data-source': 'agent' }, 'Agent'),
+          el('span', { className: 'dvb-hint' }, req.label + (req.deviceName ? ' · ' + req.deviceName : '')),
+          el('button', {
+            type: 'button',
+            className: 'dvb-btn dvb-btn-primary dvb-btn-write',
+            onClick() { resolveWrite(req.id, true) },
+          }, t('approveWrite')),
+          el('button', {
+            type: 'button', className: 'dvb-btn',
+            onClick() { resolveWrite(req.id, false) },
+          }, t('rejectWrite')))))
+      : null
 
     function exportCsv() {
       navigator.clipboard.writeText(segmentsToCsv(m.segments)).then(() => {
@@ -615,6 +654,7 @@ export function createHmiView(React, t, post, openLive) {
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
       deviceBar,
       connPanel,
+      pendingPanel,
       segPanel,
       writePanel,
       journalPanel(el, t, journal))

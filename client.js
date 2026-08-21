@@ -192,6 +192,12 @@ const COPY = {
     chartWindow: '最近 5 分钟',
     chartEmpty: '暂无曲线数据，先开始监视',
     alarmEmpty: '暂无告警记录',
+    pendingWrites: '待确认写点（Agent）',
+    approveWrite: '批准写入',
+    rejectWrite: '拒绝',
+    manualTitle: '人工操作请求（Agent）',
+    manualDone: '已完成',
+    manualFail: '无法完成',
     flashTitle: '烧录下载',
     flashIface: '调试器',
     flashTarget: '目标芯片',
@@ -386,6 +392,12 @@ const COPY = {
     chartWindow: 'last 5 minutes',
     chartEmpty: 'No trend data yet, start watching first',
     alarmEmpty: 'No alarm events',
+    pendingWrites: 'Pending writes (Agent)',
+    approveWrite: 'Approve',
+    rejectWrite: 'Reject',
+    manualTitle: 'Manual steps (Agent)',
+    manualDone: 'Done',
+    manualFail: 'Cannot do',
     flashTitle: 'Flash download',
     flashIface: 'Debugger',
     flashTarget: 'Target MCU',
@@ -1476,6 +1488,9 @@ function createDebugView(React, t, post, openProject) {
               ...prev,
               keil: { ...prev.keil, ...(data.workspace.keil || {}) },
               session: data.workspace.session || prev.session,
+              manualRequests: Array.isArray(data.workspace.manualRequests)
+                ? data.workspace.manualRequests
+                : prev.manualRequests,
             }))
             const project = data.workspace.keil && data.workspace.keil.project
             if (project && project !== projectRef.current) {
@@ -1519,6 +1534,43 @@ function createDebugView(React, t, post, openProject) {
         setWorkspace((prev) => ({ ...prev, session: { boundId: '' } }))
       }).catch(() => { /* chip refreshes on next poll */ })
     }
+
+    function resolveManual(id, done) {
+      if (!cwd) return
+      post('/dsh-vision-bench/manual/resolve', { cwd, id, done }, 15000).then(() => {
+        setWorkspace((prev) => ({
+          ...prev,
+          manualRequests: (prev.manualRequests || []).map((item) => item.id === id
+            ? { ...item, status: done ? 'done' : 'rejected' }
+            : item),
+        }))
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then((data) => {
+        if (data && data.workspace) {
+          setWorkspace((prev) => ({ ...prev, manualRequests: data.workspace.manualRequests || prev.manualRequests }))
+        }
+        if (data) setJournal(pickJournal(data))
+      }).catch(() => { /* next poll refreshes */ })
+    }
+
+    const openManual = (workspace.manualRequests || []).filter((item) => item.status === 'pending')
+    const manualPanel = openManual.length
+      ? el('div', { className: 'dvb-panel dvb-write-panel' },
+        el('div', { className: 'dvb-panel-head' },
+          el('span', { className: 'dvb-panel-title' }, t('manualTitle'))),
+        openManual.map((req) => el('div', { key: req.id, className: 'dvb-task' },
+          el('span', { className: 'dvb-badge', 'data-source': req.sessionId ? 'agent' : 'user' }, req.sessionId ? 'Agent' : 'User'),
+          el('span', { className: 'dvb-hint' }, req.text),
+          el('button', {
+            type: 'button',
+            className: 'dvb-btn dvb-btn-primary',
+            onClick() { resolveManual(req.id, true) },
+          }, t('manualDone')),
+          el('button', {
+            type: 'button', className: 'dvb-btn',
+            onClick() { resolveManual(req.id, false) },
+          }, t('manualFail')))))
+      : null
 
     function mergeState(data) {
       if (data && data.workspace) {
@@ -1964,6 +2016,7 @@ function createDebugView(React, t, post, openProject) {
             : el('div', { className: 'dvb-empty' }, t('outputEmpty')))),
       flashPanel,
       serialPanel,
+      manualPanel,
       journalPanel(el, t, journal),
       pickerEl)
   }
@@ -2030,6 +2083,7 @@ function createHmiView(React, t, post, openLive) {
     const [csvOpen, setCsvOpen] = React.useState(false)
     const [csvText, setCsvText] = React.useState('')
     const [csvNote, setCsvNote] = React.useState('')
+    const [pending, setPending] = React.useState([])
     const [ports, setPorts] = React.useState([])
     const [scanning, setScanning] = React.useState(false)
     const workspaceRef = React.useRef(workspace)
@@ -2056,6 +2110,7 @@ function createHmiView(React, t, post, openLive) {
         post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
           if (stop) return
           if (data && data.health) setHealth(data.health)
+          if (data && Array.isArray(data.pendingWrites)) setPending(data.pendingWrites)
           setJournal(pickJournal(data))
           if (seq !== persistSeq.current) return
           if (data && data.workspace && data.workspace.modbus) {
@@ -2142,6 +2197,43 @@ function createHmiView(React, t, post, openLive) {
       const next = removeSegment(m.segments, m.values, id)
       persist({ segments: next.segments, values: next.values })
     }
+
+    function resolveWrite(id, approved) {
+      post('/dsh-vision-bench/modbus/write/approve', { cwd, id, approved }, 120000).then((data) => {
+        setPending((prev) => prev.filter((item) => item.id !== id))
+        if (data && data.ok === false && !data.rejected) setError(data.error || t('fail'))
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then((data) => {
+        if (!data) return
+        setJournal(pickJournal(data))
+        if (data.workspace && data.workspace.modbus) {
+          setModbus({
+            segments: data.workspace.modbus.segments,
+            values: data.workspace.modbus.values,
+          })
+        }
+      }).catch((err) => {
+        setError(String((err && err.message) || t('fail')))
+      })
+    }
+
+    const pendingPanel = pending.length
+      ? el('div', { className: 'dvb-panel dvb-write-panel' },
+        el('div', { className: 'dvb-panel-head' },
+          el('span', { className: 'dvb-panel-title' }, t('pendingWrites'))),
+        pending.map((req) => el('div', { key: req.id, className: 'dvb-task' },
+          el('span', { className: 'dvb-badge', 'data-source': 'agent' }, 'Agent'),
+          el('span', { className: 'dvb-hint' }, req.label + (req.deviceName ? ' · ' + req.deviceName : '')),
+          el('button', {
+            type: 'button',
+            className: 'dvb-btn dvb-btn-primary dvb-btn-write',
+            onClick() { resolveWrite(req.id, true) },
+          }, t('approveWrite')),
+          el('button', {
+            type: 'button', className: 'dvb-btn',
+            onClick() { resolveWrite(req.id, false) },
+          }, t('rejectWrite')))))
+      : null
 
     function exportCsv() {
       navigator.clipboard.writeText(segmentsToCsv(m.segments)).then(() => {
@@ -2609,6 +2701,7 @@ function createHmiView(React, t, post, openLive) {
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
       deviceBar,
       connPanel,
+      pendingPanel,
       segPanel,
       writePanel,
       journalPanel(el, t, journal))

@@ -257,6 +257,9 @@ export function createDebugView(React, t, post, openProject) {
               ...prev,
               keil: { ...prev.keil, ...(data.workspace.keil || {}) },
               session: data.workspace.session || prev.session,
+              manualRequests: Array.isArray(data.workspace.manualRequests)
+                ? data.workspace.manualRequests
+                : prev.manualRequests,
             }))
             const project = data.workspace.keil && data.workspace.keil.project
             if (project && project !== projectRef.current) {
@@ -300,6 +303,43 @@ export function createDebugView(React, t, post, openProject) {
         setWorkspace((prev) => ({ ...prev, session: { boundId: '' } }))
       }).catch(() => { /* chip refreshes on next poll */ })
     }
+
+    function resolveManual(id, done) {
+      if (!cwd) return
+      post('/dsh-vision-bench/manual/resolve', { cwd, id, done }, 15000).then(() => {
+        setWorkspace((prev) => ({
+          ...prev,
+          manualRequests: (prev.manualRequests || []).map((item) => item.id === id
+            ? { ...item, status: done ? 'done' : 'rejected' }
+            : item),
+        }))
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then((data) => {
+        if (data && data.workspace) {
+          setWorkspace((prev) => ({ ...prev, manualRequests: data.workspace.manualRequests || prev.manualRequests }))
+        }
+        if (data) setJournal(pickJournal(data))
+      }).catch(() => { /* next poll refreshes */ })
+    }
+
+    const openManual = (workspace.manualRequests || []).filter((item) => item.status === 'pending')
+    const manualPanel = openManual.length
+      ? el('div', { className: 'dvb-panel dvb-write-panel' },
+        el('div', { className: 'dvb-panel-head' },
+          el('span', { className: 'dvb-panel-title' }, t('manualTitle'))),
+        openManual.map((req) => el('div', { key: req.id, className: 'dvb-task' },
+          el('span', { className: 'dvb-badge', 'data-source': req.sessionId ? 'agent' : 'user' }, req.sessionId ? 'Agent' : 'User'),
+          el('span', { className: 'dvb-hint' }, req.text),
+          el('button', {
+            type: 'button',
+            className: 'dvb-btn dvb-btn-primary',
+            onClick() { resolveManual(req.id, true) },
+          }, t('manualDone')),
+          el('button', {
+            type: 'button', className: 'dvb-btn',
+            onClick() { resolveManual(req.id, false) },
+          }, t('manualFail')))))
+      : null
 
     function mergeState(data) {
       if (data && data.workspace) {
@@ -745,6 +785,7 @@ export function createDebugView(React, t, post, openProject) {
             : el('div', { className: 'dvb-empty' }, t('outputEmpty')))),
       flashPanel,
       serialPanel,
+      manualPanel,
       journalPanel(el, t, journal),
       pickerEl)
   }

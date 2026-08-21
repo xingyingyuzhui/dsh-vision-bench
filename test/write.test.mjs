@@ -12,7 +12,7 @@ import {
 } from '../bench-points.mjs'
 import { handlePdu, _internal } from '../bench-slave.mjs'
 import { recipePair } from '../bench-devices.mjs'
-import { modbusWrite } from '../bench-actions.mjs'
+import { modbusWrite, resolvePendingWrite } from '../bench-actions.mjs'
 import { runVisionBench } from '../bench-tool.mjs'
 import { journalView, loadWorkspace, saveWorkspace } from '../bench-store.mjs'
 
@@ -242,7 +242,7 @@ test('modbusWrite rejects read-only functions before touching tasks', async () =
   }
 })
 
-test('runVisionBench write action writes through the shared path', async () => {
+test('runVisionBench write action requires user approval then executes', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-tool-write-'))
   const cwd = join(home, 'board')
   await mkdir(cwd)
@@ -253,14 +253,21 @@ test('runVisionBench write action writes through the shared path', async () => {
         segments: [{ name: '保持', function: 3, address: 0, count: 10 }],
       },
     })
-    const ran = await runVisionBench(home, {
+    const first = await runVisionBench(home, {
       action: 'write',
       function: 3,
       address: 5,
       values: [42, 43],
     }, cwd, { source: 'agent', sessionId: 's1' })
+    assert.equal(first.ok, false)
+    assert.equal(first.needsConfirm, true)
+    assert.ok(first.requestId)
+    assert.deepEqual(first.request.values, [42, 43])
+    const untouched = loadWorkspace(home, cwd).modbus.devices[0].values
+    assert.equal((untouched || []).length, 0)
+
+    const ran = await resolvePendingWrite(home, cwd, first.requestId, true)
     assert.equal(ran.ok, true)
-    assert.equal(ran.action, 'write')
     assert.deepEqual(ran.target, [42, 43])
     assert.deepEqual(ran.readback, [42, 43])
     const ws = loadWorkspace(home, cwd)
@@ -269,6 +276,39 @@ test('runVisionBench write action writes through the shared path', async () => {
     assert.equal(task.sessionId, 's1')
     const rec = ws.modbus.devices[0].values.filter((item) => item.function === 3 && item.address >= 5)
     assert.equal(rec.length, 2)
+
+    const gone = await resolvePendingWrite(home, cwd, first.requestId, false)
+    assert.equal(gone.ok, false)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('rejecting a pending agent write leaves the device untouched', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-tool-reject-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveWorkspace(home, cwd, {
+      modbus: {
+        sim: true,
+        segments: [{ name: '保持', function: 3, address: 0, count: 10 }],
+      },
+    })
+    const first = await runVisionBench(home, {
+      action: 'write',
+      function: 3,
+      address: 1,
+      values: [7],
+    }, cwd, { source: 'agent', sessionId: 's1' })
+    assert.equal(first.needsConfirm, true)
+    const ran = await resolvePendingWrite(home, cwd, first.requestId, false)
+    assert.equal(ran.ok, true)
+    assert.equal(ran.rejected, true)
+    const ws = loadWorkspace(home, cwd)
+    assert.equal(((ws.modbus.devices[0].values) || []).length, 0)
+    assert.ok(ws.timeline.some((item) => item.kind === 'write-reject' && item.ok === false))
+    assert.equal(journalView(ws).tasks.filter((item) => item.type === 'write').length, 0)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

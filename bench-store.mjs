@@ -94,8 +94,22 @@ export const emptyWorkspace = () => ({
   tasks: [],
   timeline: [],
   session: { boundId: '' },
+  manualRequests: [],
   modbus: normalizeModbus({}),
 })
+
+const MANUAL_STATUSES = new Set(['pending', 'done', 'rejected'])
+
+const normalizeManualRequests = (list) => {
+  if (!Array.isArray(list)) return []
+  return list.slice(0, 20).map((item) => ({
+    id: typeof (item && item.id) === 'string' ? item.id.trim() : '',
+    text: typeof (item && item.text) === 'string' ? item.text.trim().slice(0, 240) : '',
+    status: MANUAL_STATUSES.has(item && item.status) ? item.status : 'pending',
+    createdAt: Number(item && item.createdAt) > 0 ? Number(item.createdAt) : Date.now(),
+    sessionId: typeof (item && item.sessionId) === 'string' ? item.sessionId.trim() : '',
+  })).filter((item) => item.id && item.text)
+}
 
 export const workspaceKey = (cwd) =>
   createHash('sha256').update(String(cwd || '')).digest('hex').slice(0, 16)
@@ -118,6 +132,7 @@ export const normalizeWorkspace = (input) => {
   out.timeline = normalizeTimeline(input && input.timeline)
   const session = input && input.session && typeof input.session === 'object' ? input.session : {}
   out.session = { boundId: typeof session.boundId === 'string' ? session.boundId.trim() : '' }
+  out.manualRequests = normalizeManualRequests(input && input.manualRequests)
   out.modbus = normalizeModbus(modbus)
   return out
 }
@@ -148,6 +163,7 @@ export const saveWorkspace = (home, cwd, input) => {
     tasks: input && input.tasks !== undefined ? input.tasks : prev.tasks,
     timeline: input && input.timeline !== undefined ? input.timeline : prev.timeline,
     session: { ...prev.session, ...(input && input.session) },
+    manualRequests: input && input.manualRequests !== undefined ? input.manualRequests : prev.manualRequests,
   }
   const workspace = normalizeWorkspace(merged)
   const keilProject = workspace.keil.project
@@ -297,6 +313,56 @@ export const unbindSession = (home, cwd) => {
   const saved = saveWorkspace(home, room.cwd, { session: { boundId: '' } })
   if (!saved.ok) return saved
   return { ok: true, boundId: '' }
+}
+
+export const createManualRequest = (home, cwd, spec) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const text = typeof (spec && spec.text) === 'string' ? spec.text.trim().slice(0, 240) : ''
+  if (!text) return { ok: false, error: '缺少请求内容' }
+  const prev = loadWorkspace(home, room.cwd)
+  const request = {
+    id: newId('mr'),
+    text,
+    status: 'pending',
+    createdAt: Date.now(),
+    sessionId: typeof (spec && spec.sessionId) === 'string' ? spec.sessionId.trim() : '',
+  }
+  const saved = saveWorkspace(home, room.cwd, {
+    manualRequests: prepend(prev.manualRequests, request, 20),
+    timeline: pushEvent(prev.timeline, normalizeTimelineEvent({
+      kind: 'manual-request',
+      source: spec && spec.source === 'agent' ? 'agent' : 'user',
+      sessionId: request.sessionId,
+      summary: '请求人工操作：' + text,
+    })),
+  })
+  if (!saved.ok) return saved
+  return { ok: true, request }
+}
+
+export const resolveManualRequest = (home, cwd, id, done) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const prev = loadWorkspace(home, room.cwd)
+  const current = (prev.manualRequests || []).find((item) => item.id === String(id || '') && item.status === 'pending')
+  if (!current) return { ok: false, error: '请求不存在或已处理' }
+  const status = done ? 'done' : 'rejected'
+  const manualRequests = (prev.manualRequests || []).map((item) => item.id === current.id
+    ? { ...item, status }
+    : item)
+  const saved = saveWorkspace(home, room.cwd, {
+    manualRequests,
+    timeline: pushEvent(prev.timeline, normalizeTimelineEvent({
+      kind: 'manual-done',
+      source: 'user',
+      sessionId: current.sessionId,
+      ok: !!done,
+      summary: '人工操作' + (done ? '已完成' : '无法完成') + '：' + current.text,
+    })),
+  })
+  if (!saved.ok) return saved
+  return { ok: true, request: { ...current, status } }
 }
 
 export const sweepStaleTasks = (home) => {

@@ -1,19 +1,22 @@
+import { listPendingWrites, resolvePendingWrite } from './bench-actions.mjs'
 import { keilBuild, keilMap, keilScan, keilTargets, listDir, modbusPoll, modbusRead, modbusWrite, openocdDownload } from './bench-actions.mjs'
 import { artifactInfo, readBuildLog } from './bench-fs.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
 import {
   bindSession,
+  createManualRequest,
   defaultDshHome,
   journalView,
   loadBindings,
   loadWorkspace,
   probeBindings,
+  resolveManualRequest,
   saveBindings,
   saveWorkspace,
   sweepStaleTasks,
   unbindSession,
 } from './bench-store.mjs'
-import { maybeNotifyResult, setAgentsRegistry } from './bench-notify.mjs'
+import { maybeNotifyResult, notifyBenchEvent, setAgentsRegistry } from './bench-notify.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import { applyPointWrite, segmentCovering } from './bench-points.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
@@ -114,6 +117,7 @@ const snapshot = async (cwd) => {
     const workspace = loadWorkspace(dshHome, room.cwd)
     body.workspace = withListenRuntime(room.cwd, workspace)
     body.journal = journalView(body.workspace)
+    body.pendingWrites = listPendingWrites(room.cwd)
   }
   return body
 }
@@ -222,6 +226,14 @@ export function apply(ctx, config = {}) {
       maybeNotifyResult(dshHome, body && body.cwd, '写点', ran)
       return ran
     }),
+    route('/dsh-vision-bench/modbus/write/approve', async (req) => {
+      const body = await readJsonBody(req)
+      const room = requireWorkspaceCwd(body && body.cwd)
+      if (room.error) return { ok: false, error: room.error }
+      const ran = await resolvePendingWrite(dshHome, room.cwd, body && body.id, body && body.approved !== false)
+      maybeNotifyResult(dshHome, room.cwd, '写点', ran)
+      return ran
+    }),
     route('/dsh-vision-bench/session/bind', async (req) => {
       const body = await readJsonBody(req)
       return bindSession(dshHome, body && body.cwd, body && body.sessionId)
@@ -229,6 +241,17 @@ export function apply(ctx, config = {}) {
     route('/dsh-vision-bench/session/unbind', async (req) => {
       const body = await readJsonBody(req)
       return unbindSession(dshHome, body && body.cwd)
+    }),
+    route('/dsh-vision-bench/manual/resolve', async (req) => {
+      const body = await readJsonBody(req)
+      const room = requireWorkspaceCwd(body && body.cwd)
+      if (room.error) return { ok: false, error: room.error }
+      const ran = resolveManualRequest(dshHome, room.cwd, body && body.id, body && body.done !== false)
+      if (ran.ok && ran.request) {
+        void notifyBenchEvent(dshHome, room.cwd,
+          '人工操作' + (ran.request.status === 'done' ? '已完成' : '无法完成') + '：' + ran.request.text).catch(() => {})
+      }
+      return ran
     }),
     route('/dsh-vision-bench/modbus/poll', async (req) => {
       const body = await readJsonBody(req)
