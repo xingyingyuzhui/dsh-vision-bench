@@ -6,6 +6,23 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 function stripModule(src) {
   return src
+    // Aliased specifiers must become REAL bindings: `X as Y` -> var Y = X.
+    // Deleting import blocks outright silently kills aliases (the blank-page
+    // bug of v0.17.0).
+    .replace(/^import\s*\{([^}]*)\}\s*from\s*'[^']+'\n+/gm, (_m, specs) => {
+      const decls = String(specs)
+        .split(',')
+        .map((piece) => piece.trim())
+        .filter(Boolean)
+        .map((spec) => {
+          const mm = spec.match(/^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/)
+          return mm ? `var ${mm[2]} = ${mm[1]};` : null
+        })
+        .filter(Boolean)
+      return decls.length ? decls.join('\n') + '\n' : ''
+    })
+    .replace(/^import\s+([A-Za-z_$][\w$]*)\s+from\s*'[^']+'\n+/gm, 'var $1 = $1;\n')
+    .replace(/^import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s*'[^']+'\n+/gm, '')
     .replace(/^import[\s\S]*?from '[^']+'\n+/gm, '')
     .replace(/^export /gm, '')
 }

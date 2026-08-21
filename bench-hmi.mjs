@@ -3,7 +3,6 @@ import { addDevice, normalizeModbus, patchActiveDevice, recipePair, removeDevice
 import {
   emptyJournal,
   emptyWorkspace,
-  field as sharedField,
   journalPanel,
   pickJournal,
   runningOf,
@@ -110,7 +109,11 @@ export function createHmiView(React, t, post, openLive) {
       })
     }
 
-    const field = (label, control) => sharedField(el, label, control)
+    function field(label, control) {
+      return el('div', { className: 'dvb-row' },
+        el('div', { className: 'dvb-label' }, el('span', null, label)),
+        control)
+    }
 
     function showLive() {
       if (typeof openLive === 'function') openLive()

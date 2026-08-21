@@ -1,6 +1,6 @@
 import { NS } from './bench-i18n.mjs'
 import { clockOf } from './bench-points.mjs'
-import { field as sharedField, subscribeState } from './bench-shared.mjs'
+import { subscribeState } from './bench-shared.mjs'
 import { statusKind } from './bench-settings.mjs'
 
 function overviewEmptyWorkspace() {
@@ -77,7 +77,11 @@ export function createOverviewView(React, t, post, hooks) {
       }).catch(() => { /* clipboard unavailable */ })
     }
 
-    const field = (label, node) => sharedField(el, label, node)
+    function field(label, node) {
+      return el('div', { className: 'dvb-row' },
+        el('div', { className: 'dvb-label' }, el('span', null, label)),
+        node)
+    }
 
     const rows = [
       { key: 'python', health: health.python },

@@ -3,7 +3,6 @@ import { clockOf } from './bench-points.mjs'
 import {
   emptyJournal,
   emptyWorkspace,
-  field as sharedField,
   formatClock,
   journalPanel,
   pickJournal,
@@ -99,7 +98,11 @@ export function createDebugView(React, t, post, openProject) {
     const el = React.createElement
     const cwd = useSessionCwd(React, props)
     const sessionId = (props && props.sessionId) || ''
-    const field = (label, control) => sharedField(el, label, control)
+    function field(label, control) {
+      return el('div', { className: 'dvb-row' },
+        el('div', { className: 'dvb-label' }, el('span', null, label)),
+        control)
+    }
     const [health, setHealth] = React.useState({})
     const [workspace, setWorkspace] = React.useState(emptyWorkspace)
     const [journal, setJournal] = React.useState(emptyJournal)
