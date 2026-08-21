@@ -19,6 +19,7 @@ test('translate falls back and interpolates', () => {
   assert.equal(translate('zh', 'pointTable'), '点表')
   assert.equal(translate('zh', 'segments'), '寄存器段')
   assert.equal(translate('zh', 'live'), '实时')
+  assert.equal(translate('zh', 'statusCancelled'), '已取消')
   assert.equal(translate('zh', 'liveStart'), '监视')
   assert.equal(translate('zh', 'simOff'), '仿真')
   assert.equal(translate('zh', 'fnHolding'), '03 保持寄存器')

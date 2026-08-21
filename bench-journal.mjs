@@ -2,7 +2,7 @@ export const MAX_TASKS = 20
 export const MAX_TIMELINE = 50
 const TASK_TYPES = new Set(['build', 'read'])
 const SOURCES = new Set(['user', 'agent'])
-const STATUSES = new Set(['running', 'ok', 'error'])
+const STATUSES = new Set(['running', 'ok', 'error', 'cancelled'])
 
 export const newId = (prefix) =>
   prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)

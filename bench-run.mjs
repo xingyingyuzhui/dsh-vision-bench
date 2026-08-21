@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -33,8 +33,35 @@ const parseJsonStdout = (text) => {
   }
 }
 
-export const runExecFile = (bin, args, opts) => new Promise((resolve, reject) => {
-  execFile(bin, args, {
+export const killProcessTree = (pid) => {
+  if (!pid || pid <= 0) return
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+    return
+  }
+  try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ }
+}
+
+export const runExecFile = (bin, args, opts = {}) => new Promise((resolve, reject) => {
+  const signal = opts.signal
+  if (signal && signal.aborted) {
+    resolve({
+      exitCode: 1,
+      timedOut: false,
+      cancelled: true,
+      stdout: '',
+      stderr: '已取消',
+    })
+    return
+  }
+  let cancelled = false
+  let child
+  const onAbort = () => {
+    cancelled = true
+    if (child) killProcessTree(child.pid)
+  }
+  if (signal) signal.addEventListener('abort', onAbort, { once: true })
+  child = execFile(bin, args, {
     timeout: opts.timeoutMs,
     maxBuffer: opts.maxBuffer || 1024 * 1024,
     windowsHide: true,
@@ -42,13 +69,15 @@ export const runExecFile = (bin, args, opts) => new Promise((resolve, reject) =>
     cwd: opts.cwd,
     env: opts.env || process.env,
   }, (error, stdout, stderr) => {
+    if (signal) signal.removeEventListener('abort', onAbort)
     if (error && error.code === 'ENOENT') {
       reject(new Error('无法启动: ' + bin))
       return
     }
     resolve({
       exitCode: error ? (typeof error.code === 'number' ? error.code : 1) : 0,
-      timedOut: !!(error && error.killed),
+      timedOut: !cancelled && !!(error && error.killed),
+      cancelled,
       stdout: String(stdout || ''),
       stderr: String(stderr || (error && error.message) || ''),
     })
@@ -60,11 +89,14 @@ export const runPythonScript = async (pythonBin, scriptName, args, opts = {}) =>
   if (!existsSync(pythonBin)) return { ok: false, error: 'Python 路径不存在: ' + pythonBin }
   const script = SCRIPTS[scriptName]
   if (!script || !existsSync(script)) return { ok: false, error: '脚本不存在: ' + scriptName }
+  if (opts.signal && opts.signal.aborted) return { ok: false, cancelled: true, error: '已取消' }
   const argv = pythonArgv(pythonBin, [script, ...args])
   const ran = await runExecFile(pythonBin, argv, {
     timeoutMs: opts.timeoutMs || 30000,
     cwd: opts.cwd,
+    signal: opts.signal,
   })
+  if (ran.cancelled) return { ok: false, cancelled: true, error: '已取消', exitCode: ran.exitCode }
   if (ran.timedOut) return { ok: false, error: '脚本超时' }
   const parsed = parseJsonStdout(ran.stdout)
   if (parsed.error) {
@@ -79,4 +111,4 @@ export const runPythonScript = async (pythonBin, scriptName, args, opts = {}) =>
   return { ok: true, result: data, exitCode: ran.exitCode }
 }
 
-export const _internal = { pythonArgv, parseJsonStdout, SCRIPTS, RUNTIME_DIR }
+export const _internal = { pythonArgv, parseJsonStdout, SCRIPTS, RUNTIME_DIR, killProcessTree }

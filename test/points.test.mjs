@@ -13,6 +13,7 @@ import {
   removeSegment,
   simulateRaw,
 } from '../bench-points.mjs'
+import { addDevice } from '../bench-devices.mjs'
 import { modbusPoll } from '../bench-actions.mjs'
 import { loadWorkspace, openTask, saveWorkspace } from '../bench-store.mjs'
 
@@ -87,7 +88,7 @@ test('modbusPoll sim path fills values without python', async () => {
   await mkdir(cwd)
   try {
     const added = addSegment([], { name: '模拟', function: 3, address: 0, count: 4 })
-    saveWorkspace(home, cwd, { modbus: { sim: true, segments: added.segments } })
+    saveWorkspace(home, cwd, { modbus: { sim: true, polling: { enabled: true }, segments: added.segments } })
     const polled = await modbusPoll(home, cwd)
     assert.equal(polled.ok, true)
     assert.equal(polled.skipped, false)
@@ -119,6 +120,26 @@ test('modbusPoll does not open a task and skips while a read is running', async 
     assert.equal(loadWorkspace(home, cwd).modbus.polling.enabled, true)
     assert.equal(loadWorkspace(home, cwd).modbus.polling.intervalMs, 500)
     assert.equal(loadWorkspace(home, cwd).modbus.segments.length, 1)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('modbusPoll only reads devices with polling enabled', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-watch-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    const segs = addSegment([], { function: 3, address: 0, count: 2 }).segments
+    let pack = addDevice({}, { role: 'master', name: 'A', sim: true, polling: { enabled: true }, segments: segs }).modbus
+    pack = addDevice(pack, { role: 'master', name: 'B', sim: true, polling: { enabled: false }, segments: segs }).modbus
+    saveWorkspace(home, cwd, { modbus: pack })
+    const polled = await modbusPoll(home, cwd)
+    assert.equal(polled.ok, true)
+    const a = polled.devices.find((item) => item.name === 'A')
+    const b = polled.devices.find((item) => item.name === 'B')
+    assert.ok(a.values.length >= 2)
+    assert.equal(b.values.length, 0)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

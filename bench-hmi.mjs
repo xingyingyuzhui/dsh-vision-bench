@@ -261,7 +261,8 @@ export function createHmiView(React, t, post, openLive) {
       el('div', { className: 'dvb-panel-head' },
         el('span', { className: 'dvb-panel-title' }, t('connection')),
         sim ? el('span', { className: 'dvb-tag' }, t('sim')) : null,
-        isSlave && m.listen ? el('span', { className: 'dvb-tag' }, t('listen')) : null,
+        isSlave && m.listening ? el('span', { className: 'dvb-tag' }, t('listen')) : null,
+        isSlave && m.listen && !m.listening ? el('span', { className: 'dvb-need' }, m.listenError || t('listenFail')) : null,
         el('button', {
           type: 'button',
           className: 'dvb-btn' + (sim ? ' is-on' : ''),

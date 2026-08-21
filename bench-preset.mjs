@@ -44,15 +44,20 @@ export const ensurePresetOverlay = (dir) => {
 export const userPresetDir = (home) => join(home, '.agent-presets', PRESET_ID)
 
 export async function seedVisionBenchPreset(agentPresets, home) {
-  if (agentPresets && typeof agentPresets.copy === 'function') {
+  const dir = userPresetDir(home)
+  const composition = join(dir, 'agent.cordis.yml')
+  const marker = join(dir, MARKER)
+  if (existsSync(composition) && !existsSync(marker)) {
+    return { ok: false, error: '台架预设 id 已被其他预设占用', dir }
+  }
+  if (!existsSync(composition) && agentPresets && typeof agentPresets.copy === 'function') {
     try {
       await agentPresets.copy('standard', PRESET_ID, PRESET_TITLE)
     } catch {
       /* already exists, unknown source, or no writable root */
     }
   }
-  const dir = userPresetDir(home)
-  if (!existsSync(join(dir, 'agent.cordis.yml'))) {
+  if (!existsSync(composition)) {
     return { ok: false, error: '未能创建台架预设（需要可从 standard 复制）' }
   }
   return ensurePresetOverlay(dir)

@@ -2,6 +2,7 @@ import { createServer } from 'node:net'
 import { simulateRaw } from './bench-points.mjs'
 
 const servers = new Map()
+const listenErrors = new Map()
 
 const keyOf = (cwd, deviceId) => String(cwd) + ':' + String(deviceId)
 
@@ -80,6 +81,7 @@ export const startDeviceSlave = (cwd, device, getDevice) => {
   const prev = servers.get(id)
   if (prev && prev.dshHost === host && prev.dshPort === port && prev.listening) {
     prev.dshGet = getDevice
+    listenErrors.delete(id)
     return Promise.resolve({ ok: true, host, port, deviceId: device.id, reused: true })
   }
   if (prev) {
@@ -111,6 +113,7 @@ export const startDeviceSlave = (cwd, device, getDevice) => {
   return new Promise((resolve, reject) => {
     server.once('error', reject)
     server.listen(port, host, () => {
+      listenErrors.delete(id)
       servers.set(id, server)
       resolve({ ok: true, host, port, deviceId: device.id })
     })
@@ -123,11 +126,43 @@ export const stopDeviceSlave = (cwd, deviceId) => {
   if (!server) return
   try { server.close() } catch { /* ignore */ }
   servers.delete(id)
+  listenErrors.delete(id)
+}
+
+export const stopAllSlaves = () => {
+  for (const server of servers.values()) {
+    try { server.close() } catch { /* ignore */ }
+  }
+  servers.clear()
+  listenErrors.clear()
+}
+
+export const withListenRuntime = (cwd, workspace) => {
+  const modbus = workspace && workspace.modbus && typeof workspace.modbus === 'object' ? workspace.modbus : {}
+  const devices = Array.isArray(modbus.devices) ? modbus.devices.map((item) => {
+    if (item.role !== 'slave' || !item.listen) return { ...item, listening: false, listenError: '' }
+    const id = keyOf(cwd, item.id)
+    const server = servers.get(id)
+    const listening = !!(server && server.listening)
+    const err = listenErrors.get(id) || ''
+    return { ...item, listening, listenError: listening ? '' : (err || '未监听') }
+  }) : []
+  const active = devices.find((item) => item.id === modbus.activeId) || devices[0]
+  return {
+    ...workspace,
+    modbus: {
+      ...modbus,
+      devices,
+      listening: !!(active && active.listening),
+      listenError: active && active.listenError ? active.listenError : '',
+    },
+  }
 }
 
 export const syncDeviceSlaves = async (cwd, modbus, getModbus) => {
   const devices = (modbus && Array.isArray(modbus.devices)) ? modbus.devices : []
   const want = new Set()
+  const errors = []
   for (const device of devices) {
     if (device.role !== 'slave' || !device.listen || device.mode !== 'tcp') continue
     want.add(device.id)
@@ -137,8 +172,11 @@ export const syncDeviceSlaves = async (cwd, modbus, getModbus) => {
         const list = live && Array.isArray(live.devices) ? live.devices : []
         return list.find((item) => item.id === device.id) || device
       })
+      listenErrors.delete(keyOf(cwd, device.id))
     } catch (error) {
-      return { ok: false, error: String((error && error.message) || error), deviceId: device.id }
+      const message = String((error && error.message) || error).slice(0, 180)
+      listenErrors.set(keyOf(cwd, device.id), message)
+      errors.push(message)
     }
   }
   for (const [id, server] of servers) {
@@ -147,8 +185,9 @@ export const syncDeviceSlaves = async (cwd, modbus, getModbus) => {
     if (want.has(deviceId)) continue
     try { server.close() } catch { /* ignore */ }
     servers.delete(id)
+    listenErrors.delete(id)
   }
-  return { ok: true }
+  return { ok: errors.length === 0, error: errors[0] || '', errors }
 }
 
-export const _internal = { handlePdu, servers, keyOf }
+export const _internal = { handlePdu, servers, listenErrors, keyOf }

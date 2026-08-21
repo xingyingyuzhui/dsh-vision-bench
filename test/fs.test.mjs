@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdir, writeFile, rm, symlink } from 'node:fs/promises'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -18,6 +18,26 @@ test('listWorkspaceDir stays inside the workspace and lists Keil files', async (
     assert.equal(listed.files[0].name, 'app.uvprojx')
     const escaped = listWorkspaceDir(root, join(root, '..'))
     assert.equal(escaped.ok, false)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('listWorkspaceDir does not follow a symlink out of the workspace', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dvb-link-'))
+  const cwd = join(root, 'board')
+  const outside = join(root, 'out')
+  try {
+    await mkdir(cwd)
+    await mkdir(outside)
+    await writeFile(join(outside, 'ext.uvprojx'), '<Project/>')
+    const type = process.platform === 'win32' ? 'junction' : 'dir'
+    await symlink(outside, join(cwd, 'escape'), type)
+    const listed = listWorkspaceDir(cwd, cwd)
+    assert.equal(listed.ok, true)
+    assert.equal((listed.dirs || []).some((item) => item.name === 'escape'), false)
+    const inside = listWorkspaceDir(cwd, join(cwd, 'escape'))
+    assert.equal(inside.ok, false)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

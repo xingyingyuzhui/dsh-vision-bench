@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import test from 'node:test'
 import { isBroadCwd, pathInside, requireWorkspaceCwd } from '../bench-paths.mjs'
-import { _internal } from '../bench-run.mjs'
+import { runExecFile, _internal } from '../bench-run.mjs'
 
 test('pathInside rejects parents and relatives', () => {
   const root = join('/tmp', 'ws')
@@ -27,6 +27,13 @@ test('isBroadCwd treats user home as too wide', () => {
 test('pythonArgv inserts -3 for the Windows launcher', () => {
   assert.deepEqual(_internal.pythonArgv('/usr/bin/python3', ['a.py']), ['a.py'])
   assert.deepEqual(_internal.pythonArgv('C:\\Windows\\py.exe', ['a.py', '--json']), ['-3', 'a.py', '--json'])
+})
+
+test('runExecFile honours an already-aborted signal', async () => {
+  const ac = new AbortController()
+  ac.abort()
+  const ran = await runExecFile(process.execPath, ['-e', 'process.exit(0)'], { signal: ac.signal, timeoutMs: 2000 })
+  assert.equal(ran.cancelled, true)
 })
 
 test('parseJsonStdout reads trailing JSON after noise', () => {

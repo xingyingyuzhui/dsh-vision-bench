@@ -1,6 +1,6 @@
-import { readdirSync, statSync } from 'node:fs'
-import { basename, dirname, join, resolve } from 'node:path'
-import { pathInside, requireWorkspaceCwd } from './bench-paths.mjs'
+import { readdirSync, realpathSync, statSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { pathInside, realPath, requireWorkspaceCwd } from './bench-paths.mjs'
 
 const SKIP = new Set(['.git', '.svn', '.hg', 'node_modules', '.venv', 'venv', '__pycache__', '.dsh'])
 const KEIL_EXT = new Set(['.uvprojx', '.uvmpw'])
@@ -30,7 +30,7 @@ const extOf = (name) => {
 export const listWorkspaceDir = (cwd, requested) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
-  const target = requested ? resolve(requested) : room.cwd
+  const target = realPath(requested ? resolve(requested) : room.cwd)
   if (!pathInside(room.cwd, target)) {
     return { ok: false, error: '只能浏览当前工作区目录' }
   }
@@ -46,15 +46,20 @@ export const listWorkspaceDir = (cwd, requested) => {
     const name = entry.name
     if (!name || name.startsWith('.')) continue
     const full = join(target, name)
-    let isDir = entry.isDirectory()
-    let isFile = entry.isFile()
-    if (entry.isSymbolicLink()) {
-      try {
-        const st = statSync(full)
-        isDir = st.isDirectory()
-        isFile = st.isFile()
-      } catch { continue }
+    let real
+    try {
+      real = realpathSync(full)
+    } catch {
+      continue
     }
+    if (!pathInside(room.cwd, real)) continue
+    let isDir = false
+    let isFile = false
+    try {
+      const st = statSync(real)
+      isDir = st.isDirectory()
+      isFile = st.isFile()
+    } catch { continue }
     if (isDir) {
       if (SKIP.has(name)) continue
       dirs.push({ name, path: full })

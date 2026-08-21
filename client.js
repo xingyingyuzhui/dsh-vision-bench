@@ -62,6 +62,7 @@ const COPY = {
     statusRunning: '进行中',
     statusOk: '完成',
     statusError: '失败',
+    statusCancelled: '已取消',
     taskBuild: '编译',
     taskRead: '读取',
     agentBuilding: 'Agent 正在编译',
@@ -114,6 +115,7 @@ const COPY = {
     emptyDevices: '尚未添加设备',
     unnamed: '未命名',
     listen: '监听',
+    listenFail: '监听失败',
     fnCoil: '01 线圈',
     fnDiscrete: '02 离散输入',
     fnHolding: '03 保持寄存器',
@@ -187,6 +189,7 @@ const COPY = {
     statusRunning: 'Running',
     statusOk: 'Done',
     statusError: 'Failed',
+    statusCancelled: 'Cancelled',
     taskBuild: 'Build',
     taskRead: 'Read',
     agentBuilding: 'Agent is building',
@@ -239,6 +242,7 @@ const COPY = {
     emptyDevices: 'No devices',
     unnamed: 'Untitled',
     listen: 'Listen',
+    listenFail: 'Listen failed',
     fnCoil: '01 Coil',
     fnDiscrete: '02 Discrete input',
     fnHolding: '03 Holding register',
@@ -708,6 +712,8 @@ const emptyDevice = (input = {}) => {
     count: clampInt(input.count, 1, 1, 125),
     sim: input.sim === true,
     listen: input.listen === true,
+    listening: input.listening === true,
+    listenError: typeof input.listenError === 'string' ? input.listenError.slice(0, 180) : '',
     segments: normalizeSegments(input.segments),
     values: normalizeValues(input.values),
     polling: {
@@ -736,6 +742,8 @@ const flattenDevice = (device) => ({
   count: device.count,
   sim: device.sim,
   listen: device.listen,
+  listening: device.listening === true,
+  listenError: device.listenError || '',
   segments: device.segments,
   values: device.values,
   polling: device.polling,
@@ -939,6 +947,7 @@ function sourceLabel(t, source) {
 function statusLabel(t, status) {
   if (status === 'running') return t('statusRunning')
   if (status === 'ok') return t('statusOk')
+  if (status === 'cancelled') return t('statusCancelled')
   return t('statusError')
 }
 
@@ -1513,7 +1522,8 @@ function createHmiView(React, t, post, openLive) {
       el('div', { className: 'dvb-panel-head' },
         el('span', { className: 'dvb-panel-title' }, t('connection')),
         sim ? el('span', { className: 'dvb-tag' }, t('sim')) : null,
-        isSlave && m.listen ? el('span', { className: 'dvb-tag' }, t('listen')) : null,
+        isSlave && m.listening ? el('span', { className: 'dvb-tag' }, t('listen')) : null,
+        isSlave && m.listen && !m.listening ? el('span', { className: 'dvb-need' }, m.listenError || t('listenFail')) : null,
         el('button', {
           type: 'button',
           className: 'dvb-btn' + (sim ? ' is-on' : ''),

@@ -32,6 +32,8 @@ export const emptyDevice = (input = {}) => {
     count: clampInt(input.count, 1, 1, 125),
     sim: input.sim === true,
     listen: input.listen === true,
+    listening: input.listening === true,
+    listenError: typeof input.listenError === 'string' ? input.listenError.slice(0, 180) : '',
     segments: normalizeSegments(input.segments),
     values: normalizeValues(input.values),
     polling: {
@@ -60,6 +62,8 @@ export const flattenDevice = (device) => ({
   count: device.count,
   sim: device.sim,
   listen: device.listen,
+  listening: device.listening === true,
+  listenError: device.listenError || '',
   segments: device.segments,
   values: device.values,
   polling: device.polling,

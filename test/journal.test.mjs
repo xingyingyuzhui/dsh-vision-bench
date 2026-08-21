@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, rm } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -84,6 +84,7 @@ test('vision_bench status exposes tasks and agent origin marks select', async ()
   await mkdir(cwd)
   try {
     const project = join(cwd, 'app.uvprojx')
+    await writeFile(project, '<Project/>')
     const selected = await runVisionBench(home, { action: 'select', path: project }, cwd, {
       source: 'agent',
       sessionId: 'sess-9',
@@ -109,6 +110,7 @@ test('keilBuild rejects a second running build and keeps the first task', async 
     const python = process.execPath
     saveBindings(home, { python, uv4: python, openocd: '' })
     const project = join(cwd, 'app.uvprojx')
+    await writeFile(project, '<Project/>')
     saveWorkspace(home, cwd, { keil: { project, target: 'Debug' } })
     const task = openTask(home, cwd, { type: 'build', source: 'agent', sessionId: 'sess-2', summary: '编译 Debug' })
     const blocked = await keilBuild(home, cwd, { source: 'user', sessionId: 'ui' })
@@ -130,6 +132,7 @@ test('keilBuild records agent source when the compile itself fails', async () =>
   try {
     saveBindings(home, { python: process.execPath, uv4: process.execPath, openocd: '' })
     const project = join(cwd, 'app.uvprojx')
+    await writeFile(project, '<Project/>')
     saveWorkspace(home, cwd, { keil: { project, target: 'Debug' } })
     const ran = await keilBuild(home, cwd, { source: 'agent', sessionId: 'sess-8' })
     assert.equal(ran.ok, false)

@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { apply } from '../host.js'
-import { ensurePresetOverlay, PRESET_PERSONA } from '../bench-preset.mjs'
+import { ensurePresetOverlay, PRESET_PERSONA, seedVisionBenchPreset } from '../bench-preset.mjs'
 import { runVisionBench } from '../bench-tool.mjs'
+import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
 
 test('agent role registers vision_bench and skips HTTP routes', () => {
   const tools = []
@@ -60,6 +61,7 @@ test('runVisionBench status and select stay inside the workspace', async () => {
     const miss = await runVisionBench(home, { action: 'status' }, '')
     assert.equal(miss.ok, false)
     const project = join(cwd, 'app.uvprojx')
+    await writeFile(project, '<Project/>')
     const selected = await runVisionBench(home, { action: 'select', path: project }, cwd)
     assert.equal(selected.ok, true)
     assert.equal(selected.keil.project, project)
@@ -74,6 +76,41 @@ test('runVisionBench status and select stay inside the workspace', async () => {
     assert.ok(status.timeline.some((item) => item.kind === 'select-project'))
     const escaped = await runVisionBench(home, { action: 'select', path: join(home, 'other.uvprojx') }, cwd)
     assert.equal(escaped.ok, false)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('agent single-point read patches the active device address', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-read-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveWorkspace(home, cwd, {
+      modbus: { sim: true, function: 3, address: 0, count: 1, segments: [] },
+    })
+    const ran = await runVisionBench(home, { action: 'read', function: 3, address: 10, count: 1 }, cwd, { source: 'agent' })
+    assert.equal(ran.ok, true)
+    assert.match(ran.result.summary, /f3@10/)
+    const ws = loadWorkspace(home, cwd)
+    assert.equal(ws.modbus.address, 10)
+    assert.equal(ws.modbus.function, 3)
+    assert.equal(ws.modbus.devices[0].address, 10)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('seedVisionBenchPreset does not overlay a foreign preset', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-preset-foreign-'))
+  const dir = join(home, '.agent-presets', 'vision-bench')
+  try {
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'agent.cordis.yml'), 'name: other\n')
+    const out = await seedVisionBenchPreset(null, home)
+    assert.equal(out.ok, false)
+    const text = await (await import('node:fs/promises')).readFile(join(dir, 'agent.cordis.yml'), 'utf8')
+    assert.equal(text, 'name: other\n')
   } finally {
     await rm(home, { recursive: true, force: true })
   }

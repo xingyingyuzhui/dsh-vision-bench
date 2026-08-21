@@ -11,7 +11,7 @@ import {
 } from './bench-store.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
-import { syncDeviceSlaves } from './bench-slave.mjs'
+import { stopAllSlaves, syncDeviceSlaves, withListenRuntime } from './bench-slave.mjs'
 import { listSerialPorts } from './bench-serial.mjs'
 
 export const name = 'dsh-vision-bench'
@@ -77,12 +77,14 @@ const syncSlaves = async (cwd) => {
   } catch { /* listen is best-effort */ }
 }
 
-const snapshot = (cwd) => {
+const snapshot = async (cwd) => {
   const bindings = loadBindings(dshHome)
   const body = { ok: true, bindings, health: probeBindings(bindings) }
   const room = cwd ? requireWorkspaceCwd(cwd) : { error: 'no-cwd' }
   if (!room.error) {
-    body.workspace = loadWorkspace(dshHome, room.cwd)
+    await syncSlaves(room.cwd)
+    const workspace = loadWorkspace(dshHome, room.cwd)
+    body.workspace = withListenRuntime(room.cwd, workspace)
     body.journal = journalView(body.workspace)
   }
   return body
@@ -136,8 +138,9 @@ export function apply(ctx, config = {}) {
         modbus: body && body.modbus,
       })
       if (!saved.ok) return saved
-      void syncSlaves(room.cwd)
-      return { ok: true, workspace: saved.workspace, journal: journalView(saved.workspace) }
+      await syncSlaves(room.cwd)
+      const workspace = withListenRuntime(room.cwd, saved.workspace)
+      return { ok: true, workspace, journal: journalView(workspace) }
     }),
     route('/dsh-vision-bench/fs/list', async (req) => {
       const body = await readJsonBody(req)
@@ -162,7 +165,7 @@ export function apply(ctx, config = {}) {
     route('/dsh-vision-bench/modbus/poll', async (req) => {
       const body = await readJsonBody(req)
       const ran = await modbusPoll(dshHome, body && body.cwd)
-      void syncSlaves(body && body.cwd)
+      await syncSlaves(body && body.cwd)
       return ran
     }),
     route('/dsh-vision-bench/serial/ports', async () => listSerialPorts()),
@@ -171,6 +174,7 @@ export function apply(ctx, config = {}) {
   void seedVisionBenchPreset(ctx.agentPresets, dshHome).catch(() => { /* roster copy is best-effort */ })
   ctx.effect(() => () => {
     for (const dispose of disposers) dispose()
+    stopAllSlaves()
   })
 }
 

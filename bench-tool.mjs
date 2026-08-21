@@ -1,5 +1,5 @@
-import { keilBuild, listDir, modbusRead } from './bench-actions.mjs'
-import { pathInside, requireWorkspaceCwd } from './bench-paths.mjs'
+import { keilBuild, listDir, modbusRead, pickModbusPatch } from './bench-actions.mjs'
+import { requireKeilProject, requireWorkspaceCwd } from './bench-paths.mjs'
 import { compactSegments, compactValues } from './bench-points.mjs'
 import { compactDevices } from './bench-devices.mjs'
 import { journalView, loadWorkspace, saveWorkspace } from './bench-store.mjs'
@@ -35,7 +35,7 @@ const compactLog = (log) => {
   }))
 }
 
-export async function runVisionBench(home, args, cwd, originInput) {
+export async function runVisionBench(home, args, cwd, originInput, opts) {
   const action = args && args.action
   if (!ACTIONS.has(action)) {
     return { ok: false, error: 'action 必须是 status | ls | select | build | read' }
@@ -43,6 +43,8 @@ export async function runVisionBench(home, args, cwd, originInput) {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, action, error: room.error }
   const origin = originFrom(originInput)
+  const signal = opts && opts.signal
+  if (signal && signal.aborted) return { ok: false, action, cancelled: true, error: '已取消' }
 
   if (action === 'status') {
     const workspace = loadWorkspace(home, room.cwd)
@@ -76,12 +78,10 @@ export async function runVisionBench(home, args, cwd, originInput) {
   }
 
   if (action === 'select') {
-    const project = typeof args.path === 'string' ? args.path.trim() : ''
-    if (!project || !pathInside(room.cwd, project)) {
-      return { ok: false, action, error: 'path 必须是当前工作区内的 Keil 工程' }
-    }
+    const keil = requireKeilProject(room.cwd, typeof args.path === 'string' ? args.path.trim() : '')
+    if (keil.error) return { ok: false, action, error: keil.error }
     const saved = saveWorkspace(home, room.cwd, {
-      keil: { project, target: typeof args.target === 'string' ? args.target : '' },
+      keil: { project: keil.project, target: typeof args.target === 'string' ? args.target : '' },
       origin,
     })
     if (!saved.ok) return { ok: false, action, error: saved.error }
@@ -95,7 +95,7 @@ export async function runVisionBench(home, args, cwd, originInput) {
       artifact: args.artifact,
       source: origin.source,
       sessionId: origin.sessionId,
-    })
+    }, { signal })
     return { action, ...ran }
   }
 
@@ -104,18 +104,16 @@ export async function runVisionBench(home, args, cwd, originInput) {
     source: origin.source,
     sessionId: origin.sessionId,
     all: table,
-    modbus: table
-      ? undefined
-      : {
-        mode: args.mode,
-        port: args.port,
-        host: args.host,
-        slave: args.slave,
-        function: args.function,
-        address: args.address,
-        count: args.count,
-      },
-  })
+    modbus: table ? undefined : pickModbusPatch({
+      mode: args.mode,
+      port: args.port,
+      host: args.host,
+      slave: args.slave,
+      function: args.function,
+      address: args.address,
+      count: args.count,
+    }),
+  }, { signal })
   return { action, ...ran }
 }
 
@@ -161,10 +159,12 @@ export function visionBenchTool(home) {
     timeoutMs: 620000,
     async execute(args, exec) {
       const agent = exec && exec.agent
+      const signal = exec && exec.signal
+      if (signal && signal.aborted) return { ok: false, cancelled: true, error: '已取消' }
       return runVisionBench(home, args || {}, cwdOf(agent), {
         source: 'agent',
         sessionId: sessionIdOf(agent),
-      })
+      }, { signal })
     },
   }
 }

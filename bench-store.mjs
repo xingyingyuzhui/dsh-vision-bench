@@ -219,7 +219,9 @@ export const openTask = (home, cwd, spec) => {
 
 export const finishTask = (home, cwd, taskId, patch) => {
   const prev = loadWorkspace(home, cwd)
-  const status = patch && patch.ok === false ? 'error' : 'ok'
+  const status = patch && (patch.cancelled || patch.status === 'cancelled')
+    ? 'cancelled'
+    : (patch && patch.ok === false ? 'error' : 'ok')
   const summary = patch && patch.summary ? String(patch.summary).slice(0, 240) : ''
   const tasks = (prev.tasks || []).map((item) => {
     if (item.id !== taskId) return item

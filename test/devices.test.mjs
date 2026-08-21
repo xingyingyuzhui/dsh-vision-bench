@@ -70,7 +70,7 @@ test('saveWorkspace migrates segments onto devices', async () => {
   await mkdir(cwd)
   try {
     saveWorkspace(home, cwd, {
-      modbus: { sim: true, segments: [{ name: '模拟', function: 3, address: 0, count: 4 }] },
+      modbus: { sim: true, polling: { enabled: true }, segments: [{ name: '模拟', function: 3, address: 0, count: 4 }] },
     })
     const ws = loadWorkspace(home, cwd)
     assert.equal(ws.modbus.devices.length, 1)

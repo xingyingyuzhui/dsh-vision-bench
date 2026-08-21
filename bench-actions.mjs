@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { listWorkspaceDir, pickArtifact } from './bench-fs.mjs'
-import { pathInside, requireWorkspaceCwd } from './bench-paths.mjs'
+import { requireKeilProject, requireWorkspaceCwd } from './bench-paths.mjs'
 import {
   finishTask,
   loadBindings,
@@ -34,7 +34,25 @@ const originOf = (body) => ({
 const hasRunning = (workspace, type) =>
   (workspace.tasks || []).some((item) => item.type === type && item.status === 'running')
 
-export const keilScan = async (home, cwd) => {
+const MODBUS_PATCH_KEYS = ['mode', 'port', 'host', 'tcpPort', 'slave', 'baudrate', 'function', 'address', 'count', 'sim', 'timeoutSec']
+
+export const pickModbusPatch = (raw) => {
+  const out = {}
+  if (!raw || typeof raw !== 'object') return out
+  for (const key of MODBUS_PATCH_KEYS) {
+    if (raw[key] !== undefined) out[key] = raw[key]
+  }
+  return out
+}
+
+const pollLocks = new Map()
+const POLL_BUDGET_MS = 30000
+
+const signalOf = (body, opts) => (opts && opts.signal) || (body && body.signal) || undefined
+
+const aborted = (signal) => !!(signal && signal.aborted)
+
+export const keilScan = async (home, cwd, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
   const bindings = loadBindings(home)
@@ -43,25 +61,26 @@ export const keilScan = async (home, cwd) => {
   return runPythonScript(bindings.python, 'keil_project.py', ['scan', '--root', room.cwd, '--json'], {
     cwd: room.cwd,
     timeoutMs: 30000,
+    signal: signalOf(null, opts),
   })
 }
 
-export const keilTargets = async (home, cwd, project) => {
+export const keilTargets = async (home, cwd, project, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
   const bindings = loadBindings(home)
   const missing = needPython(bindings)
   if (missing) return { ok: false, error: missing }
-  if (!project || !pathInside(room.cwd, project)) {
-    return { ok: false, error: '工程必须在当前工作区内' }
-  }
-  return runPythonScript(bindings.python, 'keil_project.py', ['targets', '--project', project, '--json'], {
+  const keil = requireKeilProject(room.cwd, project)
+  if (keil.error) return { ok: false, error: keil.error }
+  return runPythonScript(bindings.python, 'keil_project.py', ['targets', '--project', keil.project, '--json'], {
     cwd: room.cwd,
     timeoutMs: 15000,
+    signal: signalOf(null, opts),
   })
 }
 
-export const keilBuild = async (home, cwd, body) => {
+export const keilBuild = async (home, cwd, body, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
   const bindings = loadBindings(home)
@@ -71,29 +90,34 @@ export const keilBuild = async (home, cwd, body) => {
   const project = (body && body.project) || workspace.keil.project
   const target = (body && body.target) || workspace.keil.target
   const artifact = (body && body.artifact) || workspace.keil.artifact
-  if (!project || !pathInside(room.cwd, project)) {
-    return { ok: false, error: '请先在工作区里选择 Keil 工程' }
-  }
+  const keil = requireKeilProject(room.cwd, project)
+  if (keil.error) return { ok: false, error: keil.error === '工程必须是绝对路径' ? '请先在工作区里选择 Keil 工程' : keil.error }
   if (hasRunning(workspace, 'build')) {
     return { ok: false, error: '已有编译任务进行中' }
   }
+  const signal = signalOf(body, opts)
+  if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
   const origin = originOf(body)
   const task = openTask(home, room.cwd, {
     type: 'build',
     source: origin.source,
     sessionId: origin.sessionId,
-    summary: '编译 ' + (target || project),
+    summary: '编译 ' + (target || keil.project),
   })
   const ran = await runPythonScript(bindings.python, 'keil_build.py', [
     '--uv4', bindings.uv4,
-    '--project', project,
+    '--project', keil.project,
     '--target', target || '',
     '--log-dir', join(storeDir(home), 'logs'),
     '--json',
-  ], { cwd: room.cwd, timeoutMs: 620000 })
+  ], { cwd: room.cwd, timeoutMs: 620000, signal })
+  if (ran.cancelled) {
+    finishTask(home, room.cwd, task.id, { cancelled: true, summary: '编译已取消', keil: { project: keil.project, target, artifact } })
+    return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source }
+  }
   if (!ran.ok) {
     const summary = '编译失败 ' + (ran.error || '')
-    finishTask(home, room.cwd, task.id, { ok: false, summary, keil: { project, target, artifact } })
+    finishTask(home, room.cwd, task.id, { ok: false, summary, keil: { project: keil.project, target, artifact } })
     return { ...ran, taskId: task.id, source: origin.source }
   }
   const details = ran.result && ran.result.details ? ran.result.details : {}
@@ -104,7 +128,7 @@ export const keilBuild = async (home, cwd, body) => {
   finishTask(home, room.cwd, task.id, {
     ok,
     summary,
-    keil: { project, target, artifact, download: download.path || '' },
+    keil: { project: keil.project, target, artifact, download: download.path || '' },
   })
   return {
     ...ran,
@@ -136,11 +160,11 @@ const connectionArgs = (m) => {
   return { args }
 }
 
-const runSegment = (python, conn, segment, cwd, timeoutMs) => runPythonScript(python, 'modbus_read.py', conn.concat([
+const runSegment = (python, conn, segment, cwd, timeoutMs, signal) => runPythonScript(python, 'modbus_read.py', conn.concat([
   '--function', String(segment.function),
   '--address', String(segment.address),
   '--count', String(segment.count),
-]), { cwd, timeoutMs: timeoutMs || 20000 })
+]), { cwd, timeoutMs: timeoutMs || 20000, signal })
 
 const readSegmentsSim = (m, list) => {
   const at = Date.now()
@@ -153,7 +177,7 @@ const readSegmentsSim = (m, list) => {
   return { ok: true, values, okCount: list.length, results, error: '', simulated: true }
 }
 
-const readSegments = async (python, m, list, cwd, timeoutMs) => {
+const readSegments = async (python, m, list, cwd, timeoutMs, signal) => {
   if (m.role === 'slave') return m.sim ? readSegmentsSim(m, list) : { ok: true, values: m.values || [], okCount: list.length, results: [], error: '' }
   if (m.sim) return readSegmentsSim(m, list)
   const conn = connectionArgs(m)
@@ -163,7 +187,9 @@ const readSegments = async (python, m, list, cwd, timeoutMs) => {
   let lastError = ''
   const results = []
   for (const segment of list) {
-    const ran = await runSegment(python, conn.args, segment, cwd, timeoutMs)
+    if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消', values, okCount, results }
+    const ran = await runSegment(python, conn.args, segment, cwd, timeoutMs, signal)
+    if (ran.cancelled) return { ok: false, cancelled: true, error: '已取消', values, okCount, results }
     values = applySegmentRead(values, segment, ran)
     results.push({
       segmentId: segment.id,
@@ -183,14 +209,16 @@ const readSegments = async (python, m, list, cwd, timeoutMs) => {
   }
 }
 
-export const modbusRead = async (home, cwd, body) => {
+export const modbusRead = async (home, cwd, body, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
+  const signal = signalOf(body, opts)
+  if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
   const workspace = loadWorkspace(home, room.cwd)
-  const saved = saveWorkspace(home, room.cwd, {
-    keil: workspace.keil,
-    modbus: { ...workspace.modbus, ...(body && body.modbus) },
-  })
+  const patch = pickModbusPatch(body && body.modbus)
+  const saved = Object.keys(patch).length
+    ? saveWorkspace(home, room.cwd, { keil: workspace.keil, modbus: patch })
+    : { ok: true, workspace }
   if (!saved.ok) return saved
   const pack = normalizeModbus(saved.workspace.modbus)
   const device = (body && body.deviceId)
@@ -222,12 +250,17 @@ export const modbusRead = async (home, cwd, body) => {
         ? ('读段 ' + (list[0].name || ('f' + list[0].function + '@' + list[0].address)))
         : ('读点表 ' + list.length + ' 段'),
     })
-    const ran = await readSegments(bindings.python, m, list, room.cwd, 20000)
+    const ran = await readSegments(bindings.python, m, list, room.cwd, 20000, signal)
+    if (ran.cancelled) {
+      finishTask(home, room.cwd, task.id, { cancelled: true, summary: '读取已取消' })
+      return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source }
+    }
     const summary = (sim ? '仿真 ' : '') + (ran.ok
       ? ('读取 ' + list.length + ' 段成功')
       : ('读取 ' + ran.okCount + '/' + list.length + ' 段成功' + (ran.error ? '：' + ran.error : '')))
-    const devices = pack.devices.map((item) => item.id === m.id ? { ...item, values: ran.values } : item)
-    finishTask(home, room.cwd, task.id, { ok: ran.ok, summary, modbus: { devices, activeId: pack.activeId, values: ran.values } })
+    const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+    const devices = latest.devices.map((item) => item.id === m.id ? { ...item, values: ran.values } : item)
+    finishTask(home, room.cwd, task.id, { ok: ran.ok, summary, modbus: { devices, activeId: latest.activeId } })
     return {
       ok: ran.ok,
       taskId: task.id,
@@ -271,7 +304,12 @@ export const modbusRead = async (home, cwd, body) => {
   const ran = await runPythonScript(bindings.python, 'modbus_read.py', args, {
     cwd: room.cwd,
     timeoutMs: 20000,
+    signal,
   })
+  if (ran.cancelled) {
+    finishTask(home, room.cwd, task.id, { cancelled: true, summary: '读取已取消' })
+    return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source }
+  }
   const value = ran.result && ran.result.details && ran.result.details.value
   const summary = ran.ok
     ? ('Modbus 读 f' + m.function + '@' + m.address + ' = ' + JSON.stringify(value))
@@ -280,7 +318,7 @@ export const modbusRead = async (home, cwd, body) => {
   return { ...ran, taskId: task.id, source: origin.source }
 }
 
-export const modbusPoll = async (home, cwd) => {
+export const modbusPoll = async (home, cwd, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
   const workspace = loadWorkspace(home, room.cwd)
@@ -291,58 +329,71 @@ export const modbusPoll = async (home, cwd) => {
   if (hasRunning(workspace, 'read')) {
     return { ok: true, skipped: true, polling: pack.polling, values: pack.values, devices }
   }
-  const python = loadBindings(home).python
-  const next = []
-  let ok = true
-  for (const device of devices) {
-    if (!device.segments.length) {
-      next.push(device)
-      continue
-    }
-    if (device.role === 'slave') {
-      if (device.sim) {
-        const ran = readSegmentsSim(device, device.segments)
-        next.push({
-          ...device,
-          values: ran.values,
-          polling: { ...device.polling, lastAt: Date.now(), lastOk: true, error: '' },
-        })
-      } else next.push(device)
-      continue
-    }
-    const watch = device.sim || device.polling.enabled || pack.polling.enabled
-    if (!watch) {
-      next.push(device)
-      continue
-    }
-    if (!device.sim && !python) {
-      ok = false
-      next.push({
-        ...device,
-        polling: { ...device.polling, lastAt: Date.now(), lastOk: false, error: '请先在设置 → 台架 绑定 Python' },
-      })
-      continue
-    }
-    const ran = await readSegments(device.sim ? '' : python, device, device.segments, room.cwd, 4000)
-    if (!ran.ok) ok = false
-    next.push({
-      ...device,
-      values: ran.values,
-      polling: {
-        ...device.polling,
-        lastAt: Date.now(),
-        lastOk: ran.ok,
-        error: ran.ok ? '' : (ran.error || ''),
-      },
-    })
+  if (pollLocks.has(room.cwd)) {
+    return { ok: true, skipped: true, busy: true, polling: pack.polling, values: pack.values, devices }
   }
-  const saved = saveWorkspace(home, room.cwd, { modbus: { devices: next, activeId: pack.activeId } })
-  return {
-    ok,
-    skipped: false,
-    values: saved.workspace.modbus.values,
-    polling: saved.workspace.modbus.polling,
-    devices: saved.workspace.modbus.devices,
-    error: ok ? undefined : next.map((item) => item.polling.error).filter(Boolean)[0],
+  const outer = signalOf(null, opts)
+  const budget = AbortSignal.timeout(POLL_BUDGET_MS)
+  const signal = outer ? AbortSignal.any([outer, budget]) : budget
+  const lives = new Map()
+  pollLocks.set(room.cwd, lives)
+  let ok = true
+  try {
+    const python = loadBindings(home).python
+    for (const device of devices) {
+      if (aborted(signal)) break
+      if (!device.segments.length) continue
+      if (device.role === 'slave') {
+        if (device.sim && device.listen) {
+          const ran = readSegmentsSim(device, device.segments)
+          lives.set(device.id, {
+            values: ran.values,
+            polling: { lastAt: Date.now(), lastOk: true, error: '' },
+          })
+        }
+        continue
+      }
+      if (!device.polling.enabled) continue
+      if (!device.sim && !python) {
+        ok = false
+        lives.set(device.id, {
+          values: device.values,
+          polling: { lastAt: Date.now(), lastOk: false, error: '请先在设置 → 台架 绑定 Python' },
+        })
+        continue
+      }
+      const ran = await readSegments(device.sim ? '' : python, device, device.segments, room.cwd, 4000, signal)
+      if (ran.cancelled) break
+      if (!ran.ok) ok = false
+      lives.set(device.id, {
+        values: ran.values,
+        polling: {
+          lastAt: Date.now(),
+          lastOk: ran.ok,
+          error: ran.ok ? '' : (ran.error || ''),
+        },
+      })
+    }
+    const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+    const merged = latest.devices.map((item) => {
+      const live = lives.get(item.id)
+      if (!live) return item
+      return {
+        ...item,
+        values: live.values,
+        polling: { ...item.polling, ...live.polling },
+      }
+    })
+    const saved = saveWorkspace(home, room.cwd, { modbus: { devices: merged, activeId: latest.activeId } })
+    return {
+      ok,
+      skipped: false,
+      values: saved.workspace.modbus.values,
+      polling: saved.workspace.modbus.polling,
+      devices: saved.workspace.modbus.devices,
+      error: ok ? undefined : merged.map((item) => item.polling.error).filter(Boolean)[0],
+    }
+  } finally {
+    pollLocks.delete(room.cwd)
   }
 }

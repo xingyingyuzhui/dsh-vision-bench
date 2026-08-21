@@ -96,6 +96,7 @@ function sourceLabel(t, source) {
 function statusLabel(t, status) {
   if (status === 'running') return t('statusRunning')
   if (status === 'ok') return t('statusOk')
+  if (status === 'cancelled') return t('statusCancelled')
   return t('statusError')
 }
 
