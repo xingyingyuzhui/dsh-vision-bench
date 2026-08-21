@@ -64,6 +64,20 @@ export const trimTimeline = (list, max = MAX_TIMELINE, minorBudget = MAX_TIMELIN
 export const newId = (prefix) =>
   prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 
+// ── task pipeline helpers shared by every action domain ──────────────────
+
+export const originOf = (body) => ({
+  source: body && body.source === 'agent' ? 'agent' : 'user',
+  sessionId: body && body.sessionId ? String(body.sessionId) : '',
+})
+
+export const hasRunning = (workspace, type) =>
+  (workspace.tasks || []).some((item) => item.type === type && item.status === 'running')
+
+export const signalOf = (body, opts) => (opts && opts.signal) || (body && body.signal) || undefined
+
+export const aborted = (signal) => !!(signal && signal.aborted)
+
 const text = (value, fallback) => {
   const out = typeof value === 'string' ? value.trim() : ''
   return out || fallback || ''
