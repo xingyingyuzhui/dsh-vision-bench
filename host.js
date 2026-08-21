@@ -1,5 +1,5 @@
-import { listPendingWrites, resolvePendingWrite } from './bench-actions.mjs'
-import { keilBuild, keilMap, keilScan, keilTargets, listDir, modbusPoll, modbusRead, modbusWrite, openocdDownload } from './bench-actions.mjs'
+import { listPendingWrites, keilBuild, keilMap, keilScan, keilTargets, listDir, modbusPoll, modbusRead, modbusWrite, openocdDownload, resolvePendingWrite } from './bench-actions.mjs'
+import { runSelfCheck } from './bench-check.mjs'
 import { artifactInfo, readBuildLog } from './bench-fs.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
 import {
@@ -260,6 +260,10 @@ export function apply(ctx, config = {}) {
       return ran
     }),
     route('/dsh-vision-bench/serial/ports', async () => listSerialPorts()),
+    route('/dsh-vision-bench/selfcheck', async (req) => {
+      const body = await readJsonBody(req)
+      return runSelfCheck(dshHome, body && body.cwd)
+    }),
     route('/dsh-vision-bench/serial/open', async (req) => {
       const body = await readJsonBody(req)
       const room = requireWorkspaceCwd(body && body.cwd)

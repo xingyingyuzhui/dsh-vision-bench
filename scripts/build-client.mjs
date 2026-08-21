@@ -35,6 +35,7 @@ const parts = [
   'bench-hmi.mjs',
   'bench-live.mjs',
   'bench-map.mjs',
+  'bench-overview.mjs',
   'bench-runtime.mjs',
 ].map((file) => {
   const stripped = stripModule(readFileSync(join(root, file), 'utf8'))

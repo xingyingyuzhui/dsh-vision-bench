@@ -198,6 +198,20 @@ const COPY = {
     manualTitle: '人工操作请求（Agent）',
     manualDone: '已完成',
     manualFail: '无法完成',
+    tabOverview: '总览',
+    ovProject: '工程与产物',
+    ovLastBuild: '最近编译',
+    ovNoBuild: '暂无编译记录',
+    ovLive: '现场与联动',
+    ovDevices: '设备',
+    ovTodo: '待办',
+    ovTodoLine: 'Agent 写点确认 {writes} 项 · 人工操作 {manual} 项',
+    sourceSystem: '系统',
+    selfcheck: '运行自检',
+    selfchecking: '自检中…',
+    selfcheckTitle: '台架自检',
+    selfcheckPass: '通过',
+    selfcheckFail: '未过',
     flashTitle: '烧录下载',
     flashIface: '调试器',
     flashTarget: '目标芯片',
@@ -398,6 +412,20 @@ const COPY = {
     manualTitle: 'Manual steps (Agent)',
     manualDone: 'Done',
     manualFail: 'Cannot do',
+    tabOverview: 'Overview',
+    ovProject: 'Project & artifacts',
+    ovLastBuild: 'Last build',
+    ovNoBuild: 'No build record',
+    ovLive: 'Live & linkage',
+    ovDevices: 'Devices',
+    ovTodo: 'Todo',
+    ovTodoLine: '{writes} agent writes awaiting approval · {manual} manual steps',
+    sourceSystem: 'System',
+    selfcheck: 'Run self-check',
+    selfchecking: 'Checking…',
+    selfcheckTitle: 'Bench self-check',
+    selfcheckPass: 'pass',
+    selfcheckFail: 'fail',
     flashTitle: 'Flash download',
     flashIface: 'Debugger',
     flashTarget: 'Target MCU',
@@ -470,7 +498,8 @@ const CSS = [
   'body[' + ATTR + '] .dvb-status[data-kind="ready"]{color:var(--dsw-alias-label-success,#2e7d32)}',
   'body[' + ATTR + '] .dvb-status[data-kind="missing"]{color:var(--dsw-alias-label-danger,#c62828)}',
   'body[' + ATTR + '] .dvb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:8px 10px}',
-  'body[' + ATTR + '] .dvb-input{height:28px;width:100%;box-sizing:border-box;padding:0 8px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.4));border-radius:6px;background:transparent;color:inherit;font:inherit;font-size:12px}',
+  'body[' + ATTR + '] .dvb-input{height:28px;width:100%;box-sizing:border-box;padding:0 8px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.4));border-radius:6px;background:transparent;color:inherit;font:inherit;font-size:12px;transition:border-color .15s ease}',
+  'body[' + ATTR + '] .dvb-input:focus-visible{outline:none;border-color:var(--dsw-alias-label-info,#4f8ef7)}',
   'body[' + ATTR + '] .dvb-input::placeholder{opacity:.28;font-style:normal;color:inherit}',
   'body[' + ATTR + '] .dvb-input-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}',
   'body[' + ATTR + '] .dvb-combo{display:flex;gap:6px;min-width:0;align-items:center}',
@@ -479,14 +508,16 @@ const CSS = [
   'body[' + ATTR + '] .dvb-file{display:flex;gap:8px;align-items:center;min-height:28px;padding:0 4px 0 8px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.4));border-radius:6px}',
   'body[' + ATTR + '] .dvb-file .dvb-btn{height:24px;padding:0 8px;border-color:transparent}',
   'body[' + ATTR + '] .dvb-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
-  'body[' + ATTR + '] .dvb-btn{height:28px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.4));border-radius:6px;background:transparent;color:inherit;cursor:pointer;font:inherit;font-size:12px}',
+  'body[' + ATTR + '] .dvb-btn{height:28px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.4));border-radius:6px;background:transparent;color:inherit;cursor:pointer;font:inherit;font-size:12px;transition:background-color .15s ease,border-color .15s ease,opacity .15s ease}',
+  'body[' + ATTR + '] .dvb-btn:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2,rgba(128,128,128,.1));border-color:var(--dsw-alias-border-l1,rgba(128,128,128,.55))}',
+  'body[' + ATTR + '] .dvb-btn:focus-visible{outline:2px solid var(--dsw-alias-label-info,#4f8ef7);outline-offset:1px}',
   'body[' + ATTR + '] .dvb-btn-primary,.dvb-btn.is-on{font-weight:600;background:var(--dsw-alias-bg-layer-2,rgba(128,128,128,.14));border-color:var(--dsw-alias-border-l1,rgba(128,128,128,.55))}',
   'body[' + ATTR + '] .dvb-btn:disabled{opacity:.4;cursor:default}',
   'body[' + ATTR + '] .dvb-need{font-size:12px;opacity:.62}',
   'body[' + ATTR + '] .dvb-msg{font-size:12px}',
   'body[' + ATTR + '] .dvb-msg[data-kind="ok"]{color:var(--dsw-alias-label-success,#2e7d32)}',
   'body[' + ATTR + '] .dvb-msg[data-kind="err"]{color:var(--dsw-alias-label-danger,#c62828)}',
-  'body[' + ATTR + '] .dvb-log{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap;word-break:break-all;min-height:88px;max-height:220px;overflow:auto;padding:8px 10px}',
+  'body[' + ATTR + '] .dvb-log{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap;word-break:break-all;min-height:88px;max-height:220px;overflow:auto;padding:8px 10px;scrollbar-width:thin;overscroll-behavior:contain}',
   'body[' + ATTR + '] .dvb-path{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}',
   'body[' + ATTR + '] .dvb-path[data-empty="1"]{opacity:.4}',
   'body[' + ATTR + '] .dvb-mask{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)}',
@@ -604,6 +635,8 @@ function createSettingsPage(React, t, post) {
     const [bindings, setBindings] = React.useState({ python: '', uv4: '', openocd: '' })
     const [health, setHealth] = React.useState({})
     const [busy, setBusy] = React.useState(false)
+    const [checking, setChecking] = React.useState(false)
+    const [checks, setChecks] = React.useState(null)
     const [message, setMessage] = React.useState(null)
 
     const applySnap = (data) => {
@@ -632,6 +665,17 @@ function createSettingsPage(React, t, post) {
       }).finally(() => setBusy(false))
     }
 
+    function runCheck() {
+      setChecking(true)
+      setChecks(null)
+      post('/dsh-vision-bench/selfcheck', {}, 60000).then((data) => {
+        if (data && Array.isArray(data.checks)) setChecks(data)
+        else setMessage({ kind: 'err', text: (data && data.error) || t('fail') })
+      }).catch((err) => {
+        setMessage({ kind: 'err', text: String((err && err.message) || t('fail')) })
+      }).finally(() => setChecking(false))
+    }
+
     return el('div', { className: 'dvb-page' },
       el('div', { className: 'dvb-title' }, t('settingsTitle')),
       el('div', { className: 'dvb-hint' }, t('settingsHint')),
@@ -650,9 +694,24 @@ function createSettingsPage(React, t, post) {
           }))
       }),
       el('div', { className: 'dvb-actions' },
-        el('button', { type: 'button', className: 'dvb-btn', disabled: busy, onClick: save },
-          busy ? t('saving') : t('save'))),
-      message ? el('div', { className: 'dvb-msg', 'data-kind': message.kind }, message.text) : null)
+        el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: busy, onClick: save },
+          busy ? t('saving') : t('save')),
+        el('button', { type: 'button', className: 'dvb-btn', disabled: checking, onClick: runCheck },
+          checking ? t('selfchecking') : t('selfcheck'))),
+      message ? el('div', { className: 'dvb-msg', 'data-kind': message.kind }, message.text) : null,
+      checks
+        ? el('div', { className: 'dvb-journal' },
+          el('div', { className: 'dvb-journal-title' }, t('selfcheckTitle')
+            + ' · ' + (checks.ok ? t('selfcheckPass') : t('selfcheckFail'))),
+          checks.checks.map((item) => el('div', {
+            key: item.name,
+            className: 'dvb-task',
+            'data-ok': item.ok ? 'true' : 'false',
+          },
+            el('span', { className: 'dvb-badge' }, item.ok ? '✓' : '✗'),
+            el('span', null, item.name),
+            el('span', { className: 'dvb-hint' }, item.detail))))
+        : null)
   }
 }
 
@@ -3377,6 +3436,184 @@ function openProjectTab(ctx) {
   if (bs && typeof bs.openTab === 'function') bs.openTab({ type: TAB_MAP })
 }
 
+const OVERVIEW_POLL_MS = 2000
+
+function overviewEmptyWorkspace() {
+  return {
+    keil: { project: '', target: '', artifact: 'hex', download: '' },
+    tasks: [],
+    timeline: [],
+    session: { boundId: '' },
+    manualRequests: [],
+    modbus: {},
+  }
+}
+
+function overviewSourceLabel(t, source) {
+  if (source === 'agent') return t('sourceAgent')
+  if (source === 'system') return t('sourceSystem')
+  return t('sourceUser')
+}
+
+function createOverviewView(React, t, post, hooks) {
+  return function OverviewView(props) {
+    const el = React.createElement
+    const cwd = props && props.sessionId && props.useSessions
+      ? props.useSessions((s) => {
+        const id = props.sessionId
+        return (s && s.byId && id && s.byId[id] && s.byId[id].cwd) || ''
+      })
+      : ''
+    const [health, setHealth] = React.useState({})
+    const [workspace, setWorkspace] = React.useState(overviewEmptyWorkspace)
+    const [pendingWrites, setPendingWrites] = React.useState([])
+    const [copied, setCopied] = React.useState(false)
+
+    React.useEffect(() => {
+      let stop = false
+      function pull() {
+        post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
+          if (stop) return
+          if (data && data.health) setHealth(data.health)
+          if (data && Array.isArray(data.pendingWrites)) setPendingWrites(data.pendingWrites)
+          if (data && data.workspace) setWorkspace(data.workspace)
+        }).catch(() => { /* next tick retries */ })
+      }
+      pull()
+      const timer = setInterval(pull, OVERVIEW_POLL_MS)
+      return () => { stop = true; clearInterval(timer) }
+    }, [cwd])
+
+    const keil = workspace.keil || {}
+    const modbus = workspace.modbus || {}
+    const devices = Array.isArray(modbus.devices) ? modbus.devices : []
+    const session = workspace.session || {}
+    const boundId = session.boundId || ''
+    const sessionId = (props && props.sessionId) || ''
+    const bindState = !sessionId
+      ? 'none'
+      : (boundId === sessionId ? 'self' : (boundId ? 'other' : 'open'))
+    const openManual = (workspace.manualRequests || []).filter((item) => item.status === 'pending')
+    const lastBuild = (workspace.tasks || []).find((item) => item.type === 'build')
+    const timeline = (workspace.timeline || []).slice(0, 8)
+
+    function copySnapshot() {
+      const lines = [
+        '[台架快照] ' + clockOf(Date.now()),
+        '工作区: ' + (cwd || '（无）'),
+        '工程: ' + (keil.project || '（未选）') + (keil.target ? ' · Target ' + keil.target : ''),
+        '产物: ' + (keil.download || '（无）'),
+        '最近编译: ' + (lastBuild ? lastBuild.summary + '（' + lastBuild.status + '）' : '（无记录）'),
+        '设备: ' + (devices.length
+          ? devices.map((item) => (item.name || item.id)
+            + '（' + (item.role === 'slave' ? '从机' : '主机')
+            + (item.sim ? '·仿真' : '')
+            + (item.listen ? '·监听' : '')
+            + (item.polling && item.polling.enabled ? '·监视中' : '') + '）').join('， ')
+          : '（无）'),
+        '会话绑定: ' + (bindState === 'self' ? '本会话' : bindState === 'other' ? '其他会话' : '未绑定'),
+        '待办: Agent 写点确认 ' + pendingWrites.length + ' 项，人工操作 ' + openManual.length + ' 项',
+      ]
+      navigator.clipboard.writeText(lines.join('\n')).then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      }).catch(() => { /* clipboard unavailable */ })
+    }
+
+    function field(label, node) {
+      return el('div', { className: 'dvb-row' },
+        el('div', { className: 'dvb-label' }, el('span', null, label)),
+        node)
+    }
+
+    const rows = [
+      { key: 'python', health: health.python },
+      { key: 'uv4', health: health.uv4 },
+      { key: 'openocd', health: health.openocd },
+    ]
+
+    return el('div', { className: 'dvb-page' },
+      el('div', { className: 'dvb-bar' },
+        el('div', { className: 'dvb-health' }, rows.map((row) => el('span', {
+          key: row.key,
+          className: 'dvb-chip',
+          'data-kind': statusKind(row.health),
+        }, t(row.key) + ' · ' + t(statusKind(row.health))))),
+        cwd
+          ? el('div', { className: 'dvb-cwd' }, t('workspace') + '  ' + cwd)
+          : el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('needWorkspace'))),
+      el('div', { className: 'dvb-split' },
+        el('div', { className: 'dvb-panel' },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, t('ovProject'))),
+          field(t('project'), el('div', { className: 'dvb-path', 'data-empty': keil.project ? '0' : '1' },
+            keil.project || t('pickProject'))),
+          field(t('target'), el('div', { className: 'dvb-path', 'data-empty': keil.target ? '0' : '1' },
+            keil.target || '—')),
+          field(t('artifact'), el('div', { className: 'dvb-path', 'data-empty': keil.download ? '0' : '1' },
+            keil.download || '—')),
+          field(t('ovLastBuild'), el('div', { className: 'dvb-status', 'data-kind': lastBuild ? (lastBuild.status === 'ok' ? 'ready' : 'missing') : '' },
+            lastBuild ? lastBuild.summary : t('ovNoBuild')))),
+        el('div', { className: 'dvb-panel' },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, t('ovLive'))),
+          field(t('ovDevices'), el('div', { className: 'dvb-path' },
+            devices.length
+              ? devices.map((item) => (item.name || item.id)
+                + '（' + (item.role === 'slave' ? t('roleSlave') : t('roleMaster'))
+                + (item.sim ? ' · ' + t('sim') : '')
+                + (item.listen ? ' · ' + t('listen') : '')
+                + (item.polling && item.polling.enabled ? ' · ' + t('live') : '') + '）').join('， ')
+              : t('emptyDevices'))),
+          field(t('bindChip'), el('span', {
+            className: 'dvb-chip',
+            'data-kind': bindState === 'self' ? 'ready' : 'unbound',
+          }, t('bindState_' + bindState))),
+          field(t('ovTodo'), el('div', { className: 'dvb-path' },
+            t('ovTodoLine')
+              .replace('{writes}', String(pendingWrites.length))
+              .replace('{manual}', String(openManual.length)))))),
+      el('div', { className: 'dvb-actions' },
+        el('button', {
+          type: 'button',
+          className: 'dvb-btn dvb-btn-primary',
+          disabled: !cwd,
+          onClick: copySnapshot,
+        }, copied ? t('copied') : t('copyAgent')),
+        hooks && typeof hooks.openLive === 'function'
+          ? el('button', {
+            type: 'button', className: 'dvb-btn',
+            onClick() { hooks.openLive() },
+          }, t('liveTable'))
+          : null),
+      timeline.length
+        ? el('div', { className: 'dvb-journal' },
+          el('div', { className: 'dvb-journal-title' }, t('timeline')),
+          timeline.map((item) => el('div', { key: item.id, className: 'dvb-event', 'data-ok': item.ok === false ? 'false' : '' },
+            el('span', { className: 'dvb-map-meta' }, clockOf(item.at)),
+            el('span', { className: 'dvb-badge', 'data-source': item.source }, overviewSourceLabel(t, item.source)),
+            el('span', { className: 'dvb-hint' }, item.summary || item.kind))))
+        : null)
+  }
+}
+
+function registerOverview(ctx, React, t, OverviewPage) {
+  const slots = ctx.get ? ctx.get('slots') : ctx.slots
+  if (slots == null || React == null) return function () {}
+  const stop = slots.inject('conversation.view', function () {
+    return slots.register({
+      name: 'conversation.view',
+      id: 'vision-bench-overview',
+      order: 19,
+      locale: NS,
+      label() { return t('tabOverview') },
+    }, OverviewPage)
+  })
+  return function () {
+    if (typeof stop === 'function') stop()
+  }
+}
+
 function apply(ctx) {
   const React = require('react')
   const slots = ctx.get('slots')
@@ -3429,8 +3666,10 @@ function apply(ctx) {
     closeTab(id) { closeTabImpl(id) },
   })
   const MapPage = createMapView(React, t, post)
+  const OverviewPage = createOverviewView(React, t, post, { openLive })
   const stopSettings = registerSettings(ctx, React, t, SettingsPage)
   const stopView = registerView(ctx, React, t, DebugView, HmiView)
+  const stopOverview = registerOverview(ctx, React, t, OverviewPage)
 
   if (typeof ctx.inject === 'function') {
     ctx.inject(['betterSidebar'], (side) => {
@@ -3454,6 +3693,7 @@ function apply(ctx) {
       localeDispose()
       if (typeof stopSettings === 'function') stopSettings()
       if (typeof stopView === 'function') stopView()
+      if (typeof stopOverview === 'function') stopOverview()
       if (styleTag != null) styleTag.remove()
       if (doc) doc.body.removeAttribute(ATTR)
     }
