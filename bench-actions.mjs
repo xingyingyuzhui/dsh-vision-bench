@@ -7,6 +7,7 @@ import {
   loadWorkspace,
   openTask,
   pruneBuildLogs,
+  recordBenchEvent,
   saveWorkspace,
   storeDir,
 } from './bench-store.mjs'
@@ -14,6 +15,8 @@ import {
   applyPointWrite,
   applySegmentRead,
   clampInt,
+  decodeValue,
+  evaluateAlarm,
   functionTag,
   normalizeSegments,
   normalizeWriteValues,
@@ -23,6 +26,7 @@ import {
 import { activeDevice, normalizeModbus } from './bench-devices.mjs'
 import { runPythonScript } from './bench-run.mjs'
 import { serialDevicePath } from './bench-serial.mjs'
+import { notifyBenchEvent } from './bench-notify.mjs'
 
 const needPython = (bindings) => {
   if (!bindings.python) return '请先在设置 → 台架 绑定 Python'
@@ -563,6 +567,36 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   return done(readbackOk && !mismatch, summary, { devices, readback: readbackOk ? raw : [] })
 }
 
+const deviceAlarms = (device, values) => {
+  const byId = {}
+  for (const seg of normalizeSegments(device.segments)) byId[seg.id] = seg
+  const active = device.alarmActive && typeof device.alarmActive === 'object' ? device.alarmActive : {}
+  const next = { ...active }
+  const fired = []
+  const cleared = []
+  for (const rec of Array.isArray(values) ? values : []) {
+    if (!rec || !rec.key || rec.ok !== true) continue
+    const seg = byId[rec.segmentId]
+    if (!seg || (seg.alarmMin === null && seg.alarmMax === null)) continue
+    const breach = evaluateAlarm(seg, rec.value)
+    if (breach && !next[rec.key]) {
+      next[rec.key] = true
+      fired.push({ seg, address: rec.address, value: rec.value, kind: breach })
+    } else if (!breach && next[rec.key]) {
+      delete next[rec.key]
+      cleared.push({ seg, address: rec.address, value: rec.value })
+    }
+  }
+  return { next, fired, cleared }
+}
+
+const alarmLabel = (item, kind) => {
+  const name = item.seg.name || functionTag(item.seg.function) + item.address
+  const limit = kind === 'max' ? item.seg.alarmMax : item.seg.alarmMin
+  const shown = decodeValue(item.seg, item.value)
+  return name + '=' + shown + (kind === 'max' ? '>' + limit : '<' + limit)
+}
+
 export const modbusPoll = async (home, cwd, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -582,6 +616,9 @@ export const modbusPoll = async (home, cwd, opts) => {
   const budget = AbortSignal.timeout(Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : POLL_BUDGET_MS)
   const signal = outer ? AbortSignal.any([outer, budget]) : budget
   const lives = new Map()
+  const alarmActive = new Map()
+  const firedAll = []
+  const clearedAll = []
   pollLocks.set(room.cwd, lives)
   let ok = true
   let timedOut = false
@@ -624,6 +661,10 @@ export const modbusPoll = async (home, cwd, opts) => {
         break
       }
       if (!ran.ok) ok = false
+      const alarms = deviceAlarms(device, ran.values)
+      alarmActive.set(device.id, alarms.next)
+      firedAll.push(...alarms.fired)
+      clearedAll.push(...alarms.cleared)
       lives.set(device.id, {
         values: ran.values,
         polling: {
@@ -650,8 +691,25 @@ export const modbusPoll = async (home, cwd, opts) => {
         ...item,
         values: live.values,
         polling: { ...item.polling, ...live.polling },
+        alarmActive: alarmActive.get(item.id) || item.alarmActive || {},
       }
     })
+    if (firedAll.length) {
+      recordBenchEvent(home, room.cwd, {
+        action: 'alarm',
+        ok: false,
+        summary: '越限告警：' + firedAll.slice(0, 5).map((item) => alarmLabel(item, item.kind)).join('；'),
+      }, { source: 'system' })
+      void notifyBenchEvent(home, room.cwd,
+        '台架告警：' + firedAll.slice(0, 3).map((item) => alarmLabel(item, item.kind)).join('；')).catch(() => {})
+    }
+    if (clearedAll.length) {
+      recordBenchEvent(home, room.cwd, {
+        action: 'alarm-clear',
+        ok: true,
+        summary: '告警恢复：' + clearedAll.slice(0, 5).map((item) => alarmLabel(item, '')).join('；'),
+      }, { source: 'system' })
+    }
     const saved = saveWorkspace(home, room.cwd, { modbus: { devices: merged, activeId: latest.activeId } })
     return {
       ok,
@@ -667,3 +725,5 @@ export const modbusPoll = async (home, cwd, opts) => {
     pollLocks.delete(room.cwd)
   }
 }
+
+export const _internal = { deviceAlarms, alarmLabel }

@@ -78,18 +78,58 @@ export const pointName = (segment, index) => {
 export const pointKey = (segmentId, address, fn) =>
   String(segmentId || '') + ':' + String(fn) + '@' + String(address)
 
+export const clockOf = (ms) => {
+  const d = new Date(Number(ms) || Date.now())
+  const pad = (n) => String(n).padStart(2, '0')
+  return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())
+}
+
 export const normalizeSegment = (input) => {
   const address = clampInt(input && input.address, 0, 0, 65535)
   const maxCount = Math.min(MAX_COUNT, 65536 - address)
   const count = clampInt(input && input.count, 1, 1, maxCount || 1)
   const fn = FUNCTIONS.has(Number(input && input.function)) ? Number(input.function) : 3
+  const scale = Number(input && input.scale)
+  const offset = Number(input && input.offset)
   return {
     id: text(input && input.id, newSegmentId()),
     name: text(input && input.name, '').slice(0, 40),
     function: fn,
     address,
     count,
+    scale: Number.isFinite(scale) ? scale : 1,
+    offset: Number.isFinite(offset) ? offset : 0,
+    unit: text(input && input.unit, '').slice(0, 12),
+    alarmMin: finiteOrNull(input && input.alarmMin),
+    alarmMax: finiteOrNull(input && input.alarmMax),
   }
+}
+
+const finiteOrNull = (value) => {
+  if (value === null || value === undefined || value === '') return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+export const decodeValue = (segment, raw) => {
+  if (raw === null || raw === undefined || raw === '') return raw
+  if (typeof raw === 'boolean') return raw
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return raw
+  const seg = segment || {}
+  const scale = Number.isFinite(Number(seg.scale)) ? Number(seg.scale) : 1
+  const offset = Number.isFinite(Number(seg.offset)) ? Number(seg.offset) : 0
+  return n * scale + offset
+}
+
+export const evaluateAlarm = (segment, raw) => {
+  const seg = segment || {}
+  if (seg.alarmMin === null && seg.alarmMax === null) return ''
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(n)) return ''
+  if (seg.alarmMax !== null && n > seg.alarmMax) return 'max'
+  if (seg.alarmMin !== null && n < seg.alarmMin) return 'min'
+  return ''
 }
 
 export const normalizeSegments = (list) => {
@@ -161,6 +201,9 @@ export const expandPoints = (segments) => {
         index: i,
         name: pointName(segment, i),
         range: defaultSegmentName(segment),
+        scale: segment.scale,
+        offset: segment.offset,
+        unit: segment.unit,
       })
       if (out.length >= MAX_VALUES) return out
     }
@@ -227,16 +270,29 @@ export const compactSegments = (segments) =>
     function: item.function,
     address: item.address,
     count: item.count,
+    scale: item.scale,
+    offset: item.offset,
+    unit: item.unit,
+    alarmMin: item.alarmMin,
+    alarmMax: item.alarmMax,
   }))
 
-export const compactValues = (values) =>
-  normalizeValues(values).slice(0, 32).map((item) => ({
-    name: item.name,
-    function: item.function,
-    address: item.address,
-    value: item.value,
-    ok: item.ok,
-  }))
+export const compactValues = (values, segments) => {
+  const byId = {}
+  for (const seg of normalizeSegments(segments)) byId[seg.id] = seg
+  return normalizeValues(values).slice(0, 32).map((item) => {
+    const seg = byId[item.segmentId]
+    return {
+      name: item.name,
+      function: item.function,
+      address: item.address,
+      value: seg ? decodeValue(seg, item.value) : item.value,
+      raw: item.value,
+      ok: item.ok,
+      unit: seg ? seg.unit : '',
+    }
+  })
+}
 
 export const simulateRaw = (segment, at = Date.now()) => {
   const tick = Math.floor(Number(at) / 1000)
@@ -256,3 +312,79 @@ export const simulateSegmentRan = (segment, at) => ({
   ok: true,
   result: { details: { raw: simulateRaw(segment, at) } },
 })
+
+const CSV_HEADER = ['name', 'function', 'address', 'count', 'scale', 'offset', 'unit', 'alarmMin', 'alarmMax']
+
+const csvCell = (value) => {
+  const s = value === null || value === undefined ? '' : String(value)
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+}
+
+const csvSplit = (line) => {
+  const out = []
+  let cur = ''
+  let quoted = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (quoted) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"'
+          i++
+        } else quoted = false
+      } else cur += ch
+    } else if (ch === '"') {
+      quoted = true
+    } else if (ch === ',') {
+      out.push(cur)
+      cur = ''
+    } else cur += ch
+  }
+  out.push(cur)
+  return out
+}
+
+export const segmentsToCsv = (segments) =>
+  [CSV_HEADER.join(',')]
+    .concat(normalizeSegments(segments).map((item) => [
+      item.name || defaultSegmentName(item),
+      item.function,
+      item.address,
+      item.count,
+      item.scale,
+      item.offset,
+      item.unit,
+      item.alarmMin,
+      item.alarmMax,
+    ].map(csvCell).join(',')))
+    .join('\n') + '\n'
+
+export const csvToSegments = (input) => {
+  const lines = String(input || '').split(/\r?\n/).filter((line) => line.trim())
+  if (!lines.length) return { ok: false, error: 'CSV 为空' }
+  const header = csvSplit(lines[0]).map((cell) => cell.trim().toLowerCase())
+  const idx = {}
+  CSV_HEADER.forEach((key) => { idx[key] = header.indexOf(key.toLowerCase()) })
+  if (idx.function < 0 || idx.address < 0) {
+    return { ok: false, error: 'CSV 缺少 function 或 address 列' }
+  }
+  const segments = []
+  for (let i = 1; i < lines.length; i++) {
+    const cells = csvSplit(lines[i])
+    const pick = (key) => (idx[key] >= 0 ? cells[idx[key]] : '')
+    segments.push({
+      name: pick('name'),
+      function: Number(pick('function')),
+      address: Number(pick('address')),
+      count: Number(pick('count')) || 1,
+      scale: Number(pick('scale')) || 1,
+      offset: Number(pick('offset')) || 0,
+      unit: pick('unit'),
+      alarmMin: pick('alarmMin') === '' ? null : Number(pick('alarmMin')),
+      alarmMax: pick('alarmMax') === '' ? null : Number(pick('alarmMax')),
+    })
+  }
+  const normalized = normalizeSegments(segments)
+  if (!normalized.length) return { ok: false, error: 'CSV 没有有效段' }
+  return { ok: true, segments: normalized }
+}

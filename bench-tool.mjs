@@ -105,7 +105,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
         tcpPort: workspace.modbus.tcpPort,
         slave: workspace.modbus.slave,
         segments: compactSegments(workspace.modbus.segments),
-        values: compactValues(workspace.modbus.values),
+        values: compactValues(workspace.modbus.values, workspace.modbus.segments),
         polling: workspace.modbus.polling,
         devices: compactDevices(workspace.modbus),
         activeId: workspace.modbus.activeId,

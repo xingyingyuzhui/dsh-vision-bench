@@ -183,6 +183,15 @@ const COPY = {
     serialCopied: '已复制',
     serialEmpty: '暂无日志，打开串口后显示',
     baud: '波特率',
+    csvExport: '导出 CSV',
+    csvImport: '导入 CSV',
+    csvApply: '确认导入',
+    csvCancel: '取消',
+    csvReplaceHint: '导入将替换当前点表（含倍率/单位/告警上下限）',
+    csvDone: '已复制到剪贴板',
+    chartWindow: '最近 5 分钟',
+    chartEmpty: '暂无曲线数据，先开始监视',
+    alarmEmpty: '暂无告警记录',
     flashTitle: '烧录下载',
     flashIface: '调试器',
     flashTarget: '目标芯片',
@@ -368,6 +377,15 @@ const COPY = {
     serialCopied: 'Copied',
     serialEmpty: 'No log yet, open a port first',
     baud: 'Baudrate',
+    csvExport: 'Export CSV',
+    csvImport: 'Import CSV',
+    csvApply: 'Import',
+    csvCancel: 'Cancel',
+    csvReplaceHint: 'Import replaces the current point table (scale/unit/alarm limits included)',
+    csvDone: 'Copied to clipboard',
+    chartWindow: 'last 5 minutes',
+    chartEmpty: 'No trend data yet, start watching first',
+    alarmEmpty: 'No alarm events',
     flashTitle: 'Flash download',
     flashIface: 'Debugger',
     flashTarget: 'Target MCU',
@@ -534,6 +552,12 @@ const CSS = [
   'body[' + ATTR + '] .dvb-serial-line{white-space:pre-wrap;word-break:break-all}',
   'body[' + ATTR + '] .dvb-serial-line[data-kind="err"]{color:var(--dsw-alias-label-danger,#c62828)}',
   'body[' + ATTR + '] .dvb-serial-line[data-kind="warn"]{color:var(--dsw-alias-label-warning,#b45309)}',
+  'body[' + ATTR + '] .dvb-csv-area{height:auto;padding:6px 8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;resize:vertical}',
+  'body[' + ATTR + '] .dvb-trend-canvas{width:100%;max-width:560px;height:190px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.28));border-radius:4px}',
+  'body[' + ATTR + '] .dvb-trend-legend{display:flex;flex-direction:column;gap:2px}',
+  'body[' + ATTR + '] .dvb-trend-row{display:flex;gap:8px;align-items:baseline;font-size:12px;line-height:1.5}',
+  'body[' + ATTR + '] .dvb-trend-dot{width:8px;height:8px;border-radius:999px;flex:none;align-self:center}',
+  'body[' + ATTR + '] .dvb-trend-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.78}',
   'body[' + ATTR + '] .dvb-map-meta{font-size:11px;opacity:.55}',
   'body[' + ATTR + '] .dvb-map-block{display:flex;flex-direction:column;gap:3px;margin:4px 0}',
   'body[' + ATTR + '] .dvb-map-label{font-size:11px;font-weight:600;opacity:.7}',
@@ -714,18 +738,58 @@ const pointName = (segment, index) => {
 const pointKey = (segmentId, address, fn) =>
   String(segmentId || '') + ':' + String(fn) + '@' + String(address)
 
+const clockOf = (ms) => {
+  const d = new Date(Number(ms) || Date.now())
+  const pad = (n) => String(n).padStart(2, '0')
+  return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())
+}
+
 const normalizeSegment = (input) => {
   const address = clampInt(input && input.address, 0, 0, 65535)
   const maxCount = Math.min(MAX_COUNT, 65536 - address)
   const count = clampInt(input && input.count, 1, 1, maxCount || 1)
   const fn = FUNCTIONS.has(Number(input && input.function)) ? Number(input.function) : 3
+  const scale = Number(input && input.scale)
+  const offset = Number(input && input.offset)
   return {
     id: text(input && input.id, newSegmentId()),
     name: text(input && input.name, '').slice(0, 40),
     function: fn,
     address,
     count,
+    scale: Number.isFinite(scale) ? scale : 1,
+    offset: Number.isFinite(offset) ? offset : 0,
+    unit: text(input && input.unit, '').slice(0, 12),
+    alarmMin: finiteOrNull(input && input.alarmMin),
+    alarmMax: finiteOrNull(input && input.alarmMax),
   }
+}
+
+const finiteOrNull = (value) => {
+  if (value === null || value === undefined || value === '') return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+const decodeValue = (segment, raw) => {
+  if (raw === null || raw === undefined || raw === '') return raw
+  if (typeof raw === 'boolean') return raw
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return raw
+  const seg = segment || {}
+  const scale = Number.isFinite(Number(seg.scale)) ? Number(seg.scale) : 1
+  const offset = Number.isFinite(Number(seg.offset)) ? Number(seg.offset) : 0
+  return n * scale + offset
+}
+
+const evaluateAlarm = (segment, raw) => {
+  const seg = segment || {}
+  if (seg.alarmMin === null && seg.alarmMax === null) return ''
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(n)) return ''
+  if (seg.alarmMax !== null && n > seg.alarmMax) return 'max'
+  if (seg.alarmMin !== null && n < seg.alarmMin) return 'min'
+  return ''
 }
 
 const normalizeSegments = (list) => {
@@ -797,6 +861,9 @@ const expandPoints = (segments) => {
         index: i,
         name: pointName(segment, i),
         range: defaultSegmentName(segment),
+        scale: segment.scale,
+        offset: segment.offset,
+        unit: segment.unit,
       })
       if (out.length >= MAX_VALUES) return out
     }
@@ -863,16 +930,29 @@ const compactSegments = (segments) =>
     function: item.function,
     address: item.address,
     count: item.count,
+    scale: item.scale,
+    offset: item.offset,
+    unit: item.unit,
+    alarmMin: item.alarmMin,
+    alarmMax: item.alarmMax,
   }))
 
-const compactValues = (values) =>
-  normalizeValues(values).slice(0, 32).map((item) => ({
-    name: item.name,
-    function: item.function,
-    address: item.address,
-    value: item.value,
-    ok: item.ok,
-  }))
+const compactValues = (values, segments) => {
+  const byId = {}
+  for (const seg of normalizeSegments(segments)) byId[seg.id] = seg
+  return normalizeValues(values).slice(0, 32).map((item) => {
+    const seg = byId[item.segmentId]
+    return {
+      name: item.name,
+      function: item.function,
+      address: item.address,
+      value: seg ? decodeValue(seg, item.value) : item.value,
+      raw: item.value,
+      ok: item.ok,
+      unit: seg ? seg.unit : '',
+    }
+  })
+}
 
 const simulateRaw = (segment, at = Date.now()) => {
   const tick = Math.floor(Number(at) / 1000)
@@ -892,6 +972,82 @@ const simulateSegmentRan = (segment, at) => ({
   ok: true,
   result: { details: { raw: simulateRaw(segment, at) } },
 })
+
+const CSV_HEADER = ['name', 'function', 'address', 'count', 'scale', 'offset', 'unit', 'alarmMin', 'alarmMax']
+
+const csvCell = (value) => {
+  const s = value === null || value === undefined ? '' : String(value)
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+}
+
+const csvSplit = (line) => {
+  const out = []
+  let cur = ''
+  let quoted = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (quoted) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"'
+          i++
+        } else quoted = false
+      } else cur += ch
+    } else if (ch === '"') {
+      quoted = true
+    } else if (ch === ',') {
+      out.push(cur)
+      cur = ''
+    } else cur += ch
+  }
+  out.push(cur)
+  return out
+}
+
+const segmentsToCsv = (segments) =>
+  [CSV_HEADER.join(',')]
+    .concat(normalizeSegments(segments).map((item) => [
+      item.name || defaultSegmentName(item),
+      item.function,
+      item.address,
+      item.count,
+      item.scale,
+      item.offset,
+      item.unit,
+      item.alarmMin,
+      item.alarmMax,
+    ].map(csvCell).join(',')))
+    .join('\n') + '\n'
+
+const csvToSegments = (input) => {
+  const lines = String(input || '').split(/\r?\n/).filter((line) => line.trim())
+  if (!lines.length) return { ok: false, error: 'CSV 为空' }
+  const header = csvSplit(lines[0]).map((cell) => cell.trim().toLowerCase())
+  const idx = {}
+  CSV_HEADER.forEach((key) => { idx[key] = header.indexOf(key.toLowerCase()) })
+  if (idx.function < 0 || idx.address < 0) {
+    return { ok: false, error: 'CSV 缺少 function 或 address 列' }
+  }
+  const segments = []
+  for (let i = 1; i < lines.length; i++) {
+    const cells = csvSplit(lines[i])
+    const pick = (key) => (idx[key] >= 0 ? cells[idx[key]] : '')
+    segments.push({
+      name: pick('name'),
+      function: Number(pick('function')),
+      address: Number(pick('address')),
+      count: Number(pick('count')) || 1,
+      scale: Number(pick('scale')) || 1,
+      offset: Number(pick('offset')) || 0,
+      unit: pick('unit'),
+      alarmMin: pick('alarmMin') === '' ? null : Number(pick('alarmMin')),
+      alarmMax: pick('alarmMax') === '' ? null : Number(pick('alarmMax')),
+    })
+  }
+  const normalized = normalizeSegments(segments)
+  if (!normalized.length) return { ok: false, error: 'CSV 没有有效段' }
+  return { ok: true, segments: normalized }
+}
 
 const MAX_DEVICES = 8
 
@@ -1244,11 +1400,6 @@ const FLASH_TARGETS = [
   'kinetis', 'efm32', 'at91samd',
 ]
 
-const clockOf = (ms) => {
-  const d = new Date(Number(ms) || Date.now())
-  const pad = (n) => String(n).padStart(2, '0')
-  return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())
-}
 
 const lineKind = (line) => {
   if (/(assert|panic|fault|hardfault|error|错误|失败|exception)/i.test(line)) return 'err'
@@ -1876,6 +2027,9 @@ function createHmiView(React, t, post, openLive) {
     const [error, setError] = React.useState('')
     const [draft, setDraft] = React.useState({ name: '', function: 3, address: 0, count: 10 })
     const [writeState, setWriteState] = React.useState(null)
+    const [csvOpen, setCsvOpen] = React.useState(false)
+    const [csvText, setCsvText] = React.useState('')
+    const [csvNote, setCsvNote] = React.useState('')
     const [ports, setPorts] = React.useState([])
     const [scanning, setScanning] = React.useState(false)
     const workspaceRef = React.useRef(workspace)
@@ -1987,6 +2141,25 @@ function createHmiView(React, t, post, openLive) {
     function dropRange(id) {
       const next = removeSegment(m.segments, m.values, id)
       persist({ segments: next.segments, values: next.values })
+    }
+
+    function exportCsv() {
+      navigator.clipboard.writeText(segmentsToCsv(m.segments)).then(() => {
+        setCsvNote(t('csvDone'))
+        setTimeout(() => setCsvNote(''), 1500)
+      }).catch(() => { /* clipboard unavailable */ })
+    }
+
+    function importCsv() {
+      const parsed = csvToSegments(csvText)
+      if (!parsed.ok) {
+        setError(parsed.error)
+        return
+      }
+      setError('')
+      setCsvOpen(false)
+      setCsvText('')
+      persist({ segments: parsed.segments, values: [] })
     }
 
     function readRanges(segmentId) {
@@ -2281,7 +2454,41 @@ function createHmiView(React, t, post, openLive) {
             if (!watching) showLive()
           },
         }, watching ? t('liveStop') : t('liveStart')),
+        el('button', {
+          type: 'button', className: 'dvb-btn',
+          disabled: !segments.length,
+          title: t('csvReplaceHint'),
+          onClick: exportCsv,
+        }, csvNote || t('csvExport')),
+        el('button', {
+          type: 'button',
+          className: 'dvb-btn' + (csvOpen ? ' is-on' : ''),
+          disabled: !cwd,
+          onClick() { setCsvOpen((prev) => !prev) },
+        }, t('csvImport')),
         !readBusy && readBlock ? el('span', { className: 'dvb-need' }, readBlock) : null),
+      csvOpen
+        ? el('div', { className: 'dvb-write-panel' },
+          el('div', { className: 'dvb-hint' }, t('csvReplaceHint')),
+          el('textarea', {
+            className: 'dvb-input dvb-csv-area',
+            value: csvText,
+            rows: 5,
+            spellCheck: false,
+            placeholder: 'name,function,address,count,scale,offset,unit,alarmMin,alarmMax',
+            onChange(event) { setCsvText(event.target.value) },
+          }),
+          el('div', { className: 'dvb-actions' },
+            el('button', {
+              type: 'button', className: 'dvb-btn dvb-btn-primary',
+              disabled: !csvText.trim(),
+              onClick: importCsv,
+            }, t('csvApply')),
+            el('button', {
+              type: 'button', className: 'dvb-btn',
+              onClick() { setCsvOpen(false) },
+            }, t('csvCancel'))))
+        : null,
       el('div', { className: 'dvb-seg-add' },
         field(t('segmentName'), el('input', {
           className: 'dvb-input',
@@ -2412,6 +2619,49 @@ const TAB_TABLE = 'dsh-vision-bench:modbus'
 const TAB_CHART = 'dsh-vision-bench:charts'
 const TAB_ALARM = 'dsh-vision-bench:alarms'
 const INTERVALS = [500, 1000, 2000, 5000]
+const TREND_CAP = 600
+const TREND_WINDOW_MS = 5 * 60 * 1000
+
+const TREND = { cwd: '', series: new Map(), meta: new Map() }
+
+const trendKey = (deviceId, pointKey) => String(deviceId) + ':' + String(pointKey)
+
+const sampleTrend = (cwd, pack) => {
+  if (!cwd || TREND.cwd !== cwd) {
+    if (TREND.cwd !== cwd) {
+      TREND.cwd = cwd
+      TREND.series.clear()
+    }
+    if (!cwd) return
+  }
+  const now = Date.now()
+  const devices = Array.isArray(pack && pack.devices) ? pack.devices : []
+  for (const device of devices) {
+    const segById = {}
+    for (const seg of Array.isArray(device.segments) ? device.segments : []) segById[seg.id] = seg
+    for (const rec of Array.isArray(device.values) ? device.values : []) {
+      if (!rec || !rec.key || rec.ok !== true || rec.value === null || rec.value === undefined) continue
+      const seg = segById[rec.segmentId]
+      const v = typeof rec.value === 'boolean' ? (rec.value ? 1 : 0) : Number(rec.value)
+      if (!Number.isFinite(v)) continue
+      const shown = seg ? decodeValue(seg, v) : v
+      const key = trendKey(device.id, rec.key)
+      TREND.meta.set(key, {
+        label: (device.name ? device.name + ' / ' : '') + (rec.name || key),
+        unit: seg ? seg.unit : '',
+      })
+      let list = TREND.series.get(key)
+      if (!list) {
+        list = []
+        TREND.series.set(key, list)
+      }
+      list.push({ t: now, v: Number(shown) })
+      if (list.length > TREND_CAP) list.splice(0, list.length - TREND_CAP)
+    }
+  }
+}
+
+const TREND_COLORS = ['#4f8ef7', '#2eaf64', '#e0912f', '#c85454', '#8f63d2', '#2fa8a8', '#d27ab0', '#7a8494']
 
 function sessionCwd(props) {
   if (props && props.scope && props.scope.cwd) return props.scope.cwd
@@ -2427,6 +2677,15 @@ function sessionCwd(props) {
 
 function healthReady(health) {
   return !!(health && health.python && health.python.bound && health.python.exists)
+}
+
+const displayValue = (rec, point) => {
+  if (!rec || rec.value === null || rec.value === undefined) return '—'
+  if (rec.ok === false && rec.error) return rec.error
+  let shown = rec.value
+  if (typeof shown === 'number' && point) shown = decodeValue(point, shown)
+  const text = typeof shown === 'boolean' ? (shown ? '1' : '0') : String(shown)
+  return point && point.unit ? text + ' ' + point.unit : text
 }
 
 function getBetterSidebar(ctx) {
@@ -2467,6 +2726,7 @@ function createLiveView(React, t, post, hooks) {
             if (data && data.health) setHealth(data.health)
             const next = data && data.workspace && data.workspace.modbus
             if (next) setModbus(next)
+            if (next) sampleTrend(cwd, next)
             const polling = (next && next.polling) || {}
             const enabled = polling.enabled === true
             const interval = Number(polling.intervalMs) > 0 ? Number(polling.intervalMs) : 1000
@@ -2526,14 +2786,16 @@ function createLiveView(React, t, post, hooks) {
         if (item && item.key) valueMap[item.key] = item
       }
       for (const point of expandPoints(device.segments)) {
+        const rec = valueMap[point.key]
         rows.push({
           key: (device.id || 'd') + ':' + point.key,
           name: (device.name || '') + ' / ' + point.name,
-          rec: valueMap[point.key],
+          shown: displayValue(rec, point),
+          ok: !rec || rec.ok !== false,
+          writable: isWritableFunction(point.function),
           deviceId: device.id,
           fn: point.function,
           address: point.address,
-          writable: isWritableFunction(point.function),
         })
       }
     }
@@ -2603,14 +2865,13 @@ function createLiveView(React, t, post, hooks) {
       tickError ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, tickError) : null,
       rows.length
         ? el('div', { className: 'dvb-live-list' }, rows.map((row) => {
-          const rec = row.rec
           return el('div', {
             key: row.key,
             className: 'dvb-live-row',
-            'data-ok': rec ? (rec.ok ? 'true' : 'false') : '',
+            'data-ok': row.ok ? 'true' : 'false',
           },
             el('span', { className: 'dvb-live-name', title: row.name }, row.name),
-            el('span', { className: 'dvb-val' }, rec && rec.ok === false && rec.error ? rec.error : formatPointValue(rec)),
+            el('span', { className: 'dvb-val' }, row.shown),
             row.writable
               ? el('button', {
                 type: 'button',
@@ -2682,8 +2943,153 @@ function createSoonPage(React, t, titleKey, bodyKey) {
   }
 }
 
-function registerLive(ctx, React, t, LivePage) {
+
+
+const drawTrend = (canvas, now = Date.now()) => {
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  const w = canvas.width
+  const h = canvas.height
+  ctx.clearRect(0, 0, w, h)
+  const cutoff = now - TREND_WINDOW_MS
+  const series = []
+  for (const [, list] of TREND.series) {
+    const pts = list.filter((item) => item.t >= cutoff)
+    if (pts.length >= 2) series.push(pts)
+  }
+  ctx.strokeStyle = 'rgba(128,128,128,.25)'
+  ctx.lineWidth = 1
+  for (let g = 1; g < 4; g++) {
+    const y = (h / 4) * g
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(w, y)
+    ctx.stroke()
+  }
+  if (!series.length) return
+  let min = Infinity
+  let max = -Infinity
+  for (const pts of series) {
+    for (const item of pts) {
+      if (item.v < min) min = item.v
+      if (item.v > max) max = item.v
+    }
+  }
+  if (max === min) {
+    max += 1
+    min -= 1
+  }
+  const padY = (max - min) * 0.08
+  min -= padY
+  max += padY
+  series.forEach((pts, i) => {
+    ctx.strokeStyle = TREND_COLORS[i % TREND_COLORS.length]
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    pts.forEach((item, j) => {
+      const x = ((item.t - cutoff) / TREND_WINDOW_MS) * w
+      const y = h - ((item.v - min) / (max - min)) * h
+      if (j === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    })
+    ctx.stroke()
+  })
+}
+
+function createTrendPage(React, t) {
+  return function TrendPage() {
+    const el = React.createElement
+    const canvasRef = React.useRef(null)
+    const [, setTick] = React.useState(0)
+    React.useEffect(() => {
+      const timer = setInterval(() => setTick((n) => n + 1), 500)
+      return () => clearInterval(timer)
+    }, [])
+    React.useEffect(() => {
+      drawTrend(canvasRef.current)
+    })
+    const entries = []
+    let i = 0
+    for (const [key, list] of TREND.series) {
+      if (!list.length) continue
+      const window = list.filter((item) => item.t >= Date.now() - TREND_WINDOW_MS)
+      if (!window.length) continue
+      let min = window[0].v
+      let max = window[0].v
+      for (const item of window) {
+        if (item.v < min) min = item.v
+        if (item.v > max) max = item.v
+      }
+      entries.push({
+        key,
+        label: (TREND.meta.get(key) && TREND.meta.get(key).label) || key,
+        unit: (TREND.meta.get(key) && TREND.meta.get(key).unit) || '',
+        last: list[list.length - 1],
+        min,
+        max,
+        color: TREND_COLORS[i % TREND_COLORS.length],
+      })
+      i++
+      if (entries.length >= 8) break
+    }
+    return el('div', { className: 'dvb-live' },
+      el('div', { className: 'dvb-live-head' },
+        el('span', { className: 'dvb-live-title' }, t('liveChart')),
+        el('span', { className: 'dvb-map-meta' }, t('chartWindow'))),
+      entries.length
+        ? el('canvas', { ref: canvasRef, className: 'dvb-trend-canvas', width: 560, height: 190 })
+        : el('div', { className: 'dvb-hint' }, t('chartEmpty')),
+      entries.length
+        ? el('div', { className: 'dvb-trend-legend' }, entries.map((item) => el('div', { key: item.key, className: 'dvb-trend-row' },
+          el('span', { className: 'dvb-trend-dot', style: { background: item.color } }),
+          el('span', { className: 'dvb-trend-name', title: item.label }, item.label),
+          el('span', { className: 'dvb-val' }, String(item.last.v) + (item.unit ? ' ' + item.unit : '')),
+          el('span', { className: 'dvb-map-meta' }, 'min ' + item.min + ' · max ' + item.max))))
+        : null)
+  }
+}
+
+function createAlarmPage(React, t, post) {
+  return function AlarmPage(props) {
+    const el = React.createElement
+    const cwd = sessionCwd(props)
+    const [events, setEvents] = React.useState([])
+    React.useEffect(() => {
+      let stop = false
+      function pull() {
+        post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
+          if (stop) return
+          const timeline = data && data.journal && Array.isArray(data.journal.timeline)
+            ? data.journal.timeline
+            : []
+          setEvents(timeline.filter((item) => item.kind === 'alarm' || item.kind === 'alarm-clear'))
+        }).catch(() => { /* next tick retries */ })
+      }
+      pull()
+      const timer = setInterval(pull, 2000)
+      return () => { stop = true; clearInterval(timer) }
+    }, [cwd])
+    return el('div', { className: 'dvb-live' },
+      el('div', { className: 'dvb-live-head' },
+        el('span', { className: 'dvb-live-title' }, t('liveAlarm'))),
+      events.length
+        ? el('div', { className: 'dvb-live-list' }, events.map((item) => el('div', {
+          key: item.id,
+          className: 'dvb-task',
+          'data-ok': item.ok ? 'true' : 'false',
+        },
+          el('span', { className: 'dvb-map-meta' }, clockOf(item.at)),
+          el('span', { className: 'dvb-badge', 'data-source': item.source }, item.source),
+          el('span', { className: 'dvb-hint' }, item.summary))))
+        : el('div', { className: 'dvb-hint' }, t('alarmEmpty')))
+  }
+}
+
+function registerLive(ctx, React, t, LivePage, pages = {}) {
   const bs = ctx.betterSidebar
+  const TrendPage = pages.trend || createSoonPage(React, t, 'liveChart', 'chartSoon')
+  const AlarmPage = pages.alarm || createSoonPage(React, t, 'liveAlarm', 'alarmSoon')
   const stops = [
     bs.registerTab({
       id: TAB_TABLE,
@@ -2697,14 +3103,14 @@ function registerLive(ctx, React, t, LivePage) {
       title() { return t('liveChart') },
       single: true,
       order: 71,
-      component: createSoonPage(React, t, 'liveChart', 'chartSoon'),
+      component: TrendPage,
     }),
     bs.registerTab({
       id: TAB_ALARM,
       title() { return t('liveAlarm') },
       single: true,
       order: 72,
-      component: createSoonPage(React, t, 'liveAlarm', 'alarmSoon'),
+      component: AlarmPage,
     }),
   ]
   return function () {
@@ -2938,7 +3344,10 @@ function apply(ctx) {
       openLiveImpl = function () { openModbusTab(side) }
       openProjectImpl = function () { openProjectTab(side) }
       closeTabImpl = function (id) { closeBetterTab(side, id) }
-      const stopLive = registerLive(side, React, t, LivePage)
+      const stopLive = registerLive(side, React, t, LivePage, {
+        trend: createTrendPage(React, t),
+        alarm: createAlarmPage(React, t, post),
+      })
       const stopMap = registerMap(side, React, t, MapPage)
       side.effect(() => () => {
         if (typeof stopLive === 'function') stopLive()

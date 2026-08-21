@@ -1,4 +1,4 @@
-import { addSegment, defaultSegmentName, functionTag, isWritableFunction, normalizeWriteValues, removeSegment, writeTargetOf } from './bench-points.mjs'
+import { addSegment, csvToSegments, defaultSegmentName, functionTag, isWritableFunction, normalizeWriteValues, removeSegment, segmentsToCsv, writeTargetOf } from './bench-points.mjs'
 import { addDevice, normalizeModbus, patchActiveDevice, recipePair, removeDevice } from './bench-devices.mjs'
 import { statusKind } from './bench-settings.mjs'
 
@@ -33,6 +33,9 @@ export function createHmiView(React, t, post, openLive) {
     const [error, setError] = React.useState('')
     const [draft, setDraft] = React.useState({ name: '', function: 3, address: 0, count: 10 })
     const [writeState, setWriteState] = React.useState(null)
+    const [csvOpen, setCsvOpen] = React.useState(false)
+    const [csvText, setCsvText] = React.useState('')
+    const [csvNote, setCsvNote] = React.useState('')
     const [ports, setPorts] = React.useState([])
     const [scanning, setScanning] = React.useState(false)
     const workspaceRef = React.useRef(workspace)
@@ -144,6 +147,25 @@ export function createHmiView(React, t, post, openLive) {
     function dropRange(id) {
       const next = removeSegment(m.segments, m.values, id)
       persist({ segments: next.segments, values: next.values })
+    }
+
+    function exportCsv() {
+      navigator.clipboard.writeText(segmentsToCsv(m.segments)).then(() => {
+        setCsvNote(t('csvDone'))
+        setTimeout(() => setCsvNote(''), 1500)
+      }).catch(() => { /* clipboard unavailable */ })
+    }
+
+    function importCsv() {
+      const parsed = csvToSegments(csvText)
+      if (!parsed.ok) {
+        setError(parsed.error)
+        return
+      }
+      setError('')
+      setCsvOpen(false)
+      setCsvText('')
+      persist({ segments: parsed.segments, values: [] })
     }
 
     function readRanges(segmentId) {
@@ -438,7 +460,41 @@ export function createHmiView(React, t, post, openLive) {
             if (!watching) showLive()
           },
         }, watching ? t('liveStop') : t('liveStart')),
+        el('button', {
+          type: 'button', className: 'dvb-btn',
+          disabled: !segments.length,
+          title: t('csvReplaceHint'),
+          onClick: exportCsv,
+        }, csvNote || t('csvExport')),
+        el('button', {
+          type: 'button',
+          className: 'dvb-btn' + (csvOpen ? ' is-on' : ''),
+          disabled: !cwd,
+          onClick() { setCsvOpen((prev) => !prev) },
+        }, t('csvImport')),
         !readBusy && readBlock ? el('span', { className: 'dvb-need' }, readBlock) : null),
+      csvOpen
+        ? el('div', { className: 'dvb-write-panel' },
+          el('div', { className: 'dvb-hint' }, t('csvReplaceHint')),
+          el('textarea', {
+            className: 'dvb-input dvb-csv-area',
+            value: csvText,
+            rows: 5,
+            spellCheck: false,
+            placeholder: 'name,function,address,count,scale,offset,unit,alarmMin,alarmMax',
+            onChange(event) { setCsvText(event.target.value) },
+          }),
+          el('div', { className: 'dvb-actions' },
+            el('button', {
+              type: 'button', className: 'dvb-btn dvb-btn-primary',
+              disabled: !csvText.trim(),
+              onClick: importCsv,
+            }, t('csvApply')),
+            el('button', {
+              type: 'button', className: 'dvb-btn',
+              onClick() { setCsvOpen(false) },
+            }, t('csvCancel'))))
+        : null,
       el('div', { className: 'dvb-seg-add' },
         field(t('segmentName'), el('input', {
           className: 'dvb-input',

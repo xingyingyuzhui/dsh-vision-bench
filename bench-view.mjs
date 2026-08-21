@@ -1,4 +1,5 @@
 import { NS } from './bench-i18n.mjs'
+import { clockOf } from './bench-points.mjs'
 import { statusKind } from './bench-settings.mjs'
 
 export function formatResult(result) {
@@ -180,11 +181,6 @@ const FLASH_TARGETS = [
   'kinetis', 'efm32', 'at91samd',
 ]
 
-const clockOf = (ms) => {
-  const d = new Date(Number(ms) || Date.now())
-  const pad = (n) => String(n).padStart(2, '0')
-  return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())
-}
 
 const lineKind = (line) => {
   if (/(assert|panic|fault|hardfault|error|错误|失败|exception)/i.test(line)) return 'err'

@@ -10,7 +10,7 @@ const TASK_TYPES = {
   verify: { label: '验证' },
 }
 const TASK_TYPE_KEYS = new Set(Object.keys(TASK_TYPES))
-const SOURCES = new Set(['user', 'agent'])
+const SOURCES = new Set(['user', 'agent', 'system'])
 const STATUSES = new Set(['running', 'ok', 'error', 'cancelled'])
 
 export const taskTypeLabel = (type) => {

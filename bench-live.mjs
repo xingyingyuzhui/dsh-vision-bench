@@ -1,4 +1,4 @@
-import { expandPoints, functionTag, isWritableFunction, normalizeWriteValues, writeTargetOf } from './bench-points.mjs'
+import { clockOf, decodeValue, expandPoints, functionTag, isWritableFunction, normalizeWriteValues, writeTargetOf } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 
@@ -6,6 +6,49 @@ const TAB_TABLE = 'dsh-vision-bench:modbus'
 const TAB_CHART = 'dsh-vision-bench:charts'
 const TAB_ALARM = 'dsh-vision-bench:alarms'
 const INTERVALS = [500, 1000, 2000, 5000]
+const TREND_CAP = 600
+const TREND_WINDOW_MS = 5 * 60 * 1000
+
+const TREND = { cwd: '', series: new Map(), meta: new Map() }
+
+const trendKey = (deviceId, pointKey) => String(deviceId) + ':' + String(pointKey)
+
+const sampleTrend = (cwd, pack) => {
+  if (!cwd || TREND.cwd !== cwd) {
+    if (TREND.cwd !== cwd) {
+      TREND.cwd = cwd
+      TREND.series.clear()
+    }
+    if (!cwd) return
+  }
+  const now = Date.now()
+  const devices = Array.isArray(pack && pack.devices) ? pack.devices : []
+  for (const device of devices) {
+    const segById = {}
+    for (const seg of Array.isArray(device.segments) ? device.segments : []) segById[seg.id] = seg
+    for (const rec of Array.isArray(device.values) ? device.values : []) {
+      if (!rec || !rec.key || rec.ok !== true || rec.value === null || rec.value === undefined) continue
+      const seg = segById[rec.segmentId]
+      const v = typeof rec.value === 'boolean' ? (rec.value ? 1 : 0) : Number(rec.value)
+      if (!Number.isFinite(v)) continue
+      const shown = seg ? decodeValue(seg, v) : v
+      const key = trendKey(device.id, rec.key)
+      TREND.meta.set(key, {
+        label: (device.name ? device.name + ' / ' : '') + (rec.name || key),
+        unit: seg ? seg.unit : '',
+      })
+      let list = TREND.series.get(key)
+      if (!list) {
+        list = []
+        TREND.series.set(key, list)
+      }
+      list.push({ t: now, v: Number(shown) })
+      if (list.length > TREND_CAP) list.splice(0, list.length - TREND_CAP)
+    }
+  }
+}
+
+const TREND_COLORS = ['#4f8ef7', '#2eaf64', '#e0912f', '#c85454', '#8f63d2', '#2fa8a8', '#d27ab0', '#7a8494']
 
 export function sessionCwd(props) {
   if (props && props.scope && props.scope.cwd) return props.scope.cwd
@@ -21,6 +64,15 @@ export function sessionCwd(props) {
 
 function healthReady(health) {
   return !!(health && health.python && health.python.bound && health.python.exists)
+}
+
+const displayValue = (rec, point) => {
+  if (!rec || rec.value === null || rec.value === undefined) return '—'
+  if (rec.ok === false && rec.error) return rec.error
+  let shown = rec.value
+  if (typeof shown === 'number' && point) shown = decodeValue(point, shown)
+  const text = typeof shown === 'boolean' ? (shown ? '1' : '0') : String(shown)
+  return point && point.unit ? text + ' ' + point.unit : text
 }
 
 export function getBetterSidebar(ctx) {
@@ -61,6 +113,7 @@ export function createLiveView(React, t, post, hooks) {
             if (data && data.health) setHealth(data.health)
             const next = data && data.workspace && data.workspace.modbus
             if (next) setModbus(next)
+            if (next) sampleTrend(cwd, next)
             const polling = (next && next.polling) || {}
             const enabled = polling.enabled === true
             const interval = Number(polling.intervalMs) > 0 ? Number(polling.intervalMs) : 1000
@@ -120,14 +173,16 @@ export function createLiveView(React, t, post, hooks) {
         if (item && item.key) valueMap[item.key] = item
       }
       for (const point of expandPoints(device.segments)) {
+        const rec = valueMap[point.key]
         rows.push({
           key: (device.id || 'd') + ':' + point.key,
           name: (device.name || '') + ' / ' + point.name,
-          rec: valueMap[point.key],
+          shown: displayValue(rec, point),
+          ok: !rec || rec.ok !== false,
+          writable: isWritableFunction(point.function),
           deviceId: device.id,
           fn: point.function,
           address: point.address,
-          writable: isWritableFunction(point.function),
         })
       }
     }
@@ -197,14 +252,13 @@ export function createLiveView(React, t, post, hooks) {
       tickError ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, tickError) : null,
       rows.length
         ? el('div', { className: 'dvb-live-list' }, rows.map((row) => {
-          const rec = row.rec
           return el('div', {
             key: row.key,
             className: 'dvb-live-row',
-            'data-ok': rec ? (rec.ok ? 'true' : 'false') : '',
+            'data-ok': row.ok ? 'true' : 'false',
           },
             el('span', { className: 'dvb-live-name', title: row.name }, row.name),
-            el('span', { className: 'dvb-val' }, rec && rec.ok === false && rec.error ? rec.error : formatPointValue(rec)),
+            el('span', { className: 'dvb-val' }, row.shown),
             row.writable
               ? el('button', {
                 type: 'button',
@@ -276,8 +330,153 @@ function createSoonPage(React, t, titleKey, bodyKey) {
   }
 }
 
-export function registerLive(ctx, React, t, LivePage) {
+
+
+export const drawTrend = (canvas, now = Date.now()) => {
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  const w = canvas.width
+  const h = canvas.height
+  ctx.clearRect(0, 0, w, h)
+  const cutoff = now - TREND_WINDOW_MS
+  const series = []
+  for (const [, list] of TREND.series) {
+    const pts = list.filter((item) => item.t >= cutoff)
+    if (pts.length >= 2) series.push(pts)
+  }
+  ctx.strokeStyle = 'rgba(128,128,128,.25)'
+  ctx.lineWidth = 1
+  for (let g = 1; g < 4; g++) {
+    const y = (h / 4) * g
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(w, y)
+    ctx.stroke()
+  }
+  if (!series.length) return
+  let min = Infinity
+  let max = -Infinity
+  for (const pts of series) {
+    for (const item of pts) {
+      if (item.v < min) min = item.v
+      if (item.v > max) max = item.v
+    }
+  }
+  if (max === min) {
+    max += 1
+    min -= 1
+  }
+  const padY = (max - min) * 0.08
+  min -= padY
+  max += padY
+  series.forEach((pts, i) => {
+    ctx.strokeStyle = TREND_COLORS[i % TREND_COLORS.length]
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    pts.forEach((item, j) => {
+      const x = ((item.t - cutoff) / TREND_WINDOW_MS) * w
+      const y = h - ((item.v - min) / (max - min)) * h
+      if (j === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    })
+    ctx.stroke()
+  })
+}
+
+export function createTrendPage(React, t) {
+  return function TrendPage() {
+    const el = React.createElement
+    const canvasRef = React.useRef(null)
+    const [, setTick] = React.useState(0)
+    React.useEffect(() => {
+      const timer = setInterval(() => setTick((n) => n + 1), 500)
+      return () => clearInterval(timer)
+    }, [])
+    React.useEffect(() => {
+      drawTrend(canvasRef.current)
+    })
+    const entries = []
+    let i = 0
+    for (const [key, list] of TREND.series) {
+      if (!list.length) continue
+      const window = list.filter((item) => item.t >= Date.now() - TREND_WINDOW_MS)
+      if (!window.length) continue
+      let min = window[0].v
+      let max = window[0].v
+      for (const item of window) {
+        if (item.v < min) min = item.v
+        if (item.v > max) max = item.v
+      }
+      entries.push({
+        key,
+        label: (TREND.meta.get(key) && TREND.meta.get(key).label) || key,
+        unit: (TREND.meta.get(key) && TREND.meta.get(key).unit) || '',
+        last: list[list.length - 1],
+        min,
+        max,
+        color: TREND_COLORS[i % TREND_COLORS.length],
+      })
+      i++
+      if (entries.length >= 8) break
+    }
+    return el('div', { className: 'dvb-live' },
+      el('div', { className: 'dvb-live-head' },
+        el('span', { className: 'dvb-live-title' }, t('liveChart')),
+        el('span', { className: 'dvb-map-meta' }, t('chartWindow'))),
+      entries.length
+        ? el('canvas', { ref: canvasRef, className: 'dvb-trend-canvas', width: 560, height: 190 })
+        : el('div', { className: 'dvb-hint' }, t('chartEmpty')),
+      entries.length
+        ? el('div', { className: 'dvb-trend-legend' }, entries.map((item) => el('div', { key: item.key, className: 'dvb-trend-row' },
+          el('span', { className: 'dvb-trend-dot', style: { background: item.color } }),
+          el('span', { className: 'dvb-trend-name', title: item.label }, item.label),
+          el('span', { className: 'dvb-val' }, String(item.last.v) + (item.unit ? ' ' + item.unit : '')),
+          el('span', { className: 'dvb-map-meta' }, 'min ' + item.min + ' · max ' + item.max))))
+        : null)
+  }
+}
+
+export function createAlarmPage(React, t, post) {
+  return function AlarmPage(props) {
+    const el = React.createElement
+    const cwd = sessionCwd(props)
+    const [events, setEvents] = React.useState([])
+    React.useEffect(() => {
+      let stop = false
+      function pull() {
+        post('/dsh-vision-bench/state', { cwd: cwd || '' }).then((data) => {
+          if (stop) return
+          const timeline = data && data.journal && Array.isArray(data.journal.timeline)
+            ? data.journal.timeline
+            : []
+          setEvents(timeline.filter((item) => item.kind === 'alarm' || item.kind === 'alarm-clear'))
+        }).catch(() => { /* next tick retries */ })
+      }
+      pull()
+      const timer = setInterval(pull, 2000)
+      return () => { stop = true; clearInterval(timer) }
+    }, [cwd])
+    return el('div', { className: 'dvb-live' },
+      el('div', { className: 'dvb-live-head' },
+        el('span', { className: 'dvb-live-title' }, t('liveAlarm'))),
+      events.length
+        ? el('div', { className: 'dvb-live-list' }, events.map((item) => el('div', {
+          key: item.id,
+          className: 'dvb-task',
+          'data-ok': item.ok ? 'true' : 'false',
+        },
+          el('span', { className: 'dvb-map-meta' }, clockOf(item.at)),
+          el('span', { className: 'dvb-badge', 'data-source': item.source }, item.source),
+          el('span', { className: 'dvb-hint' }, item.summary))))
+        : el('div', { className: 'dvb-hint' }, t('alarmEmpty')))
+  }
+}
+
+export function registerLive(ctx, React, t, LivePage, pages = {}) {
   const bs = ctx.betterSidebar
+  const TrendPage = pages.trend || createSoonPage(React, t, 'liveChart', 'chartSoon')
+  const AlarmPage = pages.alarm || createSoonPage(React, t, 'liveAlarm', 'alarmSoon')
   const stops = [
     bs.registerTab({
       id: TAB_TABLE,
@@ -291,14 +490,14 @@ export function registerLive(ctx, React, t, LivePage) {
       title() { return t('liveChart') },
       single: true,
       order: 71,
-      component: createSoonPage(React, t, 'liveChart', 'chartSoon'),
+      component: TrendPage,
     }),
     bs.registerTab({
       id: TAB_ALARM,
       title() { return t('liveAlarm') },
       single: true,
       order: 72,
-      component: createSoonPage(React, t, 'liveAlarm', 'alarmSoon'),
+      component: AlarmPage,
     }),
   ]
   return function () {

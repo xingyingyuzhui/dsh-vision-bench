@@ -2,7 +2,7 @@ import { COPY, NS, interpolate, tWith } from './bench-i18n.mjs'
 import { ATTR, CSS } from './bench-styles.mjs'
 import { createSettingsPage, registerSettings } from './bench-settings.mjs'
 import { createHmiView } from './bench-hmi.mjs'
-import { closeBetterTab, createLiveView, openModbusTab, registerLive } from './bench-live.mjs'
+import { closeBetterTab, createAlarmPage, createLiveView, createTrendPage, openModbusTab, registerLive } from './bench-live.mjs'
 import { createMapView, openProjectTab, registerMap } from './bench-map.mjs'
 import { createDebugView, registerView } from './bench-view.mjs'
 
@@ -66,7 +66,10 @@ export function apply(ctx) {
       openLiveImpl = function () { openModbusTab(side) }
       openProjectImpl = function () { openProjectTab(side) }
       closeTabImpl = function (id) { closeBetterTab(side, id) }
-      const stopLive = registerLive(side, React, t, LivePage)
+      const stopLive = registerLive(side, React, t, LivePage, {
+        trend: createTrendPage(React, t),
+        alarm: createAlarmPage(React, t, post),
+      })
       const stopMap = registerMap(side, React, t, MapPage)
       side.effect(() => () => {
         if (typeof stopLive === 'function') stopLive()
