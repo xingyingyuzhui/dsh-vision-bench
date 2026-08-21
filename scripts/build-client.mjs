@@ -11,15 +11,62 @@ function stripModule(src) {
 }
 
 function assertUniqueBindings(stripped, file) {
-  const re = /^(?:async\s+)?(?:function\*?|class|const|let|var)\s+([A-Za-z_$][\w$]*)/gm
+  // Split a declarator list on TOP-LEVEL commas only — commas inside arrow
+  // params or object literals are not separators.
+  const splitTop = (text) => {
+    const out = []
+    let depth = 0
+    let cur = ''
+    let quote = null
+    for (const ch of text) {
+      if (quote) {
+        cur += ch
+        if (ch === quote) quote = null
+        continue
+      }
+      if (ch === "'" || ch === '"' || ch === '`') {
+        quote = ch
+        cur += ch
+        continue
+      }
+      if ('([{'.includes(ch)) depth += 1
+      if (')]}'.includes(ch)) depth -= 1
+      if (ch === ',' && depth === 0) {
+        out.push(cur)
+        cur = ''
+        continue
+      }
+      cur += ch
+    }
+    out.push(cur)
+    return out
+  }
+
+  // Top-level declarations, including destructures and comma declarators.
+  const re = /^(?:async\s+)?(?:function\*?|class)\s+([A-Za-z_$][\w$]*)|^(?:const|let|var)\s+([^;\n]+);?/gm
   let match
   while ((match = re.exec(stripped))) {
-    const name = match[1]
-    const prev = seen.get(name)
-    if (prev) {
-      throw new Error('duplicate binding "' + name + '" in ' + file + ' (already in ' + prev + '); strip-concat is one factory scope')
+    const names = match[2]
+      ? splitTop(match[2]).map((part) => {
+        const decl = part.trim()
+        const fnLike = decl.match(/^([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\(|function)/)
+        if (fnLike) return fnLike[1]
+        const destructure = decl.match(/^(?:\{([^}]*)\}|\[([^\]]*)\])\s*=/)
+        if (destructure) {
+          return (destructure[1] || destructure[2])
+            .split(',').map((piece) => piece.trim().split(':')[0].trim())
+        }
+        const simple = decl.match(/^([A-Za-z_$][\w$]*)\s*=|^([A-Za-z_$][\w$]*)$/)
+        return simple ? (simple[1] || simple[2]) : []
+      }).flat()
+      : [match[1]]
+    for (const name of names.filter(Boolean)) {
+      const prev = seen.get(name)
+      if (prev) {
+        throw new Error('duplicate binding "' + name + '" in ' + file + ' (already in ' + prev + '); strip-concat is one factory scope')
+      }
+      seen.set(name, file)
     }
-    seen.set(name, file)
   }
 }
 
