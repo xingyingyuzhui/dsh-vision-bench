@@ -26,6 +26,8 @@ import {
 import { activeDevice, normalizeModbus } from './bench-devices.mjs'
 import { runPythonScript } from './bench-run.mjs'
 import { serialDevicePath } from './bench-serial.mjs'
+import { isPortBusy, withPortLock } from './bench-portlock.mjs'
+import { findMonitoredPort } from './bench-serial-monitor.mjs'
 import { notifyBenchEvent } from './bench-notify.mjs'
 
 const needPython = (bindings) => {
@@ -283,11 +285,38 @@ const connectionArgs = (m) => {
   return { args }
 }
 
-const runSegment = (python, conn, segment, cwd, timeoutMs, signal) => runPythonScript(python, 'modbus_read.py', conn.concat([
+const MONITOR_BUSY_MSG = '串口正被日志监视占用，请先在调试页关闭串口日志；要看总线报文可改用第二个只听适配器接另一个 COM'
+
+// Every pymodbus spawn goes through here: RTU ports are exclusive on Windows,
+// so transactions queue on a per-port lock and refuse while the log monitor
+// holds the same COM.
+const runModbusScript = (python, scriptName, args, port, opts) => {
+  if (port) {
+    if (findMonitoredPort(port)) {
+      return Promise.resolve({ ok: false, error: MONITOR_BUSY_MSG })
+    }
+    return withPortLock(port, () => runPythonScript(python, scriptName, args, opts))
+  }
+  return runPythonScript(python, scriptName, args, opts)
+}
+
+const framesOf = (ran) => {
+  const details = ran && ran.result && ran.result.details
+  const frames = details && typeof details.frames === 'object' ? details.frames : null
+  if (!frames) return null
+  return {
+    request: typeof frames.request === 'string' ? frames.request.slice(0, 200) : '',
+    response: typeof frames.response === 'string' ? frames.response.slice(0, 200) : '',
+    trace: Array.isArray(frames.trace) ? frames.trace.map((line) => String(line).slice(0, 200)).slice(0, 8) : [],
+  }
+}
+
+const runSegment = (python, conn, segment, cwd, timeoutMs, signal, port) => runModbusScript(python, 'modbus_read.py', conn.concat([
   '--function', String(segment.function),
   '--address', String(segment.address),
   '--count', String(segment.count),
-]), { cwd, timeoutMs: timeoutMs || 20000, signal })
+  '--debug',
+]), port, { cwd, timeoutMs: timeoutMs || 20000, signal })
 
 const readSegmentsSim = (m, list) => {
   const at = Date.now()
@@ -308,12 +337,15 @@ const readSegments = async (python, m, list, cwd, timeoutMs, signal) => {
   let values = m.values || []
   let okCount = 0
   let lastError = ''
+  let lastFrames = null
   const results = []
+  const port = m.mode === 'rtu' ? m.port : ''
   for (const segment of list) {
     if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消', values, okCount, results }
-    const ran = await runSegment(python, conn.args, segment, cwd, timeoutMs, signal)
+    const ran = await runSegment(python, conn.args, segment, cwd, timeoutMs, signal, port)
     if (ran.cancelled) return { ok: false, cancelled: true, error: '已取消', values, okCount, results }
     values = applySegmentRead(values, segment, ran)
+    lastFrames = framesOf(ran) || lastFrames
     results.push({
       segmentId: segment.id,
       ok: !!ran.ok,
@@ -328,6 +360,7 @@ const readSegments = async (python, m, list, cwd, timeoutMs, signal) => {
     values,
     okCount,
     results,
+    frames: lastFrames,
     error: lastError,
   }
 }
@@ -383,7 +416,7 @@ export const modbusRead = async (home, cwd, body, opts) => {
       : ('读取 ' + ran.okCount + '/' + list.length + ' 段成功' + (ran.error ? '：' + ran.error : '')))
     const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
     const devices = latest.devices.map((item) => item.id === m.id ? { ...item, values: ran.values } : item)
-    finishTask(home, room.cwd, task.id, { ok: ran.ok, summary, modbus: { devices, activeId: latest.activeId } })
+    finishTask(home, room.cwd, task.id, { ok: ran.ok, summary, frames: ran.frames || null, modbus: { devices, activeId: latest.activeId } })
     return {
       ok: ran.ok,
       taskId: task.id,
@@ -418,6 +451,7 @@ export const modbusRead = async (home, cwd, body, opts) => {
     '--function', String(m.function),
     '--address', String(m.address),
     '--count', String(m.count),
+    '--debug',
   ])
   const task = openTask(home, room.cwd, {
     type: 'read',
@@ -425,7 +459,7 @@ export const modbusRead = async (home, cwd, body, opts) => {
     sessionId: origin.sessionId,
     summary: 'Modbus 读 f' + m.function + '@' + m.address,
   })
-  const ran = await runPythonScript(bindings.python, 'modbus_read.py', args, {
+  const ran = await runModbusScript(bindings.python, 'modbus_read.py', args, m.mode === 'rtu' ? m.port : '', {
     cwd: room.cwd,
     timeoutMs: 20000,
     signal,
@@ -438,7 +472,7 @@ export const modbusRead = async (home, cwd, body, opts) => {
   const summary = ran.ok
     ? ('Modbus 读 f' + m.function + '@' + m.address + ' = ' + JSON.stringify(value))
     : ('Modbus 读失败 ' + (ran.error || ''))
-  finishTask(home, room.cwd, task.id, { ok: !!ran.ok, summary })
+  finishTask(home, room.cwd, task.id, { ok: !!ran.ok, summary, frames: framesOf(ran) })
   return { ...ran, taskId: task.id, source: origin.source }
 }
 
@@ -590,6 +624,7 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     finishTask(home, room.cwd, task.id, {
       ok,
       summary,
+      frames: extra.frames || null,
       modbus: { devices, activeId: latest.activeId },
     })
     return {
@@ -602,6 +637,7 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       before,
       target: check.values,
       readback: extra.readback || [],
+      frames: extra.frames || null,
       simulated: !!extra.simulated,
       ...(ok ? {} : { error: summary }),
     }
@@ -620,19 +656,21 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     return done(true, label + '（本地生效）', { devices, simulated: m.sim === true, readback: check.values.slice() })
   }
 
-  const ran = await runPythonScript(bindings.python, 'modbus_write.py', conn.args.concat([
+  const writePort = m.mode === 'rtu' ? m.port : ''
+  const ran = await runModbusScript(bindings.python, 'modbus_write.py', conn.args.concat([
     '--function', String(check.fc),
     '--address', String(address),
     '--values', check.values.join(','),
-  ]), { cwd: room.cwd, timeoutMs: 20000, signal })
+    '--debug',
+  ]), writePort, { cwd: room.cwd, timeoutMs: 20000, signal })
   if (ran.cancelled) {
     finishTask(home, room.cwd, task.id, { cancelled: true, summary: '写入已取消' })
     return { ok: false, cancelled: true, taskId: task.id, source: origin.source, error: '已取消' }
   }
   if (!ran.ok) {
-    return done(false, '写入失败 ' + (ran.error || ''))
+    return done(false, '写入失败 ' + (ran.error || ''), { frames: framesOf(ran) })
   }
-  const readbackRan = await runSegment(bindings.python, conn, { id: 'write-back', function: fn, address, count }, room.cwd, 20000, signal)
+  const readbackRan = await runSegment(bindings.python, conn, { id: 'write-back', function: fn, address, count }, room.cwd, 20000, signal, writePort)
   const raw = readbackRan.ok && readbackRan.result && readbackRan.result.details && Array.isArray(readbackRan.result.details.raw)
     ? readbackRan.result.details.raw.slice(0, count)
     : []
@@ -647,7 +685,11 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   const summary = label + (readbackOk
     ? (mismatch ? '，回读不一致：' + JSON.stringify(raw) : '，回读一致')
     : ('，回读失败 ' + (readbackRan.error || '')))
-  return done(readbackOk && !mismatch, summary, { devices, readback: readbackOk ? raw : [] })
+  return done(readbackOk && !mismatch, summary, {
+    devices,
+    readback: readbackOk ? raw : [],
+    frames: framesOf(ran) || framesOf(readbackRan),
+  })
 }
 
 const deviceAlarms = (device, values) => {

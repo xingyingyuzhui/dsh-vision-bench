@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -18,6 +19,79 @@ def output_json(data: dict) -> None:
 
 def error_result(code: str, message: str) -> dict:
     return {"status": "error", "action": "read", "error": {"code": code, "message": message}}
+
+
+def translate_serial_error(exc: Exception) -> dict | None:
+    """Map Windows/POSIX port-busy errors to an actionable message."""
+    text = str(exc)
+    lowered = text.lower()
+    if (
+        "permissionerror(13" in lowered.replace(" ", "")
+        or "access is denied" in lowered
+        or "拒绝访问" in text
+        or "could not open port" in lowered
+        or "device or resource busy" in lowered
+    ):
+        return error_result(
+            "port_busy",
+            "串口被其他程序占用（可能：本插件的串口日志监视、其他串口助手未关闭）。请释放该 COM 口后重试",
+        )
+    return None
+
+
+class FrameCapture(logging.Handler):
+    """Capture pymodbus DEBUG traffic lines so tasks can show raw frames."""
+
+    MARKERS = ("send", "recv", "=>", "<=", " tx", " rx")
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.DEBUG)
+        self.lines: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            text = record.getMessage()
+        except Exception:
+            return
+        lowered = text.lower()
+        # pymodbus >=3.9 logs wire frames as "Processing: 0x.." and decodes
+        # replies as "decoded PDU .."; older versions used SEND/RECV.
+        if (
+            "processing:" in lowered
+            or "decoded pdu" in lowered
+            or any(m in lowered for m in self.MARKERS)
+        ):
+            self.lines.append(text[-200:])
+            self.lines = self.lines[-8:]
+
+    def frames(self) -> dict:
+        request = ""
+        response = ""
+        for line in self.lines:
+            lowered = line.lower()
+            if "processing:" in lowered:
+                request = line
+            elif "decoded pdu" in lowered:
+                response = line
+        if not request:
+            for line in self.lines:
+                if any(m in line.lower() for m in ("send", "=>", " tx")):
+                    request = line
+                    break
+        if not response:
+            for line in reversed(self.lines):
+                if any(m in line.lower() for m in ("recv", "<=", " rx")):
+                    response = line
+                    break
+        return {"request": request, "response": response, "trace": list(self.lines)}
+
+
+def attach_frame_capture() -> FrameCapture | None:
+    capture = FrameCapture()
+    logger = logging.getLogger("pymodbus")
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(capture)
+    return capture
 
 
 def call_read(client, function: int, address: int, count: int, slave: int):
@@ -55,8 +129,11 @@ def main() -> int:
     parser.add_argument("--address", type=int, required=True)
     parser.add_argument("--count", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=1.0)
+    parser.add_argument("--debug", action="store_true", help="capture raw frames into details.frames")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
+
+    capture = attach_frame_capture() if args.debug else None
 
     try:
         from pymodbus.client import ModbusSerialClient, ModbusTcpClient
@@ -93,22 +170,26 @@ def main() -> int:
         else:
             raw = list(getattr(response, "registers", []) or [])[: args.count]
         value = raw[0] if len(raw) == 1 else raw
+        details = {
+            "slave": args.slave,
+            "function": args.function,
+            "address": args.address,
+            "count": args.count,
+            "raw": raw,
+            "value": value,
+        }
+        if capture is not None:
+            details["frames"] = capture.frames()
         output_json({
             "status": "ok",
             "action": "read",
             "summary": f"读取 f{args.function}@{args.address} 成功",
-            "details": {
-                "slave": args.slave,
-                "function": args.function,
-                "address": args.address,
-                "count": args.count,
-                "raw": raw,
-                "value": value,
-            },
+            "details": details,
         })
         return 0
     except Exception as exc:
-        output_json(error_result("modbus_exception", str(exc)))
+        busy = translate_serial_error(exc)
+        output_json(busy or error_result("modbus_exception", str(exc)))
         return 1
     finally:
         close = getattr(client, "close", None)

@@ -74,6 +74,17 @@ export const normalizeOrigin = (input) => ({
   sessionId: text(input && input.sessionId, ''),
 })
 
+const normalizeFrames = (input) => {
+  if (!input || typeof input !== 'object') return null
+  const trace = Array.isArray(input.trace)
+    ? input.trace.map((line) => text(line, '').slice(0, 200)).filter(Boolean).slice(0, 8)
+    : []
+  const request = text(input.request, '').slice(0, 200)
+  const response = text(input.response, '').slice(0, 200)
+  if (!trace.length && !request && !response) return null
+  return { request, response, trace }
+}
+
 export const normalizeTask = (input) => {
   const startedAt = Number(input && input.startedAt)
   const endedAt = Number(input && input.endedAt)
@@ -92,6 +103,7 @@ export const normalizeTask = (input) => {
     phase: text(input && input.phase, '').slice(0, 32),
     stage: text(input && input.stage, '').slice(0, 32),
     progress: Number.isFinite(progress) && progress >= 0 && progress <= 100 ? Math.trunc(progress) : null,
+    frames: normalizeFrames(input && input.frames),
     errors: Array.isArray(input && input.errors)
       ? input.errors.map((item) => String(item || '').slice(0, 240)).filter(Boolean).slice(0, 8)
       : [],
@@ -141,6 +153,7 @@ export const compactTasks = (tasks) =>
     phase: item.phase || '',
     stage: item.stage || '',
     progress: item.progress === null || item.progress === undefined ? null : item.progress,
+    frames: item.frames || null,
     errors: Array.isArray(item.errors) ? item.errors : [],
   }))
 

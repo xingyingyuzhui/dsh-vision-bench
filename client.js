@@ -601,6 +601,7 @@ const CSS = [
   'body[' + ATTR + '] .dvb-trend-row{display:flex;gap:8px;align-items:baseline;font-size:12px;line-height:1.5}',
   'body[' + ATTR + '] .dvb-trend-dot{width:8px;height:8px;border-radius:999px;flex:none;align-self:center}',
   'body[' + ATTR + '] .dvb-trend-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.78}',
+  'body[' + ATTR + '] .dvb-frames{flex-basis:100%;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:1.5;opacity:.72;word-break:break-all}',
   'body[' + ATTR + '] .dvb-map-meta{font-size:11px;opacity:.55}',
   'body[' + ATTR + '] .dvb-map-block{display:flex;flex-direction:column;gap:3px;margin:4px 0}',
   'body[' + ATTR + '] .dvb-map-label{font-size:11px;font-weight:600;opacity:.7}',
@@ -1439,7 +1440,12 @@ function journalPanel(el, t, journal) {
       el('span', {
         className: 'dvb-hint',
         title: [item.logFile, item.phase].concat(Array.isArray(item.errors) ? item.errors : []).filter(Boolean).join('\n'),
-      }, item.summary || (item.errors && item.errors[0]) || ''))),
+      }, item.summary || (item.errors && item.errors[0]) || ''),
+      item.frames && (item.frames.request || item.frames.response)
+        ? el('div', { className: 'dvb-frames', title: (item.frames.trace || []).join('\n') },
+          item.frames.request ? el('div', null, '→ ' + item.frames.request) : null,
+          item.frames.response ? el('div', null, '← ' + item.frames.response) : null)
+        : null)),
     timeline.length ? el('div', { className: 'dvb-journal-title' }, t('timeline')) : null,
     timeline.slice(0, 8).map((item) => el('div', {
       key: item.id,

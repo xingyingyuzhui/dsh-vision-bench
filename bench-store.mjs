@@ -260,6 +260,7 @@ export const finishTask = (home, cwd, taskId, patch) => {
       phase: patch && patch.phase !== undefined ? patch.phase : item.phase,
       stage: patch && patch.stage !== undefined ? patch.stage : item.stage,
       progress: patch && patch.progress !== undefined ? patch.progress : item.progress,
+      frames: patch && patch.frames !== undefined ? patch.frames : item.frames,
       errors: patch && patch.errors !== undefined ? patch.errors : item.errors,
     })
   })

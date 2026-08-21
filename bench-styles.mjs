@@ -120,6 +120,7 @@ export const CSS = [
   'body[' + ATTR + '] .dvb-trend-row{display:flex;gap:8px;align-items:baseline;font-size:12px;line-height:1.5}',
   'body[' + ATTR + '] .dvb-trend-dot{width:8px;height:8px;border-radius:999px;flex:none;align-self:center}',
   'body[' + ATTR + '] .dvb-trend-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.78}',
+  'body[' + ATTR + '] .dvb-frames{flex-basis:100%;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:1.5;opacity:.72;word-break:break-all}',
   'body[' + ATTR + '] .dvb-map-meta{font-size:11px;opacity:.55}',
   'body[' + ATTR + '] .dvb-map-block{display:flex;flex-direction:column;gap:3px;margin:4px 0}',
   'body[' + ATTR + '] .dvb-map-label{font-size:11px;font-weight:600;opacity:.7}',

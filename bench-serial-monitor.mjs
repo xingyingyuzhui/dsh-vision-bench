@@ -1,17 +1,31 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { _internal as runInternal } from './bench-run.mjs'
+import { isPortBusy, portKey } from './bench-portlock.mjs'
 
 const MONITOR_SCRIPT = join(runInternal.RUNTIME_DIR, 'serial_monitor.py')
 const MAX_LINES = 2000
 
 const monitors = new Map()
 
+export const findMonitoredPort = (port) => {
+  const want = portKey(port)
+  if (!want) return null
+  for (const [cwd, state] of monitors) {
+    if (state.closed) continue
+    if (portKey(state.port) === want) return { cwd, port: state.port }
+  }
+  return null
+}
+
 export const openSerialMonitor = (pythonBin, cwd, opts) => {
   if (!pythonBin) return { ok: false, error: '请先在设置 → 台架 绑定 Python' }
   const port = String((opts && opts.port) || '').trim()
   const baudrate = Number(opts && opts.baudrate) > 0 ? Number(opts.baudrate) : 115200
   if (!port) return { ok: false, error: '缺少串口' }
+  if (isPortBusy(port)) {
+    return { ok: false, error: '总线忙：该串口有 Modbus 事务正在执行，请稍后再打开日志监视' }
+  }
   closeSerialMonitor(cwd)
   let child
   try {

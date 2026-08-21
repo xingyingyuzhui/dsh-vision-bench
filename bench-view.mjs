@@ -149,7 +149,12 @@ function journalPanel(el, t, journal) {
       el('span', {
         className: 'dvb-hint',
         title: [item.logFile, item.phase].concat(Array.isArray(item.errors) ? item.errors : []).filter(Boolean).join('\n'),
-      }, item.summary || (item.errors && item.errors[0]) || ''))),
+      }, item.summary || (item.errors && item.errors[0]) || ''),
+      item.frames && (item.frames.request || item.frames.response)
+        ? el('div', { className: 'dvb-frames', title: (item.frames.trace || []).join('\n') },
+          item.frames.request ? el('div', null, '→ ' + item.frames.request) : null,
+          item.frames.response ? el('div', null, '← ' + item.frames.response) : null)
+        : null)),
     timeline.length ? el('div', { className: 'dvb-journal-title' }, t('timeline')) : null,
     timeline.slice(0, 8).map((item) => el('div', {
       key: item.id,
