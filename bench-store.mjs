@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { emptyLog, mergeLog, normalizeEvent } from './bench-prompt.mjs'
@@ -236,7 +236,8 @@ export const finishTask = (home, cwd, taskId, patch) => {
     })
   })
   const current = tasks.find((item) => item.id === taskId)
-  const action = current && current.type === 'read' ? 'read' : 'build'
+  const type = current && current.type
+  const action = type === 'build' || type === 'read' || type === 'write' ? type : 'task'
   const event = normalizeTimelineEvent({
     kind: (current && current.type || 'task') + '-end',
     source: current && current.source,
@@ -263,3 +264,68 @@ export const journalView = (workspace) => ({
   running: compactTasks(runningTasks(workspace && workspace.tasks)),
   timeline: compactTimeline(workspace && workspace.timeline),
 })
+
+export const sweepStaleTasks = (home) => {
+  const dir = join(storeDir(home), 'workspaces')
+  let files = []
+  try {
+    files = readdirSync(dir)
+  } catch {
+    return { ok: true, swept: 0 }
+  }
+  let swept = 0
+  for (const file of files) {
+    if (!file.endsWith('.json')) continue
+    const path = join(dir, file)
+    try {
+      const workspace = normalizeWorkspace(JSON.parse(readFileSync(path, 'utf8')))
+      const stale = (workspace.tasks || []).filter((item) => item.status === 'running')
+      if (!stale.length) continue
+      const now = Date.now()
+      const tasks = workspace.tasks.map((item) => item.status === 'running'
+        ? normalizeTask({
+          ...item,
+          status: 'error',
+          endedAt: now,
+          summary: (item.summary || item.type + ' 任务') + '（上次运行中断）',
+        })
+        : item)
+      const timeline = prepend(workspace.timeline, normalizeTimelineEvent({
+        kind: 'sweep',
+        source: 'system',
+        ok: false,
+        summary: '启动清扫：' + stale.length + ' 个中断任务已标记失败',
+      }), MAX_TIMELINE)
+      writeFileSync(path, JSON.stringify({ ...workspace, tasks, timeline }, null, 2) + '\n')
+      swept += stale.length
+    } catch { /* skip unreadable workspace */ }
+  }
+  return { ok: true, swept }
+}
+
+export const pruneBuildLogs = (home, keep = 30) => {
+  const dir = join(storeDir(home), 'logs')
+  let entries = []
+  try {
+    entries = readdirSync(dir)
+  } catch {
+    return { ok: true, pruned: 0 }
+  }
+  const logs = []
+  for (const name of entries) {
+    if (!name.endsWith('.log')) continue
+    try {
+      const path = join(dir, name)
+      logs.push({ path, mtime: statSync(path).mtimeMs })
+    } catch { /* skip */ }
+  }
+  logs.sort((a, b) => b.mtime - a.mtime)
+  let pruned = 0
+  for (const log of logs.slice(Math.max(1, keep))) {
+    try {
+      unlinkSync(log.path)
+      pruned += 1
+    } catch { /* ignore */ }
+  }
+  return { ok: true, pruned }
+}

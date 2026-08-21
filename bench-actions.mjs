@@ -6,6 +6,7 @@ import {
   loadBindings,
   loadWorkspace,
   openTask,
+  pruneBuildLogs,
   saveWorkspace,
   storeDir,
 } from './bench-store.mjs'
@@ -149,6 +150,9 @@ export const keilBuild = async (home, cwd, body, opts) => {
     errors: Array.isArray(details.errors) ? details.errors : [],
     keil: { project: keil.project, target, artifact, download: download.path || '' },
   })
+  try {
+    pruneBuildLogs(home)
+  } catch { /* retention is best-effort */ }
   if (!ok) {
     return {
       ...ran,
@@ -318,6 +322,7 @@ export const modbusRead = async (home, cwd, body, opts) => {
   }
 
   const conn = connectionArgs(m)
+  if (conn.error) return { ok: false, error: conn.error }
   const args = conn.args.concat([
     '--function', String(m.function),
     '--address', String(m.address),

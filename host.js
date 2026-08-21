@@ -8,6 +8,7 @@ import {
   probeBindings,
   saveBindings,
   saveWorkspace,
+  sweepStaleTasks,
 } from './bench-store.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
@@ -118,6 +119,9 @@ export function apply(ctx, config = {}) {
     })
     return
   }
+  try {
+    sweepStaleTasks(dshHome)
+  } catch { /* sweep is best-effort */ }
   const rows = [
     route('/dsh-vision-bench/state', async (req) => {
       const body = await readJsonBody(req)
