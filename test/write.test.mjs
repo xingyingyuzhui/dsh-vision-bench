@@ -313,3 +313,43 @@ test('rejecting a pending agent write leaves the device untouched', async () => 
     await rm(home, { recursive: true, force: true })
   }
 })
+
+test('approving a pending write whose device vanished fails cleanly', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-write-gone-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveWorkspace(home, cwd, {
+      modbus: {
+        devices: [
+          { id: 'm1', name: '主机', role: 'master', sim: true, segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }] },
+        ],
+        activeId: 'm1',
+      },
+    })
+    const first = await runVisionBench(home, {
+      action: 'write',
+      function: 3,
+      address: 0,
+      values: [9],
+    }, cwd, { source: 'agent', sessionId: 's1' })
+    assert.equal(first.needsConfirm, true)
+    // Simulate the device being removed between request and approval.
+    saveWorkspace(home, cwd, {
+      modbus: {
+        devices: [
+          { id: 'm2', name: '新机', role: 'master', sim: true, segments: [{ id: 's2', name: '保持', function: 3, address: 0, count: 10 }] },
+        ],
+        activeId: 'm2',
+      },
+    })
+    const ran = await resolvePendingWrite(home, cwd, first.requestId, true)
+    assert.equal(ran.ok, false)
+    assert.match(ran.error, /目标设备已不存在/)
+    const ws = loadWorkspace(home, cwd)
+    const m2 = ws.modbus.devices.find((item) => item.id === 'm2')
+    assert.equal(((m2 && m2.values) || []).length, 0)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})

@@ -126,7 +126,27 @@ export const normalizeTimelineEvent = (input) => {
 
 export const normalizeTasks = (list) => {
   if (!Array.isArray(list)) return []
-  return list.map(normalizeTask).slice(0, MAX_TASKS)
+  return capTasks(list.map(normalizeTask))
+}
+
+// Running tasks must never be evicted by the recency cap: losing one would
+// release its hasRunning single-flight lock and allow duplicate builds.
+export const capTasks = (list, max = MAX_TASKS) => {
+  const arr = Array.isArray(list) ? list : []
+  const out = []
+  let finished = 0
+  for (const item of arr) {
+    if (!item) continue
+    if (item.status === 'running') {
+      out.push(item)
+      continue
+    }
+    if (finished < max) {
+      out.push(item)
+      finished += 1
+    }
+  }
+  return out
 }
 
 export const normalizeTimeline = (list) => {

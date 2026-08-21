@@ -1506,6 +1506,8 @@ function createDebugView(React, t, post, openProject) {
     const [copiedSerial, setCopiedSerial] = React.useState(false)
     const serialRef = React.useRef(serial)
     serialRef.current = serial
+    const workspaceRef = React.useRef(workspace)
+    workspaceRef.current = workspace
     const projectRef = React.useRef('')
 
     function scanPorts() {
@@ -1785,10 +1787,13 @@ function createDebugView(React, t, post, openProject) {
         if (!data) return
         const list = data.result && data.result.details && data.result.details.targets || []
         setTargets(list)
-        if (list.length && !workspace.keil.target) {
+        // Judge from the latest server state, not the first-render closure:
+        // auto-pick only when the workspace genuinely has no saved target.
+        const saved = (workspaceRef.current.keil && workspaceRef.current.keil.target) || ''
+        if (list.length && !saved) {
           const name = list[0].name
           setKeil({ target: name })
-          persist({ ...workspace, keil: { ...workspace.keil, project, target: name } })
+          persist({ ...workspaceRef.current, keil: { ...workspaceRef.current.keil, project, target: name } })
         }
       })
     }
@@ -1808,11 +1813,11 @@ function createDebugView(React, t, post, openProject) {
         if (data.ok === false && typeof openProject === 'function') openProject()
         return post('/dsh-vision-bench/state', { cwd })
       }).then((data) => {
+        // Do not merge keil back from the post-build snapshot: the user may
+        // have changed target/artifact during a long build. The poll loop
+        // keeps everything else fresh.
         if (!data) return
         setJournal(pickJournal(data))
-        if (data.workspace && data.workspace.keil) {
-          setWorkspace((prev) => ({ ...prev, keil: { ...prev.keil, ...data.workspace.keil } }))
-        }
       })
     }
 

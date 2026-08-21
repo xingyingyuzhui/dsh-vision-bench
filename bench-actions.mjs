@@ -149,7 +149,7 @@ export const keilBuild = async (home, cwd, body, opts) => {
     '--json',
   ], { cwd: room.cwd, timeoutMs: 620000, signal })
   if (ran.cancelled) {
-    finishTask(home, room.cwd, task.id, { cancelled: true, summary: '编译已取消', keil: { project: keil.project, target, artifact } })
+    finishTask(home, room.cwd, task.id, { cancelled: true, summary: '编译已取消' })
     return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source }
   }
   const details = ran.result && ran.result.details ? ran.result.details : {}
@@ -163,7 +163,7 @@ export const keilBuild = async (home, cwd, body, opts) => {
     logFile: details.log_file || '',
     phase: details.phase || '',
     errors: Array.isArray(details.errors) ? details.errors : [],
-    keil: { project: keil.project, target, artifact, download: download.path || '' },
+    keil: { download: download.path || '' },
   })
   try {
     pruneBuildLogs(home)
@@ -557,9 +557,15 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
   const workspace = loadWorkspace(home, room.cwd)
   const pack = normalizeModbus(workspace.modbus)
-  const device = (body && body.deviceId)
-    ? (pack.devices.find((item) => item.id === body.deviceId) || activeDevice(pack))
-    : activeDevice(pack)
+  // A pending approval must execute on the exact device it showed the user;
+  // only requests without an explicit deviceId may fall back to the active one.
+  let device = null
+  if (body && body.deviceId) {
+    device = pack.devices.find((item) => item.id === body.deviceId) || null
+    if (!device) return { ok: false, error: '请求的目标设备已不存在' }
+  } else {
+    device = activeDevice(pack)
+  }
   const m = device
   const fn = Number(body && body.function)
   const address = clampInt(body && body.address, -1, 0, 65535)

@@ -125,10 +125,12 @@ export const startDeviceSlave = (cwd, device, getDevice, onWrite = null) => {
     return Promise.resolve({ ok: true, host, port, deviceId: device.id, reused: true })
   }
   if (prev) {
-    try { prev.close() } catch { /* already closed */ }
+    closeServer(prev)
     servers.delete(id)
   }
   const server = createServer((socket) => {
+    server.dshSockets.add(socket)
+    socket.on('close', () => { server.dshSockets.delete(socket) })
     let buf = Buffer.alloc(0)
     socket.on('data', (chunk) => {
       buf = Buffer.concat([buf, chunk])
@@ -140,7 +142,13 @@ export const startDeviceSlave = (cwd, device, getDevice, onWrite = null) => {
         const pdu = buf.subarray(7, 6 + len)
         buf = buf.subarray(6 + len)
         const getter = server.dshGet || getDevice
-        const current = (typeof getter === 'function' && getter()) || device
+        const current = typeof getter === 'function' ? getter() : device
+        // The device vanished (removed/role changed): never answer with stale
+        // data — drop the connection so the master reconnects or errors out.
+        if (!current) {
+          socket.destroy()
+          return
+        }
         const resp = handlePdu(current, pdu, Date.now(), server.dshOnWrite)
         socket.write(frameResponse(trans, unit, resp))
       }
@@ -151,6 +159,7 @@ export const startDeviceSlave = (cwd, device, getDevice, onWrite = null) => {
   server.dshPort = port
   server.dshGet = getDevice
   server.dshOnWrite = onWrite
+  server.dshSockets = new Set()
   return new Promise((resolve, reject) => {
     server.once('error', reject)
     server.listen(port, host, () => {
@@ -161,18 +170,25 @@ export const startDeviceSlave = (cwd, device, getDevice, onWrite = null) => {
   })
 }
 
+const closeServer = (server) => {
+  try { server.close() } catch { /* already closed */ }
+  for (const socket of server.dshSockets || []) {
+    try { socket.destroy() } catch { /* ignore */ }
+  }
+}
+
 export const stopDeviceSlave = (cwd, deviceId) => {
   const id = keyOf(cwd, deviceId)
   const server = servers.get(id)
   if (!server) return
-  try { server.close() } catch { /* ignore */ }
+  closeServer(server)
   servers.delete(id)
   listenErrors.delete(id)
 }
 
 export const stopAllSlaves = () => {
   for (const server of servers.values()) {
-    try { server.close() } catch { /* ignore */ }
+    closeServer(server)
   }
   servers.clear()
   listenErrors.clear()
@@ -224,7 +240,7 @@ export const syncDeviceSlaves = async (cwd, modbus, getModbus, onWrite = null) =
     if (!String(id).startsWith(String(cwd) + ':')) continue
     const deviceId = id.slice(String(cwd).length + 1)
     if (want.has(deviceId)) continue
-    try { server.close() } catch { /* ignore */ }
+    closeServer(server)
     servers.delete(id)
     listenErrors.delete(id)
   }

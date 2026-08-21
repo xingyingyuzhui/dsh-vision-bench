@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import threading
 import time
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -17,11 +19,43 @@ def emit(obj: dict) -> None:
     print(json.dumps(obj, ensure_ascii=False), flush=True)
 
 
+def pid_alive(pid: int) -> bool:
+    """Windows os.kill(pid, 0) would TERMINATE the target; use OpenProcess."""
+    if os.name == "nt":
+        import ctypes
+
+        SYNCHRONIZE = 0x00100000
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(SYNCHRONIZE, False, int(pid))
+        if not handle:
+            return False
+        kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def watch_parent(parent_pid: int, stop: threading.Event) -> None:
+    """Exit the process once the JS host disappears; otherwise the orphaned
+    python would keep holding the COM port until manually killed."""
+    while not stop.wait(2.0):
+        if not pid_alive(parent_pid):
+            os._exit(3)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Serial monitor")
     parser.add_argument("--port", required=True)
     parser.add_argument("--baudrate", type=int, default=115200)
+    parser.add_argument("--parent", type=int, default=0, help="host pid to watch")
     args = parser.parse_args()
+
+    stop = threading.Event()
+    if args.parent > 0:
+        threading.Thread(target=watch_parent, args=(args.parent, stop), daemon=True).start()
 
     try:
         import serial
@@ -37,7 +71,7 @@ def main() -> int:
 
     buf = b""
     try:
-        while True:
+        while not stop.is_set():
             try:
                 data = ser.read(1024)
             except Exception as exc:
@@ -55,9 +89,14 @@ def main() -> int:
     except KeyboardInterrupt:
         return 0
     finally:
+        stop.set()
         close = getattr(ser, "close", None)
         if callable(close):
             close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 
 
 if __name__ == "__main__":

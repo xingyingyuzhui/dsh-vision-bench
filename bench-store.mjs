@@ -7,6 +7,7 @@ import { normalizeModbus, patchActiveDevice } from './bench-devices.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import {
   MAX_TASKS,
+  capTasks,
   compactTasks,
   compactTimeline,
   newId,
@@ -237,7 +238,7 @@ export const openTask = (home, cwd, spec) => {
     summary: task.summary || ('开始 ' + task.type),
   })
   saveWorkspace(home, cwd, {
-    tasks: prepend(prev.tasks, task, MAX_TASKS),
+    tasks: capTasks(prepend(prev.tasks, task, MAX_TASKS * 3)),
     timeline: pushEvent(prev.timeline, event),
   })
   return task

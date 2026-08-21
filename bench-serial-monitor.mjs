@@ -29,7 +29,12 @@ export const openSerialMonitor = (pythonBin, cwd, opts) => {
   closeSerialMonitor(cwd)
   let child
   try {
-    child = spawn(pythonBin, [MONITOR_SCRIPT, '--port', port, '--baudrate', String(baudrate)], {
+    child = spawn(pythonBin, [
+      MONITOR_SCRIPT,
+      '--port', port,
+      '--baudrate', String(baudrate),
+      '--parent', String(process.pid),
+    ], {
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     })

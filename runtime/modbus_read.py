@@ -25,8 +25,11 @@ def translate_serial_error(exc: Exception) -> dict | None:
     """Map Windows/POSIX port-busy errors to an actionable message."""
     text = str(exc)
     lowered = text.lower()
+    compact = lowered.replace(" ", "")
     if (
-        "permissionerror(13" in lowered.replace(" ", "")
+        "permissionerror(13" in compact
+        or "errno 13" in lowered
+        or "winerror 5" in lowered
         or "access is denied" in lowered
         or "拒绝访问" in text
         or "could not open port" in lowered

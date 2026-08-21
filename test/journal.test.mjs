@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { keilBuild } from '../bench-actions.mjs'
 import {
+  capTasks,
   compactTasks,
   compactTimeline,
   normalizeOrigin,
@@ -189,6 +190,34 @@ test('finishTask stores logFile, phase and errors for Agent builds', async () =>
     const view = journalView(ws)
     assert.equal(view.tasks[0].logFile, '/tmp/vision-bench/logs/t9.log')
     assert.deepEqual(view.tasks[0].errors, ws.tasks[0].errors)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('capTasks keeps running tasks across the recency cap', () => {
+  const mk = (i, status) => ({ id: 't' + i, type: 'read', source: 'user', sessionId: '', status, startedAt: i, endedAt: null, summary: '' })
+  const tasks = [mk('build', 'running')]
+  for (let i = 0; i < 25; i++) tasks.push(mk(i, 'ok'))
+  const capped = capTasks(tasks)
+  assert.ok(capped.some((item) => item.id === 'tbuild' && item.status === 'running'))
+  assert.ok(capped.length <= 21)
+})
+
+test('openTask never evicts a long-running build under read pressure', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-cap-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    const buildTask = openTask(home, cwd, { type: 'build', source: 'agent', sessionId: 's', summary: '长编译' })
+    for (let i = 0; i < 25; i++) {
+      const t = openTask(home, cwd, { type: 'read', source: 'user', sessionId: '', summary: '读' + i })
+      finishTask(home, cwd, t.id, { ok: true, summary: '完成' })
+    }
+    const ws = loadWorkspace(home, cwd)
+    const stillRunning = ws.tasks.find((item) => item.id === buildTask.id)
+    assert.ok(stillRunning, 'running build was evicted')
+    assert.equal(stillRunning.status, 'running')
   } finally {
     await rm(home, { recursive: true, force: true })
   }

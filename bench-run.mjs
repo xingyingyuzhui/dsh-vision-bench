@@ -57,28 +57,44 @@ export const runExecFile = (bin, args, opts = {}) => new Promise((resolve, rejec
     return
   }
   let cancelled = false
+  let timedOut = false
+  let settled = false
   let child
+  const finish = () => {
+    if (settled) return
+    settled = true
+  }
   const onAbort = () => {
     cancelled = true
     if (child) killProcessTree(child.pid)
   }
   if (signal) signal.addEventListener('abort', onAbort, { once: true })
+  // execFile's built-in timeout only kills the direct child; route expiry
+  // through killProcessTree so grandchildren like UV4.exe die with it.
+  const killer = opts.timeoutMs > 0
+    ? setTimeout(() => {
+      timedOut = true
+      if (child) killProcessTree(child.pid)
+    }, opts.timeoutMs)
+    : null
   child = execFile(bin, args, {
-    timeout: opts.timeoutMs,
     maxBuffer: opts.maxBuffer || 1024 * 1024,
     windowsHide: true,
     encoding: 'utf8',
     cwd: opts.cwd,
     env: opts.env || process.env,
   }, (error, stdout, stderr) => {
+    if (killer) clearTimeout(killer)
     if (signal) signal.removeEventListener('abort', onAbort)
     if (error && error.code === 'ENOENT') {
+      finish()
       reject(new Error('无法启动: ' + bin))
       return
     }
+    finish()
     resolve({
       exitCode: error ? (typeof error.code === 'number' ? error.code : 1) : 0,
-      timedOut: !cancelled && !!(error && error.killed),
+      timedOut,
       cancelled,
       stdout: String(stdout || ''),
       stderr: String(stderr || (error && error.message) || ''),
