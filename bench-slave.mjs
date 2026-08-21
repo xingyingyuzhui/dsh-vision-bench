@@ -1,0 +1,146 @@
+import { createServer } from 'node:net'
+import { simulateRaw } from './bench-points.mjs'
+
+const servers = new Map()
+
+const keyOf = (cwd, deviceId) => String(cwd) + ':' + String(deviceId)
+
+const u16 = (buf, offset) => buf.readUInt16BE(offset)
+
+const exception = (fc, code) => Buffer.from([fc | 0x80, code])
+
+const bankOf = (device, fn, at) => {
+  const values = new Map()
+  const segments = Array.isArray(device.segments) ? device.segments : []
+  for (const segment of segments) {
+    if (Number(segment.function) !== fn) continue
+    const recs = Array.isArray(device.values) ? device.values : []
+    const raw = device.sim ? simulateRaw(segment, at) : null
+    for (let i = 0; i < segment.count; i++) {
+      const address = segment.address + i
+      const rec = recs.find((item) => item.segmentId === segment.id && item.address === address)
+      let value = 0
+      if (raw) value = raw[i]
+      else if (rec && rec.value !== null && rec.value !== undefined) value = rec.value
+      values.set(address, value)
+    }
+  }
+  return values
+}
+
+const readBits = (bank, addr, qty) => {
+  const bytes = Math.ceil(qty / 8)
+  const out = Buffer.alloc(2 + bytes)
+  out[0] = 1
+  out[1] = bytes
+  for (let i = 0; i < qty; i++) {
+    const on = bank.get(addr + i) ? 1 : 0
+    if (on) out[2 + (i >> 3)] |= 1 << (i & 7)
+  }
+  return out
+}
+
+const readRegs = (bank, addr, qty, fc) => {
+  const out = Buffer.alloc(2 + qty * 2)
+  out[0] = fc
+  out[1] = qty * 2
+  for (let i = 0; i < qty; i++) {
+    const n = Number(bank.get(addr + i) || 0) & 0xffff
+    out.writeUInt16BE(n, 2 + i * 2)
+  }
+  return out
+}
+
+export const handlePdu = (device, pdu, at = Date.now()) => {
+  if (!pdu || pdu.length < 1) return exception(0, 1)
+  const fc = pdu[0]
+  if (pdu.length < 5) return exception(fc, 3)
+  const addr = u16(pdu, 1)
+  const qty = u16(pdu, 3)
+  if (qty < 1 || qty > 125) return exception(fc, 3)
+  if (fc === 1 || fc === 2) return readBits(bankOf(device, fc, at), addr, qty)
+  if (fc === 3 || fc === 4) return readRegs(bankOf(device, fc, at), addr, qty, fc)
+  return exception(fc, 1)
+}
+
+const frameResponse = (trans, unit, pdu) => {
+  const out = Buffer.alloc(7 + pdu.length)
+  out.writeUInt16BE(trans, 0)
+  out.writeUInt16BE(0, 2)
+  out.writeUInt16BE(1 + pdu.length, 4)
+  out[6] = unit
+  pdu.copy(out, 7)
+  return out
+}
+
+export const startDeviceSlave = (cwd, device, getDevice) => {
+  const id = keyOf(cwd, device.id)
+  const prev = servers.get(id)
+  if (prev) {
+    try { prev.close() } catch { /* already closed */ }
+    servers.delete(id)
+  }
+  const host = device.host || '127.0.0.1'
+  const port = Number(device.tcpPort) || 1502
+  const server = createServer((socket) => {
+    let buf = Buffer.alloc(0)
+    socket.on('data', (chunk) => {
+      buf = Buffer.concat([buf, chunk])
+      while (buf.length >= 8) {
+        const len = buf.readUInt16BE(4)
+        if (len < 2 || buf.length < 6 + len) break
+        const trans = buf.readUInt16BE(0)
+        const unit = buf[6]
+        const pdu = buf.subarray(7, 6 + len)
+        buf = buf.subarray(6 + len)
+        const current = getDevice() || device
+        const resp = handlePdu(current, pdu)
+        socket.write(frameResponse(trans, unit, resp))
+      }
+    })
+    socket.on('error', () => { /* drop */ })
+  })
+  return new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(port, host, () => {
+      servers.set(id, server)
+      resolve({ ok: true, host, port, deviceId: device.id })
+    })
+  })
+}
+
+export const stopDeviceSlave = (cwd, deviceId) => {
+  const id = keyOf(cwd, deviceId)
+  const server = servers.get(id)
+  if (!server) return
+  try { server.close() } catch { /* ignore */ }
+  servers.delete(id)
+}
+
+export const syncDeviceSlaves = async (cwd, modbus, getModbus) => {
+  const devices = (modbus && Array.isArray(modbus.devices)) ? modbus.devices : []
+  const want = new Set()
+  for (const device of devices) {
+    if (device.role !== 'slave' || !device.listen || device.mode !== 'tcp') continue
+    want.add(device.id)
+    try {
+      await startDeviceSlave(cwd, device, () => {
+        const live = getModbus ? getModbus() : modbus
+        const list = live && Array.isArray(live.devices) ? live.devices : []
+        return list.find((item) => item.id === device.id) || device
+      })
+    } catch (error) {
+      return { ok: false, error: String((error && error.message) || error), deviceId: device.id }
+    }
+  }
+  for (const [id, server] of servers) {
+    if (!String(id).startsWith(String(cwd) + ':')) continue
+    const deviceId = id.slice(String(cwd).length + 1)
+    if (want.has(deviceId)) continue
+    try { server.close() } catch { /* ignore */ }
+    servers.delete(id)
+  }
+  return { ok: true }
+}
+
+export const _internal = { handlePdu, servers, keyOf }

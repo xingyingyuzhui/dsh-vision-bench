@@ -1,0 +1,58 @@
+{
+  "name": "dsh-vision-bench",
+  "version": "0.6.3",
+  "description": "Vision 台架：会话区调试/上位机点表（按段添加地址），共享任务与时间线，并安装「台架模式」Agent 预设。",
+  "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "bench", "keil", "modbus"],
+  "license": "MIT",
+  "type": "module",
+  "main": "./host.js",
+  "exports": {
+    ".": "./host.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "host.js",
+    "client.js",
+    "bench-store.mjs",
+    "bench-paths.mjs",
+    "bench-fs.mjs",
+    "bench-run.mjs",
+    "bench-actions.mjs",
+    "bench-prompt.mjs",
+    "bench-tool.mjs",
+    "bench-preset.mjs",
+    "bench-i18n.mjs",
+    "bench-styles.mjs",
+    "bench-settings.mjs",
+    "bench-view.mjs",
+    "bench-hmi.mjs",
+    "bench-live.mjs",
+    "bench-points.mjs",
+    "bench-devices.mjs",
+    "bench-slave.mjs",
+    "bench-serial.mjs",
+    "bench-journal.mjs",
+    "bench-runtime.mjs",
+    "runtime/keil_project.py",
+    "runtime/keil_build.py",
+    "runtime/modbus_read.py",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xingyingyuzhui/dsh-vision-bench.git"
+  },
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "build:check": "node scripts/build-client.mjs --check",
+    "test": "npm run build:check && node --test test/*.test.mjs"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": { "platform": "web" }
+  }
+}

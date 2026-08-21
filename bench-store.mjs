@@ -1,0 +1,260 @@
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { isAbsolute, join } from 'node:path'
+import { emptyLog, mergeLog, normalizeEvent } from './bench-prompt.mjs'
+import { normalizeModbus, patchActiveDevice } from './bench-devices.mjs'
+import {
+  MAX_TASKS,
+  MAX_TIMELINE,
+  compactTasks,
+  compactTimeline,
+  newId,
+  normalizeTask,
+  normalizeTasks,
+  normalizeTimeline,
+  normalizeTimelineEvent,
+  prepend,
+  runningTasks,
+} from './bench-journal.mjs'
+
+export const BINDING_KEYS = ['python', 'uv4', 'openocd']
+
+export const emptyBindings = () => ({ python: '', uv4: '', openocd: '' })
+
+export const defaultDshHome = (env = process.env, home = homedir()) =>
+  env.DSH_HOME || join(home, '.dsh')
+
+export const storeDir = (home) => join(home, 'vision-bench')
+
+export const bindingsPath = (home) => join(storeDir(home), 'bindings.json')
+
+export const normalizeBindings = (input) => {
+  const out = emptyBindings()
+  if (!input || typeof input !== 'object') return out
+  for (const key of BINDING_KEYS) {
+    const value = input[key]
+    out[key] = typeof value === 'string' ? value.trim() : ''
+  }
+  return out
+}
+
+export const validateBindings = (bindings) => {
+  const errors = []
+  for (const key of BINDING_KEYS) {
+    const value = bindings[key]
+    if (value && !isAbsolute(value)) errors.push(key + ' 必须是绝对路径')
+  }
+  return errors
+}
+
+export const probePath = (value, exists = existsSync) => {
+  if (!value) return { bound: false, exists: false }
+  try {
+    return { bound: true, exists: !!exists(value) }
+  } catch {
+    return { bound: true, exists: false }
+  }
+}
+
+export const probeBindings = (bindings, exists = existsSync) => {
+  const health = {}
+  for (const key of BINDING_KEYS) health[key] = probePath(bindings[key], exists)
+  return health
+}
+
+export const loadBindings = (home) => {
+  try {
+    return normalizeBindings(JSON.parse(readFileSync(bindingsPath(home), 'utf8')))
+  } catch {
+    return emptyBindings()
+  }
+}
+
+export const saveBindings = (home, input) => {
+  const bindings = normalizeBindings(input)
+  const errors = validateBindings(bindings)
+  if (errors.length > 0) {
+    return { ok: false, error: errors.join('；'), bindings }
+  }
+  mkdirSync(storeDir(home), { recursive: true })
+  writeFileSync(bindingsPath(home), JSON.stringify(bindings, null, 2) + '\n')
+  return { ok: true, bindings }
+}
+
+export const emptyWorkspace = () => ({
+  keil: { project: '', target: '', artifact: 'hex', download: '' },
+  log: emptyLog(),
+  tasks: [],
+  timeline: [],
+  modbus: normalizeModbus({}),
+})
+
+export const workspaceKey = (cwd) =>
+  createHash('sha256').update(String(cwd || '')).digest('hex').slice(0, 16)
+
+export const workspacePath = (home, cwd) =>
+  join(storeDir(home), 'workspaces', workspaceKey(cwd) + '.json')
+
+export const normalizeWorkspace = (input) => {
+  const out = emptyWorkspace()
+  const keil = input && input.keil && typeof input.keil === 'object' ? input.keil : {}
+  const modbus = input && input.modbus && typeof input.modbus === 'object' ? input.modbus : {}
+  out.keil.project = typeof keil.project === 'string' ? keil.project.trim() : ''
+  out.keil.target = typeof keil.target === 'string' ? keil.target.trim() : ''
+  const artifact = typeof keil.artifact === 'string' ? keil.artifact.trim().toLowerCase() : 'hex'
+  out.keil.artifact = ['hex', 'bin', 'axf', 'elf'].indexOf(artifact) >= 0 ? artifact : 'hex'
+  out.keil.download = typeof keil.download === 'string' ? keil.download.trim() : ''
+  const rawLog = input && Array.isArray(input.log) ? input.log : []
+  out.log = rawLog.map(normalizeEvent).slice(0, 8)
+  out.tasks = normalizeTasks(input && input.tasks)
+  out.timeline = normalizeTimeline(input && input.timeline)
+  out.modbus = normalizeModbus(modbus)
+  return out
+}
+
+export const loadWorkspace = (home, cwd) => {
+  try {
+    return normalizeWorkspace(JSON.parse(readFileSync(workspacePath(home, cwd), 'utf8')))
+  } catch {
+    return emptyWorkspace()
+  }
+}
+
+export const saveWorkspace = (home, cwd, input) => {
+  const prev = loadWorkspace(home, cwd)
+  const incoming = (input && input.modbus) || {}
+  const switched = incoming.activeId
+    ? { ...prev.modbus, activeId: incoming.activeId }
+    : prev.modbus
+  const mergedModbus = Array.isArray(incoming.devices)
+    ? { ...switched, ...incoming, devices: incoming.devices }
+    : (Object.keys(incoming).some((key) => key !== 'activeId' && key !== 'devices')
+      ? patchActiveDevice(switched, incoming)
+      : switched)
+  const merged = {
+    keil: { ...prev.keil, ...(input && input.keil) },
+    modbus: mergedModbus,
+    log: input && input.log !== undefined ? input.log : prev.log,
+    tasks: input && input.tasks !== undefined ? input.tasks : prev.tasks,
+    timeline: input && input.timeline !== undefined ? input.timeline : prev.timeline,
+  }
+  const workspace = normalizeWorkspace(merged)
+  const keilProject = workspace.keil.project
+  if (keilProject && !isAbsolute(keilProject)) {
+    return { ok: false, error: 'keil.project 必须是绝对路径', workspace }
+  }
+  if (keilProject && keilProject !== (prev.keil && prev.keil.project)) {
+    const summary = '选择工程 ' + keilProject
+    const origin = {
+      source: input && input.origin && input.origin.source === 'agent' ? 'agent' : 'user',
+      sessionId: input && input.origin && input.origin.sessionId ? String(input.origin.sessionId) : '',
+    }
+    workspace.log = mergeLog(workspace.log, {
+      action: 'select-project',
+      ok: true,
+      summary,
+    })
+    workspace.timeline = prepend(workspace.timeline, normalizeTimelineEvent({
+      kind: 'select-project',
+      source: origin.source,
+      sessionId: origin.sessionId,
+      ok: true,
+      summary,
+    }), MAX_TIMELINE)
+  }
+  mkdirSync(join(storeDir(home), 'workspaces'), { recursive: true })
+  writeFileSync(workspacePath(home, cwd), JSON.stringify(workspace, null, 2) + '\n')
+  return { ok: true, workspace, prev }
+}
+
+export const recordBenchEvent = (home, cwd, event, extra = {}) => {
+  const prev = loadWorkspace(home, cwd)
+  const timelineEvent = normalizeTimelineEvent({
+    kind: event && event.action,
+    source: extra.source || 'user',
+    sessionId: extra.sessionId || '',
+    taskId: extra.taskId || '',
+    ok: event && event.ok,
+    summary: event && event.summary,
+  })
+  return saveWorkspace(home, cwd, {
+    ...prev,
+    ...extra,
+    keil: { ...prev.keil, ...(extra.keil || {}) },
+    modbus: { ...prev.modbus, ...(extra.modbus || {}) },
+    log: mergeLog(prev.log, event),
+    timeline: prepend(prev.timeline, timelineEvent, MAX_TIMELINE),
+  })
+}
+
+export const openTask = (home, cwd, spec) => {
+  const prev = loadWorkspace(home, cwd)
+  const origin = {
+    source: spec && spec.source === 'agent' ? 'agent' : 'user',
+    sessionId: spec && spec.sessionId ? String(spec.sessionId) : '',
+  }
+  const task = normalizeTask({
+    id: newId('t'),
+    type: spec && spec.type,
+    source: origin.source,
+    sessionId: origin.sessionId,
+    status: 'running',
+    startedAt: Date.now(),
+    summary: spec && spec.summary,
+  })
+  const event = normalizeTimelineEvent({
+    kind: task.type + '-start',
+    source: origin.source,
+    sessionId: origin.sessionId,
+    taskId: task.id,
+    summary: task.summary || ('开始 ' + task.type),
+  })
+  saveWorkspace(home, cwd, {
+    tasks: prepend(prev.tasks, task, MAX_TASKS),
+    timeline: prepend(prev.timeline, event, MAX_TIMELINE),
+  })
+  return task
+}
+
+export const finishTask = (home, cwd, taskId, patch) => {
+  const prev = loadWorkspace(home, cwd)
+  const status = patch && patch.ok === false ? 'error' : 'ok'
+  const summary = patch && patch.summary ? String(patch.summary).slice(0, 240) : ''
+  const tasks = (prev.tasks || []).map((item) => {
+    if (item.id !== taskId) return item
+    return normalizeTask({
+      ...item,
+      status,
+      endedAt: Date.now(),
+      summary: summary || item.summary,
+    })
+  })
+  const current = tasks.find((item) => item.id === taskId)
+  const action = current && current.type === 'read' ? 'read' : 'build'
+  const event = normalizeTimelineEvent({
+    kind: (current && current.type || 'task') + '-end',
+    source: current && current.source,
+    sessionId: current && current.sessionId,
+    taskId,
+    ok: status === 'ok',
+    summary: summary || (status === 'ok' ? '完成' : '失败'),
+  })
+  return saveWorkspace(home, cwd, {
+    tasks,
+    timeline: prepend(prev.timeline, event, MAX_TIMELINE),
+    keil: patch && patch.keil,
+    modbus: patch && patch.modbus,
+    log: patch && patch.log !== undefined ? patch.log : mergeLog(prev.log, {
+      action,
+      ok: status === 'ok',
+      summary: summary || (status === 'ok' ? '完成' : '失败'),
+    }),
+  })
+}
+
+export const journalView = (workspace) => ({
+  tasks: compactTasks(workspace && workspace.tasks),
+  running: compactTasks(runningTasks(workspace && workspace.tasks)),
+  timeline: compactTimeline(workspace && workspace.timeline),
+})
