@@ -530,7 +530,45 @@ const FUNCTIONS = new Set([1, 2, 3, 4])
 
 const FN_TAG = { 1: 'C', 2: 'DI', 3: 'HR', 4: 'IR' }
 
+const WRITE_TARGET = {
+  1: { single: 5, multi: 15, kind: 'coil', maxMulti: 1968 },
+  3: { single: 6, multi: 16, kind: 'register', maxMulti: 123 },
+}
+
 const functionTag = (fn) => FN_TAG[fn] || 'HR'
+
+const writeTargetOf = (fn) => {
+  const target = WRITE_TARGET[Number(fn)]
+  return target ? { writable: true, ...target } : { writable: false, single: 0, multi: 0, kind: '', maxMulti: 0 }
+}
+
+const isWritableFunction = (fn) => !!WRITE_TARGET[Number(fn)]
+
+const normalizeWriteValues = (fn, input, maxCount) => {
+  const target = writeTargetOf(fn)
+  if (!target.writable) {
+    return { ok: false, error: '该功能码只读，不能写入' }
+  }
+  const list = Array.isArray(input) ? input : [input]
+  if (!list.length) return { ok: false, error: '缺少写入值' }
+  if (list.length > Math.min(target.maxMulti, maxCount || target.maxMulti)) {
+    return { ok: false, error: '写入数量超出上限' }
+  }
+  const values = []
+  for (const item of list) {
+    const n = typeof item === 'boolean' ? (item ? 1 : 0) : Number(item)
+    if (!Number.isInteger(n)) {
+      return { ok: false, error: '写入值必须是整数' }
+    }
+    if (target.kind === 'coil') {
+      if (n !== 0 && n !== 1) return { ok: false, error: '线圈值只能是 0 或 1' }
+    } else if (n < 0 || n > 65535) {
+      return { ok: false, error: '寄存器值必须在 0–65535' }
+    }
+    values.push(n)
+  }
+  return { ok: true, kind: target.kind, fc: values.length === 1 ? target.single : target.multi, values }
+}
 
 const text = (value, fallback) => {
   const out = typeof value === 'string' ? value.trim() : ''
@@ -681,6 +719,30 @@ const applySegmentRead = (values, segment, ran) => {
     })
   }
   return Object.keys(byKey).map((key) => byKey[key]).slice(0, MAX_VALUES)
+}
+
+const segmentCovering = (segments, fn, address) =>
+  normalizeSegments(segments).find((segment) => segment.function === Number(fn)
+    && address >= segment.address
+    && address < segment.address + segment.count) || null
+
+const applyPointWrite = (values, segment, address, value, at = Date.now()) => {
+  const seg = normalizeSegment(segment)
+  const key = pointKey(seg.id, address, seg.function)
+  const byKey = {}
+  for (const item of normalizeValues(values)) byKey[item.key] = item
+  byKey[key] = normalizeValue({
+    key,
+    segmentId: seg.id,
+    function: seg.function,
+    address,
+    name: pointName(seg, address - seg.address),
+    value,
+    ok: true,
+    error: '',
+    at,
+  })
+  return Object.keys(byKey).map((k) => byKey[k]).slice(0, MAX_VALUES)
 }
 
 const compactSegments = (segments) =>

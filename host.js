@@ -1,4 +1,4 @@
-import { keilBuild, keilMap, keilScan, keilTargets, listDir, modbusPoll, modbusRead } from './bench-actions.mjs'
+import { keilBuild, keilMap, keilScan, keilTargets, listDir, modbusPoll, modbusRead, modbusWrite } from './bench-actions.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
 import {
   defaultDshHome,
@@ -11,6 +11,8 @@ import {
   sweepStaleTasks,
 } from './bench-store.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
+import { applyPointWrite, segmentCovering } from './bench-points.mjs'
+import { normalizeModbus } from './bench-devices.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
 import { stopAllSlaves, syncDeviceSlaves, withListenRuntime } from './bench-slave.mjs'
 import { listSerialPorts } from './bench-serial.mjs'
@@ -70,11 +72,31 @@ const guard = (req, res) => {
   return true
 }
 
+const persistSlaveWrite = (cwd, deviceId, fn, address, values, at) => {
+  const workspace = loadWorkspace(dshHome, cwd)
+  const pack = normalizeModbus(workspace.modbus)
+  const idx = pack.devices.findIndex((item) => item.id === deviceId)
+  if (idx < 0) return
+  const device = pack.devices[idx]
+  let vals = Array.isArray(device.values) ? device.values : []
+  for (let i = 0; i < values.length; i++) {
+    const segment = segmentCovering(device.segments, fn, address + i)
+    if (!segment) continue
+    vals = applyPointWrite(vals, segment, address + i, values[i], at)
+  }
+  const devices = pack.devices.map((item, i) => i === idx
+    ? { ...item, values: vals, sim: false }
+    : item)
+  saveWorkspace(dshHome, cwd, { modbus: { devices, activeId: pack.activeId } })
+}
+
 const syncSlaves = async (cwd) => {
   if (!cwd) return
   try {
     const ws = loadWorkspace(dshHome, cwd)
-    await syncDeviceSlaves(cwd, ws.modbus, () => loadWorkspace(dshHome, cwd).modbus)
+    await syncDeviceSlaves(cwd, ws.modbus, () => loadWorkspace(dshHome, cwd).modbus, (deviceId, fn, address, values, at) => {
+      persistSlaveWrite(cwd, deviceId, fn, address, values, at)
+    })
   } catch { /* listen is best-effort */ }
 }
 
@@ -169,6 +191,10 @@ export function apply(ctx, config = {}) {
     route('/dsh-vision-bench/modbus/read', async (req) => {
       const body = await readJsonBody(req)
       return modbusRead(dshHome, body && body.cwd, body)
+    }),
+    route('/dsh-vision-bench/modbus/write', async (req) => {
+      const body = await readJsonBody(req)
+      return modbusWrite(dshHome, body && body.cwd, body)
     }),
     route('/dsh-vision-bench/modbus/poll', async (req) => {
       const body = await readJsonBody(req)

@@ -10,7 +10,16 @@ import {
   saveWorkspace,
   storeDir,
 } from './bench-store.mjs'
-import { applySegmentRead, normalizeSegments, simulateSegmentRan } from './bench-points.mjs'
+import {
+  applyPointWrite,
+  applySegmentRead,
+  clampInt,
+  functionTag,
+  normalizeSegments,
+  normalizeWriteValues,
+  segmentCovering,
+  simulateSegmentRan,
+} from './bench-points.mjs'
 import { activeDevice, normalizeModbus } from './bench-devices.mjs'
 import { runPythonScript } from './bench-run.mjs'
 import { serialDevicePath } from './bench-serial.mjs'
@@ -349,6 +358,130 @@ export const modbusRead = async (home, cwd, body, opts) => {
     : ('Modbus 读失败 ' + (ran.error || ''))
   finishTask(home, room.cwd, task.id, { ok: !!ran.ok, summary })
   return { ...ran, taskId: task.id, source: origin.source }
+}
+
+const pointBefore = (device, fn, address) => {
+  const segment = segmentCovering(device.segments, fn, address)
+  if (!segment) return null
+  const recs = Array.isArray(device.values) ? device.values : []
+  const key = String(segment.id) + ':' + String(fn) + '@' + String(address)
+  const rec = recs.find((item) => item.key === key)
+  return rec && rec.value !== null && rec.value !== undefined ? rec.value : null
+}
+
+export const modbusWrite = async (home, cwd, body, opts) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const signal = signalOf(body, opts)
+  if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
+  const workspace = loadWorkspace(home, room.cwd)
+  const pack = normalizeModbus(workspace.modbus)
+  const device = (body && body.deviceId)
+    ? (pack.devices.find((item) => item.id === body.deviceId) || activeDevice(pack))
+    : activeDevice(pack)
+  const m = device
+  const fn = Number(body && body.function)
+  const address = clampInt(body && body.address, -1, 0, 65535)
+  if (address < 0) return { ok: false, error: '缺少寄存器地址' }
+  const rawValues = body && body.values !== undefined
+    ? body.values
+    : (body && body.value !== undefined ? body.value : undefined)
+  const check = normalizeWriteValues(fn, rawValues, 1968)
+  if (!check.ok) return { ok: false, error: check.error }
+  const count = check.values.length
+  const local = m.sim === true || m.role === 'slave'
+  if (local) {
+    for (let i = 0; i < count; i++) {
+      if (!segmentCovering(m.segments, fn, address + i)) {
+        return { ok: false, error: '地址 ' + (address + i) + ' 不在点表段内' }
+      }
+    }
+  }
+  if (hasRunning(workspace, 'write')) {
+    return { ok: false, error: '已有写入任务进行中' }
+  }
+  const bindings = m.sim ? { python: '' } : loadBindings(home)
+  let conn = null
+  if (!m.sim) {
+    conn = connectionArgs(m)
+    if (conn.error) return { ok: false, error: conn.error }
+  }
+  const origin = originOf(body)
+  const tag = functionTag(fn)
+  const label = count === 1
+    ? ('写 ' + tag + address + ' = ' + check.values[0])
+    : ('批量写 ' + tag + address + '–' + (address + count - 1) + '（' + count + ' 点）')
+  const before = []
+  for (let i = 0; i < count; i++) before.push(pointBefore(m, fn, address + i))
+  const task = openTask(home, room.cwd, {
+    type: 'write',
+    source: origin.source,
+    sessionId: origin.sessionId,
+    summary: label,
+  })
+  const done = (ok, summary, extra = {}) => {
+    const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+    const devices = extra.devices || latest.devices.map((item) => item.id === m.id ? { ...item, ...extra.devicePatch } : item)
+    finishTask(home, room.cwd, task.id, {
+      ok,
+      summary,
+      modbus: { devices, activeId: latest.activeId },
+    })
+    return {
+      ok,
+      taskId: task.id,
+      source: origin.source,
+      action: 'write',
+      function: fn,
+      address,
+      before,
+      target: check.values,
+      simulated: !!extra.simulated,
+      ...(ok ? {} : { error: summary }),
+    }
+  }
+
+  if (local) {
+    const at = Date.now()
+    let vals = Array.isArray(m.values) ? m.values : []
+    for (let i = 0; i < count; i++) {
+      const seg = segmentCovering(m.segments, fn, address + i)
+      vals = applyPointWrite(vals, seg, address + i, check.values[i], at)
+    }
+    const devices = pack.devices.map((item) => item.id === m.id
+      ? { ...item, values: vals, sim: false }
+      : item)
+    return done(true, label + '（本地生效）', { devices, simulated: m.sim === true })
+  }
+
+  const ran = await runPythonScript(bindings.python, 'modbus_write.py', conn.args.concat([
+    '--function', String(check.fc),
+    '--address', String(address),
+    '--values', check.values.join(','),
+  ]), { cwd: room.cwd, timeoutMs: 20000, signal })
+  if (ran.cancelled) {
+    finishTask(home, room.cwd, task.id, { cancelled: true, summary: '写入已取消' })
+    return { ok: false, cancelled: true, taskId: task.id, source: origin.source, error: '已取消' }
+  }
+  if (!ran.ok) {
+    return done(false, '写入失败 ' + (ran.error || ''))
+  }
+  const readbackRan = await runSegment(bindings.python, conn, { id: 'write-back', function: fn, address, count }, room.cwd, 20000, signal)
+  const raw = readbackRan.ok && readbackRan.result && readbackRan.result.details && Array.isArray(readbackRan.result.details.raw)
+    ? readbackRan.result.details.raw.slice(0, count)
+    : []
+  const readbackOk = readbackRan.ok && raw.length === count
+  let vals = Array.isArray(m.values) ? m.values : []
+  for (let i = 0; i < count; i++) {
+    const seg = segmentCovering(m.segments, fn, address + i) || { id: 'write', function: fn, address: address + i, count: 1 }
+    vals = applyPointWrite(vals, seg, address + i, raw[i] !== undefined ? raw[i] : null, Date.now())
+  }
+  const devices = pack.devices.map((item) => item.id === m.id ? { ...item, values: vals } : item)
+  const mismatch = readbackOk && raw.some((value, i) => Number(value) !== Number(check.values[i]))
+  const summary = label + (readbackOk
+    ? (mismatch ? '，回读不一致：' + JSON.stringify(raw) : '，回读一致')
+    : ('，回读失败 ' + (readbackRan.error || '')))
+  return done(readbackOk && !mismatch, summary, { devices })
 }
 
 export const modbusPoll = async (home, cwd, opts) => {
