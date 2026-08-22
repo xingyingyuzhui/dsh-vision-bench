@@ -118,13 +118,34 @@ const COPY = {
     needSegments: '未添加寄存器段',
     pointsHint: '每段对应一帧报文。监视在右侧打开实时点表。',
     live: '实时',
-    liveTable: '点表',
+    liveTable: '监视',
     liveChart: '曲线',
     liveAlarm: '告警',
+    liveFrames: '串口报文',
     liveStart: '监视',
     liveStop: '停止',
-    liveEmpty: '无监视点。先添加寄存器段。',
+    liveEmpty: '无监视点，先在上位机添加点位。',
     liveClose: '关闭',
+    monitorScope: '监视范围',
+    scopeFollow: '跟随上位机',
+    scopePinned: '已固定',
+    openInHmi: '在上位机打开',
+    monitorEmpty: '无监视点，先在上位机添加点位',
+    monitorSearch: '搜索点位',
+    monitorQuality: '质量',
+    monitorTime: '采集时间',
+    framesTab: '串口报文',
+    framesProto: '协议报文',
+    framesRaw: '原始数据',
+    framesAll: '全部串口',
+    framesPortInUse: '串口被占用',
+    framesClearView: '清空显示',
+    framesClearCache: '清除缓存',
+    framesDetail: '事务详情',
+    framesCopyHex: '复制 Hex',
+    framesCopyTx: '复制事务',
+    framesExport: '导出范围',
+    portInUse: '串口被占用',
     projectMap: '工程',
     projectMapEmpty: '先在调试页选择 Keil 工程。',
     mapIncludes: '包含路径',
@@ -346,13 +367,34 @@ const COPY = {
     needSegments: 'No register range',
     pointsHint: 'Each range is one PDU. Watch opens the live table on the right.',
     live: 'Live',
-    liveTable: 'Points',
+    liveTable: 'Monitor',
     liveChart: 'Charts',
     liveAlarm: 'Alarms',
+    liveFrames: 'Serial Frames',
     liveStart: 'Watch',
     liveStop: 'Stop',
-    liveEmpty: 'No points. Add a register range first.',
+    liveEmpty: 'No points yet, add them in HMI first.',
     liveClose: 'Close',
+    monitorScope: 'Monitor scope',
+    scopeFollow: 'Follow HMI',
+    scopePinned: 'Pinned',
+    openInHmi: 'Open in HMI',
+    monitorEmpty: 'No points yet, add them in HMI first',
+    monitorSearch: 'Search points',
+    monitorQuality: 'Quality',
+    monitorTime: 'Acquired',
+    framesTab: 'Serial Frames',
+    framesProto: 'Protocol',
+    framesRaw: 'Raw data',
+    framesAll: 'All ports',
+    framesPortInUse: 'Port in use',
+    framesClearView: 'Clear view',
+    framesClearCache: 'Clear cache',
+    framesDetail: 'Transaction detail',
+    framesCopyHex: 'Copy Hex',
+    framesCopyTx: 'Copy transaction',
+    framesExport: 'Export range',
+    portInUse: 'Port in use',
     projectMap: 'Project',
     projectMapEmpty: 'Choose a Keil project on the Debug tab.',
     mapIncludes: 'Include paths',
@@ -2398,6 +2440,50 @@ function subscribeState(post, cwd, cb) {
   }
 }
 
+// ── Sidebar scope (follow / pinned) helpers ────────────────────────────────
+// Pinned scope lives per-cwd in memory; HMI activeConnectionId/activeDeviceId is the follow source.
+// All three sidebar tabs (monitor / chart / alarm / frames) use same resolver so they never diverge.
+const SIDEBAR_PIN = new Map() // cwd -> { connectionId, deviceId, pinned:boolean }
+
+function getSidebarPin(cwd) {
+  return SIDEBAR_PIN.get(cwd) || null
+}
+function setSidebarPin(cwd, pin) {
+  if (!pin || !pin.pinned) {
+    SIDEBAR_PIN.delete(cwd)
+    return null
+  }
+  const v = {
+    connectionId: String(pin.connectionId || ''),
+    deviceId: String(pin.deviceId || ''),
+    pinned: true,
+  }
+  SIDEBAR_PIN.set(cwd, v)
+  return v
+}
+function clearSidebarPin(cwd) {
+  SIDEBAR_PIN.delete(cwd)
+}
+function resolveSidebarScope(cwd, activeConnectionId, activeDeviceId) {
+  const pin = SIDEBAR_PIN.get(cwd)
+  if (pin && pin.pinned && pin.connectionId) {
+    return { connectionId: pin.connectionId, deviceId: pin.deviceId || '', pinned: true, follow: false }
+  }
+  return { connectionId: String(activeConnectionId || ''), deviceId: String(activeDeviceId || ''), pinned: false, follow: true }
+}
+function filterByScope(list, scope, getIds) {
+  if (!Array.isArray(list)) return []
+  if (!scope || !scope.connectionId) return list
+  return list.filter((item) => {
+    const ids = typeof getIds === 'function' ? getIds(item) : item
+    const cid = ids && (ids.connectionId || ids.connId) || ''
+    const did = ids && ids.deviceId || ''
+    if (cid !== scope.connectionId) return false
+    if (scope.deviceId && did && did !== scope.deviceId) return false
+    return true
+  })
+}
+
 function lineKind(line) {
   if (/(assert|panic|fault|hardfault|error|错误|失败|exception)/i.test(line)) return 'err'
   if (/(warn|警告)/i.test(line)) return 'warn'
@@ -4430,13 +4516,14 @@ function createHmiView(React, t, post, openLive) {
 const TAB_TABLE = 'dsh-vision-bench:modbus'
 const TAB_CHART = 'dsh-vision-bench:charts'
 const TAB_ALARM = 'dsh-vision-bench:alarms'
+const TAB_FRAMES = 'dsh-vision-bench:frames'
 const INTERVALS = [500, 1000, 2000, 5000]
 const TREND_CAP = 600
 const TREND_WINDOW_MS = 5 * 60 * 1000
 
 const TREND = { cwd: '', series: new Map(), meta: new Map() }
 
-const trendKey = (deviceId, pointKey) => String(deviceId) + ':' + String(pointKey)
+const trendKey = (connectionId, deviceId, pointId) => String(connectionId) + ':' + String(deviceId) + ':' + String(pointId)
 
 const sampleTrend = (cwd, pack) => {
   if (!cwd || TREND.cwd !== cwd) {
@@ -4448,19 +4535,22 @@ const sampleTrend = (cwd, pack) => {
     if (!cwd) return
   }
   const now = Date.now()
-  const segById = {}
-  for (const seg of normalizePointsSafe(pack)) segById[seg.id] = seg
+  const pointsById = {}
+  for (const p of Array.isArray(pack.points) ? pack.points : []) pointsById[p.id] = p
   for (const rec of Array.isArray(pack.values) ? pack.values : []) {
-    if (!rec || !rec.key || rec.ok !== true || rec.value === null && rec.raw === null) continue
+    const pid = rec && (rec.pointId || rec.key)
+    if (!pid || !pointsById[pid]) continue
+    // quality gate: only good values produce trend points; bad quality => gap (no point)
+    if (rec.ok !== true) continue
     const rawV = rec.value !== null && rec.value !== undefined ? Number(rec.value) : Number(rec.raw)
     if (!Number.isFinite(rawV)) continue
-    const key = String(rec.key)
-    TREND.meta.set(key, { label: (rec.name || key), unit: '' })
+    const pt = pointsById[pid]
+    const key = trendKey(pt.connectionId || '', pt.deviceId || '', pid)
+    TREND.meta.set(key, { label: (pt.name || pid), unit: pt.unit || '', connectionId: pt.connectionId, deviceId: pt.deviceId, pointId: pid })
     let list = TREND.series.get(key)
     if (!list) { list = []; TREND.series.set(key, list) }
     list.push({ t: now, v: rawV })
     if (list.length > TREND_CAP) list.splice(0, list.length - TREND_CAP)
-    void segById
   }
 }
 
@@ -4505,56 +4595,64 @@ function getBetterSidebar(ctx) {
 
 function createLiveView(React, t, post, hooks) {
   const openLive = hooks && hooks.openLive
+  const openHmi = hooks && hooks.openHmi
   const closeTab = hooks && hooks.closeTab
   return function LiveView(props) {
     const el = React.createElement
     const cwd = sessionCwd(props)
     const [health, setHealth] = React.useState({})
-    const [modbus, setModbus] = React.useState({ segments: [], values: [], polling: { enabled: false, intervalMs: 1000 } })
+    const [modbus, setModbus] = React.useState({ version: 3, connections: [], devices: [], points: [], values: [], pollingByConnection: {} })
     const [tickError, setTickError] = React.useState('')
-    const [edit, setEdit] = React.useState(null)
+    const [search, setSearch] = React.useState('')
+    const [pinnedTick, setPinnedTick] = React.useState(0)
+    const [paused, setPaused] = React.useState(false)
 
     React.useEffect(() => {
       let stop = false
       let timer = 0
-      function wait(ms) {
-        return new Promise((resolve) => { timer = setTimeout(resolve, ms) })
-      }
+      function wait(ms) { return new Promise((resolve) => { timer = setTimeout(resolve, ms) }) }
       async function loop() {
         while (!stop) {
           if (!cwd) {
-            setModbus({ segments: [], values: [], polling: { enabled: false, intervalMs: 1000 } })
+            setModbus({ version: 3, connections: [], devices: [], points: [], values: [], pollingByConnection: {} })
             await wait(2000)
             continue
           }
+          if (paused) { await wait(2000); continue }
           try {
             const data = await post('/dsh-vision-bench/state', { cwd })
             if (stop) return
             if (data && data.health) setHealth(data.health)
             const next = data && data.workspace && data.workspace.modbus
-            if (next) setModbus(next)
-            if (next) sampleTrend(cwd, next)
-            const polling = (next && next.polling) || {}
-            const enabled = polling.enabled === true
-            const interval = Number(polling.intervalMs) > 0 ? Number(polling.intervalMs) : 1000
-            const hasSegments = next && (
-              (Array.isArray(next.devices) && next.devices.some((item) => item.segments && item.segments.length))
-              || (Array.isArray(next.segments) && next.segments.length > 0)
-            )
-            if (enabled && hasSegments && (healthReady(data && data.health) || (next && next.sim))) {
-              const polled = await post('/dsh-vision-bench/modbus/poll', { cwd }, 120000)
+            if (next) {
+              setModbus(next)
+              sampleTrend(cwd, next)
+            }
+            const packTmp = next ? normalizeModbus(next) : null
+            const activeCid = packTmp ? packTmp.activeConnectionId : null
+            const hasPoints = packTmp && Array.isArray(packTmp.points) && packTmp.points.length > 0
+            const pollingForActive = packTmp && activeCid ? (packTmp.pollingByConnection && packTmp.pollingByConnection[activeCid]) : null
+            const enabled = pollingForActive ? pollingForActive.enabled : (next && next.polling && next.polling.enabled)
+            const interval = pollingForActive ? pollingForActive.intervalMs : (next && next.polling && next.polling.intervalMs) || 1000
+            const canPoll = enabled && hasPoints && (healthReady(data && data.health) || (next && (next.conn && next.conn.sim)))
+            if (canPoll) {
+              // poll only the scoped connection (follow or pinned)
+              const scope = resolveSidebarScope(cwd, packTmp.activeConnectionId, packTmp.activeDeviceId)
+              const pollCid = scope.connectionId || activeCid
+              const polled = await post('/dsh-vision-bench/modbus/poll', pollCid ? { cwd, connectionId: pollCid } : { cwd }, 120000)
               if (stop) return
               if (polled && Array.isArray(polled.values)) {
-                setModbus((prev) => ({ ...prev, values: polled.values, polling: polled.polling || prev.polling }))
+                setModbus((prev) => ({ ...prev, values: polled.values, pollingByConnection: polled.pollingByConnection || prev.pollingByConnection, polling: polled.polling || prev.polling }))
               }
               if (polled && Array.isArray(polled.framesLog)) {
-                pushFramesLog(cwd, polled.framesLog)
+                const cid = pollCid || '_default'
+                pushFramesLog(cwd, cid, polled.framesLog)
               }
               setTickError(polled && polled.ok === false && !polled.skipped ? (polled.error || t('fail')) : '')
-              await wait(interval)
+              await wait(Math.max(200, Number(interval) || 1000))
             } else {
               if (!enabled) setTickError('')
-              await wait(enabled ? interval : 2000)
+              await wait(enabled ? 2000 : 2000)
             }
           } catch (err) {
             if (stop) return
@@ -4565,98 +4663,140 @@ function createLiveView(React, t, post, hooks) {
       }
       loop()
       return () => { stop = true; clearTimeout(timer) }
-    }, [cwd])
+    }, [cwd, paused])
 
     function persistPolling(patch) {
       if (!cwd) return
       const pack = normalizeModbus(modbus)
-      const devices = pack.devices.map((item) => (
-        item.role === 'slave'
-          ? item
-          : { ...item, polling: { ...item.polling, ...patch } }
-      ))
-      const polling = { ...(pack.polling || {}), ...patch }
-      const next = { ...pack, devices, polling }
+      const scope = resolveSidebarScope(cwd, pack.activeConnectionId, pack.activeDeviceId)
+      const targetCid = scope.connectionId || pack.activeConnectionId
+      if (!targetCid) return
+      const nextPolling = { ...(pack.pollingByConnection || {}) }
+      nextPolling[targetCid] = { ...(nextPolling[targetCid] || { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' }), ...patch }
+      const next = { ...pack, pollingByConnection: nextPolling }
+      // optimistic
       setModbus(next)
-      if (polling.enabled && typeof openLive === 'function') openLive()
-      post('/dsh-vision-bench/workspace', { cwd, modbus: next }).catch(() => { /* keep local */ })
+      if (patch.enabled && typeof openLive === 'function') openLive()
+      post('/dsh-vision-bench/workspace', { cwd, modbus: { pollingByConnection: nextPolling, version: 3 } }).catch(() => {})
     }
 
     const pack = normalizeModbus(modbus)
-    const polling = pack.polling || {}
+    const scope = resolveSidebarScope(cwd, pack.activeConnectionId, pack.activeDeviceId)
+    // keep pinnedTick to force re-render on pin change
+    void pinnedTick
+    const activeConn = pack.connections.find((c) => c.id === scope.connectionId) || pack.connections.find((c) => c.id === pack.activeConnectionId) || pack.connections[0] || null
+    const activeDev = pack.devices.find((d) => d.id === scope.deviceId) || pack.devices.find((d) => d.connectionId === (activeConn && activeConn.id)) || pack.devices[0] || null
+    const pollingForScope = scope.connectionId ? (pack.pollingByConnection && pack.pollingByConnection[scope.connectionId]) : null
+    const polling = pollingForScope || pack.polling || { enabled: false, intervalMs: 1000 }
     const enabled = polling.enabled === true
     const pythonReady = healthReady(health)
-    const conn = pack.conn || {}
-    const sim = conn.sim === true
+    const sim = activeConn ? (activeConn.conn && activeConn.conn.sim === true) : false
     const canWatch = pythonReady || sim
     const points = Array.isArray(pack.points) ? pack.points : []
+    // v3 scope filtering: must match connectionId and optionally deviceId
+    const scopedPoints = points.filter((p) => {
+      if (scope.connectionId && (p.connectionId || p.connId) !== scope.connectionId) return false
+      if (scope.deviceId && scope.pinned && p.deviceId !== scope.deviceId) return false
+      return true
+    })
     const valueMap = {}
     for (const item of Array.isArray(pack.values) ? pack.values : []) {
-      if (item && item.key) valueMap[item.key] = item
+      const pid = item && (item.pointId || item.key)
+      if (pid) valueMap[pid] = item
     }
-    const rows = points.map((point) => {
+    const needle = search.trim().toLowerCase()
+    const rows = scopedPoints.filter((p) => {
+      if (!needle) return true
+      const name = (p.name || (functionTag(p.function) + p.address)).toLowerCase()
+      return name.includes(needle) || String(p.address).includes(needle) || String(p.id).toLowerCase().includes(needle)
+    }).map((point) => {
       const rec = valueMap[point.id]
       let shown = '—'
-      if (rec && rec.ok && rec.raw !== null && rec.raw !== undefined) {
-        shown = String(decodeValue(point, typeof rec.raw === 'boolean' ? (rec.raw ? 1 : 0) : rec.raw))
-        if (point.unit) shown += ' ' + point.unit
-      } else if (rec && rec.ok === false && rec.error) {
-        shown = rec.error
+      let quality = 'good'
+      let rawText = ''
+      let engText = ''
+      if (rec) {
+        if (rec.ok === false) {
+          shown = rec.error || '—'
+          quality = 'bad'
+        } else if (rec.raw !== null && rec.raw !== undefined) {
+          const rawVal = rec.raw
+          const engVal = decodeValue(point, typeof rawVal === 'boolean' ? (rawVal ? 1 : 0) : rawVal)
+          rawText = String(rawVal)
+          engText = String(engVal) + (point.unit ? ' ' + point.unit : '')
+          shown = engText
+          quality = 'good'
+        } else {
+          quality = 'stale'
+        }
+      } else {
+        quality = 'stale'
       }
+      // stale / timeout / disconnected not green
+      const at = rec && rec.at ? clockOf(rec.at) : ''
       return {
         key: point.id,
+        point,
+        rec,
         name: point.name || (functionTag(point.function) + point.address),
-        fn: point.function,
-        address: point.address,
-        writable: isWritableFunction(point.function),
-        deviceId: '',
         shown,
-        ok: rec ? rec.ok !== false : true,
+        rawText,
+        engText,
+        quality,
+        at,
+        ok: !rec || rec.ok !== false ? true : false,
+        connectionId: point.connectionId || point.connId || '',
+        deviceId: point.deviceId || '',
       }
     })
-    const pointTag = (fn) => ({ 1: 'C', 2: 'DI', 3: 'HR', 4: 'IR' }[fn] || 'HR')
-    const openEdit = (row) => {
-      setEdit({ rowKey: row.key, name: row.name, deviceId: row.deviceId, fn: row.fn, address: row.address, text: '', busy: false, result: null })
-    }
-    const submitEdit = () => {
-      if (!edit || !cwd) return
-      const kind = writeTargetOf(edit.fn).kind
-      const values = kind === 'coil'
-        ? [Number(edit.text) ? 1 : 0]
-        : [Number(edit.text)]
-      const check = normalizeWriteValues(edit.fn, values, 1)
-      if (!check.ok) {
-        setEdit((prev) => ({ ...prev, result: { ok: false, error: check.error } }))
-        return
-      }
-      setEdit((prev) => ({ ...prev, busy: true, result: null }))
-      post('/dsh-vision-bench/modbus/write', {
-        cwd,
-        source: 'user',
-        deviceId: edit.deviceId,
-        function: edit.fn,
-        address: edit.address,
-        values,
-      }, 60000).then((data) => {
-        setEdit((prev) => ({ ...prev, busy: false, result: data }))
-      }).catch((err) => {
-        setEdit((prev) => ({ ...prev, busy: false, result: { ok: false, error: String((err && err.message) || t('fail')) } }))
-      })
-    }
-    const kind = !cwd || !rows.length || !canWatch
+    const kind = !cwd || !scopedPoints.length || !canWatch
       ? 'idle'
       : (tickError || polling.lastOk === false ? 'err' : (enabled ? 'live' : 'idle'))
     const tabId = props && props.tab && props.tab.id
+    const togglePin = () => {
+      if (scope.pinned) {
+        setSidebarPin(cwd, null)
+      } else {
+        setSidebarPin(cwd, { connectionId: scope.connectionId, deviceId: scope.deviceId, pinned: true })
+      }
+      setPinnedTick((n) => n + 1)
+    }
+    const openInHmi = () => {
+      if (typeof openHmi === 'function') {
+        try { openHmi({ connectionId: scope.connectionId, deviceId: scope.deviceId }) } catch {}
+        return
+      }
+      if (typeof openLive === 'function') {
+        try { openLive() } catch {}
+      }
+    }
+    const scopeLabel = () => {
+      if (!cwd) return t('needWorkspace')
+      const connName = activeConn ? activeConn.name : (scope.connectionId || '—')
+      const connEp = activeConn && activeConn.conn ? (activeConn.conn.mode === 'tcp' ? ((activeConn.conn.host || 'TCP') + ':' + (activeConn.conn.tcpPort || 502)) : (activeConn.conn.port || '—')) : '—'
+      const devName = activeDev ? (activeDev.name + ' · Unit ' + activeDev.unitId) : (scope.deviceId || '—')
+      return connName + ' · ' + connEp + ' / ' + devName
+    }
 
     return el('div', { className: 'dvb-live', 'data-kind': kind },
       el('div', { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('liveTable')),
         el('span', { className: 'dvb-live-dot', 'data-kind': kind })),
+      // unified scope bar
+      el('div', { className: 'dvb-scope-bar' },
+        el('span', { className: 'dvb-scope-cwd', title: cwd || '' }, cwd ? cwd.slice(-32) : t('needWorkspace')),
+        el('span', { className: 'dvb-scope-conn', title: scopeLabel() }, scopeLabel()),
+        el('span', { className: 'dvb-chip', 'data-kind': scope.pinned ? 'warn' : 'ready' }, scope.pinned ? t('scopePinned') : t('scopeFollow')),
+        el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: togglePin }, scope.pinned ? t('scopeFollow') : t('scopePinned')),
+        el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: openInHmi }, t('openInHmi')),
+        tabId && typeof closeTab === 'function'
+          ? el('button', { type: 'button', className: 'dvb-btn dvb-live-close', title: t('liveClose'), onClick() { closeTab(tabId) } }, '×')
+          : null),
       el('div', { className: 'dvb-live-controls' },
         el('button', {
           type: 'button',
           className: 'dvb-btn' + (enabled ? ' dvb-btn-primary' : ''),
-          disabled: !cwd || !canWatch || !rows.length,
+          disabled: !cwd || !canWatch || !scopedPoints.length,
           onClick() { persistPolling({ enabled: !enabled }) },
         }, enabled ? t('liveStop') : t('liveStart')),
         el('select', {
@@ -4665,18 +4805,27 @@ function createLiveView(React, t, post, hooks) {
           disabled: !cwd,
           onChange(event) { persistPolling({ intervalMs: Number(event.target.value) }) },
         }, INTERVALS.map((ms) => el('option', { key: String(ms), value: String(ms) }, (ms / 1000) + 's'))),
-        tabId && typeof closeTab === 'function'
-          ? el('button', {
-            type: 'button', className: 'dvb-btn dvb-live-close', title: t('liveClose'),
-            onClick() { closeTab(tabId) },
-          }, '×')
-          : null),
+        el('button', {
+          type: 'button',
+          className: 'dvb-btn',
+          disabled: !cwd,
+          title: paused ? '恢复' : '暂停',
+          onClick() { setPaused((v) => !v) },
+        }, paused ? '恢复' : '暂停')),
+      el('div', { className: 'dvb-live-search' },
+        el('input', {
+          className: 'dvb-input',
+          value: search,
+          placeholder: t('monitorSearch'),
+          spellCheck: false,
+          onChange(event) { setSearch(event.target.value) },
+        })),
       !cwd
         ? el('div', { className: 'dvb-hint' }, t('needWorkspace'))
         : (!canWatch
           ? el('div', { className: 'dvb-need' }, t('needBindingsRead'))
-          : (!rows.length
-            ? el('div', { className: 'dvb-hint' }, t('liveEmpty'))
+          : (!scopedPoints.length
+            ? el('div', { className: 'dvb-hint' }, t('monitorEmpty'))
             : (sim ? el('div', { className: 'dvb-hint' }, t('simHint')) : null))),
       tickError ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, tickError) : null,
       rows.length
@@ -4685,70 +4834,29 @@ function createLiveView(React, t, post, hooks) {
             key: row.key,
             className: 'dvb-live-row',
             'data-ok': row.ok ? 'true' : 'false',
+            'data-quality': row.quality,
+            'data-connection': row.connectionId,
+            'data-device': row.deviceId,
           },
-            el('span', { className: 'dvb-live-name', title: row.name }, row.name),
-            el('span', { className: 'dvb-val' }, row.shown),
-            row.writable
-              ? el('button', {
-                type: 'button',
-                className: 'dvb-btn dvb-btn-write dvb-live-edit' + (edit && edit.rowKey === row.key ? ' is-on' : ''),
-                title: t('writeTitle'),
-                disabled: !!edit && edit.busy,
-                onClick() { openEdit(row) },
-              }, '✎')
-              : null)
-        }))
-        : null,
-      edit
-        ? el('div', { className: 'dvb-write-panel dvb-write-inline' },
-          el('div', { className: 'dvb-write-head' },
-            el('span', { className: 'dvb-write-title' }, t('writeTitle') + ' · ' + edit.name),
-            el('button', {
-              type: 'button', className: 'dvb-btn',
-              disabled: edit.busy,
-              onClick() { setEdit(null) },
-            }, t('writeClose'))),
-          el('div', { className: 'dvb-write-form' },
-            writeTargetOf(edit.fn).kind === 'coil'
-              ? el('select', {
-                className: 'dvb-input',
-                value: String(Number(edit.text) ? 1 : 0),
-                disabled: edit.busy,
-                onChange(event) { setEdit((prev) => ({ ...prev, text: event.target.value })) },
-              },
-                el('option', { value: '0' }, t('coilOff')),
-                el('option', { value: '1' }, t('coilOn')))
-              : el('input', {
-                className: 'dvb-input dvb-input-mono',
-                type: 'number',
-                min: 0,
-                max: 65535,
-                value: edit.text,
-                disabled: edit.busy,
-                spellCheck: false,
-                onChange(event) { setEdit((prev) => ({ ...prev, text: event.target.value })) },
-                onKeyDown(event) {
-                  if (event.key === 'Enter' && !edit.busy) submitEdit()
-                },
-              }),
+            el('span', { className: 'dvb-live-name', title: row.name + ' [' + row.connectionId + '/' + row.deviceId + ']' }, row.name),
+            el('span', { className: 'dvb-val', title: row.rawText ? ('raw ' + row.rawText + ' → ' + row.engText) : row.shown }, row.shown),
+            el('span', { className: 'dvb-map-meta', title: t('monitorTime') }, row.at || ''),
+            el('span', { className: 'dvb-badge', 'data-quality': row.quality }, row.quality === 'good' ? '' : row.quality),
             el('button', {
               type: 'button',
-              className: 'dvb-btn dvb-btn-primary dvb-btn-write',
-              disabled: !cwd || edit.busy,
-              onClick: submitEdit,
-            }, edit.busy ? t('writing') : t('writeConfirm'))),
-          edit.result
-            ? (edit.result.ok === false
-              ? el('div', { className: 'dvb-write-result', 'data-kind': 'err' }, edit.result.error || t('fail'))
-              : el('div', { className: 'dvb-write-result', 'data-kind': 'ok' },
-                functionTag(edit.fn) + edit.address + ': '
-                  + (edit.result.before && edit.result.before[0] !== null && edit.result.before[0] !== undefined ? String(edit.result.before[0]) : '—')
-                  + ' → ' + String(edit.result.target && edit.result.target[0])
-                  + ' → ' + (edit.result.readback && edit.result.readback[0] !== undefined ? String(edit.result.readback[0]) : '—')))
-            : null)
+              className: 'dvb-btn dvb-btn-sm',
+              title: t('openInHmi'),
+              onClick() {
+                if (typeof openHmi === 'function') {
+                  try { openHmi({ connectionId: row.connectionId, deviceId: row.deviceId, pointId: row.key }) } catch {}
+                } else if (typeof openLive === 'function') openLive()
+              },
+            }, t('openInHmi')))
+        }))
         : null)
   }
 }
+
 
 function createSoonPage(React, t, titleKey, bodyKey) {
   return function SoonPage() {

@@ -28,7 +28,7 @@ test('translate falls back and interpolates', () => {
   assert.equal(translate('zh', 'liveStart'), '监视')
   assert.equal(translate('zh', 'fnHolding'), '03 保持寄存器')
   assert.equal(translate('zh', 'liveClose'), '关闭')
-  assert.equal(translate('zh', 'liveTable'), '点表')
+  assert.equal(translate('zh', 'liveTable'), '监视')
   assert.equal(translate('zh', 'liveChart'), '曲线')
   assert.equal(translate('zh', 'recipePair'), '主从示例')
   assert.equal(translate('zh', 'roleSlave'), '从机')

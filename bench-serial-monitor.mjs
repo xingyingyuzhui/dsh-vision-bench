@@ -19,12 +19,16 @@ export const findMonitoredPort = (port) => {
 }
 
 export const openSerialMonitor = (pythonBin, cwd, opts) => {
-  if (!pythonBin) return { ok: false, error: '请先在设置 → 台架 绑定 Python' }
+  if (!pythonBin) return { ok: false, error: '请先在设置 → 台架 绑定 Python', code: 'NO_PYTHON' }
   const port = String((opts && opts.port) || '').trim()
   const baudrate = Number(opts && opts.baudrate) > 0 ? Number(opts.baudrate) : 115200
-  if (!port) return { ok: false, error: '缺少串口' }
+  if (!port) return { ok: false, error: '缺少串口', code: 'MISSING_PORT' }
   if (isPortBusy(port)) {
-    return { ok: false, error: '总线忙：该串口有 Modbus 事务正在执行，请稍后再打开日志监视' }
+    return { ok: false, error: '串口被占用: ' + port + ' 正被 Modbus 占用', code: 'PORT_IN_USE' }
+  }
+  const busy = findMonitoredPort(port)
+  if (busy && busy.cwd !== cwd) {
+    return { ok: false, error: '串口被占用: ' + port + ' 正被其他工作区监视', code: 'PORT_IN_USE' }
   }
   closeSerialMonitor(cwd)
   let child

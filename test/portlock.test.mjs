@@ -65,7 +65,7 @@ test('openSerialMonitor refuses while the bus is busy and findMonitoredPort matc
     await new Promise((resolve) => setTimeout(resolve, 20))
     const busy = openSerialMonitor(runner, home, { port: '\\\\.\\COM7' })
     assert.equal(busy.ok, false)
-    assert.match(busy.error, /总线忙/)
+    assert.match(busy.error, /串口被占用/)
     release()
     await running
 
