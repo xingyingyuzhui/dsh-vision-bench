@@ -89,6 +89,63 @@ export const saveBindings = (home, input) => {
   return { ok: true, bindings }
 }
 
+export const emptyFocusState = () => ({
+  request: null,
+  prev: null,
+  tempWatchIds: [],
+  badgeOnly: false,
+  evidence: [],
+})
+
+const focusText = (v) => (typeof v === 'string' ? v.trim().slice(0, 64) : '')
+
+export const normalizeFocusRequest = (input) => {
+  if (!input || typeof input !== 'object') return null
+  const connectionId = focusText(input.connectionId || input.connId)
+  const deviceId = focusText(input.deviceId)
+  const pointId = focusText(input.pointId)
+  const frameId = focusText(input.frameId)
+  const trendKey = focusText(input.trendKey)
+  const alarmId = focusText(input.alarmId)
+  const kind = typeof input.kind === 'string' ? input.kind.slice(0, 32) : ''
+  const at = Number(input.at) > 0 ? Number(input.at) : Date.now()
+  const by = input.by === 'agent' ? 'agent' : 'user'
+  const version = Number(input.version) > 0 ? Number(input.version) : 0
+  const hasTarget = connectionId || deviceId || pointId || frameId || trendKey || alarmId
+  if (!hasTarget) return null
+  return { connectionId, deviceId, pointId, frameId, trendKey, alarmId, kind, at, by, version }
+}
+
+export const normalizeFocusState = (input) => {
+  const out = emptyFocusState()
+  if (!input || typeof input !== 'object') return out
+  const req = normalizeFocusRequest(input.request || input)
+  const prev = normalizeFocusRequest(input.prev)
+  out.request = req
+  out.prev = prev
+  if (Array.isArray(input.tempWatchIds)) {
+    out.tempWatchIds = input.tempWatchIds.map((v) => focusText(v)).filter(Boolean).slice(0, 32)
+  } else if (Array.isArray(input.tempWatch)) {
+    out.tempWatchIds = input.tempWatch.map((v) => focusText(v)).filter(Boolean).slice(0, 32)
+  }
+  out.badgeOnly = input.badgeOnly === true
+  if (Array.isArray(input.evidence)) {
+    out.evidence = input.evidence.slice(0, 20).map((e) => {
+      if (!e || typeof e !== 'object') return null
+      const kind = typeof e.kind === 'string' ? e.kind.slice(0, 32) : ''
+      return {
+        kind,
+        id: focusText(e.id || e.pointId || e.frameId || e.alarmId),
+        connectionId: focusText(e.connectionId || e.connId),
+        deviceId: focusText(e.deviceId),
+        at: Number(e.at) > 0 ? Number(e.at) : Date.now(),
+        version: Number(e.version) > 0 ? Number(e.version) : 0,
+      }
+    }).filter(Boolean)
+  }
+  return out
+}
+
 export const emptyWorkspace = () => ({
   keil: { project: '', target: '', artifact: 'hex', download: '' },
   log: emptyLog(),
@@ -97,6 +154,7 @@ export const emptyWorkspace = () => ({
   session: { boundId: '' },
   manualRequests: [],
   modbus: normalizeModbus({ version: 3 }),
+  focus: emptyFocusState(),
 })
 
 const MANUAL_STATUSES = new Set(['pending', 'done', 'rejected'])
@@ -135,6 +193,7 @@ export const normalizeWorkspace = (input) => {
   out.session = { boundId: typeof session.boundId === 'string' ? session.boundId.trim() : '' }
   out.manualRequests = normalizeManualRequests(input && input.manualRequests)
   out.modbus = normalizeModbus(modbus)
+  out.focus = normalizeFocusState(input && input.focus)
   return out
 }
 
@@ -286,6 +345,7 @@ export const saveWorkspace = (home, cwd, input) => {
     timeline: input && input.timeline !== undefined ? input.timeline : prev.timeline,
     session: { ...prev.session, ...(input && input.session) },
     manualRequests: input && input.manualRequests !== undefined ? input.manualRequests : prev.manualRequests,
+    focus: input && input.focus !== undefined ? normalizeFocusState(input.focus) : prev.focus,
   }
   const workspace = normalizeWorkspace(merged)
   // COM / TCP server + Unit ID uniqueness check before persist

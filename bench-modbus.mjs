@@ -23,6 +23,8 @@ import {
   finishTask,
   loadBindings,
   loadWorkspace,
+  normalizeFocusRequest,
+  normalizeFocusState,
   openTask,
   pruneBuildLogs,
   recordBenchEvent,
@@ -34,8 +36,43 @@ import { withPortLock } from './bench-portlock.mjs'
 import { findMonitoredPort } from './bench-serial-monitor.mjs'
 import { notifyBenchEvent } from './bench-notify.mjs'
 
+export const ERROR_CODES = {
+  PORT_IN_USE: 'PORT_IN_USE',
+  TARGET_REQUIRED: 'TARGET_REQUIRED',
+  DEVICE_DISABLED: 'DEVICE_DISABLED',
+  ENDPOINT_DRIFT: 'ENDPOINT_DRIFT',
+  STALE_VALUE: 'STALE_VALUE',
+  WRITE_READBACK_MISMATCH: 'WRITE_READBACK_MISMATCH',
+  POINT_NOT_FOUND: 'POINT_NOT_FOUND',
+  CONNECTION_NOT_FOUND: 'CONNECTION_NOT_FOUND',
+}
+
 const needPython = (bindings) => {
   if (!bindings.python) return '请先在设置 → 台架 绑定 Python'
+  return null
+}
+
+const STALE_MS = 30 * 1000
+
+export const isStaleValue = (rec) => {
+  if (!rec || rec.ok !== true) return false
+  const at = Number(rec.at)
+  if (!Number.isFinite(at) || at <= 0) return true
+  return Date.now() - at > STALE_MS
+}
+
+const deviceDisabledOf = (pack, cid, did) => {
+  const conn = (pack.connections || []).find((c) => c.id === cid)
+  if (conn && conn.enabled === false) return true
+  const dev = (pack.devices || []).find((d) => d.id === did)
+  if (dev && dev.enabled === false) return true
+  return false
+}
+
+const targetRequired = (origin, pack, cidArg, didArg) => {
+  if (!origin || origin.source !== 'agent') return null
+  const enabledConns = (pack.connections || []).filter((c) => c.enabled !== false)
+  if (!cidArg && enabledConns.length > 1) return { error: '缺少 connectionId', errorCode: ERROR_CODES.TARGET_REQUIRED }
   return null
 }
 
@@ -326,7 +363,7 @@ export const resolvePendingWrite = async (home, cwd, id, approved) => {
     void notifyBenchEvent(home, room.cwd,
       '写点请求已失效：串口/TCP 连接在批准前发生了变化，请让 Agent 重新发起',
       '', { sessionId: entry.params.sessionId }).catch(() => {})
-    return { ok: false, error: '设备连接已变更，原批准已失效，请让 Agent 重新发起请求' }
+    return { ok: false, error: '设备连接已变更，原批准已失效，请让 Agent 重新发起请求', errorCode: ERROR_CODES.ENDPOINT_DRIFT }
   }
   return modbusWrite(home, room.cwd, {
     ...entry.params,
@@ -369,7 +406,7 @@ const runModbusScript = (python, scriptName, args, conn, opts) => {
   const port = conn && conn.mode === 'rtu' ? conn.port : ''
   if (port) {
     if (findMonitoredPort(port)) {
-      return Promise.resolve({ ok: false, error: MONITOR_BUSY_MSG })
+      return Promise.resolve({ ok: false, error: MONITOR_BUSY_MSG, errorCode: ERROR_CODES.PORT_IN_USE })
     }
     return withPortLock(port, () => runPythonScript(python, scriptName, args, opts))
   }
@@ -387,16 +424,22 @@ const framesOf = (ran) => {
   }
 }
 
-const frameEntry = (label, frames, at = Date.now(), extra = {}) => ({
-  t: at,
-  connectionId: extra.connectionId || '',
-  deviceId: extra.deviceId || 'conn',
-  deviceName: extra.deviceName || '',
-  label,
-  request: frames ? frames.request : '',
-  response: frames ? frames.response : '',
-  trace: frames ? frames.trace : [],
-})
+const frameEntry = (label, frames, at = Date.now(), extra = {}) => {
+  const cid = String(extra.connectionId || '')
+  const id = String(extra.frameId || (cid ? (cid + ':' + at + ':' + String(label).slice(0, 12)) : ('f:' + at)))
+  return {
+    id,
+    frameId: id,
+    t: at,
+    connectionId: cid,
+    deviceId: String(extra.deviceId || 'conn'),
+    deviceName: String(extra.deviceName || ''),
+    label,
+    request: frames ? frames.request : '',
+    response: frames ? frames.response : '',
+    trace: frames ? frames.trace : [],
+  }
+}
 
 // ── reads ────────────────────────────────────────────────────────────────
 
@@ -423,18 +466,30 @@ export const modbusRead = async (home, cwd, body, opts) => {
   const targetDid = didArg || (pack.devices.find((d) => d.connectionId === targetCid)?.id || activeDid)
   const targetConnObj = pack.connections.find((c) => c.id === targetCid) || pack.connections.find((c) => c.id === activeCid) || pack.connections[0]
   const conn = targetConnObj ? targetConnObj.conn : pack.conn
+  const origin = originOf(body)
+  // Explicit ID enforcement for Agent: when multiple connections exist, require connectionId
+  {
+    const need = targetRequired(origin, pack, cidArg, didArg)
+    if (need) return { ok: false, errorCode: need.errorCode, error: need.error }
+  }
+  // Device/connection disabled
+  if (deviceDisabledOf(pack, targetCid, targetDid)) {
+    return { ok: false, error: '设备已禁用', errorCode: ERROR_CODES.DEVICE_DISABLED }
+  }
+  if (!targetConnObj || !pack.connections.some((c) => c.id === targetCid)) {
+    return { ok: false, error: '连接不存在: ' + targetCid, errorCode: ERROR_CODES.CONNECTION_NOT_FOUND }
+  }
   const sim = conn.sim === true
   const bindings = sim ? { python: '' } : loadBindings(home)
   if (!sim) {
     const missing = needPython(bindings)
     if (missing) return { ok: false, error: missing }
     const connCheck = connArgs(conn)
-    if (connCheck.error) return { ok: false, error: connCheck.error }
+    if (connCheck.error) return { ok: false, error: connCheck.error, errorCode: ERROR_CODES.TARGET_REQUIRED }
   }
   if (hasRunning(workspace, 'read')) {
     return { ok: false, error: '已有读点任务进行中' }
   }
-  const origin = originOf(body)
 
   // Batch selection:
   //   all=true            → planned batches over every configured point (filtered by connection/device if given)
@@ -457,9 +512,9 @@ export const modbusRead = async (home, cwd, body, opts) => {
     batchConnIds = batches.map(() => targetCid)
   } else if (body && body.pointId) {
     const point = pack.points.find((item) => item.id === body.pointId)
-    if (!point) return { ok: false, error: '点位不存在: ' + body.pointId }
-    if (cidArg && (point.connectionId || point.connId) !== cidArg) return { ok: false, error: '点位不在指定连接: ' + body.pointId }
-    if (didArg && point.deviceId !== didArg) return { ok: false, error: '点位不在指定设备: ' + body.pointId }
+    if (!point) return { ok: false, error: '点位不存在: ' + body.pointId, errorCode: ERROR_CODES.POINT_NOT_FOUND }
+    if (cidArg && (point.connectionId || point.connId) !== cidArg) return { ok: false, error: '点位不在指定连接: ' + body.pointId, errorCode: ERROR_CODES.TARGET_REQUIRED }
+    if (didArg && point.deviceId !== didArg) return { ok: false, error: '点位不在指定设备: ' + body.pointId, errorCode: ERROR_CODES.TARGET_REQUIRED }
     batches = [{ fc: point.function, address: point.address, count: 1 }]
     labels = ['读 ' + pointLabel(point)]
     batchConnIds = [point.connectionId || targetCid]
@@ -602,14 +657,26 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   const targetDid = didArg || (pack.devices.find((d) => d.connectionId === targetCid)?.id || pack.activeDeviceId || pack.devices[0]?.id || 'd1')
   const targetConnObj = pack.connections.find((c) => c.id === targetCid) || pack.connections.find((c) => c.id === pack.activeConnectionId) || pack.connections[0]
   const conn = targetConnObj ? targetConnObj.conn : pack.conn
+  const origin = originOf(body)
+  // Agent explicit ID enforcement & device disabled
+  {
+    const need = targetRequired(origin, pack, cidArg, didArg)
+    if (need) return { ok: false, errorCode: need.errorCode, error: need.error }
+  }
+  if (deviceDisabledOf(pack, targetCid, targetDid)) {
+    return { ok: false, error: '设备已禁用', errorCode: ERROR_CODES.DEVICE_DISABLED }
+  }
+  if (!targetConnObj || !pack.connections.some((c) => c.id === targetCid)) {
+    return { ok: false, error: '连接不存在: ' + targetCid, errorCode: ERROR_CODES.CONNECTION_NOT_FOUND }
+  }
   const fn = Number(body && body.function)
   const address = clampInt(body && body.address, -1, 0, 65535)
-  if (address < 0) return { ok: false, error: '缺少寄存器地址' }
+  if (address < 0) return { ok: false, error: '缺少寄存器地址', errorCode: ERROR_CODES.TARGET_REQUIRED }
   const rawValues = body && body.values !== undefined
     ? body.values
     : (body && body.value !== undefined ? body.value : undefined)
   const check = normalizeWriteValues(fn, rawValues, 1968)
-  if (!check.ok) return { ok: false, error: check.error }
+  if (!check.ok) return { ok: false, error: check.error, errorCode: ERROR_CODES.TARGET_REQUIRED }
   const count = check.values.length
   if (hasRunning(workspace, 'write')) {
     return { ok: false, error: '已有写入任务进行中' }
@@ -619,16 +686,15 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     const addr = address + i
     const hit = findPointV3(pack.points, fn, addr, targetCid, targetDid)
     if (!hit) {
-      return { ok: false, error: '不在点表：' + functionTag(fn) + addr }
+      return { ok: false, error: '不在点表：' + functionTag(fn) + addr, errorCode: ERROR_CODES.POINT_NOT_FOUND }
     }
     if (cidArg && (hit.connectionId || hit.connId) !== cidArg) {
-      return { ok: false, error: '不在点表：' + functionTag(fn) + addr }
+      return { ok: false, error: '不在点表：' + functionTag(fn) + addr, errorCode: ERROR_CODES.TARGET_REQUIRED }
     }
     if (didArg && hit.deviceId !== didArg) {
-      return { ok: false, error: '不在点表：' + functionTag(fn) + addr }
+      return { ok: false, error: '不在点表：' + functionTag(fn) + addr, errorCode: ERROR_CODES.TARGET_REQUIRED }
     }
   }
-  const origin = originOf(body)
   if (origin.source === 'agent' && !(body && body.confirm === true)) {
     const request = createPendingWrite(room.cwd, {
       function: fn,
@@ -682,6 +748,10 @@ export const modbusWrite = async (home, cwd, body, opts) => {
         saveWorkspace(home, room.cwd, { modbus: { framesByConnection: fbc, version: 3 } })
       }
     } catch {}
+    const errorCode = extra.errorCode || (!ok
+      ? (extra.readbackMismatch ? ERROR_CODES.WRITE_READBACK_MISMATCH
+        : (!extra.readbackOk && extra.readbackTried ? ERROR_CODES.STALE_VALUE : undefined))
+      : undefined)
     return {
       ok,
       taskId: task.id,
@@ -700,7 +770,8 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       framesByConnection: extra.framesByConnection || undefined,
       values: extra.values || pack.values,
       simulated: !!extra.simulated,
-      ...(ok ? {} : { error: summaryText }),
+      ...(ok ? {} : { error: summaryText, errorCode }),
+      ...(errorCode ? { errorCode } : {}),
     }
   }
 
@@ -735,7 +806,7 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     return { ok: false, cancelled: true, taskId: task.id, source: origin.source, error: '已取消' }
   }
   if (!ran.ok) {
-    return done(false, '写入失败 ' + (ran.error || ''), { frames: framesOf(ran) })
+    return done(false, '写入失败 ' + (ran.error || ''), { frames: framesOf(ran), errorCode: ran.errorCode || ERROR_CODES.TARGET_REQUIRED })
   }
   // Read back the written range so success means verified.
   const readbackRan = await runReadTx(bindings.python, conn, fn, address, count, room.cwd, 20000, signal)
@@ -765,6 +836,10 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     values: vals,
     readback: readbackOk ? raw : [],
     frames: framesOf(ran) || framesOf(readbackRan),
+    readbackOk,
+    readbackTried: true,
+    readbackMismatch: !!mismatch,
+    errorCode: !readbackOk ? ERROR_CODES.STALE_VALUE : (mismatch ? ERROR_CODES.WRITE_READBACK_MISMATCH : undefined),
   })
 }
 
@@ -973,5 +1048,162 @@ export function deviceAlarms(device, values) {
 }
 
 export const pickModbusPatch = pickConnPatch
+
+// ── frames / focus (Agent explicit ID + UI linkage) ────────────────────────
+
+export const listFrames = (home, cwd, body) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error, errorCode: ERROR_CODES.TARGET_REQUIRED }
+  const workspace = loadWorkspace(home, room.cwd)
+  const pack = normalizeModbus(workspace.modbus)
+  const origin = originOf(body)
+  const cidArg = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
+  const didArg = body && body.deviceId ? String(body.deviceId).trim() : ''
+  const frameId = body && (body.frameId || body.id) ? String(body.frameId || body.id).trim() : ''
+  // Agent requires explicit connectionId when multiple connections
+  {
+    const need = targetRequired(origin, pack, cidArg, didArg)
+    if (need) return { ok: false, error: need.error, errorCode: need.errorCode }
+  }
+  if (cidArg && !pack.connections.some((c) => c.id === cidArg)) {
+    return { ok: false, error: '连接不存在: ' + cidArg, errorCode: ERROR_CODES.CONNECTION_NOT_FOUND }
+  }
+  if (cidArg) {
+    const conn = pack.connections.find((c) => c.id === cidArg)
+    if (conn && conn.enabled === false) {
+      return { ok: false, error: '设备已禁用', errorCode: ERROR_CODES.DEVICE_DISABLED }
+    }
+  }
+  if (cidArg && didArg && deviceDisabledOf(pack, cidArg, didArg)) {
+    return { ok: false, error: '设备已禁用', errorCode: ERROR_CODES.DEVICE_DISABLED }
+  }
+  // Resolve target connection: explicit else active
+  const targetCid = cidArg || pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || ''
+  const limit = Math.max(1, Math.min(200, Number(body && body.limit) || 50))
+  const offset = Math.max(0, Number(body && body.offset) || 0)
+  const srcFrames = (pack.framesByConnection && pack.framesByConnection[targetCid]) || []
+  // Enrich frames with stable id if missing
+  const enriched = srcFrames.map((f, idx) => {
+    if (f && f.id) return f
+    const id = (f && f.connectionId ? f.connectionId : targetCid) + ':' + (f && f.t ? f.t : Date.now()) + ':' + idx
+    return { ...f, id, frameId: id }
+  })
+  if (frameId) {
+    const hit = enriched.find((f) => f.id === frameId || f.frameId === frameId)
+    if (!hit) return { ok: false, error: '报文不存在: ' + frameId, errorCode: ERROR_CODES.POINT_NOT_FOUND }
+    // Include stale check: if frame too old? mark stale
+    const stale = hit.t && Date.now() - hit.t > 5 * 60 * 1000
+    return { ok: true, frame: hit, stale: !!stale, connectionId: targetCid, configVersion: pack.version || 3, errorCode: stale ? ERROR_CODES.STALE_VALUE : undefined }
+  }
+  const slice = enriched.slice(Math.max(0, enriched.length - limit - offset), enriched.length - offset)
+  // Detect stale: last frame older than 60s?
+  const last = enriched[enriched.length - 1]
+  const stale = last ? (Date.now() - Number(last.t) > 60 * 1000) : false
+  return {
+    ok: true,
+    frames: slice,
+    total: enriched.length,
+    connectionId: targetCid,
+    deviceId: didArg || (pack.devices.find((d) => d.connectionId === targetCid)?.id || ''),
+    configVersion: pack.version || 3,
+    stale: !!stale,
+    ...(stale ? { errorCode: ERROR_CODES.STALE_VALUE, warning: '报文较旧，可能已过期' } : {}),
+  }
+}
+
+export const requestFocus = (home, cwd, body) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error, errorCode: ERROR_CODES.TARGET_REQUIRED }
+  const workspace = loadWorkspace(home, room.cwd)
+  const pack = normalizeModbus(workspace.modbus)
+  const origin = originOf(body)
+  const rawTarget = body && (body.target || body.focus || body) ? (body.target || body.focus || body) : {}
+  const target = normalizeFocusRequest(rawTarget) || normalizeFocusRequest({
+    connectionId: rawTarget.connectionId || rawTarget.connId,
+    deviceId: rawTarget.deviceId,
+    pointId: rawTarget.pointId,
+    frameId: rawTarget.frameId,
+    trendKey: rawTarget.trendKey,
+    alarmId: rawTarget.alarmId,
+    kind: rawTarget.kind,
+    version: pack.version || 3,
+    by: origin.source === 'agent' ? 'agent' : 'user',
+  })
+  if (!target) return { ok: false, error: '缺少聚焦目标 connectionId/deviceId/pointId/frameId', errorCode: ERROR_CODES.TARGET_REQUIRED }
+  if (target.connectionId && !pack.connections.some((c) => c.id === target.connectionId)) {
+    return { ok: false, error: '连接不存在: ' + target.connectionId, errorCode: ERROR_CODES.CONNECTION_NOT_FOUND }
+  }
+  if (target.connectionId && target.deviceId && !pack.devices.some((d) => d.id === target.deviceId && d.connectionId === target.connectionId)) {
+    // allow deviceId belonging to any connection? strict check
+    if (!pack.devices.some((d) => d.id === target.deviceId)) {
+      return { ok: false, error: '设备不存在: ' + target.deviceId, errorCode: ERROR_CODES.TARGET_REQUIRED }
+    }
+  }
+  if (target.connectionId && target.deviceId && deviceDisabledOf(pack, target.connectionId, target.deviceId)) {
+    return { ok: false, error: '设备已禁用', errorCode: ERROR_CODES.DEVICE_DISABLED }
+  }
+  if (target.pointId && !pack.points.some((p) => p.id === target.pointId)) {
+    return { ok: false, error: '点位不存在: ' + target.pointId, errorCode: ERROR_CODES.POINT_NOT_FOUND }
+  }
+  if (target.frameId) {
+    const cidForFrame = target.connectionId || pack.activeConnectionId
+    const arr = (pack.framesByConnection && pack.framesByConnection[cidForFrame]) || []
+    const exists = arr.some((f) => f.id === target.frameId || f.frameId === target.frameId)
+    if (!exists) return { ok: false, error: '报文不存在: ' + target.frameId, errorCode: ERROR_CODES.POINT_NOT_FOUND }
+  }
+  // Temporal check: ENDPOINT_DRIFT if target's endpoint fingerprint changed?
+  // For focus, we treat endpoint drift as warning but not error.
+  const prev = workspace.focus ? workspace.focus.request : null
+  const nextReq = {
+    connectionId: target.connectionId || '',
+    deviceId: target.deviceId || '',
+    pointId: target.pointId || '',
+    frameId: target.frameId || '',
+    trendKey: target.trendKey || '',
+    alarmId: target.alarmId || '',
+    kind: target.kind || '',
+    at: Date.now(),
+    by: origin.source === 'agent' ? 'agent' : 'user',
+    version: pack.version || 3,
+  }
+  const tempWatchIds = Array.isArray(body.tempWatchIds) ? body.tempWatchIds.map((x) => String(x).trim()).filter(Boolean).slice(0, 32)
+    : (Array.isArray(body.tempWatch) ? body.tempWatch.map((x) => String(x).trim()).filter(Boolean).slice(0, 32) : [])
+  const evidence = Array.isArray(body.evidence) ? body.evidence.slice(0, 20) : []
+  const badgeOnly = !!(body.badgeOnly === true || (origin.source === 'agent' && body.foreground === false))
+  const saved = saveWorkspace(home, room.cwd, {
+    focus: {
+      request: nextReq,
+      prev: prev || null,
+      tempWatchIds,
+      badgeOnly,
+      evidence,
+    },
+  })
+  if (!saved.ok) return { ok: false, error: saved.error }
+  // Record event for timeline
+  try {
+    recordBenchEvent(home, room.cwd, {
+      action: 'focus',
+      ok: true,
+      summary: '聚焦 ' + [nextReq.connectionId, nextReq.deviceId, nextReq.pointId, nextReq.frameId].filter(Boolean).join('/') || '未知目标',
+    }, { source: origin.source, sessionId: origin.sessionId })
+  } catch {}
+  return { ok: true, focus: nextReq, prev, tempWatchIds, badgeOnly, evidence, configVersion: pack.version || 3 }
+}
+
+export const buildEvidenceRefs = (home, cwd) => {
+  const workspace = loadWorkspace(home, cwd)
+  const pack = normalizeModbus(workspace.modbus)
+  const refs = []
+  // compile evidence: latest build task
+  const latestBuild = (workspace.tasks || []).find((t) => t.type === 'build')
+  if (latestBuild) refs.push({ kind: 'build', id: latestBuild.id, at: latestBuild.endedAt || latestBuild.startedAt, version: pack.version || 3 })
+  // log evidence: last timeline
+  const lastLog = (workspace.timeline || [])[0]
+  if (lastLog) refs.push({ kind: 'log', id: lastLog.id, at: lastLog.at, version: pack.version || 3 })
+  // point/frame/trend slices
+  for (const p of pack.points.slice(0, 5)) refs.push({ kind: 'point', id: p.id, connectionId: p.connectionId, deviceId: p.deviceId, version: pack.version || 3 })
+  return refs
+}
 
 export const _internal = { deviceAlarms, evaluatePointAlarms, alarmLabel, endpointFingerprint }

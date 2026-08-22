@@ -207,14 +207,19 @@ export function pushFramesLog(cwd, connId, logArray) {
   const arr = Array.isArray(list) ? list : []
   for (const entry of arr) {
     if (!entry) continue
+    const at = Number(entry.t) || Date.now()
+    const cidNorm = String(entry.connectionId || cid || '')
+    const fid = String(entry.id || entry.frameId || (cidNorm ? (cidNorm + ':' + at + ':' + String(entry.label || '').slice(0, 8)) : ('f:' + at)))
     FRAME_LOGS.byConn[cid].push({
-      t: Number(entry.t) || Date.now(),
+      id: fid,
+      frameId: fid,
+      t: at,
       deviceName: String(entry.deviceName || ''),
       label: String(entry.label || ''),
       request: String(entry.request || ''),
       response: String(entry.response || ''),
       trace: Array.isArray(entry.trace) ? entry.trace.map((s) => String(s).slice(0, 200)).slice(0, 8) : [],
-      connectionId: String(entry.connectionId || cid || ''),
+      connectionId: cidNorm,
       deviceId: String(entry.deviceId || ''),
     })
   }
@@ -325,6 +330,150 @@ export function filterByScope(list, scope, getIds) {
     if (scope.deviceId && did && did !== scope.deviceId) return false
     return true
   })
+}
+
+// ── Agent focus / highlight / temp watch / evidence ────────────────────────
+
+const FOCUS_STATE = { cwd: '', request: null, prev: null, tempWatchIds: [], badgeOnly: false, evidence: [], subs: new Set() }
+
+export function getFocusState(cwd) {
+  if (FOCUS_STATE.cwd !== cwd) return { request: null, prev: null, tempWatchIds: [], badgeOnly: false, evidence: [] }
+  return { request: FOCUS_STATE.request, prev: FOCUS_STATE.prev, tempWatchIds: FOCUS_STATE.tempWatchIds.slice(), badgeOnly: !!FOCUS_STATE.badgeOnly, evidence: FOCUS_STATE.evidence.slice() }
+}
+
+export function setFocusState(cwd, focus) {
+  FOCUS_STATE.cwd = cwd || ''
+  if (!focus || typeof focus !== 'object') {
+    FOCUS_STATE.request = null
+    FOCUS_STATE.prev = null
+    FOCUS_STATE.tempWatchIds = []
+    FOCUS_STATE.badgeOnly = false
+    FOCUS_STATE.evidence = []
+  } else {
+    FOCUS_STATE.request = focus.request || null
+    FOCUS_STATE.prev = focus.prev || null
+    FOCUS_STATE.tempWatchIds = Array.isArray(focus.tempWatchIds) ? focus.tempWatchIds.slice(0, 32) : []
+    FOCUS_STATE.badgeOnly = !!focus.badgeOnly
+    FOCUS_STATE.evidence = Array.isArray(focus.evidence) ? focus.evidence.slice(0, 20) : []
+  }
+  for (const sub of FOCUS_STATE.subs) {
+    try { sub(getFocusState(cwd)) } catch {}
+  }
+}
+
+export function subscribeFocus(cwd, cb) {
+  if (typeof cb !== 'function') return function () {}
+  FOCUS_STATE.subs.add(cb)
+  return function () { FOCUS_STATE.subs.delete(cb) }
+}
+
+export function isFocusTarget(item, focusRequest) {
+  if (!focusRequest || !item) return false
+  const cid = item.connectionId || item.connId || ''
+  const did = item.deviceId || ''
+  const pid = item.pointId || item.id || ''
+  const fid = item.frameId || item.id || ''
+  if (focusRequest.connectionId && cid && focusRequest.connectionId !== cid) return false
+  if (focusRequest.deviceId && did && focusRequest.deviceId !== did) return false
+  if (focusRequest.pointId && pid && focusRequest.pointId !== pid) return false
+  if (focusRequest.frameId && fid && focusRequest.frameId !== fid) return false
+  // At least one id matches
+  if (focusRequest.pointId && pid === focusRequest.pointId) return true
+  if (focusRequest.frameId && fid === focusRequest.frameId) return true
+  if (focusRequest.deviceId && did === focusRequest.deviceId && !focusRequest.pointId && !focusRequest.frameId) return true
+  if (focusRequest.connectionId && cid === focusRequest.connectionId && !did && !pid && !fid) return true
+  return !!(focusRequest.connectionId || focusRequest.deviceId || focusRequest.pointId || focusRequest.frameId)
+}
+
+export function focusHighlightClass(isFocused) {
+  return isFocused ? ' dvb-focus-ring' : ''
+}
+
+// Temp watch group: transient UI-only monitor selection
+const TEMP_WATCH = new Map() // cwd -> { ids: string[], at:number, ttlMs:number }
+
+export function setTempWatch(cwd, ids, ttlMs = 300000) {
+  if (!cwd) return []
+  const list = Array.isArray(ids) ? ids.map((x) => String(x).trim()).filter(Boolean).slice(0, 32) : []
+  TEMP_WATCH.set(cwd, { ids: list, at: Date.now(), ttlMs })
+  return list
+}
+
+export function getTempWatch(cwd) {
+  const entry = TEMP_WATCH.get(cwd)
+  if (!entry) return []
+  if (Date.now() - entry.at > entry.ttlMs) {
+    TEMP_WATCH.delete(cwd)
+    return []
+  }
+  return entry.ids.slice()
+}
+
+export function clearTempWatch(cwd) {
+  TEMP_WATCH.delete(cwd)
+}
+
+export function hasTempWatch(cwd) {
+  return getTempWatch(cwd).length > 0
+}
+
+// Structured Agent reference for “让 Agent 分析” — stable ID + configVersion + timeRange
+export function buildAgentRef(kind, payload, opts) {
+  const now = Date.now()
+  const base = {
+    kind: String(kind || 'point'),
+    at: now,
+    configVersion: opts && opts.configVersion != null ? Number(opts.configVersion) : 3,
+  }
+  if (payload && typeof payload === 'object') {
+    base.connectionId = String(payload.connectionId || payload.connId || opts?.connectionId || '').slice(0, 64)
+    base.deviceId = String(payload.deviceId || opts?.deviceId || '').slice(0, 64)
+    base.pointId = String(payload.pointId || payload.id || opts?.pointId || '').slice(0, 64)
+    base.frameId = String(payload.frameId || opts?.frameId || '').slice(0, 64)
+    base.alarmId = String(payload.alarmId || opts?.alarmId || '').slice(0, 64)
+    if (payload.start != null || payload.end != null) {
+      base.timeRange = {
+        start: Number(payload.start ?? opts?.start ?? (now - 5 * 60 * 1000)),
+        end: Number(payload.end ?? opts?.end ?? now),
+      }
+    } else if (opts && (opts.start != null || opts.end != null)) {
+      base.timeRange = { start: Number(opts.start ?? (now - 5 * 60 * 1000)), end: Number(opts.end ?? now) }
+    }
+    // Include human label if available
+    if (payload.name || payload.label) base.label = String(payload.name || payload.label).slice(0, 80)
+  }
+  return base
+}
+
+export function agentRefToText(ref) {
+  const range = ref && ref.timeRange ? (' [' + new Date(ref.timeRange.start).toISOString() + ' → ' + new Date(ref.timeRange.end).toISOString() + ']') : ''
+  const ids = [ref.connectionId, ref.deviceId, ref.pointId || ref.frameId || ref.alarmId].filter(Boolean).join('/')
+  return '[' + (ref.kind || 'ref') + '] ' + (ids || 'unknown') + ' v' + (ref.configVersion || 3) + range
+}
+
+export function copyAgentRef(ref) {
+  const text = JSON.stringify(ref, null, 2)
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {}
+  return false
+}
+
+// Badge vs抢焦点：后台任务仅角标，不自动切换 Tab
+export function isForegroundTask(task) {
+  if (!task || typeof task !== 'object') return false
+  // Agent 的轮询/读点等背景任务 badgeOnly
+  if (task.source === 'agent' && (task.type === 'read' || task.type === 'poll')) return false
+  // 已标记 badgeOnly 的 focus 请求也不抢焦点
+  return true
+}
+
+export function shouldStealFocus(task, focusState) {
+  if (focusState && focusState.badgeOnly) return false
+  return isForegroundTask(task)
 }
 
 export function lineKind(line) {

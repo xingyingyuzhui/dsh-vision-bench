@@ -47,14 +47,17 @@ export function apply(ctx) {
 
   let openLiveImpl = function () {}
   let openProjectImpl = function () {}
+  let openHmiImpl = function () {}
   let closeTabImpl = function () {}
   function openLive() { openLiveImpl() }
   function openProject() { openProjectImpl() }
+  function openHmi(target) { try { openHmiImpl(target) } catch {} }
   const SettingsPage = createSettingsPage(React, t, post)
   const DebugView = createDebugView(React, t, post, openProject)
   const HmiView = createHmiView(React, t, post, openLive)
   const LivePage = createLiveView(React, t, post, {
     openLive,
+    openHmi,
     closeTab(id) { closeTabImpl(id) },
   })
   const MapPage = createMapView(React, t, post)
@@ -67,8 +70,8 @@ export function apply(ctx) {
       openProjectImpl = function () { openProjectTab(side) }
       closeTabImpl = function (id) { closeBetterTab(side, id) }
       const stopLive = registerLive(side, React, t, LivePage, {
-        trend: createTrendPage(React, t),
-        alarm: createAlarmPage(React, t, post),
+        trend: createTrendPage(React, t, post, { openLive, openHmi }),
+        alarm: createAlarmPage(React, t, post, { openLive, openHmi }),
       })
       const stopMap = registerMap(side, React, t, MapPage)
       side.effect(() => () => {

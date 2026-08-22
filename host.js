@@ -1,4 +1,4 @@
-import { listPendingWrites, keilBuild, keilMap, keilScan, keilTargets, listDir, modbusPoll, modbusRead, modbusWrite, openocdDownload, resolvePendingWrite } from './bench-actions.mjs'
+import { listPendingWrites, keilBuild, keilMap, keilScan, keilTargets, listDir, listFrames, modbusPoll, modbusRead, modbusWrite, openocdDownload, requestFocus, resolvePendingWrite } from './bench-actions.mjs'
 import { runSelfCheck } from './bench-check.mjs'
 import { artifactInfo, readBuildLog } from './bench-fs.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
@@ -241,6 +241,14 @@ export function apply(ctx, config = {}) {
     route('/dsh-vision-bench/modbus/points', async (req) => {
       const body = normalizeConnAlias(await readJsonBody(req))
       return pointsOp(dshHome, body && body.cwd, body)
+    }),
+    route('/dsh-vision-bench/frames/list', async (req) => {
+      const body = normalizeConnAlias(await readJsonBody(req))
+      return listFrames(dshHome, body && body.cwd, body)
+    }),
+    route('/dsh-vision-bench/focus', async (req) => {
+      const body = normalizeConnAlias(await readJsonBody(req))
+      return requestFocus(dshHome, body && body.cwd, body)
     }),
     route('/dsh-vision-bench/session/bind', async (req) => {
       const body = await readJsonBody(req)

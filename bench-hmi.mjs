@@ -1,9 +1,20 @@
 import {
+  agentRefToText,
+  buildAgentRef,
   clearFramesLog,
   clockOf,
+  copyAgentRef,
+  getFocusState,
+  getTempWatch,
+  clearTempWatch,
+  setTempWatch,
+  isFocusTarget,
+  focusHighlightClass,
   getFramesLog,
   lineKind,
   pushFramesLog,
+  setFocusState,
+  shouldStealFocus,
 } from './bench-shared.mjs'
 import {
   emptyJournal,
@@ -66,6 +77,9 @@ export function createHmiView(React, t, post, openLive) {
     const [frameFilter, setFrameFilter] = React.useState('all')
     const [hmiTab, setHmiTab] = React.useState('all')
     const [moreOpen, setMoreOpen] = React.useState(false)
+    const [focusState, setFocusUi] = React.useState({ request: null, prev: null, tempWatchIds: [], badgeOnly: false, evidence: [] })
+    const [agentCopied, setAgentCopied] = React.useState('')
+    const [tempWatchNote, setTempWatchNote] = React.useState('')
     const lastDeviceByConn = React.useRef({})
     const serialRef = React.useRef(serial)
     serialRef.current = serial
@@ -113,9 +127,13 @@ export function createHmiView(React, t, post, openLive) {
       if (data.health) setHealth(data.health)
       if (Array.isArray(data.pendingWrites)) setPending(data.pendingWrites)
       setJournal(pickJournal(data))
+      if (data.workspace && data.workspace.focus) {
+        setFocusUi(data.workspace.focus)
+        try { setFocusState(cwd, data.workspace.focus) } catch {}
+      }
       if (inflight.current > 0) return
       if (data.workspace && data.workspace.modbus) {
-        setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus }))
+        setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus, focus: data.workspace.focus || prev.focus }))
       }
     }), [cwd])
 
@@ -179,6 +197,60 @@ export function createHmiView(React, t, post, openLive) {
       }).finally(() => {
         if (seq === inflight.current) inflight.current = 0
       })
+    }
+
+    function cfgVersion() {
+      try { return normalizePack().version || 3 } catch { return 3 }
+    }
+
+    function agentRefFor(kind, payload) {
+      const pack = normalizePack()
+      return buildAgentRef(kind, payload, { configVersion: pack.version || 3 })
+    }
+
+    function sendToAgent(kind, payload) {
+      const ref = agentRefFor(kind, payload)
+      const ok = copyAgentRef(ref)
+      setAgentCopied(kind + ':' + (payload && (payload.id || payload.pointId || payload.frameId || payload.connectionId) || ''))
+      setTimeout(() => setAgentCopied(''), 2000)
+      // Also emit a bench event for evidence back-mount (best effort)
+      try {
+        const cur = workspaceRef.current
+        const ev = { kind: ref.kind, id: ref.pointId || ref.frameId || ref.connectionId || ref.deviceId, connectionId: ref.connectionId, deviceId: ref.deviceId, at: ref.at, version: ref.configVersion }
+        const prevFocus = cur.focus || { request: null, prev: null, tempWatchIds: [], evidence: [] }
+        const nextEvidence = (prevFocus.evidence || []).concat([ev]).slice(-20)
+        // Persist evidence locally (non-blocking)
+        post('/dsh-vision-bench/workspace', { cwd, focus: { ...prevFocus, evidence: nextEvidence } }).catch(() => {})
+      } catch {}
+      return ref
+    }
+
+    function requestFocusUi(target, opts) {
+      if (!cwd) return
+      const pack = normalizePack()
+      const payload = {
+        cwd,
+        target: target || {},
+        tempWatchIds: (opts && opts.tempWatchIds) || [],
+        evidence: (opts && opts.evidence) || [],
+        badgeOnly: !!(opts && opts.badgeOnly),
+        foreground: !(opts && opts.badgeOnly),
+      }
+      post('/dsh-vision-bench/focus', payload, 15000).catch((e) => setError(String((e && e.message) || t('fail'))))
+    }
+
+    function returnToPrevFocus() {
+      const prev = focusState && focusState.prev
+      if (!prev) return
+      requestFocusUi(prev, { badgeOnly: false })
+    }
+
+    function createTempWatch(ids) {
+      const list = setTempWatch(cwd, ids, 300000)
+      setTempWatchNote('临时监视组已创建：' + list.length + ' 点')
+      setTimeout(() => setTempWatchNote(''), 2000)
+      // Also push to focus state tempWatchIds
+      requestFocusUi(focusState.request || {}, { tempWatchIds: list, badgeOnly: true })
     }
 
     // ── connection list operations ──
@@ -659,17 +731,35 @@ export function createHmiView(React, t, post, openLive) {
     function logBody() {
       if (logMode === 'frames') {
         if (!frameRowsFiltered.length) return el('div', { className: 'dvb-empty' }, t('framesEmpty'))
-        return el('pre', {
+        return el('div', {
           className: 'dvb-log dvb-serial-log',
+          style: { maxHeight: '260px', overflowY: 'auto' },
           ref: (node) => {
             if (node && !serial.paused) node.scrollTop = node.scrollHeight
           },
-        }, frameRowsFiltered.map((item, idx) => el('div', {
-          key: item.t + ':' + idx,
-          className: 'dvb-serial-line',
-        },
-          '[' + clockOf(item.t) + '] ' + item.tx,
-          item.rx ? el('div', null, '  ' + item.rx) : null)))
+        }, frameRowsFiltered.map((item, idx) => {
+          const fid = item.id || item.frameId || (String(item.connectionId || 'c') + ':' + String(item.t) + ':' + idx)
+          const isFocused = focusState && focusState.request && focusState.request.frameId === fid
+          return el('div', {
+            key: fid + ':' + idx,
+            className: 'dvb-serial-line' + focusHighlightClass(isFocused),
+            'data-focused': isFocused ? 'true' : 'false',
+            style: isFocused ? { background: 'rgba(79,142,247,.12)', borderRadius: '4px', padding: '2px 4px' } : null,
+          },
+            '[' + clockOf(item.t) + '] ' + item.tx,
+            item.rx ? el('div', null, '  ' + item.rx) : null,
+            el('span', { style: { display: 'inline-flex', gap: '4px', marginLeft: '8px' } },
+              el('button', {
+                type: 'button', className: 'dvb-btn dvb-btn-sm',
+                title: '复制报文结构化引用（稳定 ID+配置版本+时间范围）',
+                onClick() { sendToAgent('frame', { frameId: fid, connectionId: item.connectionId, deviceId: item.deviceId, label: item.label }) },
+              }, agentCopied === 'frame:' + fid ? '已复制' : '让 Agent 分析'),
+              el('button', {
+                type: 'button', className: 'dvb-btn dvb-btn-sm' + (isFocused ? ' is-on' : ''),
+                title: '聚焦此报文，高亮并支持证据跳转',
+                onClick() { requestFocusUi({ connectionId: item.connectionId, deviceId: item.deviceId, frameId: fid, kind: 'frame' }) },
+              }, '聚焦')))
+        }))
       }
       if (!serialLines.length) return el('div', { className: 'dvb-empty' }, t('serialEmpty'))
       return el('pre', {
@@ -747,8 +837,40 @@ export function createHmiView(React, t, post, openLive) {
       })),
       logBody())
 
+    // ── Agent 聚焦横幅（角标不抢焦点，支持返回原焦点 + 临时监视组）──
+    const focusBanner = focusState && focusState.request
+      ? el('div', { className: 'dvb-panel dvb-focus-banner', 'data-badge': focusState.badgeOnly ? 'true' : 'false' },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, 'Agent 聚焦' + (focusState.badgeOnly ? ' · 角标' : ' · 高亮')),
+            el('span', { className: 'dvb-tag' }, [focusState.request.connectionId, focusState.request.deviceId, focusState.request.pointId || focusState.request.frameId].filter(Boolean).join(' / ') || '未知目标'),
+            focusState.request && focusState.request.at ? el('span', { className: 'dvb-map-meta' }, clockOf(focusState.request.at)) : null,
+            el('button', { type: 'button', className: 'dvb-btn', onClick: returnToPrevFocus, disabled: !focusState.prev }, '返回原焦点'),
+            el('button', { type: 'button', className: 'dvb-btn', onClick() { requestFocusUi(null, { badgeOnly: false }); setFocusUi({ request: null, prev: focusState.request, tempWatchIds: [], badgeOnly: false, evidence: [] }) } }, '清除聚焦'),
+            focusState.tempWatchIds && focusState.tempWatchIds.length ? el('span', { className: 'dvb-tag' }, '临时监视 ' + focusState.tempWatchIds.length) : null,
+            focusState.badgeOnly ? el('span', { className: 'dvb-chip', 'data-kind': 'warn' }, '后台任务 · 仅角标') : null),
+          el('div', { className: 'dvb-toolbar' },
+            el('button', {
+              type: 'button', className: 'dvb-btn dvb-btn-primary',
+              onClick() {
+                const r = focusState.request
+                if (r && r.connectionId) { selectConnection(r.connectionId); if (r.deviceId) persist({ activeDeviceId: r.deviceId, version: 3 }) }
+                if (r && r.pointId) setFrameFilter(r.connectionId || frameFilter)
+              },
+            }, '跳转到目标'),
+            focusState.request && focusState.request.pointId ? el('button', {
+              type: 'button', className: 'dvb-btn',
+              onClick() { sendToAgent('point', { pointId: focusState.request.pointId, connectionId: focusState.request.connectionId, deviceId: focusState.request.deviceId }) },
+            }, agentCopied.startsWith('point:') ? '已复制' : '让 Agent 分析') : null,
+            focusState.request && focusState.request.frameId ? el('button', {
+              type: 'button', className: 'dvb-btn',
+              onClick() { sendToAgent('frame', { frameId: focusState.request.frameId, connectionId: focusState.request.connectionId }) },
+            }, '让 Agent 分析报文') : null,
+            tempWatchNote ? el('span', { className: 'dvb-hint' }, tempWatchNote) : null,
+            agentCopied ? el('span', { className: 'dvb-hint' }, '已复制引用 · 粘贴给 Agent') : null))
+      : null
+
     // ── 顶部连接列表 ──
-    const connListPanel = el('div', { className: 'dvb-panel' },
+    const connListPanel = el('div', { className: 'dvb-panel' + (focusState && focusState.request && focusState.request.connectionId ? ' dvb-has-focus' : '') },
       el('div', { className: 'dvb-panel-head' },
         el('span', { className: 'dvb-panel-title' }, t('connBar') || '连接'),
         el('span', { className: 'dvb-tag' }, connections.length + ' 个连接'),
@@ -819,6 +941,16 @@ export function createHmiView(React, t, post, openLive) {
                         type: 'button', className: 'dvb-btn',
                         onClick() { openConnEdit(c) },
                       }, '编辑'),
+                      el('button', {
+                        type: 'button', className: 'dvb-btn dvb-btn-sm',
+                        title: '复制结构化引用（稳定 ID+配置版本）并让 Agent 分析',
+                        onClick() { sendToAgent('connection', { connectionId: c.id, name: c.name }) },
+                      }, agentCopied === 'connection:' + c.id ? '已复制' : '让 Agent 分析'),
+                      el('button', {
+                        type: 'button', className: 'dvb-btn dvb-btn-sm' + (focusState.request && focusState.request.connectionId === c.id && !focusState.request.pointId ? ' is-on' : ''),
+                        title: '聚焦此连接标签，高亮并支持返回原焦点',
+                        onClick() { requestFocusUi({ connectionId: c.id, kind: 'connection' }) },
+                      }, '聚焦'),
                       pendingDeleteId === c.id
                         ? el('span', { style: { display: 'flex', gap: '4px', alignItems: 'center' } },
                             el('span', { className: 'dvb-need' }, '确认删除？'),
@@ -962,6 +1094,16 @@ export function createHmiView(React, t, post, openLive) {
                           persist({ devices: nextDevs, version:3 })
                         },
                       }, '重命名'),
+                      el('button', {
+                        type:'button', className:'dvb-btn dvb-btn-sm',
+                        title: '复制设备结构化引用并让 Agent 分析',
+                        onClick(){ sendToAgent('device', { deviceId: d.id, connectionId: d.connectionId, name: d.name }) },
+                      }, agentCopied === 'device:' + d.id ? '已复制' : '让 Agent 分析'),
+                      el('button', {
+                        type:'button', className:'dvb-btn dvb-btn-sm' + (focusState.request && focusState.request.deviceId === d.id ? ' is-on' : ''),
+                        title: '聚焦此设备',
+                        onClick(){ requestFocusUi({ connectionId: d.connectionId, deviceId: d.id, kind: 'device' }) },
+                      }, '聚焦'),
                       el('button', {
                         type:'button', className:'dvb-btn',
                         disabled: activeDevices.length<=1,
@@ -1164,7 +1306,8 @@ export function createHmiView(React, t, post, openLive) {
         : (rec && rec.ok === false ? rec.error : '—')
       const writable = isWritableFunction(point.function)
       const devName = (devices.find((d)=>d.id===(point.deviceId||point.deviceId)) && devices.find((d)=>d.id===(point.deviceId)).name) || point.deviceId || '—'
-      return el('tr', { key: point.id, 'data-kind': 'pt' },
+      const isFocused = focusState && focusState.request && focusState.request.pointId === point.id
+      return el('tr', { key: point.id, 'data-kind': 'pt', className: 'dvb-row' + focusHighlightClass(isFocused), 'data-focused': isFocused ? 'true' : 'false' },
         el('td', null, point.name || functionTag(point.function) + point.address),
         el('td', null, devName),
         el('td', null, functionTag(point.function)),
@@ -1194,7 +1337,17 @@ export function createHmiView(React, t, post, openLive) {
         el('td', null, el('button', {
           type: 'button', className: 'dvb-btn', disabled: !!busy,
           onClick() { removePointRow(point) },
-        }, t('deleteSegment'))))
+        }, t('deleteSegment'))),
+        el('td', null, el('button', {
+          type: 'button', className: 'dvb-btn dvb-btn-sm',
+          title: '复制结构化引用（稳定 ID+配置版本+时间范围）',
+          onClick() { sendToAgent('point', { pointId: point.id, connectionId: point.connectionId, deviceId: point.deviceId, name: point.name }) },
+        }, agentCopied === 'point:' + point.id ? '已复制' : '让 Agent 分析')),
+        el('td', null, el('button', {
+          type: 'button', className: 'dvb-btn dvb-btn-sm' + (isFocused ? ' is-on' : ''),
+          title: 'Agent 聚焦此点位 · 支持临时监视组与返回原焦点',
+          onClick() { requestFocusUi({ connectionId: point.connectionId, deviceId: point.deviceId, pointId: point.id, kind: 'point' }, { badgeOnly: false }) },
+        }, '聚焦')))
     })
 
     const pointsPanel = el('div', { className: 'dvb-panel' },
@@ -1280,7 +1433,9 @@ export function createHmiView(React, t, post, openLive) {
               el('th', null, '写入'),
               el('th', null, '读取'),
               el('th', null, '编辑'),
-              el('th', null, '删除'))),
+              el('th', null, '删除'),
+              el('th', null, '让 Agent 分析'),
+              el('th', null, '聚焦'))),
             el('tbody', null, tableRows)))
         : el('div', { className: 'dvb-empty' }, t('noPoints')))
 
@@ -1486,7 +1641,9 @@ export function createHmiView(React, t, post, openLive) {
         statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),
         visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
         error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
+        agentCopied ? el('div', { className: 'dvb-msg', 'data-kind': 'ok' }, '已复制「让 Agent 分析」引用 · 粘贴到会话中让 Agent 分析') : null,
         tabBar,
+        focusBanner,
         connListPanel,
         connFormPanel,
         journalPanel(el, t, journal))
@@ -1496,7 +1653,9 @@ export function createHmiView(React, t, post, openLive) {
       statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),
       visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
+      agentCopied ? el('div', { className: 'dvb-msg', 'data-kind': 'ok' }, '已复制「让 Agent 分析」引用 ' + agentCopied + ' · 粘贴到会话中让 Agent 分析') : null,
       tabBar,
+      focusBanner,
       activeConnDetail,
       devicePanel,
       pointsPanel,
