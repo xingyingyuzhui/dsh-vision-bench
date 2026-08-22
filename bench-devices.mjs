@@ -134,8 +134,9 @@ function migrateLegacy(modbusLike) {
 
 export function normalizeModbus(input) {
   const src = input && typeof input === 'object' ? input : {}
-  const looksLegacy = Array.isArray(src.devices)
-    || (src.conn === undefined && (src.mode !== undefined || src.segments !== undefined || src.port !== undefined))
+  const looksLegacy = src.conn === undefined && (
+    Array.isArray(src.devices) || src.mode !== undefined || src.segments !== undefined || src.port !== undefined
+  )
   let conn
   let pointsRaw
   let valuesRaw
@@ -161,26 +162,27 @@ export function normalizeModbus(input) {
     alarmActive: src.alarmActive && typeof src.alarmActive === 'object' ? { ...src.alarmActive } : {},
   }
   // Legacy compat for old tests and bench-slave (flat fields + segments/devices)
+  // Made non-enumerable so JSON.stringify and { ...ret } don't persist legacy shape
   Object.defineProperties(ret, {
-    mode: { get() { return ret.conn.mode }, enumerable: true },
-    port: { get() { return ret.conn.port }, enumerable: true },
-    host: { get() { return ret.conn.host }, enumerable: true },
-    baudrate: { get() { return ret.conn.baudrate }, enumerable: true },
-    slave: { get() { return ret.conn.slave }, enumerable: true },
-    sim: { get() { return ret.conn.sim }, enumerable: true },
-    function: { get() { return ret.points[0]?.function }, enumerable: true },
-    address: { get() { return ret.points[0]?.address }, enumerable: true },
+    mode: { get() { return ret.conn.mode }, enumerable: false },
+    port: { get() { return ret.conn.port }, enumerable: false },
+    host: { get() { return ret.conn.host }, enumerable: false },
+    baudrate: { get() { return ret.conn.baudrate }, enumerable: false },
+    slave: { get() { return ret.conn.slave }, enumerable: false },
+    sim: { get() { return ret.conn.sim }, enumerable: false },
+    function: { get() { return ret.points[0]?.function }, enumerable: false },
+    address: { get() { return ret.points[0]?.address }, enumerable: false },
     segments: {
       get() {
         return ret.points.map((p) => ({ ...p, count: 1, id: p.id }))
       },
-      enumerable: true,
+      enumerable: false,
     },
     devices: {
       get() {
         return [{ ...ret.conn, segments: ret.points.map((p) => ({ ...p, count: 1, id: p.id })), values: ret.values, polling: ret.polling }]
       },
-      enumerable: true,
+      enumerable: false,
     },
   })
   return ret

@@ -443,6 +443,13 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   const check = normalizeWriteValues(fn, rawValues, 1968)
   if (!check.ok) return { ok: false, error: check.error }
   const count = check.values.length
+  // Validate that every target address exists in the point table
+  for (let i = 0; i < count; i++) {
+    const id = pointIdOf(fn, address + i)
+    if (!pack.points.some((p) => p.id === id)) {
+      return { ok: false, error: '不在点表：' + functionTag(fn) + (address + i) }
+    }
+  }
   if (hasRunning(workspace, 'write')) {
     return { ok: false, error: '已有写入任务进行中' }
   }
@@ -509,10 +516,13 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     const at = Date.now()
     let vals = pack.values
     for (let i = 0; i < count; i++) {
-      const pseudo = pack.points.find((p) => p.id === pointIdOf(fn, address + i))
-        || { id: pointIdOf(fn, address + i), function: fn, address: address + i, scale: 1, offset: 0 }
-      vals = setPointValue(vals, pseudo, check.values[i], { ok: true, at })
+      const point = pack.points.find((p) => p.id === pointIdOf(fn, address + i))
+      // validation already ensures point exists, but keep fallback for safety
+      const target = point || { id: pointIdOf(fn, address + i), function: fn, address: address + i, scale: 1, offset: 0 }
+      vals = setPointValue(vals, target, check.values[i], { ok: true, at })
     }
+    // Persist values and exit sim (local write is considered verified)
+    saveWorkspace(home, room.cwd, { modbus: { conn: { ...conn, sim: false }, values: vals } })
     return done(true, label + '（本地生效）', {
       values: vals,
       simulated: true,

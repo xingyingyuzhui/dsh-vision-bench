@@ -248,8 +248,8 @@ test('runVisionBench write action requires user approval then executes', async (
   try {
     saveWorkspace(home, cwd, {
       modbus: {
-        sim: true,
-        segments: [{ name: '保持', function: 3, address: 0, count: 10 }],
+        conn: { sim: true },
+        points: Array.from({ length: 10 }, (_, i) => ({ name: '保持' + i, function: 3, address: i })),
       },
     })
     const first = await runVisionBench(home, {
@@ -262,7 +262,7 @@ test('runVisionBench write action requires user approval then executes', async (
     assert.equal(first.needsConfirm, true)
     assert.ok(first.requestId)
     assert.deepEqual(first.request.values, [42, 43])
-    const untouched = loadWorkspace(home, cwd).modbus.devices[0].values
+    const untouched = loadWorkspace(home, cwd).modbus.values
     assert.equal((untouched || []).length, 0)
 
     const ran = await resolvePendingWrite(home, cwd, first.requestId, true)
@@ -273,7 +273,7 @@ test('runVisionBench write action requires user approval then executes', async (
     const task = journalView(ws).tasks.find((item) => item.type === 'write')
     assert.equal(task.source, 'agent')
     assert.equal(task.sessionId, 's1')
-    const rec = ws.modbus.devices[0].values.filter((item) => item.function === 3 && item.address >= 5)
+    const rec = ws.modbus.values.filter((item) => item.key === 'p3_5' || item.key === 'p3_6')
     assert.equal(rec.length, 2)
 
     const gone = await resolvePendingWrite(home, cwd, first.requestId, false)

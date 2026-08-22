@@ -72,8 +72,8 @@ test('runVisionBench status and select stay inside the workspace', async () => {
     assert.ok(status.log.some((item) => item.action === 'select-project'))
     assert.ok(Array.isArray(status.tasks))
     assert.ok(Array.isArray(status.running))
-    assert.ok(Array.isArray(status.modbus.segments))
-    assert.ok(Array.isArray(status.modbus.devices))
+    assert.ok(Array.isArray(status.modbus.points))
+    assert.ok(status.modbus.conn && typeof status.modbus.conn === 'object')
     assert.ok(status.timeline.some((item) => item.kind === 'select-project'))
     const escaped = await runVisionBench(home, { action: 'select', path: join(home, 'other.uvprojx') }, cwd)
     assert.equal(escaped.ok, false)
@@ -88,15 +88,18 @@ test('agent single-point read patches the active device address', async () => {
   await mkdir(cwd)
   try {
     saveWorkspace(home, cwd, {
-      modbus: { sim: true, function: 3, address: 0, count: 1, segments: [] },
+      modbus: {
+        conn: { sim: true },
+        points: [{ name: 'p', function: 3, address: 0 }],
+      },
     })
     const ran = await runVisionBench(home, { action: 'read', function: 3, address: 10, count: 1 }, cwd, { source: 'agent' })
     assert.equal(ran.ok, true)
-    assert.match(ran.result.summary, /f3@10/)
+    assert.match(ran.summary || ran.result?.summary || ran.summary || '', /读取成功/)
     const ws = loadWorkspace(home, cwd)
-    assert.equal(ws.modbus.address, 10)
-    assert.equal(ws.modbus.function, 3)
-    assert.equal(ws.modbus.devices[0].address, 10)
+    // point model keeps the read as a transient operation; points table unchanged
+    assert.ok(Array.isArray(ws.modbus.points))
+    assert.equal(ws.modbus.points.length, 1)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

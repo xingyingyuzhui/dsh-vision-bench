@@ -154,9 +154,9 @@ export const saveWorkspace = (home, cwd, input) => {
   const incoming = (input && input.modbus) || {}
   // Legacy wins when its signature fields are present (flat mode/port or
   // devices[]); everything else is treated as a v2 partial patch.
-  const looksLegacy = Array.isArray(incoming.devices)
-    || incoming.mode !== undefined
-    || incoming.segments !== undefined
+  const looksLegacy = incoming.conn === undefined && (
+    Array.isArray(incoming.devices) || incoming.mode !== undefined || incoming.segments !== undefined
+  )
   const isV2Partial = !looksLegacy && ['conn', 'points', 'values', 'polling', 'alarmActive', 'version']
     .some((key) => Object.prototype.hasOwnProperty.call(incoming, key))
   let mergedModbus
