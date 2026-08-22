@@ -1,6 +1,7 @@
 import { NS } from './bench-i18n.mjs'
 import { clockOf } from './bench-points.mjs'
 import { subscribeState } from './bench-shared.mjs'
+import { connLabel } from './bench-devices.mjs'
 import { statusKind } from './bench-settings.mjs'
 
 function overviewEmptyWorkspace() {
@@ -43,7 +44,8 @@ export function createOverviewView(React, t, post, hooks) {
 
     const keil = workspace.keil || {}
     const modbus = workspace.modbus || {}
-    const devices = Array.isArray(modbus.devices) ? modbus.devices : []
+    const conn = modbus.conn || {}
+    const pointCount = Array.isArray(modbus.points) ? modbus.points.length : 0
     const session = workspace.session || {}
     const boundId = session.boundId || ''
     const sessionId = (props && props.sessionId) || ''
@@ -115,12 +117,9 @@ export function createOverviewView(React, t, post, hooks) {
           el('div', { className: 'dvb-panel-head' },
             el('span', { className: 'dvb-panel-title' }, t('ovLive'))),
           field(t('ovDevices'), el('div', { className: 'dvb-path' },
-            devices.length
-              ? devices.map((item) => (item.name || item.id)
-                + '（' + (item.role === 'slave' ? t('roleSlave') : t('roleMaster'))
-                + (item.sim ? ' · ' + t('sim') : '')
-                + (item.listen ? ' · ' + t('listen') : '')
-                + (item.polling && item.polling.enabled ? ' · ' + t('live') : '') + '）').join('， ')
+            pointCount
+              ? (connLabel(conn) + ' · ' + pointCount + ' 点位'
+                + (modbus.polling && modbus.polling.enabled ? ' · ' + t('live') : ''))
               : t('emptyDevices'))),
           field(t('bindChip'), el('span', {
             className: 'dvb-chip',

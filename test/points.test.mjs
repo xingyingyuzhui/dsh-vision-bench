@@ -1,146 +1,122 @@
 import assert from 'node:assert/strict'
-import { mkdir, rm } from 'node:fs/promises'
-import { mkdtemp } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import test from 'node:test'
 import {
-  addSegment,
-  applySegmentRead,
-  compactSegments,
-  expandPoints,
-  pointName,
-  removeSegment,
-  simulateRaw,
+  csvToPoints,
+  decodeValue,
+  evaluateAlarm,
+  evaluatePointAlarms,
+  fillSimValues,
+  normalizePoint,
+  normalizePoints,
+  pointIdOf,
+  pointsToCsv,
+  scatterBatch,
+  setPointValue,
 } from '../bench-points.mjs'
-import { addDevice } from '../bench-devices.mjs'
-import { modbusPoll } from '../bench-actions.mjs'
-import { loadWorkspace, openTask, saveWorkspace } from '../bench-store.mjs'
+import { planReadBatches, MAX_READ_REGS } from '../bench-pollplan.mjs'
 
-test('addSegment expands a holding range into consecutive points', () => {
-  const added = addSegment([], { name: '温度', function: 3, address: 10, count: 4 })
-  assert.equal(added.ok, true)
-  const points = expandPoints(added.segments)
-  assert.equal(points.length, 4)
-  assert.equal(points[0].address, 10)
-  assert.equal(points[3].address, 13)
-  assert.equal(points[0].name, '温度[10]')
-  assert.equal(pointName({ name: '水位', function: 3, address: 5, count: 1 }, 0), '水位')
+test('normalizePoint derives deterministic ids and clamps fields', () => {
+  const p = normalizePoint({ name: '温度', function: 3, address: 100, scale: 0.1, offset: -40, unit: '℃', alarmMin: -10, alarmMax: 85 })
+  assert.equal(p.id, 'p3_100')
+  assert.equal(p.scale, 0.1)
+  assert.equal(p.offset, -40)
+  assert.equal(p.alarmMin, -10)
+  const bare = normalizePoint({ function: 9, address: -5 })
+  assert.equal(bare.function, 3)
+  assert.equal(bare.address, 0)
+  assert.equal(normalizePoints([{ function: 3, address: 1 }, { function: 3, address: 1 }]).length, 1)
 })
 
-test('addSegment rejects duplicates and overflow', () => {
-  const first = addSegment([], { function: 3, address: 0, count: 10 })
-  const dup = addSegment(first.segments, { function: 3, address: 0, count: 10 })
-  assert.equal(dup.ok, false)
-  const overflow = addSegment([], { function: 3, address: 65530, count: 20 })
-  assert.equal(overflow.ok, false)
+test('planReadBatches merges contiguous runs and splits per fc', () => {
+  const batches = planReadBatches([
+    { function: 3, address: 8 },
+    { function: 3, address: 6 },
+    { function: 3, address: 7 },
+    { function: 3, address: 200 },
+    { function: 1, address: 3 },
+    { function: 1, address: 4 },
+  ])
+  assert.deepEqual(batches, [
+    { fc: 1, address: 3, count: 2 },
+    { fc: 3, address: 6, count: 3 },
+    { fc: 3, address: 200, count: 1 },
+  ])
 })
 
-test('removeSegment drops values belonging to that range', () => {
-  const added = addSegment([], { function: 4, address: 1, count: 2 })
-  const values = applySegmentRead([], added.segment, {
-    ok: true,
-    result: { details: { raw: [11, 22] } },
-  })
+test('planReadBatches respects the register span limit', () => {
+  const pts = []
+  for (let i = 0; i < MAX_READ_REGS + 1; i++) pts.push({ function: 3, address: i })
+  const batches = planReadBatches(pts)
+  assert.equal(batches.length, 2)
+  assert.equal(batches[0].count, MAX_READ_REGS)
+  assert.equal(batches[1].count, 1)
+})
+
+test('scatterBatch distributes raw values to covered points only', () => {
+  const points = [
+    { id: 'a', function: 3, address: 10 },
+    { id: 'b', function: 3, address: 11 },
+    { id: 'c', function: 3, address: 12 },
+    { id: 'far', function: 3, address: 50 },
+    { id: 'coil', function: 1, address: 10 },
+  ]
+  const values = scatterBatch([], points, { fc: 3, address: 10, count: 3 }, [7, 8, 9], true, '')
+  const get = (id) => values.find((v) => v.key === id)
+  assert.equal(get('a').raw, 7)
+  assert.equal(get('c').raw, 9)
+  assert.ok(!get('far'))
+  assert.ok(!get('coil'))
+  const failed = scatterBatch(values, points, { fc: 3, address: 10, count: 3 }, [], false, 'timeout')
+  assert.equal(failed.find((v) => v.key === 'a').ok, false)
+  assert.match(failed.find((v) => v.key === 'a').error, /timeout/)
+})
+
+test('setPointValue decodes with the point config', () => {
+  const p = { id: 'x', function: 3, address: 1, scale: 0.1, offset: 2 }
+  const values = setPointValue([], p, 255, { ok: true })
+  assert.equal(values[0].value, 27.5)
+  assert.equal(values[0].raw, 255)
+})
+
+test('fillSimValues produces plausible raw values for every point', () => {
+  const points = [
+    { id: 'c', function: 1, address: 0 },
+    { id: 'r', function: 3, address: 4 },
+  ]
+  const values = fillSimValues([], points, 1000)
   assert.equal(values.length, 2)
-  const next = removeSegment(added.segments, values, added.segment.id)
-  assert.equal(next.segments.length, 0)
-  assert.equal(next.values.length, 0)
+  assert.ok([0, 1].includes(values.find((v) => v.key === 'c').raw))
+  assert.ok(Number.isFinite(values.find((v) => v.key === 'r').raw))
 })
 
-test('saveWorkspace keeps segments across connection-only saves', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'dvb-seg-'))
-  const cwd = join(home, 'board')
-  await mkdir(cwd)
-  try {
-    const added = addSegment([], { name: 'HR', function: 3, address: 0, count: 8 })
-    const saved = saveWorkspace(home, cwd, {
-      modbus: { mode: 'tcp', host: '127.0.0.1', segments: added.segments },
-    })
-    assert.equal(saved.ok, true)
-    assert.equal(saved.workspace.modbus.segments.length, 1)
-    assert.equal(saved.workspace.modbus.segments[0].count, 8)
-    const again = saveWorkspace(home, cwd, { modbus: { slave: 5 } })
-    assert.equal(again.workspace.modbus.segments[0].count, 8)
-    assert.equal(again.workspace.modbus.slave, 5)
-    assert.equal(loadWorkspace(home, cwd).modbus.host, '127.0.0.1')
-    assert.equal(compactSegments(again.workspace.modbus.segments)[0].count, 8)
-  } finally {
-    await rm(home, { recursive: true, force: true })
-  }
+test('evaluateAlarm and evaluatePointAlarms detect breaches with hysteresis', () => {
+  const p = { id: 's1', name: '压力', function: 3, address: 0, alarmMax: 100 }
+  assert.equal(evaluateAlarm(p, 120), 'max')
+  assert.equal(evaluateAlarm(p, 50), '')
+  const first = evaluatePointAlarms([p], [{ key: 's1', raw: 120, ok: true }], {})
+  assert.equal(first.fired.length, 1)
+  const again = evaluatePointAlarms([p], [{ key: 's1', raw: 130, ok: true }], first.next)
+  assert.equal(again.fired.length, 0)
+  const clear = evaluatePointAlarms([p], [{ key: 's1', raw: 20, ok: true }], first.next)
+  assert.equal(clear.cleared.length, 1)
+  assert.deepEqual(clear.next, {})
 })
 
-test('simulateRaw yields moving register values without a device', () => {
-  const segment = { function: 3, address: 4, count: 3 }
-  const a = simulateRaw(segment, 1_000_000)
-  const b = simulateRaw(segment, 2_000_000)
-  assert.equal(a.length, 3)
-  assert.equal(a[0], (4 * 10 + 1000) & 0xffff)
-  assert.notEqual(a[0], b[0])
-  const coil = simulateRaw({ function: 1, address: 0, count: 2 }, 0)
-  assert.equal(coil[0], true)
-  assert.equal(coil[1], false)
+test('CSV round-trip preserves per-point metadata', () => {
+  const points = [
+    { name: '温度', function: 3, address: 0, scale: 0.1, offset: -40, unit: '℃', alarmMin: -10, alarmMax: 85 },
+    { name: '开关', function: 1, address: 9 },
+  ]
+  const back = csvToPoints(pointsToCsv(points))
+  assert.equal(back.ok, true)
+  assert.equal(back.points.length, 2)
+  assert.equal(back.points[0].scale, 0.1)
+  assert.equal(back.points[0].unit, '℃')
+  assert.equal(back.points[0].alarmMax, 85)
+  assert.equal(back.points[1].alarmMax, null)
+  assert.equal(csvToPoints('a,b\n1,2').ok, false)
 })
 
-test('modbusPoll sim path fills values without python', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'dvb-sim-'))
-  const cwd = join(home, 'board')
-  await mkdir(cwd)
-  try {
-    const added = addSegment([], { name: '模拟', function: 3, address: 0, count: 4 })
-    saveWorkspace(home, cwd, { modbus: { sim: true, polling: { enabled: true }, segments: added.segments } })
-    const polled = await modbusPoll(home, cwd)
-    assert.equal(polled.ok, true)
-    assert.equal(polled.skipped, false)
-    assert.equal(polled.values.length, 4)
-    assert.equal(polled.values[0].ok, true)
-    assert.equal(typeof polled.values[0].value, 'number')
-    assert.equal(loadWorkspace(home, cwd).tasks.length, 0)
-  } finally {
-    await rm(home, { recursive: true, force: true })
-  }
-})
-
-test('modbusPoll does not open a task and skips while a read is running', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'dvb-poll-'))
-  const cwd = join(home, 'board')
-  await mkdir(cwd)
-  try {
-    const empty = await modbusPoll(home, cwd)
-    assert.equal(empty.ok, false)
-    assert.match(empty.error, /寄存器段/)
-    const added = addSegment([], { function: 3, address: 0, count: 2 })
-    saveWorkspace(home, cwd, { modbus: { mode: 'tcp', host: '127.0.0.1', segments: added.segments } })
-    openTask(home, cwd, { type: 'read', source: 'user', summary: '读点表' })
-    const skipped = await modbusPoll(home, cwd)
-    assert.equal(skipped.ok, true)
-    assert.equal(skipped.skipped, true)
-    assert.equal(loadWorkspace(home, cwd).tasks.filter((item) => item.status === 'running').length, 1)
-    saveWorkspace(home, cwd, { modbus: { polling: { enabled: true, intervalMs: 500 } } })
-    assert.equal(loadWorkspace(home, cwd).modbus.polling.enabled, true)
-    assert.equal(loadWorkspace(home, cwd).modbus.polling.intervalMs, 500)
-    assert.equal(loadWorkspace(home, cwd).modbus.segments.length, 1)
-  } finally {
-    await rm(home, { recursive: true, force: true })
-  }
-})
-
-test('modbusPoll only reads devices with polling enabled', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'dvb-watch-'))
-  const cwd = join(home, 'board')
-  await mkdir(cwd)
-  try {
-    const segs = addSegment([], { function: 3, address: 0, count: 2 }).segments
-    let pack = addDevice({}, { role: 'master', name: 'A', sim: true, polling: { enabled: true }, segments: segs }).modbus
-    pack = addDevice(pack, { role: 'master', name: 'B', sim: true, polling: { enabled: false }, segments: segs }).modbus
-    saveWorkspace(home, cwd, { modbus: pack })
-    const polled = await modbusPoll(home, cwd)
-    assert.equal(polled.ok, true)
-    const a = polled.devices.find((item) => item.name === 'A')
-    const b = polled.devices.find((item) => item.name === 'B')
-    assert.ok(a.values.length >= 2)
-    assert.equal(b.values.length, 0)
-  } finally {
-    await rm(home, { recursive: true, force: true })
-  }
+test('pointIdOf is stable for write lookups', () => {
+  assert.equal(pointIdOf(3, 42), normalizePoint({ function: 3, address: 42 }).id)
 })

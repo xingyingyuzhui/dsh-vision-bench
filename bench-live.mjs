@@ -1,5 +1,5 @@
 import { pushFramesLog, subscribeState } from './bench-shared.mjs'
-import { clockOf, decodeValue, expandPoints, functionTag, isWritableFunction, normalizeWriteValues, writeTargetOf } from './bench-points.mjs'
+import { clockOf, decodeValue, isWritableFunction, normalizeWriteValues } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 
@@ -19,34 +19,29 @@ const sampleTrend = (cwd, pack) => {
     if (TREND.cwd !== cwd) {
       TREND.cwd = cwd
       TREND.series.clear()
+      TREND.meta.clear()
     }
     if (!cwd) return
   }
   const now = Date.now()
-  const devices = Array.isArray(pack && pack.devices) ? pack.devices : []
-  for (const device of devices) {
-    const segById = {}
-    for (const seg of Array.isArray(device.segments) ? device.segments : []) segById[seg.id] = seg
-    for (const rec of Array.isArray(device.values) ? device.values : []) {
-      if (!rec || !rec.key || rec.ok !== true || rec.value === null || rec.value === undefined) continue
-      const seg = segById[rec.segmentId]
-      const v = typeof rec.value === 'boolean' ? (rec.value ? 1 : 0) : Number(rec.value)
-      if (!Number.isFinite(v)) continue
-      const shown = seg ? decodeValue(seg, v) : v
-      const key = trendKey(device.id, rec.key)
-      TREND.meta.set(key, {
-        label: (device.name ? device.name + ' / ' : '') + (rec.name || key),
-        unit: seg ? seg.unit : '',
-      })
-      let list = TREND.series.get(key)
-      if (!list) {
-        list = []
-        TREND.series.set(key, list)
-      }
-      list.push({ t: now, v: Number(shown) })
-      if (list.length > TREND_CAP) list.splice(0, list.length - TREND_CAP)
-    }
+  const segById = {}
+  for (const seg of normalizePointsSafe(pack)) segById[seg.id] = seg
+  for (const rec of Array.isArray(pack.values) ? pack.values : []) {
+    if (!rec || !rec.key || rec.ok !== true || rec.value === null && rec.raw === null) continue
+    const rawV = rec.value !== null && rec.value !== undefined ? Number(rec.value) : Number(rec.raw)
+    if (!Number.isFinite(rawV)) continue
+    const key = String(rec.key)
+    TREND.meta.set(key, { label: (rec.name || key), unit: '' })
+    let list = TREND.series.get(key)
+    if (!list) { list = []; TREND.series.set(key, list) }
+    list.push({ t: now, v: rawV })
+    if (list.length > TREND_CAP) list.splice(0, list.length - TREND_CAP)
+    void segById
   }
+}
+
+function normalizePointsSafe(pack) {
+  return Array.isArray(pack.points) ? pack.points : []
 }
 
 const TREND_COLORS = ['#4f8ef7', '#2eaf64', '#e0912f', '#c85454', '#8f63d2', '#2fa8a8', '#d27ab0', '#7a8494']
@@ -167,29 +162,35 @@ export function createLiveView(React, t, post, hooks) {
     const polling = pack.polling || {}
     const enabled = polling.enabled === true
     const pythonReady = healthReady(health)
-    const deviceList = pack.devices.length ? pack.devices : [pack]
-    const sim = deviceList.some((item) => item.sim)
+    const conn = pack.conn || {}
+    const sim = conn.sim === true
     const canWatch = pythonReady || sim
-    const rows = []
-    for (const device of deviceList) {
-      const valueMap = {}
-      for (const item of Array.isArray(device.values) ? device.values : []) {
-        if (item && item.key) valueMap[item.key] = item
-      }
-      for (const point of expandPoints(device.segments)) {
-        const rec = valueMap[point.key]
-        rows.push({
-          key: (device.id || 'd') + ':' + point.key,
-          name: (device.name || '') + ' / ' + point.name,
-          shown: displayValue(rec, point),
-          ok: !rec || rec.ok !== false,
-          writable: isWritableFunction(point.function),
-          deviceId: device.id,
-          fn: point.function,
-          address: point.address,
-        })
-      }
+    const points = Array.isArray(pack.points) ? pack.points : []
+    const valueMap = {}
+    for (const item of Array.isArray(pack.values) ? pack.values : []) {
+      if (item && item.key) valueMap[item.key] = item
     }
+    const rows = points.map((point) => {
+      const rec = valueMap[point.id]
+      let shown = '—'
+      if (rec && rec.ok && rec.raw !== null && rec.raw !== undefined) {
+        shown = String(decodeValue(point, typeof rec.raw === 'boolean' ? (rec.raw ? 1 : 0) : rec.raw))
+        if (point.unit) shown += ' ' + point.unit
+      } else if (rec && rec.ok === false && rec.error) {
+        shown = rec.error
+      }
+      return {
+        key: point.id,
+        name: point.name || (functionTag(point.function) + point.address),
+        fn: point.function,
+        address: point.address,
+        writable: isWritableFunction(point.function),
+        deviceId: '',
+        shown,
+        ok: rec ? rec.ok !== false : true,
+      }
+    })
+    const pointTag = (fn) => ({ 1: 'C', 2: 'DI', 3: 'HR', 4: 'IR' }[fn] || 'HR')
     const openEdit = (row) => {
       setEdit({ rowKey: row.key, name: row.name, deviceId: row.deviceId, fn: row.fn, address: row.address, text: '', busy: false, result: null })
     }

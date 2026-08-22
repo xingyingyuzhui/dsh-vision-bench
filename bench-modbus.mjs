@@ -1,9 +1,31 @@
-import { applyPointWrite, applySegmentRead, clampInt, decodeValue, evaluateAlarm, functionTag, normalizeSegments, normalizeWriteValues, segmentCovering, simulateSegmentRan } from './bench-points.mjs'
-import { activeDevice, normalizeModbus } from './bench-devices.mjs'
+import { pickArtifact } from './bench-fs.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
-import { finishTask, loadBindings, loadWorkspace, openTask, recordBenchEvent, saveWorkspace } from './bench-store.mjs'
+import {
+  clampInt,
+  decodeValue,
+  evaluateAlarm,
+  evaluatePointAlarms,
+  fillSimValues,
+  functionTag,
+  normalizePoints,
+  normalizeWriteValues,
+  pointIdOf,
+  pointLabel,
+  scatterBatch,
+  setPointValue,
+} from './bench-points.mjs'
+import { normalizeModbus } from './bench-devices.mjs'
+import { planReadBatches } from './bench-pollplan.mjs'
 import { aborted, hasRunning, originOf, signalOf } from './bench-journal.mjs'
-
+import {
+  finishTask,
+  loadBindings,
+  loadWorkspace,
+  openTask,
+  pruneBuildLogs,
+  recordBenchEvent,
+  saveWorkspace,
+} from './bench-store.mjs'
 import { runPythonScript } from './bench-run.mjs'
 import { serialDevicePath } from './bench-serial.mjs'
 import { withPortLock } from './bench-portlock.mjs'
@@ -18,279 +40,150 @@ const needPython = (bindings) => {
 const pollLocks = new Map()
 const POLL_BUDGET_MS = 30000
 
-const MODBUS_PATCH_KEYS = ['mode', 'port', 'host', 'tcpPort', 'slave', 'baudrate', 'function', 'address', 'count', 'sim', 'timeoutSec']
+// ── connection profile ───────────────────────────────────────────────────
 
-export const pickModbusPatch = (raw) => {
+const CONN_PATCH_KEYS = ['mode', 'port', 'baudrate', 'bytesize', 'parity', 'stopbits', 'host', 'tcpPort', 'slave', 'sim']
+
+export const pickConnPatch = (raw) => {
   const out = {}
   if (!raw || typeof raw !== 'object') return out
-  for (const key of MODBUS_PATCH_KEYS) {
+  for (const key of CONN_PATCH_KEYS) {
     if (raw[key] !== undefined) out[key] = raw[key]
   }
   return out
 }
 
-const connectionArgs = (m) => {
-  const args = [
-    '--mode', m.mode,
-    '--slave', String(m.slave),
-    '--timeout', String(m.timeoutSec),
-    '--json',
-  ]
-  if (m.mode === 'rtu') {
-    if (!m.port) return { error: 'RTU 需要串口' }
-    args.push('--port', serialDevicePath(m.port), '--baudrate', String(m.baudrate))
-  } else {
-    if (!m.host) return { error: 'TCP 需要主机地址' }
-    args.push('--host', m.host, '--tcp-port', String(m.tcpPort))
-  }
-  return { args }
-}
-
-
-const MONITOR_BUSY_MSG = '串口正被日志监视占用，请先在上位机页关闭串口日志；要看总线报文可改用第二个只听适配器接另一个 COM'
-
-// Every pymodbus spawn goes through here: RTU ports are exclusive on Windows,
-// so transactions queue on a per-port lock and refuse while the log monitor
-// holds the same COM.
-const runModbusScript = (python, scriptName, args, port, opts) => {
-  if (port) {
-    if (findMonitoredPort(port)) {
-      return Promise.resolve({ ok: false, error: MONITOR_BUSY_MSG })
-    }
-    return withPortLock(port, () => runPythonScript(python, scriptName, args, opts))
-  }
-  return runPythonScript(python, scriptName, args, opts)
-}
-
-
-const framesOf = (ran) => {
-  const details = ran && ran.result && ran.result.details
-  const frames = details && typeof details.frames === 'object' ? details.frames : null
-  if (!frames) return null
-  return {
-    request: typeof frames.request === 'string' ? frames.request.slice(0, 200) : '',
-    response: typeof frames.response === 'string' ? frames.response.slice(0, 200) : '',
-    trace: Array.isArray(frames.trace) ? frames.trace.map((line) => String(line).slice(0, 200)).slice(0, 8) : [],
-  }
-}
-
-// Uniform frame-log entry shape shared by read / write / poll responses.
-const frameEntry = (device, label, frames, at = Date.now()) => ({
-  t: at,
-  deviceId: device.id,
-  deviceName: device.name || '',
-  label,
-  request: frames ? frames.request : '',
-  response: frames ? frames.response : '',
-  trace: frames ? frames.trace : [],
-})
-
-
-const runSegment = (python, conn, segment, cwd, timeoutMs, signal, port) => runModbusScript(python, 'modbus_read.py', conn.concat([
-  '--function', String(segment.function),
-  '--address', String(segment.address),
-  '--count', String(segment.count),
-  '--debug',
-]), port, { cwd, timeoutMs: timeoutMs || 20000, signal })
-
-
-const readSegmentsSim = (m, list) => {
-  const at = Date.now()
-  let values = m.values || []
-  const results = []
-  for (const segment of list) {
-    values = applySegmentRead(values, segment, simulateSegmentRan(segment, at))
-    results.push({ segmentId: segment.id, ok: true, error: '', count: segment.count })
-  }
-  return { ok: true, values, okCount: list.length, results, error: '', simulated: true, framesLog: [] }
-}
-
-
-const readSegments = async (python, m, list, cwd, timeoutMs, signal) => {
-  if (m.role === 'slave') return m.sim ? readSegmentsSim(m, list) : { ok: true, values: m.values || [], okCount: list.length, results: [], error: '', framesLog: [] }
-  if (m.sim) return readSegmentsSim(m, list)
-  const conn = connectionArgs(m)
-  if (conn.error) return { ok: false, error: conn.error, values: m.values || [], okCount: 0, framesLog: [] }
-  let values = m.values || []
-  let okCount = 0
-  let lastError = ''
-  let lastFrames = null
-  const results = []
-  const framesLog = []
-  const port = m.mode === 'rtu' ? m.port : ''
-  for (const segment of list) {
-    if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消', values, okCount, results, framesLog }
-    const ran = await runSegment(python, conn.args, segment, cwd, timeoutMs, signal, port)
-    if (ran.cancelled) return { ok: false, cancelled: true, error: '已取消', values, okCount, results, framesLog }
-    values = applySegmentRead(values, segment, ran)
-    const f = framesOf(ran)
-    if (f) {
-      lastFrames = f
-      framesLog.push(frameEntry(m, '读 ' + functionTag(segment.function) + segment.address + '×' + segment.count, f))
-    }
-    results.push({
-      segmentId: segment.id,
-      ok: !!ran.ok,
-      error: ran.ok ? '' : (ran.error || ''),
-      count: segment.count,
-    })
-    if (ran.ok) okCount += 1
-    else lastError = ran.error || lastError
-  }
-  return {
-    ok: okCount === list.length,
-    values,
-    okCount,
-    results,
-    frames: lastFrames,
-    framesLog,
-    error: lastError,
-  }
-}
-
-
-export const modbusRead = async (home, cwd, body, opts) => {
+export const connectOp = (home, cwd, body) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
-  const signal = signalOf(body, opts)
-  if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
-  const workspace = loadWorkspace(home, room.cwd)
-  const patch = pickModbusPatch(body && body.modbus)
-  const saved = Object.keys(patch).length
-    ? saveWorkspace(home, room.cwd, { keil: workspace.keil, modbus: patch })
-    : { ok: true, workspace }
+  const patch = pickConnPatch(body)
+  if (!Object.keys(patch).length) return { ok: false, error: '缺少连接参数' }
+  const saved = saveWorkspace(home, room.cwd, { modbus: { conn: patch } })
   if (!saved.ok) return saved
-  const pack = normalizeModbus(saved.workspace.modbus)
-  const device = (body && body.deviceId)
-    ? (pack.devices.find((item) => item.id === body.deviceId) || activeDevice(pack))
-    : activeDevice(pack)
-  const m = device
-  const sim = m.sim === true
-  const bindings = sim ? { python: '' } : loadBindings(home)
-  if (!sim && m.role !== 'slave') {
-    const missing = needPython(bindings)
-    if (missing) return { ok: false, error: missing }
-    const conn = connectionArgs(m)
-    if (conn.error) return { ok: false, error: conn.error }
-  }
-  if (hasRunning(saved.workspace, 'read')) {
-    return { ok: false, error: '已有读点任务进行中' }
-  }
-  const origin = originOf(body)
-  const table = body && (body.all === true || body.segmentId)
-  if (table) {
-    const all = normalizeSegments(m.segments)
-    const list = body.segmentId ? all.filter((item) => item.id === body.segmentId) : all
-    if (!list.length) return { ok: false, error: '无寄存器段' }
-    const task = openTask(home, room.cwd, {
-      type: 'read',
-      source: origin.source,
-      sessionId: origin.sessionId,
-      summary: list.length === 1
-        ? ('读段 ' + (list[0].name || ('f' + list[0].function + '@' + list[0].address)))
-        : ('读点表 ' + list.length + ' 段'),
-    })
-    const ran = await readSegments(bindings.python, m, list, room.cwd, 20000, signal)
-    if (ran.cancelled) {
-      finishTask(home, room.cwd, task.id, { cancelled: true, summary: '读取已取消' })
-      return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source }
-    }
-    const summary = (sim ? '仿真 ' : '') + (ran.ok
-      ? ('读取 ' + list.length + ' 段成功')
-      : ('读取 ' + ran.okCount + '/' + list.length + ' 段成功' + (ran.error ? '：' + ran.error : '')))
-    const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
-    const devices = latest.devices.map((item) => item.id === m.id ? { ...item, values: ran.values } : item)
-    finishTask(home, room.cwd, task.id, { ok: ran.ok, summary, frames: ran.frames || null, modbus: { devices, activeId: latest.activeId } })
-    return {
-      ok: ran.ok,
-      taskId: task.id,
-      source: origin.source,
-      summary,
-      results: ran.results,
-      values: ran.values,
-      framesLog: ran.framesLog || [],
-      simulated: sim,
-      error: ran.ok ? undefined : ran.error,
-    }
-  }
-
-  if (sim) {
-    const segment = { id: 'single', function: m.function, address: m.address, count: m.count }
-    const ran = simulateSegmentRan(segment)
-    const raw = ran.result.details.raw
-    const value = raw.length === 1 ? raw[0] : raw
-    const task = openTask(home, room.cwd, {
-      type: 'read',
-      source: origin.source,
-      sessionId: origin.sessionId,
-      summary: '仿真读 f' + m.function + '@' + m.address,
-    })
-    const summary = '仿真读 f' + m.function + '@' + m.address + ' = ' + JSON.stringify(value)
-    finishTask(home, room.cwd, task.id, { ok: true, summary })
-    return { ok: true, taskId: task.id, source: origin.source, simulated: true, result: { summary, details: { raw, value } } }
-  }
-
-  const conn = connectionArgs(m)
-  if (conn.error) return { ok: false, error: conn.error }
-  const args = conn.args.concat([
-    '--function', String(m.function),
-    '--address', String(m.address),
-    '--count', String(m.count),
-    '--debug',
-  ])
-  const task = openTask(home, room.cwd, {
-    type: 'read',
-    source: origin.source,
-    sessionId: origin.sessionId,
-    summary: 'Modbus 读 f' + m.function + '@' + m.address,
-  })
-  const ran = await runModbusScript(bindings.python, 'modbus_read.py', args, m.mode === 'rtu' ? m.port : '', {
-    cwd: room.cwd,
-    timeoutMs: 20000,
-    signal,
-  })
-  if (ran.cancelled) {
-    finishTask(home, room.cwd, task.id, { cancelled: true, summary: '读取已取消' })
-    return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source }
-  }
-  const value = ran.result && ran.result.details && ran.result.details.value
-  const summary = ran.ok
-    ? ('Modbus 读 f' + m.function + '@' + m.address + ' = ' + JSON.stringify(value))
-    : ('Modbus 读失败 ' + (ran.error || ''))
-  const f = framesOf(ran)
-  finishTask(home, room.cwd, task.id, { ok: !!ran.ok, summary, frames: f })
-  return { ...ran, taskId: task.id, source: origin.source, framesLog: [frameEntry(m, '读 ' + functionTag(m.function) + m.address + '×' + m.count, f)] }
+  return { ok: true, action: 'connect', conn: saved.workspace.modbus.conn }
 }
 
+// ── point table ops (Agent-facing) ───────────────────────────────────────
 
-const pointBefore = (device, fn, address) => {
-  const segment = segmentCovering(device.segments, fn, address)
-  if (!segment) return null
-  const recs = Array.isArray(device.values) ? device.values : []
-  const key = String(segment.id) + ':' + String(fn) + '@' + String(address)
-  const rec = recs.find((item) => item.key === key)
-  return rec && rec.value !== null && rec.value !== undefined ? rec.value : null
+const compactPointRow = (p, values) => {
+  const rec = (Array.isArray(values) ? values : []).find((item) => item.key === p.id)
+  return {
+    id: p.id,
+    name: p.name,
+    function: p.function,
+    address: p.address,
+    scale: p.scale,
+    offset: p.offset,
+    unit: p.unit,
+    alarmMin: p.alarmMin,
+    alarmMax: p.alarmMax,
+    writable: isWritableFunction(p.function),
+    raw: rec ? rec.raw : null,
+    value: rec ? rec.value : null,
+    ok: rec ? rec.ok : false,
+    at: rec ? rec.at : 0,
+  }
 }
 
+export const pointsOp = (home, cwd, body) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const workspace = loadWorkspace(home, room.cwd)
+  const pack = normalizeModbus(workspace.modbus)
+  const op = body && body.op
+  if (op === 'list') {
+    return { ok: true, action: 'points', points: pack.points.map((p) => compactPointRow(p, pack.values)) }
+  }
+  if (op === 'add' || op === 'update') {
+    const inputs = Array.isArray(body.points) ? body.points : (body.point ? [body.point] : [])
+    if (!inputs.length) return { ok: false, error: '缺少 points 或 point' }
+    let points = pack.points
+    for (const input of inputs) {
+      const normalized = normalizePoints([{ ...(input || {}) }])
+      if (!normalized.length) continue
+      const next = normalized[0]
+      if (op === 'add') {
+        if (points.some((p) => p.id === next.id)) {
+          return { ok: false, error: '点位已存在: ' + pointLabel(next) + '（可用 update 修改）' }
+        }
+        points = points.concat([next])
+      } else {
+        const idx = points.findIndex((p) => p.id === next.id)
+        if (idx < 0) return { ok: false, error: '要更新的点位不存在: ' + next.id }
+        points = points.map((p, i) => (i === idx ? next : p))
+      }
+    }
+    const saved = saveWorkspace(home, room.cwd, { modbus: { points } })
+    if (!saved.ok) return saved
+    return { ok: true, action: 'points', points: saved.workspace.modbus.points.map((p) => compactPointRow(p, saved.workspace.modbus.values)) }
+  }
+  if (op === 'remove') {
+    const ids = Array.isArray(body.ids) ? body.ids.map(String) : (body.id ? [String(body.id)] : [])
+    if (!ids.length) return { ok: false, error: '缺少 ids' }
+    const kept = pack.points.filter((p) => !ids.includes(p.id))
+    if (kept.length === pack.points.length) return { ok: false, error: '没有匹配的点位' }
+    const saved = saveWorkspace(home, room.cwd, { modbus: { points: kept } })
+    if (!saved.ok) return saved
+    return { ok: true, action: 'points', removed: ids.length }
+  }
+  if (op === 'clear') {
+    const saved = saveWorkspace(home, room.cwd, { modbus: { points: [], values: [], alarmActive: {} } })
+    if (!saved.ok) return saved
+    return { ok: true, action: 'points', cleared: true }
+  }
+  return { ok: false, error: "op 必须是 list | add | update | remove | clear" }
+}
+
+// ── pending agent writes ─────────────────────────────────────────────────
 
 const PENDING_TTL_MS = 5 * 60 * 1000
 const pendingWrites = new Map()
 let pendingSeq = 0
 
+const endpointFingerprint = (conn) => ({
+  mode: conn.mode,
+  port: (conn.port || '').trim(),
+  baudrate: Number(conn.baudrate) || 0,
+  bytesize: Number(conn.bytesize) || 8,
+  parity: conn.parity || 'N',
+  stopbits: Number(conn.stopbits) || 1,
+  host: (conn.host || '').trim(),
+  tcpPort: Number(conn.tcpPort) || 0,
+  slave: Number(conn.slave) || 0,
+})
+
+const endpointLabelText = (conn) => conn.mode === 'tcp'
+  ? ((conn.host || '?') + ':' + conn.tcpPort + ' · 站号 ' + conn.slave)
+  : ((conn.port || '?') + ' @ ' + conn.baudrate + ' · 站号 ' + conn.slave)
+
+const sameEndpoint = (a, b) =>
+  !!a && !!b
+    && a.mode === b.mode
+    && a.port === b.port
+    && a.baudrate === b.baudrate
+    && a.bytesize === b.bytesize
+    && a.parity === b.parity
+    && a.stopbits === b.stopbits
+    && a.host === b.host
+    && a.tcpPort === b.tcpPort
+    && a.slave === b.slave
+
+const prunePendingWrites = () => {
+  const now = Date.now()
+  for (const [key, entry] of pendingWrites) {
+    if (now - entry.createdAt > PENDING_TTL_MS) pendingWrites.delete(key)
+  }
+}
+
 export const createPendingWrite = (cwd, params) => {
   const id = 'pw' + Date.now().toString(36) + (++pendingSeq).toString(36)
-  pendingWrites.set(cwd + ':' + id, {
-    id,
-    cwd,
-    createdAt: Date.now(),
-    params,
-  })
-  prunePendingWrites(cwd)
+  pendingWrites.set(cwd + ':' + id, { id, cwd, createdAt: Date.now(), params })
+  prunePendingWrites()
   return { id, ...params }
 }
 
 export const popPendingWrite = (cwd, id) => {
-  prunePendingWrites(cwd)
+  prunePendingWrites()
   const key = String(cwd) + ':' + String(id || '')
   const entry = pendingWrites.get(key)
   if (!entry) return null
@@ -299,46 +192,13 @@ export const popPendingWrite = (cwd, id) => {
 }
 
 export const listPendingWrites = (cwd) => {
-  prunePendingWrites(cwd)
+  prunePendingWrites()
   const out = []
   for (const entry of pendingWrites.values()) {
     if (entry.cwd === cwd) out.push({ id: entry.id, ...entry.params })
   }
   return out
 }
-
-const prunePendingWrites = (cwd) => {
-  const now = Date.now()
-  void cwd
-  for (const [key, entry] of pendingWrites) {
-    if (now - entry.createdAt > PENDING_TTL_MS) {
-      pendingWrites.delete(key)
-    }
-  }
-}
-
-
-const endpointFingerprint = (m) => ({
-  mode: m.mode,
-  port: (m.port || '').trim(),
-  host: (m.host || '').trim(),
-  tcpPort: Number(m.tcpPort) || 0,
-  slave: Number(m.slave) || 0,
-  baudrate: Number(m.baudrate) || 0,
-})
-
-export const endpointLabel = (m) => m.mode === 'rtu'
-  ? ((m.port || '?') + ' @ ' + (m.baudrate || 0) + ' · 站号 ' + (m.slave || 0))
-  : ((m.host || '?') + ':' + (m.tcpPort || 0) + ' · 站号 ' + (m.slave || 0))
-
-const sameEndpoint = (a, b) =>
-  !!a && !!b
-    && a.mode === b.mode
-    && a.port === b.port
-    && a.host === b.host
-    && a.tcpPort === b.tcpPort
-    && a.slave === b.slave
-    && a.baudrate === b.baudrate
 
 export const resolvePendingWrite = async (home, cwd, id, approved) => {
   const room = requireWorkspaceCwd(cwd)
@@ -356,22 +216,18 @@ export const resolvePendingWrite = async (home, cwd, id, approved) => {
       '', { sessionId: entry.params.sessionId }).catch(() => {})
     return { ok: true, rejected: true }
   }
-  // The user approved a write to the endpoint they saw on the card. If the
-  // device connection changed since, refuse instead of writing somewhere else.
+  // The user approved a write against the endpoint shown on the card. If the
+  // connection changed since, refuse instead of writing somewhere else.
   const workspace = loadWorkspace(home, room.cwd)
   const pack = normalizeModbus(workspace.modbus)
-  const device = pack.devices.find((item) => item.id === entry.params.deviceId)
-  if (!device) {
-    return { ok: false, error: '请求的目标设备已不存在，请让 Agent 重新发起请求' }
-  }
-  if (!sameEndpoint(endpointFingerprint(device), entry.params.endpoint)) {
+  if (!sameEndpoint(endpointFingerprint(pack.conn), entry.params.endpoint)) {
     recordBenchEvent(home, room.cwd, {
       action: 'write-stale',
       ok: false,
-      summary: '写点请求过期（设备连接已变更）：' + entry.params.label,
+      summary: '写点请求过期（连接已变更）：' + entry.params.label,
     }, { source: 'system' })
     void notifyBenchEvent(home, room.cwd,
-      '写点请求已失效：设备连接在批准前发生了变化，请让 Agent 重新发起',
+      '写点请求已失效：串口/TCP 连接在批准前发生了变化，请让 Agent 重新发起',
       '', { sessionId: entry.params.sessionId }).catch(() => {})
     return { ok: false, error: '设备连接已变更，原批准已失效，请让 Agent 重新发起请求' }
   }
@@ -382,6 +238,193 @@ export const resolvePendingWrite = async (home, cwd, id, approved) => {
   })
 }
 
+// ── transport ────────────────────────────────────────────────────────────
+
+const MONITOR_BUSY_MSG = '串口正被日志监视占用，请先在上位机页关闭串口日志；要看总线报文可改用第二个只听适配器接另一个 COM'
+
+const connArgs = (conn) => {
+  const args = [
+    '--mode', conn.mode,
+    '--slave', String(conn.slave),
+    '--timeout', '1',
+    '--json',
+  ]
+  if (conn.mode === 'rtu') {
+    if (!conn.port) return { error: 'RTU 需要串口' }
+    args.push(
+      '--port', serialDevicePath(conn.port),
+      '--baudrate', String(conn.baudrate),
+      '--bytesize', String(conn.bytesize),
+      '--parity', String(conn.parity),
+      '--stopbits', String(conn.stopbits),
+    )
+  } else {
+    if (!conn.host) return { error: 'TCP 需要主机地址' }
+    args.push('--host', conn.host, '--tcp-port', String(conn.tcpPort))
+  }
+  return { args }
+}
+
+// Every pymodbus spawn goes through here: RTU ports are exclusive on Windows,
+// so transactions queue on a per-port lock and refuse while the log monitor
+// holds the same COM.
+const runModbusScript = (python, scriptName, args, conn, opts) => {
+  const port = conn && conn.mode === 'rtu' ? conn.port : ''
+  if (port) {
+    if (findMonitoredPort(port)) {
+      return Promise.resolve({ ok: false, error: MONITOR_BUSY_MSG })
+    }
+    return withPortLock(port, () => runPythonScript(python, scriptName, args, opts))
+  }
+  return runPythonScript(python, scriptName, args, opts)
+}
+
+const framesOf = (ran) => {
+  const details = ran && ran.result && ran.result.details
+  const frames = details && typeof details.frames === 'object' ? details.frames : null
+  if (!frames) return null
+  return {
+    request: typeof frames.request === 'string' ? frames.request.slice(0, 200) : '',
+    response: typeof frames.response === 'string' ? frames.response.slice(0, 200) : '',
+    trace: Array.isArray(frames.trace) ? frames.trace.map((line) => String(line).slice(0, 200)).slice(0, 8) : [],
+  }
+}
+
+const frameEntry = (label, frames, at = Date.now()) => ({
+  t: at,
+  deviceId: 'conn',
+  deviceName: '',
+  label,
+  request: frames ? frames.request : '',
+  response: frames ? frames.response : '',
+  trace: frames ? frames.trace : [],
+})
+
+// ── reads ────────────────────────────────────────────────────────────────
+
+const runReadTx = (python, conn, fc, address, count, cwd, timeoutMs, signal) =>
+  runModbusScript(python, 'modbus_read.py', [
+    '--function', String(fc),
+    '--address', String(address),
+    '--count', String(count),
+    '--debug',
+  ], conn, { cwd, timeoutMs: timeoutMs || 20000, signal })
+
+export const modbusRead = async (home, cwd, body, opts) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const signal = signalOf(body, opts)
+  if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
+  const workspace = loadWorkspace(home, room.cwd)
+  const pack = normalizeModbus(workspace.modbus)
+  const conn = pack.conn
+  const sim = conn.sim === true
+  const bindings = sim ? { python: '' } : loadBindings(home)
+  if (!sim) {
+    const missing = needPython(bindings)
+    if (missing) return { ok: false, error: missing }
+    const connCheck = connArgs(conn)
+    if (connCheck.error) return { ok: false, error: connCheck.error }
+  }
+  if (hasRunning(workspace, 'read')) {
+    return { ok: false, error: '已有读点任务进行中' }
+  }
+  const origin = originOf(body)
+
+  // Batch selection:
+  //   all=true            → planned batches over every configured point
+  //   pointId             → single configured point
+  //   function+address    → standalone scratch read (no point needed)
+  let batches = []
+  let labels = []
+  if (body && body.all === true) {
+    if (!pack.points.length) return { ok: false, error: '无点位，请先添加点位' }
+    batches = planReadBatches(pack.points)
+    labels = batches.map((b) => '读 ' + functionTag(b.fc) + b.address + '×' + b.count)
+  } else if (body && body.pointId) {
+    const point = pack.points.find((item) => item.id === body.pointId)
+    if (!point) return { ok: false, error: '点位不存在: ' + body.pointId }
+    batches = [{ fc: point.function, address: point.address, count: 1 }]
+    labels = ['读 ' + pointLabel(point)]
+  } else if (body && Number.isFinite(Number(body.function)) && Number.isFinite(Number(body.address))) {
+    const fc = Number(body.function)
+    const address = clampInt(body.address, -1, 0, 65535)
+    const count = clampInt(body.count, 1, 1, 125)
+    if (address < 0) return { ok: false, error: '缺少寄存器地址' }
+    batches = [{ fc, address, count }]
+    labels = ['读 ' + functionTag(fc) + address + '×' + count]
+  } else {
+    return { ok: false, error: '无点位：请传 all、pointId 或 function+address' }
+  }
+
+  const task = openTask(home, room.cwd, {
+    type: 'read',
+    source: origin.source,
+    sessionId: origin.sessionId,
+    summary: labels.length === 1 ? labels[0] : ('读点表 ' + batches.length + ' 批'),
+  })
+
+  let values = pack.values
+  let okCount = 0
+  let lastError = ''
+  let lastFrames = null
+  const results = []
+  const framesLog = []
+
+  for (let bi = 0; bi < batches.length; bi++) {
+    const batch = batches[bi]
+    if (aborted(signal)) {
+      finishTask(home, room.cwd, task.id, { cancelled: true, summary: '读取已取消' })
+      return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source, values, framesLog }
+    }
+     const ran = await (sim
+        ? Promise.resolve({
+          ok: true,
+          result: { details: { raw: Array.from({ length: batch.count }, (_, i) => ((batch.address + i) * 10 + Math.floor(Date.now() / 1000)) & 0xffff) } },
+        })
+        : runReadTx(bindings.python, conn, batch.fc, batch.address, batch.count, room.cwd, 20000, signal))
+    if (ran.cancelled) {
+      finishTask(home, room.cwd, task.id, { cancelled: true, summary: '读取已取消' })
+      return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source, values, framesLog }
+    }
+    const raw = ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw)
+      ? ran.result.details.raw
+      : []
+    values = scatterBatch(values, pack.points, batch, raw, !!ran.ok, ran.ok ? '' : (ran.error || ''))
+    const f = framesOf(ran)
+    if (f) {
+      lastFrames = f
+      framesLog.push(frameEntry(labels[bi] + (sim ? '（仿真）' : ''), f))
+    }
+    results.push({ label: labels[bi], ok: !!ran.ok, error: ran.ok ? '' : (ran.error || ''), count: batch.count })
+    if (ran.ok) okCount += 1
+    else lastError = ran.error || lastError
+  }
+
+  const okAll = okCount === batches.length
+  const summary = (sim ? '仿真 ' : '')
+    + (okAll ? ('读取成功（' + batches.length + ' 批）') : ('读取 ' + okCount + '/' + batches.length + ' 批成功' + (lastError ? '：' + lastError : '')))
+  finishTask(home, room.cwd, task.id, { ok: okAll, summary, frames: lastFrames })
+  return {
+    ok: okAll,
+    taskId: task.id,
+    source: origin.source,
+    summary,
+    results,
+    values,
+    framesLog,
+    simulated: sim,
+    error: okAll ? undefined : lastError,
+  }
+}
+
+// ── writes ───────────────────────────────────────────────────────────────
+
+const pointBefore = (values, fn, address) => {
+  const key = pointIdOf(fn, address)
+  const rec = (Array.isArray(values) ? values : []).find((item) => item.key === key)
+  return rec && rec.raw !== null && rec.raw !== undefined ? rec.raw : null
+}
 
 export const modbusWrite = async (home, cwd, body, opts) => {
   const room = requireWorkspaceCwd(cwd)
@@ -390,16 +433,7 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
   const workspace = loadWorkspace(home, room.cwd)
   const pack = normalizeModbus(workspace.modbus)
-  // A pending approval must execute on the exact device it showed the user;
-  // only requests without an explicit deviceId may fall back to the active one.
-  let device = null
-  if (body && body.deviceId) {
-    device = pack.devices.find((item) => item.id === body.deviceId) || null
-    if (!device) return { ok: false, error: '请求的目标设备已不存在' }
-  } else {
-    device = activeDevice(pack)
-  }
-  const m = device
+  const conn = pack.conn
   const fn = Number(body && body.function)
   const address = clampInt(body && body.address, -1, 0, 65535)
   if (address < 0) return { ok: false, error: '缺少寄存器地址' }
@@ -409,40 +443,21 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   const check = normalizeWriteValues(fn, rawValues, 1968)
   if (!check.ok) return { ok: false, error: check.error }
   const count = check.values.length
-  const local = m.sim === true || m.role === 'slave'
-  if (local) {
-    for (let i = 0; i < count; i++) {
-      if (!segmentCovering(m.segments, fn, address + i)) {
-        return { ok: false, error: '地址 ' + (address + i) + ' 不在点表段内' }
-      }
-    }
-  }
   if (hasRunning(workspace, 'write')) {
     return { ok: false, error: '已有写入任务进行中' }
   }
   const origin = originOf(body)
-  const bindings = m.sim ? { python: '' } : loadBindings(home)
-  let conn = null
-  if (!m.sim) {
-    conn = connectionArgs(m)
-    if (conn.error) return { ok: false, error: conn.error }
-  }
-  const tag = functionTag(fn)
-  const label = count === 1
-    ? ('写 ' + tag + address + ' = ' + check.values[0])
-    : ('批量写 ' + tag + address + '–' + (address + count - 1) + '（' + count + ' 点）')
   if (origin.source === 'agent' && !(body && body.confirm === true)) {
     const request = createPendingWrite(room.cwd, {
       function: fn,
       address,
       values: check.values.slice(),
-      deviceId: m.id,
-      deviceName: m.name || '',
-      label,
+      label: '',
       sessionId: origin.sessionId,
-      endpoint: endpointFingerprint(m),
-      endpointLabelStr: endpointLabel(m),
+      endpoint: endpointFingerprint(conn),
     })
+    // Label needs the tag helpers; fill it in place.
+    request.label = entryLabel(fn, address, count, check.values)
     return {
       ok: false,
       needsConfirm: true,
@@ -451,33 +466,26 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       error: 'Agent 写点是高影响操作，需要用户在界面上批准',
     }
   }
+  const bindings = conn.sim ? { python: '' } : loadBindings(home)
+  let connChecked = null
+  if (!conn.sim) {
+    connChecked = connArgs(conn)
+    if (connChecked.error) return { ok: false, error: connChecked.error }
+  }
+  const label = entryLabel(fn, address, count, check.values)
   const before = []
-  for (let i = 0; i < count; i++) before.push(pointBefore(m, fn, address + i))
+  for (let i = 0; i < count; i++) before.push(pointBefore(pack.values, fn, address + i))
   const task = openTask(home, room.cwd, {
     type: 'write',
     source: origin.source,
     sessionId: origin.sessionId,
     summary: label,
   })
-  // Merge-only completion: reload the freshest device list and patch ONLY the
-  // target device's values (and sim flag for local writes). A real write plus
-  // readback can take tens of seconds; rebuilding the whole device array from
-  // a pre-write snapshot would clobber concurrent config edits.
-  const done = (ok, summary, extra = {}) => {
-    const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
-    const devices = latest.devices.map((item) => {
-      if (item.id !== m.id) return item
-      return {
-        ...item,
-        values: extra.values !== undefined ? extra.values : item.values,
-        sim: extra.exitSim ? false : item.sim,
-      }
-    })
+  const done = (ok, summaryText, extra = {}) => {
     finishTask(home, room.cwd, task.id, {
       ok,
-      summary,
+      summary: summaryText,
       frames: extra.frames || null,
-      modbus: { devices, activeId: latest.activeId },
     })
     return {
       ok,
@@ -490,34 +498,34 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       target: check.values,
       readback: extra.readback || [],
       frames: extra.frames || null,
-      framesLog: [frameEntry(m, label, extra.frames)],
+      framesLog: [frameEntry(label, extra.frames)],
+      values: extra.values || pack.values,
       simulated: !!extra.simulated,
-      ...(ok ? {} : { error: summary }),
+      ...(ok ? {} : { error: summaryText }),
     }
   }
 
-  if (local) {
+  if (conn.sim) {
     const at = Date.now()
-    let vals = Array.isArray(m.values) ? m.values : []
+    let vals = pack.values
     for (let i = 0; i < count; i++) {
-      const seg = segmentCovering(m.segments, fn, address + i)
-      vals = applyPointWrite(vals, seg, address + i, check.values[i], at)
+      const pseudo = pack.points.find((p) => p.id === pointIdOf(fn, address + i))
+        || { id: pointIdOf(fn, address + i), function: fn, address: address + i, scale: 1, offset: 0 }
+      vals = setPointValue(vals, pseudo, check.values[i], { ok: true, at })
     }
     return done(true, label + '（本地生效）', {
       values: vals,
-      exitSim: true,
-      simulated: m.sim === true,
+      simulated: true,
       readback: check.values.slice(),
     })
   }
 
-  const writePort = m.mode === 'rtu' ? m.port : ''
-  const ran = await runModbusScript(bindings.python, 'modbus_write.py', conn.args.concat([
+  const ran = await runModbusScript(bindings.python, 'modbus_write.py', [
     '--function', String(check.fc),
     '--address', String(address),
     '--values', check.values.join(','),
     '--debug',
-  ]), writePort, { cwd: room.cwd, timeoutMs: 20000, signal })
+  ], conn, { cwd: room.cwd, timeoutMs: 20000, signal })
   if (ran.cancelled) {
     finishTask(home, room.cwd, task.id, { cancelled: true, summary: '写入已取消' })
     return { ok: false, cancelled: true, taskId: task.id, source: origin.source, error: '已取消' }
@@ -525,15 +533,20 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   if (!ran.ok) {
     return done(false, '写入失败 ' + (ran.error || ''), { frames: framesOf(ran) })
   }
-  const readbackRan = await runSegment(bindings.python, conn, { id: 'write-back', function: fn, address, count }, room.cwd, 20000, signal, writePort)
+  // Read back the written range so success means verified.
+  const readbackRan = await runReadTx(bindings.python, conn, fn, address, count, room.cwd, 20000, signal)
   const raw = readbackRan.ok && readbackRan.result && readbackRan.result.details && Array.isArray(readbackRan.result.details.raw)
     ? readbackRan.result.details.raw.slice(0, count)
     : []
   const readbackOk = readbackRan.ok && raw.length === count
-  let vals = Array.isArray(m.values) ? m.values : []
+  let vals = pack.values
   for (let i = 0; i < count; i++) {
-    const seg = segmentCovering(m.segments, fn, address + i) || { id: 'write', function: fn, address: address + i, count: 1 }
-    vals = applyPointWrite(vals, seg, address + i, raw[i] !== undefined ? raw[i] : null, Date.now())
+    const pseudo = pack.points.find((p) => p.id === pointIdOf(fn, address + i))
+      || { id: pointIdOf(fn, address + i), function: fn, address: address + i, scale: 1, offset: 0 }
+    vals = setPointValue(vals, pseudo, raw[i] !== undefined ? raw[i] : null, {
+      ok: readbackOk,
+      error: readbackOk ? '' : (readbackRan.error || ''),
+    })
   }
   const mismatch = readbackOk && raw.some((value, i) => Number(value) !== Number(check.values[i]))
   const summary = label + (readbackOk
@@ -546,156 +559,99 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   })
 }
 
+const entryLabel = (fn, address, count, values) => count === 1
+  ? ('写 ' + functionTag(fn) + address + ' = ' + values[0])
+  : ('批量写 ' + functionTag(fn) + address + '–' + (address + count - 1) + '（' + count + ' 点）')
 
-const deviceAlarms = (device, values) => {
-  const byId = {}
-  for (const seg of normalizeSegments(device.segments)) byId[seg.id] = seg
-  const active = device.alarmActive && typeof device.alarmActive === 'object' ? device.alarmActive : {}
-  const next = { ...active }
-  const fired = []
-  const cleared = []
-  for (const rec of Array.isArray(values) ? values : []) {
-    if (!rec || !rec.key || rec.ok !== true) continue
-    const seg = byId[rec.segmentId]
-    if (!seg || (seg.alarmMin === null && seg.alarmMax === null)) continue
-    const breach = evaluateAlarm(seg, rec.value)
-    if (breach && !next[rec.key]) {
-      next[rec.key] = true
-      fired.push({ seg, address: rec.address, value: rec.value, kind: breach })
-    } else if (!breach && next[rec.key]) {
-      delete next[rec.key]
-      cleared.push({ seg, address: rec.address, value: rec.value })
-    }
-  }
-  return { next, fired, cleared }
-}
+// ── polling ──────────────────────────────────────────────────────────────
 
-const alarmLabel = (item, kind) => {
-  const name = item.seg.name || functionTag(item.seg.function) + item.address
-  const limit = kind === 'max' ? item.seg.alarmMax : item.seg.alarmMin
-  const shown = decodeValue(item.seg, item.value)
-  return name + '=' + shown + (kind === 'max' ? '>' + limit : '<' + limit)
-}
-
+const alarmSummary = (items, kind) => items.slice(0, 5).map((item) => {
+  const limit = kind === 'max' ? item.point.alarmMax : item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
+  void limit
+  return decodeValue(item.point, item.raw) !== undefined
+    ? pointLabel(item.point) + '=' + decodeValue(item.point, item.raw)
+    : pointLabel(item.point)
+}).join('；')
 
 export const modbusPoll = async (home, cwd, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
   const workspace = loadWorkspace(home, room.cwd)
   const pack = normalizeModbus(workspace.modbus)
-  const devices = pack.devices.length ? pack.devices : [activeDevice(pack)]
-  const hasWork = devices.some((item) => item.segments && item.segments.length)
-  if (!hasWork) return { ok: false, error: '无寄存器段', polling: pack.polling, values: pack.values, devices }
+  const conn = pack.conn
+  console.log('POLL pack points', pack.points.length, 'conn sim', conn.sim, 'polling', pack.polling)
+  if (!pack.points.length) return { ok: false, error: '无点位，请先添加点位' }
   if (hasRunning(workspace, 'read')) {
-    return { ok: true, skipped: true, polling: pack.polling, values: pack.values, devices }
+    return { ok: true, skipped: true, polling: pack.polling, values: pack.values }
   }
   if (pollLocks.has(room.cwd)) {
-    return { ok: true, skipped: true, busy: true, polling: pack.polling, values: pack.values, devices }
+    return { ok: true, skipped: true, busy: true, polling: pack.polling, values: pack.values }
   }
   const outer = signalOf(null, opts)
   const budgetMs = Number(opts && opts.budgetMs)
   const budget = AbortSignal.timeout(Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : POLL_BUDGET_MS)
   const signal = outer ? AbortSignal.any([outer, budget]) : budget
-  const lives = new Map()
-  const alarmActive = new Map()
-  const firedAll = []
-  const clearedAll = []
-  const pollFramesLog = []
-  pollLocks.set(room.cwd, lives)
+  pollLocks.set(room.cwd, true)
   let ok = true
   let timedOut = false
   try {
-    const python = loadBindings(home).python
-    for (const device of devices) {
-      if (aborted(signal)) {
-        timedOut = true
-        ok = false
-        break
+    const bindings = conn.sim ? { python: '' } : loadBindings(home)
+    if (!conn.sim) {
+      const missing = needPython(bindings)
+      if (missing) {
+        return { ok: false, error: missing, polling: pack.polling, values: pack.values }
       }
-      if (!device.segments.length) continue
-      if (device.role === 'slave') {
-        if (device.sim && device.listen) {
-          const ran = readSegmentsSim(device, device.segments)
-          lives.set(device.id, {
-            values: ran.values,
-            polling: { lastAt: Date.now(), lastOk: true, error: '' },
-          })
-        }
-        continue
-      }
-      if (!device.polling.enabled) continue
-      if (!device.sim && !python) {
-        ok = false
-        lives.set(device.id, {
-          values: device.values,
-          polling: { lastAt: Date.now(), lastOk: false, error: '请先在设置 → 台架 绑定 Python' },
+    }
+    const batches = planReadBatches(pack.points)
+    let values = pack.values
+    const framesLog = []
+    for (const batch of batches) {
+      if (aborted(signal)) { timedOut = true; ok = false; break }
+      const ran = await (conn.sim
+        ? Promise.resolve({
+          ok: true,
+          result: { details: { raw: Array.from({ length: batch.count }, (_, i) => ((batch.address + i) * 10 + Math.floor(Date.now() / 1000)) & 0xffff) } },
         })
-        continue
-      }
-      const ran = await readSegments(device.sim ? '' : python, device, device.segments, room.cwd, 4000, signal)
-      if (ran.cancelled || aborted(signal)) {
-        timedOut = true
-        ok = false
-        lives.set(device.id, {
-          values: device.values,
-          polling: { lastAt: Date.now(), lastOk: false, error: '轮询超时' },
-        })
-        break
-      }
+        : runReadTx(bindings.python, conn, batch.fc, batch.address, batch.count, room.cwd, 4000, signal))
+      if (ran.cancelled || aborted(signal)) { timedOut = true; ok = false; break }
       if (!ran.ok) ok = false
-      const alarms = deviceAlarms(device, ran.values)
-      alarmActive.set(device.id, alarms.next)
-      for (const entry of (ran.framesLog || [])) {
-        pollFramesLog.push({ ...entry, label: entry.label + '（监视）' })
-      }
-      firedAll.push(...alarms.fired)
-      clearedAll.push(...alarms.cleared)
-      lives.set(device.id, {
-        values: ran.values,
-        polling: {
-          lastAt: Date.now(),
-          lastOk: ran.ok,
-          error: ran.ok ? '' : (ran.error || ''),
-        },
-      })
+      const raw = ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw) ? ran.result.details.raw : []
+      values = scatterBatch(values, pack.points, batch, raw, !!ran.ok, ran.ok ? '' : (ran.error || ''))
+      const f = framesOf(ran)
+      if (f) framesLog.push(frameEntry('读 ' + functionTag(batch.fc) + batch.address + '×' + batch.count + '（监视）', f))
     }
-    if (timedOut) {
-      for (const device of devices) {
-        if (!device.polling || !device.polling.enabled || lives.has(device.id)) continue
-        lives.set(device.id, {
-          values: device.values,
-          polling: { lastAt: Date.now(), lastOk: false, error: '轮询超时' },
-        })
-      }
-    }
-    const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
-    const merged = latest.devices.map((item) => {
-      const live = lives.get(item.id)
-      if (!live) return item
-      return {
-        ...item,
-        values: live.values,
-        polling: { ...item.polling, ...live.polling },
-        alarmActive: alarmActive.get(item.id) || item.alarmActive || {},
-      }
-    })
-    if (firedAll.length) {
+    const alarms = evaluatePointAlarms(pack.points, values, pack.alarmActive)
+    if (alarms.fired.length) {
       recordBenchEvent(home, room.cwd, {
         action: 'alarm',
         ok: false,
-        summary: '越限告警：' + firedAll.slice(0, 5).map((item) => alarmLabel(item, item.kind)).join('；'),
+        summary: '越限告警：' + alarms.fired.slice(0, 5).map((item) => {
+          const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
+          return pointLabel(item.point) + '=' + decodeValue(item.point, item.raw) + (item.kind === 'max' ? '>' + limit : '<' + limit)
+        }).join('；'),
       }, { source: 'system' })
       void notifyBenchEvent(home, room.cwd,
-        '台架告警：' + firedAll.slice(0, 3).map((item) => alarmLabel(item, item.kind)).join('；')).catch(() => {})
+        '台架告警：' + alarms.fired.slice(0, 3).map((item) => {
+          const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
+          return pointLabel(item.point) + '=' + decodeValue(item.point, item.raw) + (item.kind === 'max' ? '>' + limit : '<' + limit)
+        }).join('；')).catch(() => {})
     }
-    if (clearedAll.length) {
+    if (alarms.cleared.length) {
       recordBenchEvent(home, room.cwd, {
         action: 'alarm-clear',
         ok: true,
-        summary: '告警恢复：' + clearedAll.slice(0, 5).map((item) => alarmLabel(item, '')).join('；'),
+        summary: '告警恢复：' + alarms.cleared.slice(0, 5).map((item) => pointLabel(item.point) + '=' + decodeValue(item.point, item.raw)).join('；'),
       }, { source: 'system' })
     }
-    const saved = saveWorkspace(home, room.cwd, { modbus: { devices: merged, activeId: latest.activeId } })
+    const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+    const saved = saveWorkspace(home, room.cwd, {
+      modbus: {
+        values,
+        alarmActive: alarms.next,
+        polling: { ...latest.polling, lastAt: Date.now(), lastOk: ok, error: ok ? '' : (timedOut ? '轮询超时' : '') },
+      },
+    })
+    void framesLog
     return {
       ok,
       skipped: false,
@@ -703,14 +659,57 @@ export const modbusPoll = async (home, cwd, opts) => {
       timedOut,
       values: saved.workspace.modbus.values,
       polling: saved.workspace.modbus.polling,
-      devices: saved.workspace.modbus.devices,
-      framesLog: pollFramesLog,
-      error: ok ? undefined : (timedOut ? '轮询超时' : merged.map((item) => item.polling.error).filter(Boolean)[0]),
+      framesLog,
+      error: ok ? undefined : (timedOut ? '轮询超时' : ''),
     }
   } finally {
     pollLocks.delete(room.cwd)
   }
 }
 
+const alarmLabel = (item, kind) => {
+  const limit = kind === 'max' ? item.point.alarmMax : item.point.alarmMin
+  return pointLabel(item.point) + '=' + decodeValue(item.point, item.raw) + (kind === 'max' ? '>' + limit : '<' + limit)
+}
 
-export const _internal = { deviceAlarms, alarmLabel }
+// Legacy compat for old tests that pass device.segments
+export function deviceAlarms(device, values) {
+  if (device && Array.isArray(device.points)) {
+    return evaluatePointAlarms(device.points, values, device.alarmActive)
+  }
+  // Old segment-based path
+  const segs = Array.isArray(device?.segments) ? device.segments : []
+  const byId = {}
+  for (const s of segs) {
+    const fn = Number(s.function)
+    const addr = Number(s.address)
+    const count = Number(s.count) || 1
+    for (let i = 0; i < count; i++) {
+      const key = `${s.id}:${fn}@${addr + i}`
+      byId[key] = s
+    }
+  }
+  const active = device?.alarmActive && typeof device.alarmActive === 'object' ? device.alarmActive : {}
+  const next = { ...active }
+  const fired = []
+  const cleared = []
+  for (const rec of Array.isArray(values) ? values : []) {
+    if (!rec || !rec.key || rec.ok !== true) continue
+    const seg = byId[rec.key] || segs.find((s) => s.id === rec.segmentId)
+    if (!seg || (seg.alarmMin === null && seg.alarmMax === null)) continue
+    const raw = rec.raw !== undefined ? rec.raw : rec.value
+    const breach = evaluateAlarm(seg, raw)
+    if (breach && !next[rec.key]) {
+      next[rec.key] = true
+      fired.push({ seg, address: rec.address, value: raw, raw, kind: breach, point: { ...seg, address: rec.address, alarmMin: seg.alarmMin, alarmMax: seg.alarmMax } })
+    } else if (!breach && next[rec.key]) {
+      delete next[rec.key]
+      cleared.push({ seg, address: rec.address, value: raw, raw })
+    }
+  }
+  return { next, fired, cleared }
+}
+
+export const pickModbusPatch = pickConnPatch
+
+export const _internal = { deviceAlarms, evaluatePointAlarms, alarmLabel, endpointFingerprint }

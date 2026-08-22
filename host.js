@@ -18,10 +18,7 @@ import {
 } from './bench-store.mjs'
 import { maybeNotifyResult, notifyBenchEvent, setAgentsRegistry } from './bench-notify.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
-import { applyPointWrite, segmentCovering } from './bench-points.mjs'
-import { normalizeModbus } from './bench-devices.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
-import { stopAllSlaves, syncDeviceSlaves, withListenRuntime } from './bench-slave.mjs'
 import { listSerialPorts } from './bench-serial.mjs'
 import { closeSerialMonitor, openSerialMonitor, serialFeed, serialState, stopAllSerialMonitors } from './bench-serial-monitor.mjs'
 
@@ -80,42 +77,13 @@ const guard = (req, res) => {
   return true
 }
 
-const persistSlaveWrite = (cwd, deviceId, fn, address, values, at) => {
-  const workspace = loadWorkspace(dshHome, cwd)
-  const pack = normalizeModbus(workspace.modbus)
-  const idx = pack.devices.findIndex((item) => item.id === deviceId)
-  if (idx < 0) return
-  const device = pack.devices[idx]
-  let vals = Array.isArray(device.values) ? device.values : []
-  for (let i = 0; i < values.length; i++) {
-    const segment = segmentCovering(device.segments, fn, address + i)
-    if (!segment) continue
-    vals = applyPointWrite(vals, segment, address + i, values[i], at)
-  }
-  const devices = pack.devices.map((item, i) => i === idx
-    ? { ...item, values: vals, sim: false }
-    : item)
-  saveWorkspace(dshHome, cwd, { modbus: { devices, activeId: pack.activeId } })
-}
-
-const syncSlaves = async (cwd) => {
-  if (!cwd) return
-  try {
-    const ws = loadWorkspace(dshHome, cwd)
-    await syncDeviceSlaves(cwd, ws.modbus, () => loadWorkspace(dshHome, cwd).modbus, (deviceId, fn, address, values, at) => {
-      persistSlaveWrite(cwd, deviceId, fn, address, values, at)
-    })
-  } catch { /* listen is best-effort */ }
-}
-
 const snapshot = async (cwd) => {
   const bindings = loadBindings(dshHome)
   const body = { ok: true, bindings, health: probeBindings(bindings) }
   const room = cwd ? requireWorkspaceCwd(cwd) : { error: 'no-cwd' }
   if (!room.error) {
-    await syncSlaves(room.cwd)
     const workspace = loadWorkspace(dshHome, room.cwd)
-    body.workspace = withListenRuntime(room.cwd, workspace)
+    body.workspace = workspace
     body.journal = journalView(body.workspace)
     body.pendingWrites = listPendingWrites(room.cwd)
   }
@@ -177,9 +145,7 @@ export function apply(ctx, config = {}) {
         modbus: body && body.modbus,
       })
       if (!saved.ok) return saved
-      await syncSlaves(room.cwd)
-      const workspace = withListenRuntime(room.cwd, saved.workspace)
-      return { ok: true, workspace, journal: journalView(workspace) }
+      return { ok: true, workspace: saved.workspace, journal: journalView(saved.workspace) }
     }),
     route('/dsh-vision-bench/fs/list', async (req) => {
       const body = await readJsonBody(req)
@@ -235,6 +201,14 @@ export function apply(ctx, config = {}) {
       maybeNotifyResult(dshHome, room.cwd, '写点', ran)
       return ran
     }),
+    route('/dsh-vision-bench/modbus/connect', async (req) => {
+      const body = await readJsonBody(req)
+      return connectOp(dshHome, body && body.cwd, body)
+    }),
+    route('/dsh-vision-bench/modbus/points', async (req) => {
+      const body = await readJsonBody(req)
+      return pointsOp(dshHome, body && body.cwd, body)
+    }),
     route('/dsh-vision-bench/session/bind', async (req) => {
       const body = await readJsonBody(req)
       return bindSession(dshHome, body && body.cwd, body && body.sessionId)
@@ -257,9 +231,7 @@ export function apply(ctx, config = {}) {
     }),
     route('/dsh-vision-bench/modbus/poll', async (req) => {
       const body = await readJsonBody(req)
-      const ran = await modbusPoll(dshHome, body && body.cwd)
-      await syncSlaves(body && body.cwd)
-      return ran
+      return modbusPoll(dshHome, body && body.cwd)
     }),
     route('/dsh-vision-bench/serial/ports', async () => listSerialPorts()),
     route('/dsh-vision-bench/selfcheck', async (req) => {
@@ -290,7 +262,6 @@ export function apply(ctx, config = {}) {
   void seedVisionBenchPreset(ctx.agentPresets, dshHome).catch(() => { /* roster copy is best-effort */ })
   ctx.effect(() => () => {
     for (const dispose of disposers) dispose()
-    stopAllSlaves()
     stopAllSerialMonitors()
   })
 }

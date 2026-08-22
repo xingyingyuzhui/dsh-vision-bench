@@ -16,7 +16,14 @@ export function useSessionCwd(React, props) {
 export function emptyWorkspace() {
   return {
     keil: { project: '', target: '', artifact: 'hex' },
-    modbus: { mode: 'rtu', port: '', baudrate: 9600, host: '', tcpPort: 502, slave: 1, function: 3, address: 0, count: 1, segments: [], values: [] },
+    modbus: {
+      version: 2,
+      conn: { mode: 'rtu', port: '', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, host: '', tcpPort: 502, slave: 1, sim: false },
+      points: [],
+      values: [],
+      polling: { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' },
+      alarmActive: {},
+    },
   }
 }
 

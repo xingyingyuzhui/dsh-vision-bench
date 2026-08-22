@@ -134,8 +134,8 @@ test('modbusWrite local path persists values, exits sim and records a task', asy
   try {
     saveWorkspace(home, cwd, {
       modbus: {
-        sim: true,
-        segments: [{ name: '保持', function: 3, address: 0, count: 10 }],
+        conn: { sim: true },
+        points: [{ name: '保持', function: 3, address: 0 }, { name: '保持1', function: 3, address: 1 }, { name: '保持2', function: 3, address: 2 }, { name: '保持3', function: 3, address: 3 }, { name: '保持4', function: 3, address: 4 }, { name: '保持5', function: 3, address: 5 }, { name: '保持6', function: 3, address: 6 }, { name: '保持7', function: 3, address: 7 }, { name: '保持8', function: 3, address: 8 }, { name: '保持9', function: 3, address: 9 }],
       },
     })
     const ran = await modbusWrite(home, cwd, {
@@ -149,9 +149,8 @@ test('modbusWrite local path persists values, exits sim and records a task', asy
     assert.deepEqual(ran.target, [1234])
     assert.deepEqual(ran.readback, [1234])
     const ws = loadWorkspace(home, cwd)
-    const device = ws.modbus.devices[0]
-    assert.equal(device.sim, false)
-    const rec = device.values.find((item) => item.address === 2 && item.function === 3)
+    assert.equal(ws.modbus.conn.sim, false)
+    const rec = ws.modbus.values.find((item) => item.key === 'p3_2')
     assert.equal(rec.value, 1234)
     const journal = journalView(ws)
     assert.ok(journal.tasks.some((item) => item.type === 'write' && item.status === 'ok'))
@@ -169,8 +168,8 @@ test('modbusWrite rejects addresses outside segments without opening a task', as
   try {
     saveWorkspace(home, cwd, {
       modbus: {
-        sim: true,
-        segments: [{ name: '保持', function: 3, address: 0, count: 4 }],
+        conn: { sim: true },
+        points: [{ name: '保持', function: 3, address: 0 }, { name: '保持1', function: 3, address: 1 }, { name: '保持2', function: 3, address: 2 }, { name: '保持3', function: 3, address: 3 }],
       },
     })
     const ran = await modbusWrite(home, cwd, {
@@ -179,7 +178,7 @@ test('modbusWrite rejects addresses outside segments without opening a task', as
       values: [1],
     })
     assert.equal(ran.ok, false)
-    assert.match(ran.error, /不在点表段内/)
+    assert.match(ran.error, /不在点表/)
     const ws = loadWorkspace(home, cwd)
     assert.equal(journalView(ws).tasks.length, 0)
   } finally {
@@ -334,18 +333,16 @@ test('approving a pending write whose device vanished fails cleanly', async () =
       values: [9],
     }, cwd, { source: 'agent', sessionId: 's1' })
     assert.equal(first.needsConfirm, true)
-    // Simulate the device being removed between request and approval.
+    // Simulate the connection drifting between request and approval.
     saveWorkspace(home, cwd, {
       modbus: {
-        devices: [
-          { id: 'm2', name: '新机', role: 'master', sim: true, segments: [{ id: 's2', name: '保持', function: 3, address: 0, count: 10 }] },
-        ],
-        activeId: 'm2',
+        conn: { port: 'COM9', baudrate: 9600, slave: 1, sim: true },
+        points: [{ name: '保持', function: 3, address: 0 }],
       },
     })
     const ran = await resolvePendingWrite(home, cwd, first.requestId, true)
     assert.equal(ran.ok, false)
-    assert.match(ran.error, /目标设备已不存在/)
+    assert.match(ran.error, /设备连接已变更/)
     const ws = loadWorkspace(home, cwd)
     const m2 = ws.modbus.devices.find((item) => item.id === 'm2')
     assert.equal(((m2 && m2.values) || []).length, 0)
@@ -489,7 +486,7 @@ test('table read response carries framesLog from the runtime capture', async () 
     assert.equal(ran.framesLog.length, 1)
     assert.match(ran.framesLog[0].request, /SEND 01 03/)
     assert.match(ran.framesLog[0].response, /RECV/)
-    assert.equal(ran.framesLog[0].deviceId, 'm1')
+    assert.equal(ran.framesLog[0].deviceId, 'conn')
     assert.match(ran.framesLog[0].label, /^读 HR0×2$/)
   } finally {
     await rm(home, { recursive: true, force: true })

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync,
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { emptyLog, mergeLog, normalizeEvent } from './bench-prompt.mjs'
-import { normalizeModbus, patchActiveDevice } from './bench-devices.mjs'
+import { normalizeConn, normalizeModbus } from './bench-devices.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import {
   MAX_TASKS,
@@ -148,15 +148,34 @@ export const loadWorkspace = (home, cwd) => {
 
 export const saveWorkspace = (home, cwd, input) => {
   const prev = loadWorkspace(home, cwd)
+  // v2 patches deep-merge per key onto the previous model. A legacy-shaped
+  // payload (devices[] / flat mode+port) passes through raw so that
+  // normalizeModbus can migrate it on the way in.
   const incoming = (input && input.modbus) || {}
-  const switched = incoming.activeId
-    ? { ...prev.modbus, activeId: incoming.activeId }
-    : prev.modbus
-  const mergedModbus = Array.isArray(incoming.devices)
-    ? { ...switched, ...incoming, devices: incoming.devices }
-    : (Object.keys(incoming).some((key) => key !== 'activeId' && key !== 'devices')
-      ? patchActiveDevice(switched, incoming)
-      : switched)
+  // Legacy wins when its signature fields are present (flat mode/port or
+  // devices[]); everything else is treated as a v2 partial patch.
+  const looksLegacy = Array.isArray(incoming.devices)
+    || incoming.mode !== undefined
+    || incoming.segments !== undefined
+  const isV2Partial = !looksLegacy && ['conn', 'points', 'values', 'polling', 'alarmActive', 'version']
+    .some((key) => Object.prototype.hasOwnProperty.call(incoming, key))
+  let mergedModbus
+  if (looksLegacy) {
+    mergedModbus = incoming
+  } else if (isV2Partial) {
+    mergedModbus = { ...prev.modbus }
+    if (incoming.conn && typeof incoming.conn === 'object') {
+      mergedModbus.conn = normalizeConn({ ...mergedModbus.conn, ...incoming.conn })
+    }
+    if (incoming.points !== undefined) {
+      mergedModbus.points = incoming.points
+    }
+    if (incoming.values !== undefined) mergedModbus.values = incoming.values
+    if (incoming.polling !== undefined) mergedModbus.polling = { ...mergedModbus.polling, ...incoming.polling }
+    if (incoming.alarmActive !== undefined) mergedModbus.alarmActive = incoming.alarmActive
+  } else {
+    mergedModbus = prev.modbus
+  }
   const merged = {
     keil: { ...prev.keil, ...(input && input.keil) },
     modbus: mergedModbus,
