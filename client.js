@@ -3052,7 +3052,7 @@ function createHmiView(React, t, post, openLive) {
 
     const pointsPanel = el('div', { className: 'dvb-panel' },
       el('div', { className: 'dvb-panel-head' },
-        el('span', { className: 'dvb-panel-title' }, t('segments')),
+        el('span', { className: 'dvb-panel-title' }, t('pointTable')),
         el('button', {
           type: 'button', className: 'dvb-btn dvb-btn-primary',
           disabled: !cwd,
