@@ -2,16 +2,16 @@
 
 日常开发用的会话工作台。跟 Claw 无关。
 
-- 会话区四个标签：**总览**、**调试**、**上位机**、（侧栏）点表/曲线/告警/工程
+- 会话区标签：**调试**、**上位机**、（侧栏）点表/曲线/告警/工程
 - 设置页 **台架**：绑定本机 Python / Keil UV4 / OpenOCD，一键 **运行自检**
-- 安装后写入用户预设 **台架模式**（从官方 `standard` 复制，再挂上 `vision_bench`）
+- 安装后写入用户预设 **Vision模式**（从官方 `standard` 复制，再挂上 `vision_bench`，提示规则由插件 `vision-bench:guidance` 区段提供）
 - Agent 需要时自己调用 `vision_bench`，不把现场状态塞进每一轮系统提示
 - 编译 / 读点 / 写点 / 烧录进入共享任务和时间线；调试页轮询，能看到 Agent 发起的操作
 - 只使用绑定路径，不在磁盘上搜索
 
-## 台架模式
+## Vision模式
 
-插件启动时若还没有 `vision-bench` 预设，会把官方 **标准模式** 复制到 `$DSH_HOME/.agent-presets/vision-bench/`，并加上 agent 平面的本插件行。新会话在设置里选 **台架模式** 即可。
+插件启动时若还没有 `vision-bench` 预设，会把官方 **标准模式** 复制到 `$DSH_HOME/.agent-presets/vision-bench/`，并加上 agent 平面的本插件行。新会话在设置里选 **Vision模式** 即可。
 
 `vision_bench` 只出现在这个预设里，避免每个 Agent 都多带一套工具。
 
@@ -59,7 +59,7 @@ dsh plugin --profile web add github:xingyingyuzhui/dsh-vision-bench
 dsh plugin --profile web add link:/abs/path/to/dsh-vision-bench
 ```
 
-装完重启 `dsh web`。打开 **调试** / **上位机**，或 **设置 → 台架**。新会话选 **台架模式**。
+装完重启 `dsh web`。打开 **调试** / **上位机**，或 **设置 → 台架**。新会话选 **Vision模式**。
 
 ## 卸载
 
@@ -67,7 +67,7 @@ dsh plugin --profile web add link:/abs/path/to/dsh-vision-bench
 dsh plugin --profile web remove dsh-vision-bench
 ```
 
-绑定写在 `$DSH_HOME/vision-bench/bindings.json`。用户预设 `台架模式` 不会随卸载删除。
+绑定写在 `$DSH_HOME/vision-bench/bindings.json`。用户预设 `Vision模式` 不会随卸载删除。
 
 ## 开发
 

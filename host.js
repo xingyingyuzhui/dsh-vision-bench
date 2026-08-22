@@ -21,9 +21,10 @@ import { requireWorkspaceCwd } from './bench-paths.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
 import { listSerialPorts } from './bench-serial.mjs'
 import { closeSerialMonitor, openSerialMonitor, serialFeed, serialState, stopAllSerialMonitors } from './bench-serial-monitor.mjs'
+import { VISION_GUIDANCE } from './bench-preset.mjs'
 
 export const name = 'dsh-vision-bench'
-export const inject = ['webServer', 'tools', 'agentPresets']
+export const inject = ['webServer', 'tools', 'agentPresets', 'systemPrompt']
 
 const BODY_CAP = 65536
 const LOOPBACK_ORIGIN = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/
@@ -134,8 +135,19 @@ export function apply(ctx, config = {}) {
   const role = config.role === 'agent' ? 'agent' : 'host'
   if (role === 'agent') {
     const stopTool = ctx.tools.register(visionBenchTool(dshHome))
+    let stopGuidance = () => {}
+    try {
+      if (ctx.systemPrompt && typeof ctx.systemPrompt.section === 'function') {
+        stopGuidance = ctx.systemPrompt.section({
+          name: 'vision-bench:guidance',
+          order: 20,
+          text: () => VISION_GUIDANCE,
+        }) || (() => {})
+      }
+    } catch {}
     ctx.effect(() => () => {
       if (typeof stopTool === 'function') stopTool()
+      if (typeof stopGuidance === 'function') stopGuidance()
     })
     return
   }

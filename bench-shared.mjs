@@ -99,6 +99,35 @@ export function statusBar(el, t, cwd, rows) {
       : el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('needWorkspace')))
 }
 
+export function visionCollabBar(el, t, opts) {
+  const cwd = opts && opts.cwd || ''
+  const workspace = opts && opts.workspace || {}
+  const journal = opts && opts.journal || { tasks: [], running: [], timeline: [] }
+  const pendingWrites = opts && opts.pendingWrites || opts && opts.pending || []
+  const sessionId = opts && opts.sessionId || ''
+  const session = workspace.session || {}
+  const boundId = session.boundId || ''
+  const bindState = !sessionId ? 'none' : (boundId === sessionId ? 'self' : (boundId ? 'other' : 'open'))
+  const running = journal.running || []
+  const pendingCount = Array.isArray(pendingWrites) ? pendingWrites.length : 0
+  const manualPending = (workspace.manualRequests || []).filter((m) => m.status === 'pending').length
+  const runningCount = running.length
+  if (!cwd && !runningCount && !pendingCount && !manualPending) return null
+  return el('div', { className: 'dvb-vision-bar' },
+    el('div', { className: 'dvb-vision-chips' },
+      cwd ? el('span', { className: 'dvb-chip', title: cwd }, t('workspace') + ' ' + cwd.slice(-32)) : null,
+      el('span', { className: 'dvb-chip', 'data-kind': bindState === 'self' ? 'ready' : 'unbound' }, t('bindChip') + ' · ' + t('bindState_' + bindState)),
+      runningCount ? el('span', { className: 'dvb-chip', 'data-kind': 'live' }, '任务 ' + runningCount) : null,
+      pendingCount ? el('span', { className: 'dvb-chip', 'data-kind': 'warn' }, '待确认 ' + pendingCount) : null,
+      manualPending ? el('span', { className: 'dvb-chip', 'data-kind': 'warn' }, '人工 ' + manualPending) : null,
+    ),
+    el('div', { className: 'dvb-vision-meta' },
+      journal.tasks && journal.tasks.length ? el('span', { className: 'dvb-hint' }, t('tasks') + ' ' + journal.tasks.length) : null,
+      journal.timeline && journal.timeline.length ? el('span', { className: 'dvb-hint' }, t('timeline') + ' ' + journal.timeline.length) : null,
+    )
+  )
+}
+
 export function journalPanel(el, t, journal) {
   const tasks = journal && Array.isArray(journal.tasks) ? journal.tasks : []
   const timeline = journal && Array.isArray(journal.timeline) ? journal.timeline : []

@@ -27,7 +27,7 @@ const csrf = { 'x-dsh-vision-bench': '1', origin: 'http://127.0.0.1:3080' }
 
 test('host named exports', () => {
   assert.equal(name, 'dsh-vision-bench')
-  assert.deepEqual(inject, ['webServer', 'tools', 'agentPresets'])
+  assert.deepEqual(inject, ['webServer', 'tools', 'agentPresets', 'systemPrompt'])
 })
 
 test('apply registers state and bindings routes and disposes them', () => {

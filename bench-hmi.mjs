@@ -15,6 +15,7 @@ import {
   statusBar,
   subscribeState,
   useSessionCwd,
+  visionCollabBar,
 } from './bench-shared.mjs'
 import { statusKind } from './bench-settings.mjs'
 import { connLabel, normalizeModbus } from './bench-devices.mjs'
@@ -63,6 +64,9 @@ export function createHmiView(React, t, post, openLive) {
     const [connForm, setConnForm] = React.useState({ open: false, id: '', name: '', role: 'client', enabled: true, conn: { mode: 'rtu', port: '', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, host: '', tcpPort: 502, slave: 1, sim: false } })
     const [pendingDeleteId, setPendingDeleteId] = React.useState('')
     const [frameFilter, setFrameFilter] = React.useState('all')
+    const [hmiTab, setHmiTab] = React.useState('all')
+    const [moreOpen, setMoreOpen] = React.useState(false)
+    const lastDeviceByConn = React.useRef({})
     const serialRef = React.useRef(serial)
     serialRef.current = serial
     const workspaceRef = React.useRef(workspace)
@@ -189,13 +193,24 @@ export function createHmiView(React, t, post, openLive) {
       const nextPolling = { ...(pack.pollingByConnection||{}), [nid]: { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' } }
       const nextFrames = { ...(pack.framesByConnection||{}), [nid]: [] }
       persist({ connections: nextConns, devices: nextDevs, pollingByConnection: nextPolling, framesByConnection: nextFrames, activeConnectionId: nid, activeDeviceId: did, version: 3 })
+      setHmiTab(nid)
+      lastDeviceByConn.current[nid] = did
+      setFrameFilter(nid)
     }
 
     function selectConnection(connId) {
       const pack = normalizePack()
-      const devFor = (pack.devices||[]).find((d) => d.connectionId === connId)
-      persist({ activeConnectionId: connId, activeDeviceId: devFor ? devFor.id : (pack.devices[0] && pack.devices[0].id) || '', version: 3 })
+      // restore last device for this connection if any
+      let targetDevId = lastDeviceByConn.current[connId]
+      if (!targetDevId || !(pack.devices||[]).some((d) => d.id === targetDevId && d.connectionId === connId)) {
+        const devFor = (pack.devices||[]).find((d) => d.connectionId === connId)
+        targetDevId = devFor ? devFor.id : (pack.devices[0] && pack.devices[0].id) || ''
+      }
+      persist({ activeConnectionId: connId, activeDeviceId: targetDevId, version: 3 })
       setPendingDeleteId('')
+      setHmiTab(connId)
+      setMoreOpen(false)
+      setFrameFilter(connId)
     }
 
     function toggleConnEnabled(connId) {
@@ -235,7 +250,8 @@ export function createHmiView(React, t, post, openLive) {
         nextActive = (nextConns[0] && nextConns[0].id) || ''
         const devFor = (nextDevs||[]).find((d) => d.connectionId === nextActive)
         nextActiveDev = devFor ? devFor.id : (nextDevs[0] && nextDevs[0].id) || ''
-        setFrameFilter('all')
+        setFrameFilter(nextActive || 'all')
+        setHmiTab(nextActive || 'all')
       }
       clearFramesLog(cwd, connId)
       setPendingDeleteId('')
@@ -915,6 +931,7 @@ export function createHmiView(React, t, post, openLive) {
             const nid = hmiGenId('d')
             const newDev = { id: nid, connectionId: activeConnId, name: '设备' + (activeDevices.length+1), unitId: 1, enabled: true }
             persist({ devices: (pack.devices||[]).concat([newDev]), activeDeviceId: nid, version:3 })
+            lastDeviceByConn.current[activeConnId] = nid
           },
         }, '＋设备')),
       activeDevices.length
@@ -929,7 +946,7 @@ export function createHmiView(React, t, post, openLive) {
                     el('button', {
                       type:'button',
                       className:'dvb-btn' + (isActiveDev ? ' is-on dvb-btn-primary' : ''),
-                      onClick(){ persist({ activeDeviceId: d.id, version:3 }) },
+                      onClick(){ persist({ activeDeviceId: d.id, version:3 }); lastDeviceByConn.current[activeConnId] = d.id },
                     }, d.name + (isActiveDev ? ' ●' : ''))),
                   el('td', null, String(d.unitId)),
                   el('td', null, d.enabled!==false ? '启用' : '禁用'),
@@ -1353,11 +1370,133 @@ export function createHmiView(React, t, post, openLive) {
           : null)
       : null
 
+    // ── connection tab bar [全部连接] [连接·COM/端点] [更多▼] [+] ──
+    function connEndpointLabel(c) {
+      const cc = c && c.conn || {}
+      if (cc.mode === 'tcp') {
+        if (c.role === 'server' || c.role === 'slave') return 'Listen :' + (cc.tcpPort || 502)
+        return (cc.host || 'TCP') + ':' + (cc.tcpPort || 502)
+      }
+      return cc.port || '—'
+    }
+    function connTabLabel(c) {
+      return c.name + ' · ' + connEndpointLabel(c)
+    }
+    function badgeForConn(connId) {
+      const pts = (pack.points || []).filter((p) => (p.connectionId || p.connId) === connId)
+      const ids = new Set(pts.map((p) => p.id))
+      const anomaly = (pack.values || []).filter((v) => ids.has(v.key || v.pointId) && v.ok === false).length
+      const pend = (pending || []).filter((r) => (r.connectionId || r.connId) === connId).length
+      const running = (journal && journal.running ? journal.running.filter((x) => x && x.status === 'running') : []).length
+      // Only show running badge on active connection to avoid clutter, but still compute
+      return { anomaly, pend, running: connId === activeConnId ? running : 0 }
+    }
+    const MAX_VISIBLE_TABS = 6
+    const visibleConns = connections.length > MAX_VISIBLE_TABS ? connections.slice(0, MAX_VISIBLE_TABS) : connections
+    const overflowConns = connections.length > MAX_VISIBLE_TABS ? connections.slice(MAX_VISIBLE_TABS) : []
+    function handleTabKeyDown(e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault()
+        const order = ['all'].concat(connections.map((c) => c.id))
+        const idx = order.indexOf(hmiTab)
+        let nextIdx = idx
+        if (e.key === 'ArrowRight') nextIdx = (idx + 1) % order.length
+        if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + order.length) % order.length
+        const nid = order[nextIdx]
+        if (nid === 'all') setHmiTab('all')
+        else selectConnection(nid)
+      } else if (e.key === 'Home') {
+        e.preventDefault()
+        setHmiTab('all')
+      } else if (e.key === 'End') {
+        e.preventDefault()
+        const last = connections[connections.length - 1]
+        if (last) selectConnection(last.id)
+      }
+    }
+    const tabBar = el('div', { className: 'dvb-hmi-tabs', role: 'tablist', onKeyDown: handleTabKeyDown },
+      el('button', {
+        type: 'button',
+        role: 'tab',
+        'aria-selected': hmiTab === 'all' ? 'true' : 'false',
+        className: 'dvb-tab' + (hmiTab === 'all' ? ' is-on' : ''),
+        onClick() { setHmiTab('all'); setMoreOpen(false) },
+      }, '全部连接'),
+      visibleConns.map((c) => {
+        const isActive = hmiTab === c.id
+        const b = badgeForConn(c.id)
+        const occupied = c.conn && c.conn.mode === 'rtu' && c.conn.port ? findRtuOccupier(c.conn.port, c.id) : (c.conn && c.conn.mode === 'tcp' ? findTcpOccupier(c.conn.host, c.conn.tcpPort, c.id) : null)
+        return el('button', {
+          key: c.id,
+          type: 'button',
+          role: 'tab',
+          'aria-selected': isActive ? 'true' : 'false',
+          className: 'dvb-tab' + (isActive ? ' is-on' : '') + (occupied ? ' is-warn' : ''),
+          title: c.name + ' · ' + connLabel(c.conn || {}) + (occupied ? ' · COM冲突: ' + occupied : ''),
+          onClick() { selectConnection(c.id) },
+        },
+          el('span', { className: 'dvb-tab-label' }, connTabLabel(c)),
+          isActive ? el('span', { className: 'dvb-tab-dot', 'data-kind': c.enabled === false ? 'idle' : (pending.length ? 'warn' : 'live') }) : null,
+          (b.anomaly || b.pend || b.running) ? el('span', { className: 'dvb-tab-badges' },
+            b.anomaly ? el('span', { className: 'dvb-badge', 'data-kind': 'err' }, String(b.anomaly)) : null,
+            b.running ? el('span', { className: 'dvb-badge', 'data-kind': 'live' }, String(b.running)) : null,
+            b.pend ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, String(b.pend)) : null,
+          ) : null,
+        )
+      }),
+      overflowConns.length
+        ? el('div', { className: 'dvb-tab-more' },
+          el('button', {
+            type: 'button',
+            className: 'dvb-tab' + (overflowConns.some((c) => c.id === hmiTab) ? ' is-on' : ''),
+            onClick() { setMoreOpen((v) => !v) },
+          }, '更多▼'),
+          moreOpen ? el('div', { className: 'dvb-tab-dropdown' },
+            overflowConns.map((c) => {
+              const isActive = hmiTab === c.id
+              const b = badgeForConn(c.id)
+              return el('button', {
+                key: c.id,
+                type: 'button',
+                className: 'dvb-tab' + (isActive ? ' is-on' : ''),
+                onClick() { selectConnection(c.id); setMoreOpen(false) },
+              },
+                el('span', null, connTabLabel(c)),
+                (b.anomaly || b.pend || b.running) ? el('span', { className: 'dvb-tab-badges' },
+                  b.anomaly ? el('span', { className: 'dvb-badge', 'data-kind': 'err' }, String(b.anomaly)) : null,
+                  b.pend ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, String(b.pend)) : null,
+                ) : null,
+              )
+            })
+          ) : null,
+        )
+        : null,
+      el('button', {
+        type: 'button',
+        className: 'dvb-tab dvb-tab-add',
+        title: '新建连接',
+        disabled: !cwd,
+        onClick: addConnection,
+      }, '+')
+    )
+
+    // 全部连接视图：仅管理表
+    if (hmiTab === 'all') {
+      return el('div', { className: 'dvb-page' },
+        statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),
+        visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
+        error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
+        tabBar,
+        connListPanel,
+        connFormPanel,
+        journalPanel(el, t, journal))
+    }
+
     return el('div', { className: 'dvb-page' },
       statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),
+      visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
-      connListPanel,
-      connFormPanel,
+      tabBar,
       activeConnDetail,
       devicePanel,
       pointsPanel,

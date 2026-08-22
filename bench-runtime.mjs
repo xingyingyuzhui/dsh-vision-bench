@@ -4,7 +4,6 @@ import { createSettingsPage, registerSettings } from './bench-settings.mjs'
 import { createHmiView } from './bench-hmi.mjs'
 import { closeBetterTab, createAlarmPage, createLiveView, createTrendPage, openModbusTab, registerLive } from './bench-live.mjs'
 import { createMapView, openProjectTab, registerMap } from './bench-map.mjs'
-import { createOverviewView, registerOverview } from './bench-overview.mjs'
 import { createDebugView, registerView } from './bench-view.mjs'
 
 export function apply(ctx) {
@@ -59,10 +58,8 @@ export function apply(ctx) {
     closeTab(id) { closeTabImpl(id) },
   })
   const MapPage = createMapView(React, t, post)
-  const OverviewPage = createOverviewView(React, t, post, { openLive })
   const stopSettings = registerSettings(ctx, React, t, SettingsPage)
   const stopView = registerView(ctx, React, t, DebugView, HmiView)
-  const stopOverview = registerOverview(ctx, React, t, OverviewPage)
 
   if (typeof ctx.inject === 'function') {
     ctx.inject(['betterSidebar'], (side) => {
@@ -86,7 +83,6 @@ export function apply(ctx) {
       localeDispose()
       if (typeof stopSettings === 'function') stopSettings()
       if (typeof stopView === 'function') stopView()
-      if (typeof stopOverview === 'function') stopOverview()
       if (styleTag != null) styleTag.remove()
       if (doc) doc.body.removeAttribute(ATTR)
     }

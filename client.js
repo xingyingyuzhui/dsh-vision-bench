@@ -220,14 +220,6 @@ const COPY = {
     manualTitle: '人工操作请求（Agent）',
     manualDone: '已完成',
     manualFail: '无法完成',
-    tabOverview: '总览',
-    ovProject: '工程与产物',
-    ovLastBuild: '最近编译',
-    ovNoBuild: '暂无编译记录',
-    ovLive: '现场与联动',
-    ovDevices: '设备',
-    ovTodo: '待办',
-    ovTodoLine: 'Agent 写点确认 {writes} 项 · 人工操作 {manual} 项',
     sourceSystem: '系统',
     selfcheck: '运行自检',
     selfchecking: '自检中…',
@@ -456,14 +448,6 @@ const COPY = {
     manualTitle: 'Manual steps (Agent)',
     manualDone: 'Done',
     manualFail: 'Cannot do',
-    tabOverview: 'Overview',
-    ovProject: 'Project & artifacts',
-    ovLastBuild: 'Last build',
-    ovNoBuild: 'No build record',
-    ovLive: 'Live & linkage',
-    ovDevices: 'Devices',
-    ovTodo: 'Todo',
-    ovTodoLine: '{writes} agent writes awaiting approval · {manual} manual steps',
     sourceSystem: 'System',
     selfcheck: 'Run self-check',
     selfchecking: 'Checking…',
@@ -656,6 +640,25 @@ const CSS = [
   'body[' + ATTR + '] .dvb-map-file[data-kind="missing"] .dvb-map-file-name,body[' + ATTR + '] .dvb-map-path[data-kind="missing"]{color:var(--dsw-alias-label-danger,#c62828)}',
   'body[' + ATTR + '] .dvb-map-file[data-kind="unread"] .dvb-map-file-name{opacity:.55}',
   'body[' + ATTR + '] .dvb-map-file[data-kind="out"] .dvb-map-file-name,body[' + ATTR + '] .dvb-map-path[data-kind="out"]{opacity:.6}',
+  'body[' + ATTR + '] .dvb-hmi-tabs{display:flex;gap:4px;align-items:center;flex-wrap:nowrap;overflow:auto;padding:4px 0 6px;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.18));scrollbar-width:thin}',
+  'body[' + ATTR + '] .dvb-tab{flex:none;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.32));border-radius:999px;background:transparent;color:inherit;font:inherit;font-size:12px;white-space:nowrap;cursor:pointer;transition:all .15s ease}',
+  'body[' + ATTR + '] .dvb-tab:hover{border-color:var(--dsw-alias-border-l1,rgba(128,128,128,.55));background:var(--dsw-alias-bg-layer-2,rgba(128,128,128,.08))}',
+  'body[' + ATTR + '] .dvb-tab.is-on{font-weight:600;background:var(--dsw-alias-bg-layer-2,rgba(128,128,128,.16));border-color:var(--dsw-alias-label-info,#4f8ef7);color:var(--dsw-alias-label-info,#4f8ef7)}',
+  'body[' + ATTR + '] .dvb-tab.is-warn{border-color:var(--dsw-alias-label-danger,#c62828);color:var(--dsw-alias-label-danger,#c62828)}',
+  'body[' + ATTR + '] .dvb-tab-dot{width:6px;height:6px;border-radius:999px;background:var(--dsw-alias-label-success,#2e7d32);flex:none}',
+  'body[' + ATTR + '] .dvb-tab-dot[data-kind="warn"]{background:var(--dsw-alias-label-warning,#b45309)}',
+  'body[' + ATTR + '] .dvb-tab-dot[data-kind="idle"]{background:rgba(128,128,128,.4)}',
+  'body[' + ATTR + '] .dvb-tab-badges{display:inline-flex;gap:3px;align-items:center}',
+  'body[' + ATTR + '] .dvb-tab-badges .dvb-badge{min-width:14px;padding:0 4px;border-radius:999px;text-align:center;font-size:10px;line-height:14px;border:1px solid currentColor}',
+  'body[' + ATTR + '] .dvb-tab-badges .dvb-badge[data-kind="err"]{color:var(--dsw-alias-label-danger,#c62828)}',
+  'body[' + ATTR + '] .dvb-tab-badges .dvb-badge[data-kind="live"]{color:var(--dsw-alias-label-success,#2e7d32)}',
+  'body[' + ATTR + '] .dvb-tab-badges .dvb-badge[data-kind="warn"]{color:var(--dsw-alias-label-warning,#b45309)}',
+  'body[' + ATTR + '] .dvb-tab-add{width:28px;justify-content:center;padding:0;font-weight:700}',
+  'body[' + ATTR + '] .dvb-tab-more{position:relative;flex:none}',
+  'body[' + ATTR + '] .dvb-tab-dropdown{position:absolute;top:32px;left:0;z-index:20;display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.35));border-radius:8px;background:var(--dsw-alias-bg-layer-1,#1e1e1e);box-shadow:0 4px 16px rgba(0,0,0,.18);min-width:180px}',
+  'body[' + ATTR + '] .dvb-vision-bar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;padding:6px 10px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.22));border-radius:6px;background:var(--dsw-alias-bg-layer-2,rgba(128,128,128,.06))}',
+  'body[' + ATTR + '] .dvb-vision-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
+  'body[' + ATTR + '] .dvb-vision-meta{display:flex;gap:10px;align-items:center}',
   '@media (max-width:720px){body[' + ATTR + '] .dvb-conn,body[' + ATTR + '] .dvb-seg-add{grid-template-columns:repeat(2,minmax(0,1fr))}body[' + ATTR + '] .dvb-split{grid-template-columns:1fr}}',
 ].join('\n')
 
@@ -2211,6 +2214,35 @@ function statusBar(el, t, cwd, rows) {
       : el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('needWorkspace')))
 }
 
+function visionCollabBar(el, t, opts) {
+  const cwd = opts && opts.cwd || ''
+  const workspace = opts && opts.workspace || {}
+  const journal = opts && opts.journal || { tasks: [], running: [], timeline: [] }
+  const pendingWrites = opts && opts.pendingWrites || opts && opts.pending || []
+  const sessionId = opts && opts.sessionId || ''
+  const session = workspace.session || {}
+  const boundId = session.boundId || ''
+  const bindState = !sessionId ? 'none' : (boundId === sessionId ? 'self' : (boundId ? 'other' : 'open'))
+  const running = journal.running || []
+  const pendingCount = Array.isArray(pendingWrites) ? pendingWrites.length : 0
+  const manualPending = (workspace.manualRequests || []).filter((m) => m.status === 'pending').length
+  const runningCount = running.length
+  if (!cwd && !runningCount && !pendingCount && !manualPending) return null
+  return el('div', { className: 'dvb-vision-bar' },
+    el('div', { className: 'dvb-vision-chips' },
+      cwd ? el('span', { className: 'dvb-chip', title: cwd }, t('workspace') + ' ' + cwd.slice(-32)) : null,
+      el('span', { className: 'dvb-chip', 'data-kind': bindState === 'self' ? 'ready' : 'unbound' }, t('bindChip') + ' · ' + t('bindState_' + bindState)),
+      runningCount ? el('span', { className: 'dvb-chip', 'data-kind': 'live' }, '任务 ' + runningCount) : null,
+      pendingCount ? el('span', { className: 'dvb-chip', 'data-kind': 'warn' }, '待确认 ' + pendingCount) : null,
+      manualPending ? el('span', { className: 'dvb-chip', 'data-kind': 'warn' }, '人工 ' + manualPending) : null,
+    ),
+    el('div', { className: 'dvb-vision-meta' },
+      journal.tasks && journal.tasks.length ? el('span', { className: 'dvb-hint' }, t('tasks') + ' ' + journal.tasks.length) : null,
+      journal.timeline && journal.timeline.length ? el('span', { className: 'dvb-hint' }, t('timeline') + ' ' + journal.timeline.length) : null,
+    )
+  )
+}
+
 function journalPanel(el, t, journal) {
   const tasks = journal && Array.isArray(journal.tasks) ? journal.tasks : []
   const timeline = journal && Array.isArray(journal.timeline) ? journal.timeline : []
@@ -2462,6 +2494,7 @@ function createDebugView(React, t, post, openProject) {
     const [copied, setCopied] = React.useState(false)
     const [picker, setPicker] = React.useState(null)
     const [flash, setFlash] = React.useState({ interface: 'cmsis-dap', target: 'stm32f1x', busy: false, confirm: null, result: null })
+    const [pendingWrites, setPendingWrites] = React.useState([])
     const workspaceRef = React.useRef(workspace)
     workspaceRef.current = workspace
     const projectRef = React.useRef('')
@@ -2469,6 +2502,7 @@ function createDebugView(React, t, post, openProject) {
     React.useEffect(() => subscribeState(post, cwd, (data) => {
       if (!data) return
       if (data.health) setHealth(data.health)
+      if (Array.isArray(data.pendingWrites)) setPendingWrites(data.pendingWrites)
       if (data.workspace) {
         setWorkspace((prev) => ({
           ...prev,
@@ -2477,12 +2511,8 @@ function createDebugView(React, t, post, openProject) {
           manualRequests: Array.isArray(data.workspace.manualRequests)
             ? data.workspace.manualRequests
             : prev.manualRequests,
+          modbus: data.workspace.modbus || prev.modbus,
         }))
-        const project = data.workspace.keil && data.workspace.keil.project
-        if (project && project !== projectRef.current) {
-          projectRef.current = project
-          loadTargets(project)
-        }
       }
       setJournal(pickJournal(data))
     }), [cwd, post])
@@ -2802,6 +2832,7 @@ function createDebugView(React, t, post, openProject) {
         { key: 'python', health: health.python },
         { key: 'uv4', health: health.uv4 },
       ]),
+      visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites, sessionId }),
       sessionId
         ? el('div', { className: 'dvb-bindbar' },
           el('span', {
@@ -2952,6 +2983,9 @@ function createHmiView(React, t, post, openLive) {
     const [connForm, setConnForm] = React.useState({ open: false, id: '', name: '', role: 'client', enabled: true, conn: { mode: 'rtu', port: '', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, host: '', tcpPort: 502, slave: 1, sim: false } })
     const [pendingDeleteId, setPendingDeleteId] = React.useState('')
     const [frameFilter, setFrameFilter] = React.useState('all')
+    const [hmiTab, setHmiTab] = React.useState('all')
+    const [moreOpen, setMoreOpen] = React.useState(false)
+    const lastDeviceByConn = React.useRef({})
     const serialRef = React.useRef(serial)
     serialRef.current = serial
     const workspaceRef = React.useRef(workspace)
@@ -3078,13 +3112,24 @@ function createHmiView(React, t, post, openLive) {
       const nextPolling = { ...(pack.pollingByConnection||{}), [nid]: { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' } }
       const nextFrames = { ...(pack.framesByConnection||{}), [nid]: [] }
       persist({ connections: nextConns, devices: nextDevs, pollingByConnection: nextPolling, framesByConnection: nextFrames, activeConnectionId: nid, activeDeviceId: did, version: 3 })
+      setHmiTab(nid)
+      lastDeviceByConn.current[nid] = did
+      setFrameFilter(nid)
     }
 
     function selectConnection(connId) {
       const pack = normalizePack()
-      const devFor = (pack.devices||[]).find((d) => d.connectionId === connId)
-      persist({ activeConnectionId: connId, activeDeviceId: devFor ? devFor.id : (pack.devices[0] && pack.devices[0].id) || '', version: 3 })
+      // restore last device for this connection if any
+      let targetDevId = lastDeviceByConn.current[connId]
+      if (!targetDevId || !(pack.devices||[]).some((d) => d.id === targetDevId && d.connectionId === connId)) {
+        const devFor = (pack.devices||[]).find((d) => d.connectionId === connId)
+        targetDevId = devFor ? devFor.id : (pack.devices[0] && pack.devices[0].id) || ''
+      }
+      persist({ activeConnectionId: connId, activeDeviceId: targetDevId, version: 3 })
       setPendingDeleteId('')
+      setHmiTab(connId)
+      setMoreOpen(false)
+      setFrameFilter(connId)
     }
 
     function toggleConnEnabled(connId) {
@@ -3124,7 +3169,8 @@ function createHmiView(React, t, post, openLive) {
         nextActive = (nextConns[0] && nextConns[0].id) || ''
         const devFor = (nextDevs||[]).find((d) => d.connectionId === nextActive)
         nextActiveDev = devFor ? devFor.id : (nextDevs[0] && nextDevs[0].id) || ''
-        setFrameFilter('all')
+        setFrameFilter(nextActive || 'all')
+        setHmiTab(nextActive || 'all')
       }
       clearFramesLog(cwd, connId)
       setPendingDeleteId('')
@@ -3804,6 +3850,7 @@ function createHmiView(React, t, post, openLive) {
             const nid = hmiGenId('d')
             const newDev = { id: nid, connectionId: activeConnId, name: '设备' + (activeDevices.length+1), unitId: 1, enabled: true }
             persist({ devices: (pack.devices||[]).concat([newDev]), activeDeviceId: nid, version:3 })
+            lastDeviceByConn.current[activeConnId] = nid
           },
         }, '＋设备')),
       activeDevices.length
@@ -3818,7 +3865,7 @@ function createHmiView(React, t, post, openLive) {
                     el('button', {
                       type:'button',
                       className:'dvb-btn' + (isActiveDev ? ' is-on dvb-btn-primary' : ''),
-                      onClick(){ persist({ activeDeviceId: d.id, version:3 }) },
+                      onClick(){ persist({ activeDeviceId: d.id, version:3 }); lastDeviceByConn.current[activeConnId] = d.id },
                     }, d.name + (isActiveDev ? ' ●' : ''))),
                   el('td', null, String(d.unitId)),
                   el('td', null, d.enabled!==false ? '启用' : '禁用'),
@@ -4242,11 +4289,133 @@ function createHmiView(React, t, post, openLive) {
           : null)
       : null
 
+    // ── connection tab bar [全部连接] [连接·COM/端点] [更多▼] [+] ──
+    function connEndpointLabel(c) {
+      const cc = c && c.conn || {}
+      if (cc.mode === 'tcp') {
+        if (c.role === 'server' || c.role === 'slave') return 'Listen :' + (cc.tcpPort || 502)
+        return (cc.host || 'TCP') + ':' + (cc.tcpPort || 502)
+      }
+      return cc.port || '—'
+    }
+    function connTabLabel(c) {
+      return c.name + ' · ' + connEndpointLabel(c)
+    }
+    function badgeForConn(connId) {
+      const pts = (pack.points || []).filter((p) => (p.connectionId || p.connId) === connId)
+      const ids = new Set(pts.map((p) => p.id))
+      const anomaly = (pack.values || []).filter((v) => ids.has(v.key || v.pointId) && v.ok === false).length
+      const pend = (pending || []).filter((r) => (r.connectionId || r.connId) === connId).length
+      const running = (journal && journal.running ? journal.running.filter((x) => x && x.status === 'running') : []).length
+      // Only show running badge on active connection to avoid clutter, but still compute
+      return { anomaly, pend, running: connId === activeConnId ? running : 0 }
+    }
+    const MAX_VISIBLE_TABS = 6
+    const visibleConns = connections.length > MAX_VISIBLE_TABS ? connections.slice(0, MAX_VISIBLE_TABS) : connections
+    const overflowConns = connections.length > MAX_VISIBLE_TABS ? connections.slice(MAX_VISIBLE_TABS) : []
+    function handleTabKeyDown(e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault()
+        const order = ['all'].concat(connections.map((c) => c.id))
+        const idx = order.indexOf(hmiTab)
+        let nextIdx = idx
+        if (e.key === 'ArrowRight') nextIdx = (idx + 1) % order.length
+        if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + order.length) % order.length
+        const nid = order[nextIdx]
+        if (nid === 'all') setHmiTab('all')
+        else selectConnection(nid)
+      } else if (e.key === 'Home') {
+        e.preventDefault()
+        setHmiTab('all')
+      } else if (e.key === 'End') {
+        e.preventDefault()
+        const last = connections[connections.length - 1]
+        if (last) selectConnection(last.id)
+      }
+    }
+    const tabBar = el('div', { className: 'dvb-hmi-tabs', role: 'tablist', onKeyDown: handleTabKeyDown },
+      el('button', {
+        type: 'button',
+        role: 'tab',
+        'aria-selected': hmiTab === 'all' ? 'true' : 'false',
+        className: 'dvb-tab' + (hmiTab === 'all' ? ' is-on' : ''),
+        onClick() { setHmiTab('all'); setMoreOpen(false) },
+      }, '全部连接'),
+      visibleConns.map((c) => {
+        const isActive = hmiTab === c.id
+        const b = badgeForConn(c.id)
+        const occupied = c.conn && c.conn.mode === 'rtu' && c.conn.port ? findRtuOccupier(c.conn.port, c.id) : (c.conn && c.conn.mode === 'tcp' ? findTcpOccupier(c.conn.host, c.conn.tcpPort, c.id) : null)
+        return el('button', {
+          key: c.id,
+          type: 'button',
+          role: 'tab',
+          'aria-selected': isActive ? 'true' : 'false',
+          className: 'dvb-tab' + (isActive ? ' is-on' : '') + (occupied ? ' is-warn' : ''),
+          title: c.name + ' · ' + connLabel(c.conn || {}) + (occupied ? ' · COM冲突: ' + occupied : ''),
+          onClick() { selectConnection(c.id) },
+        },
+          el('span', { className: 'dvb-tab-label' }, connTabLabel(c)),
+          isActive ? el('span', { className: 'dvb-tab-dot', 'data-kind': c.enabled === false ? 'idle' : (pending.length ? 'warn' : 'live') }) : null,
+          (b.anomaly || b.pend || b.running) ? el('span', { className: 'dvb-tab-badges' },
+            b.anomaly ? el('span', { className: 'dvb-badge', 'data-kind': 'err' }, String(b.anomaly)) : null,
+            b.running ? el('span', { className: 'dvb-badge', 'data-kind': 'live' }, String(b.running)) : null,
+            b.pend ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, String(b.pend)) : null,
+          ) : null,
+        )
+      }),
+      overflowConns.length
+        ? el('div', { className: 'dvb-tab-more' },
+          el('button', {
+            type: 'button',
+            className: 'dvb-tab' + (overflowConns.some((c) => c.id === hmiTab) ? ' is-on' : ''),
+            onClick() { setMoreOpen((v) => !v) },
+          }, '更多▼'),
+          moreOpen ? el('div', { className: 'dvb-tab-dropdown' },
+            overflowConns.map((c) => {
+              const isActive = hmiTab === c.id
+              const b = badgeForConn(c.id)
+              return el('button', {
+                key: c.id,
+                type: 'button',
+                className: 'dvb-tab' + (isActive ? ' is-on' : ''),
+                onClick() { selectConnection(c.id); setMoreOpen(false) },
+              },
+                el('span', null, connTabLabel(c)),
+                (b.anomaly || b.pend || b.running) ? el('span', { className: 'dvb-tab-badges' },
+                  b.anomaly ? el('span', { className: 'dvb-badge', 'data-kind': 'err' }, String(b.anomaly)) : null,
+                  b.pend ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, String(b.pend)) : null,
+                ) : null,
+              )
+            })
+          ) : null,
+        )
+        : null,
+      el('button', {
+        type: 'button',
+        className: 'dvb-tab dvb-tab-add',
+        title: '新建连接',
+        disabled: !cwd,
+        onClick: addConnection,
+      }, '+')
+    )
+
+    // 全部连接视图：仅管理表
+    if (hmiTab === 'all') {
+      return el('div', { className: 'dvb-page' },
+        statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),
+        visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
+        error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
+        tabBar,
+        connListPanel,
+        connFormPanel,
+        journalPanel(el, t, journal))
+    }
+
     return el('div', { className: 'dvb-page' },
       statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),
+      visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
-      connListPanel,
-      connFormPanel,
+      tabBar,
       activeConnDetail,
       devicePanel,
       pointsPanel,
@@ -4911,172 +5080,6 @@ function openProjectTab(ctx) {
   if (bs && typeof bs.openTab === 'function') bs.openTab({ type: TAB_MAP })
 }
 
-function overviewEmptyWorkspace() {
-  return {
-    keil: { project: '', target: '', artifact: 'hex', download: '' },
-    tasks: [],
-    timeline: [],
-    session: { boundId: '' },
-    manualRequests: [],
-    modbus: {},
-  }
-}
-
-function overviewSourceLabel(t, source) {
-  if (source === 'agent') return t('sourceAgent')
-  if (source === 'system') return t('sourceSystem')
-  return t('sourceUser')
-}
-
-function createOverviewView(React, t, post, hooks) {
-  return function OverviewView(props) {
-    const el = React.createElement
-    const cwd = props && props.sessionId && props.useSessions
-      ? props.useSessions((s) => {
-        const id = props.sessionId
-        return (s && s.byId && id && s.byId[id] && s.byId[id].cwd) || ''
-      })
-      : ''
-    const [health, setHealth] = React.useState({})
-    const [workspace, setWorkspace] = React.useState(overviewEmptyWorkspace)
-    const [pendingWrites, setPendingWrites] = React.useState([])
-    const [copied, setCopied] = React.useState(false)
-
-    React.useEffect(() => subscribeState(post, cwd, (data) => {
-      if (!data) return
-      if (data.health) setHealth(data.health)
-      if (Array.isArray(data.pendingWrites)) setPendingWrites(data.pendingWrites)
-      if (data.workspace) setWorkspace(data.workspace)
-    }), [cwd, post])
-
-    const keil = workspace.keil || {}
-    const modbus = workspace.modbus || {}
-    const conn = modbus.conn || {}
-    const pointCount = Array.isArray(modbus.points) ? modbus.points.length : 0
-    const session = workspace.session || {}
-    const boundId = session.boundId || ''
-    const sessionId = (props && props.sessionId) || ''
-    const bindState = !sessionId
-      ? 'none'
-      : (boundId === sessionId ? 'self' : (boundId ? 'other' : 'open'))
-    const openManual = (workspace.manualRequests || []).filter((item) => item.status === 'pending')
-    const lastBuild = (workspace.tasks || []).find((item) => item.type === 'build')
-    const timeline = (workspace.timeline || []).slice(0, 8)
-
-    function copySnapshot() {
-      const lines = [
-        '[台架快照] ' + clockOf(Date.now()),
-        '工作区: ' + (cwd || '（无）'),
-        '工程: ' + (keil.project || '（未选）') + (keil.target ? ' · Target ' + keil.target : ''),
-        '产物: ' + (keil.download || '（无）'),
-        '最近编译: ' + (lastBuild ? lastBuild.summary + '（' + lastBuild.status + '）' : '（无记录）'),
-        '设备: ' + (devices.length
-          ? devices.map((item) => (item.name || item.id)
-            + '（' + (item.role === 'slave' ? '从机' : '主机')
-            + (item.sim ? '·仿真' : '')
-            + (item.listen ? '·监听' : '')
-            + (item.polling && item.polling.enabled ? '·监视中' : '') + '）').join('， ')
-          : '（无）'),
-        '会话绑定: ' + (bindState === 'self' ? '本会话' : bindState === 'other' ? '其他会话' : '未绑定'),
-        '待办: Agent 写点确认 ' + pendingWrites.length + ' 项，人工操作 ' + openManual.length + ' 项',
-      ]
-      navigator.clipboard.writeText(lines.join('\n')).then(() => {
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1500)
-      }).catch(() => { /* clipboard unavailable */ })
-    }
-
-    function field(label, node) {
-      return el('div', { className: 'dvb-row' },
-        el('div', { className: 'dvb-label' }, el('span', null, label)),
-        node)
-    }
-
-    const rows = [
-      { key: 'python', health: health.python },
-      { key: 'uv4', health: health.uv4 },
-      { key: 'openocd', health: health.openocd },
-    ]
-
-    return el('div', { className: 'dvb-page' },
-      el('div', { className: 'dvb-bar' },
-        el('div', { className: 'dvb-health' }, rows.map((row) => el('span', {
-          key: row.key,
-          className: 'dvb-chip',
-          'data-kind': statusKind(row.health),
-        }, t(row.key) + ' · ' + t(statusKind(row.health))))),
-        cwd
-          ? el('div', { className: 'dvb-cwd' }, t('workspace') + '  ' + cwd)
-          : el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('needWorkspace'))),
-      el('div', { className: 'dvb-split' },
-        el('div', { className: 'dvb-panel' },
-          el('div', { className: 'dvb-panel-head' },
-            el('span', { className: 'dvb-panel-title' }, t('ovProject'))),
-          field(t('project'), el('div', { className: 'dvb-path', 'data-empty': keil.project ? '0' : '1' },
-            keil.project || t('pickProject'))),
-          field(t('target'), el('div', { className: 'dvb-path', 'data-empty': keil.target ? '0' : '1' },
-            keil.target || '—')),
-          field(t('artifact'), el('div', { className: 'dvb-path', 'data-empty': keil.download ? '0' : '1' },
-            keil.download || '—')),
-          field(t('ovLastBuild'), el('div', { className: 'dvb-status', 'data-kind': lastBuild ? (lastBuild.status === 'ok' ? 'ready' : 'missing') : '' },
-            lastBuild ? lastBuild.summary : t('ovNoBuild')))),
-        el('div', { className: 'dvb-panel' },
-          el('div', { className: 'dvb-panel-head' },
-            el('span', { className: 'dvb-panel-title' }, t('ovLive'))),
-          field(t('ovDevices'), el('div', { className: 'dvb-path' },
-            pointCount
-              ? (connLabel(conn) + ' · ' + pointCount + ' 点位'
-                + (modbus.polling && modbus.polling.enabled ? ' · ' + t('live') : ''))
-              : t('emptyDevices'))),
-          field(t('bindChip'), el('span', {
-            className: 'dvb-chip',
-            'data-kind': bindState === 'self' ? 'ready' : 'unbound',
-          }, t('bindState_' + bindState))),
-          field(t('ovTodo'), el('div', { className: 'dvb-path' },
-            t('ovTodoLine')
-              .replace('{writes}', String(pendingWrites.length))
-              .replace('{manual}', String(openManual.length)))))),
-      el('div', { className: 'dvb-actions' },
-        el('button', {
-          type: 'button',
-          className: 'dvb-btn dvb-btn-primary',
-          disabled: !cwd,
-          onClick: copySnapshot,
-        }, copied ? t('copied') : t('copyAgent')),
-        hooks && typeof hooks.openLive === 'function'
-          ? el('button', {
-            type: 'button', className: 'dvb-btn',
-            onClick() { hooks.openLive() },
-          }, t('liveTable'))
-          : null),
-      timeline.length
-        ? el('div', { className: 'dvb-journal' },
-          el('div', { className: 'dvb-journal-title' }, t('timeline')),
-          timeline.map((item) => el('div', { key: item.id, className: 'dvb-event', 'data-ok': item.ok === false ? 'false' : '' },
-            el('span', { className: 'dvb-map-meta' }, clockOf(item.at)),
-            el('span', { className: 'dvb-badge', 'data-source': item.source }, overviewSourceLabel(t, item.source)),
-            el('span', { className: 'dvb-hint' }, item.summary || item.kind))))
-        : null)
-  }
-}
-
-function registerOverview(ctx, React, t, OverviewPage) {
-  const slots = ctx.get ? ctx.get('slots') : ctx.slots
-  if (slots == null || React == null) return function () {}
-  const stop = slots.inject('conversation.view', function () {
-    return slots.register({
-      name: 'conversation.view',
-      id: 'vision-bench-overview',
-      order: 19,
-      locale: NS,
-      label() { return t('tabOverview') },
-    }, OverviewPage)
-  })
-  return function () {
-    if (typeof stop === 'function') stop()
-  }
-}
-
 function apply(ctx) {
   const React = require('react')
   const slots = ctx.get('slots')
@@ -5129,10 +5132,8 @@ function apply(ctx) {
     closeTab(id) { closeTabImpl(id) },
   })
   const MapPage = createMapView(React, t, post)
-  const OverviewPage = createOverviewView(React, t, post, { openLive })
   const stopSettings = registerSettings(ctx, React, t, SettingsPage)
   const stopView = registerView(ctx, React, t, DebugView, HmiView)
-  const stopOverview = registerOverview(ctx, React, t, OverviewPage)
 
   if (typeof ctx.inject === 'function') {
     ctx.inject(['betterSidebar'], (side) => {
@@ -5156,7 +5157,6 @@ function apply(ctx) {
       localeDispose()
       if (typeof stopSettings === 'function') stopSettings()
       if (typeof stopView === 'function') stopView()
-      if (typeof stopOverview === 'function') stopOverview()
       if (styleTag != null) styleTag.remove()
       if (doc) doc.body.removeAttribute(ATTR)
     }

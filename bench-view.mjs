@@ -14,6 +14,7 @@ import {
   subscribeState,
   typeLabel,
   useSessionCwd,
+  visionCollabBar,
 } from './bench-shared.mjs'
 import { statusKind } from './bench-settings.mjs'
 
@@ -107,6 +108,7 @@ export function createDebugView(React, t, post, openProject) {
     const [copied, setCopied] = React.useState(false)
     const [picker, setPicker] = React.useState(null)
     const [flash, setFlash] = React.useState({ interface: 'cmsis-dap', target: 'stm32f1x', busy: false, confirm: null, result: null })
+    const [pendingWrites, setPendingWrites] = React.useState([])
     const workspaceRef = React.useRef(workspace)
     workspaceRef.current = workspace
     const projectRef = React.useRef('')
@@ -114,6 +116,7 @@ export function createDebugView(React, t, post, openProject) {
     React.useEffect(() => subscribeState(post, cwd, (data) => {
       if (!data) return
       if (data.health) setHealth(data.health)
+      if (Array.isArray(data.pendingWrites)) setPendingWrites(data.pendingWrites)
       if (data.workspace) {
         setWorkspace((prev) => ({
           ...prev,
@@ -122,12 +125,8 @@ export function createDebugView(React, t, post, openProject) {
           manualRequests: Array.isArray(data.workspace.manualRequests)
             ? data.workspace.manualRequests
             : prev.manualRequests,
+          modbus: data.workspace.modbus || prev.modbus,
         }))
-        const project = data.workspace.keil && data.workspace.keil.project
-        if (project && project !== projectRef.current) {
-          projectRef.current = project
-          loadTargets(project)
-        }
       }
       setJournal(pickJournal(data))
     }), [cwd, post])
@@ -447,6 +446,7 @@ export function createDebugView(React, t, post, openProject) {
         { key: 'python', health: health.python },
         { key: 'uv4', health: health.uv4 },
       ]),
+      visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites, sessionId }),
       sessionId
         ? el('div', { className: 'dvb-bindbar' },
           el('span', {

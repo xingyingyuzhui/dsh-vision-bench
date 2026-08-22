@@ -41,9 +41,6 @@ test('hmi view mounts — the former blind spot of the bundle', async () => {
 
 test('live/overview views mount', async () => {
   const { createLiveView } = await import('../bench-live.mjs')
-  const { createOverviewView } = await import('../bench-overview.mjs')
   const Live = createLiveView(makeReact(), () => 'k', post, {})
   assert.ok(Live({ tab: {} }))
-  const Overview = createOverviewView(makeReact(), () => 'k', post, {})
-  assert.ok(Overview({ sessionId: 's1', useSessions: (fn) => fn({ byId: {} }) }))
 })

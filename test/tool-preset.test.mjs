@@ -47,8 +47,24 @@ test('ensurePresetOverlay appends the agent-plane row and persona', async () => 
     const text = await (await import('node:fs/promises')).readFile(join(dir, 'agent.cordis.yml'), 'utf8')
     assert.match(text, /id: vision-bench-tools/)
     assert.match(text, /role: agent/)
-    assert.match(text, /vision_bench/)
-    assert.equal(text.indexOf(PRESET_PERSONA) >= 0, true)
+    // persona should remain standard (not Vision) – check via yaml parse to handle folded style
+    const yaml = await import('yaml')
+    const doc = yaml.parseDocument(text)
+    let personaText = null
+    for (const item of doc.contents.items) {
+      if (item.get('id') === 'persona') personaText = item.getIn(['config', 'text'])
+    }
+    assert.equal(personaText, PRESET_PERSONA)
+    // Vision guidance is now via host prompt section, not hard-coded persona
+    assert.equal(text.includes('Vision 台架'), false)
+    // ownership file should be JSON with Vision模式 metadata
+    const presetText = await (await import('node:fs/promises')).readFile(join(dir, 'preset.yml'), 'utf8')
+    assert.match(presetText, /Vision模式/)
+    const marker = await (await import('node:fs/promises')).readFile(join(dir, '.dsh-vision-bench'), 'utf8')
+    const ownership = JSON.parse(marker)
+    assert.equal(ownership.owner, 'dsh-vision-bench')
+    assert.equal(ownership.presetSchemaVersion, 2)
+    assert.equal(ownership.pluginRowId, 'vision-bench-tools')
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
