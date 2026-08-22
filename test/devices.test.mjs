@@ -4,123 +4,119 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { handlePdu, startDeviceSlave, stopDeviceSlave, _internal } from '../bench-slave.mjs'
-import { addDevice, recipePair, normalizeModbus, patchActiveDevice } from '../bench-devices.mjs'
-import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
-import { modbusPoll } from '../bench-actions.mjs'
+import { normalizeConn, normalizeModbus, connLabel, patchConn } from '../bench-devices.mjs'
+import { modbusPoll } from '../bench-modbus.mjs'
+import { saveWorkspace } from '../bench-store.mjs'
 
-test('legacy workspace becomes one master device', () => {
-  const pack = normalizeModbus({
-    mode: 'tcp',
-    host: '10.0.0.8',
-    sim: true,
-    segments: [{ function: 3, address: 0, count: 4 }],
-  })
-  assert.equal(pack.devices.length, 1)
-  assert.equal(pack.devices[0].role, 'master')
-  assert.equal(pack.devices[0].host, '10.0.0.8')
-  assert.equal(pack.sim, true)
-  assert.equal(pack.segments.length, 1)
+test('normalizeConn applies defaults and clamps', () => {
+  const c = normalizeConn({ mode: 'tcp', baudrate: 0, bytesize: 9, parity: 'X', stopbits: 7, slave: 300 })
+  assert.equal(c.mode, 'tcp')
+  assert.equal(c.baudrate, 9600)
+  assert.equal(c.bytesize, 8)
+  assert.equal(c.parity, 'N')
+  assert.equal(c.stopbits, 1)
+  assert.equal(c.slave, 247)
+  const rtu = normalizeConn({ port: ' COM3 ', parity: 'E', stopbits: 2, bytesize: 7 })
+  assert.equal(rtu.mode, 'rtu')
+  assert.equal(rtu.port, 'COM3')
+  assert.equal(rtu.parity, 'E')
+  assert.equal(rtu.stopbits, 2)
+  assert.equal(rtu.bytesize, 7)
 })
 
-test('recipePair makes master plus listening slave', () => {
-  const pack = recipePair()
-  assert.equal(pack.devices.length, 2)
-  assert.equal(pack.devices[0].role, 'master')
-  assert.equal(pack.devices[1].role, 'slave')
-  assert.equal(pack.devices[1].listen, true)
-  assert.equal(pack.devices[1].tcpPort, 1502)
-})
-
-test('patchActiveDevice keeps the other device intact', () => {
-  const added = addDevice(recipePair(), { name: '第三台', role: 'master' })
-  const next = patchActiveDevice(added.modbus, { sim: true })
-  assert.equal(next.devices.length, 3)
-  const active = next.devices.find((item) => item.id === next.activeId)
-  assert.equal(active.sim, true)
-  assert.equal(next.devices[1].role, 'slave')
-})
-
-test('slave handlePdu returns holding registers from sim map', () => {
-  const device = recipePair().devices[1]
-  const pdu = Buffer.from([3, 0, 0, 0, 2])
-  const resp = handlePdu(device, pdu, 1_000_000)
-  assert.equal(resp[0], 3)
-  assert.equal(resp[1], 4)
-  assert.ok(resp.length >= 6)
-})
-
-test('startDeviceSlave reuses the same TCP listen', async () => {
-  const cwd = join(tmpdir(), 'dvb-slave-' + process.pid)
-  const device = { id: 'd-listen', host: '127.0.0.1', tcpPort: 0, role: 'slave' }
-  try {
-    const first = await startDeviceSlave(cwd, device, () => device)
-    assert.equal(first.ok, true)
-    const second = await startDeviceSlave(cwd, device, () => device)
-    assert.equal(second.reused, true)
-    assert.equal(_internal.servers.size, 1)
-  } finally {
-    stopDeviceSlave(cwd, device.id)
-  }
-})
-
-test('saveWorkspace migrates segments onto devices', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'dvb-dev-'))
-  const cwd = join(home, 'board')
-  await mkdir(cwd)
-  try {
-    saveWorkspace(home, cwd, {
-      modbus: { sim: true, polling: { enabled: true }, segments: [{ name: '模拟', function: 3, address: 0, count: 4 }] },
-    })
-    const ws = loadWorkspace(home, cwd)
-    assert.equal(ws.modbus.devices.length, 1)
-    assert.equal(ws.modbus.devices[0].segments[0].count, 4)
-    const polled = await modbusPoll(home, cwd)
-    assert.equal(polled.ok, true)
-    assert.ok(polled.devices[0].values.length >= 4)
-  } finally {
-    await rm(home, { recursive: true, force: true })
-  }
-})
-
-test('modbusPoll reports timeout instead of ok after the budget', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'dvb-poll-to-'))
+test('legacy devices+segments workspaces migrate into points', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-migrate-'))
   const cwd = join(home, 'board')
   await mkdir(cwd)
   try {
     saveWorkspace(home, cwd, {
       modbus: {
-        devices: [
-          {
-            id: 'a',
-            name: 'A',
-            role: 'master',
-            sim: true,
-            polling: { enabled: true },
-            segments: [{ function: 3, address: 0, count: 2 }],
-          },
-          {
-            id: 'b',
-            name: 'B',
-            role: 'master',
-            sim: true,
-            polling: { enabled: true },
-            segments: [{ function: 3, address: 10, count: 2 }],
-          },
+        mode: 'rtu',
+        port: 'COM5',
+        baudrate: 19200,
+        slave: 3,
+        sim: true,
+        segments: [
+          { id: 'sA', name: '温度块', function: 3, address: 0, count: 2, scale: 0.1, offset: -40, unit: '℃' },
+          { id: 'sB', name: '阀门', function: 1, address: 9, count: 1 },
         ],
-        activeId: 'a',
+        values: [{ key: 'sB:1@9', value: 1, raw: true, ok: true, at: 42 }],
       },
     })
-    const ac = new AbortController()
-    ac.abort()
-    const polled = await modbusPoll(home, cwd, { signal: ac.signal })
-    assert.equal(polled.ok, false)
-    assert.equal(polled.timedOut, true)
-    assert.equal(polled.partial, true)
-    assert.match(polled.error, /超时/)
-    assert.equal(polled.devices[0].polling.lastOk, false)
-    assert.equal(polled.devices[1].polling.lastOk, false)
-    assert.match(polled.devices[1].polling.error, /超时/)
+    const ws = await import('../bench-store.mjs').then((m) => m.loadWorkspace(home, cwd))
+    const mb = ws.modbus
+    assert.equal(mb.version, 2)
+    assert.equal(mb.conn.port, 'COM5')
+    assert.equal(mb.conn.slave, 3)
+    assert.equal(mb.conn.sim, true)
+    assert.equal(mb.points.length, 3)
+    assert.deepEqual(mb.points.map((p) => p.id), ['p3_0', 'p3_1', 'p1_9'])
+    // batch segment drops its block name; single-point segment keeps it
+    assert.equal(mb.points[2].name, '阀门')
+    assert.equal(mb.points[0].scale, 0.1)
+    // migrated values keep their payload under the new key
+    const valve = mb.values.find((v) => v.key === 'p1_9')
+    assert.ok(valve && valve.value === 1 && valve.at === 42)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('patchConn merges without touching points or values', () => {
+  const base = normalizeModbus({
+    conn: { port: 'COM3', baudrate: 9600 },
+    points: [{ function: 3, address: 1 }],
+    values: [{ key: 'p3_1', raw: 5, value: 5, ok: true, at: 1 }],
+  })
+  const next = patchConn(base, { baudrate: 19200, host: 'x' })
+  assert.equal(next.conn.baudrate, 19200)
+  assert.equal(next.conn.host, 'x')
+  assert.equal(next.conn.port, 'COM3')
+  assert.equal(next.points.length, 1)
+  assert.equal(next.values.length, 1)
+})
+
+test('connLabel renders both modes', () => {
+  assert.match(connLabel(normalizeConn({ port: 'COM3', baudrate: 9600, slave: 2 })), /COM3 @ 9600/)
+  assert.match(connLabel(normalizeConn({ mode: 'tcp', host: '10.0.0.8', tcpPort: 1502, slave: 4 })), /10\.0\.0\.8:1502/)
+})
+
+test('modbusPoll reports missing points cleanly', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-poll-v2-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveWorkspace(home, cwd, { modbus: { conn: { sim: true } } })
+    const ran = await modbusPoll(home, cwd)
+    assert.equal(ran.ok, false)
+    assert.match(ran.error, /无点位/)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('modbusPoll sim path batches contiguous points and fills values', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-poll-batch-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveWorkspace(home, cwd, {
+      modbus: {
+        conn: { sim: true },
+        polling: { enabled: true },
+        points: [
+          { name: 'a', function: 3, address: 0 },
+          { name: 'b', function: 3, address: 1 },
+          { name: 'c', function: 3, address: 2 },
+        ],
+      },
+    })
+    const ran = await modbusPoll(home, cwd)
+    assert.equal(ran.ok, true)
+    assert.ok(Array.isArray(ran.framesLog))
+    const ws = await import('../bench-store.mjs').then((m) => m.loadWorkspace(home, cwd))
+    const filled = ws.modbus.values.filter((v) => v.ok).length
+    assert.equal(filled, 3)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

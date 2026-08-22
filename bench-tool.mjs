@@ -1,10 +1,10 @@
-import { keilBuild, keilMap, listDir, modbusRead, modbusWrite, pickModbusPatch } from './bench-actions.mjs'
+import { connectOp, keilBuild, keilMap, listDir, modbusRead, modbusWrite, pointsOp } from './bench-modbus-forward.mjs'
 import { requireKeilProject, requireWorkspaceCwd } from './bench-paths.mjs'
-import { compactSegments, compactValues } from './bench-points.mjs'
-import { compactDevices } from './bench-devices.mjs'
+import { decodeValue } from './bench-points.mjs'
+import { connLabel } from './bench-devices.mjs'
 import { createManualRequest, journalView, loadWorkspace, saveWorkspace } from './bench-store.mjs'
 
-const ACTIONS = new Set(['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual'])
+const ACTIONS = new Set(['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual', 'connect', 'points'])
 
 export const cwdOf = (agent) => {
   const session = agent && agent.session
@@ -77,7 +77,7 @@ const compactLog = (log) => {
 export async function runVisionBench(home, args, cwd, originInput, opts) {
   const action = args && args.action
   if (!ACTIONS.has(action)) {
-    return { ok: false, error: 'action 必须是 status | ls | select | build | read | write | map | manual' }
+    return { ok: false, error: 'action 必须是 status | ls | select | build | read | write | map | manual | connect | points' }
   }
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, action, error: room.error }
@@ -89,6 +89,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
     const workspace = loadWorkspace(home, room.cwd)
     const journal = journalView(workspace)
     const boundId = workspace.session && workspace.session.boundId ? workspace.session.boundId : ''
+    const mb = workspace.modbus
     return {
       ok: true,
       action,
@@ -99,16 +100,37 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
       },
       keil: workspace.keil,
       modbus: {
-        mode: workspace.modbus.mode,
-        port: workspace.modbus.port,
-        host: workspace.modbus.host,
-        tcpPort: workspace.modbus.tcpPort,
-        slave: workspace.modbus.slave,
-        segments: compactSegments(workspace.modbus.segments),
-        values: compactValues(workspace.modbus.values, workspace.modbus.segments),
-        polling: workspace.modbus.polling,
-        devices: compactDevices(workspace.modbus),
-        activeId: workspace.modbus.activeId,
+        conn: {
+          mode: mb.conn.mode,
+          port: mb.conn.port,
+          baudrate: mb.conn.baudrate,
+          bytesize: mb.conn.bytesize,
+          parity: mb.conn.parity,
+          stopbits: mb.conn.stopbits,
+          host: mb.conn.host,
+          tcpPort: mb.conn.tcpPort,
+          slave: mb.conn.slave,
+          sim: mb.conn.sim,
+          label: connLabel(mb.conn),
+        },
+        points: (mb.points || []).map((p) => {
+          const rec = (mb.values || []).find((item) => item.key === p.id)
+          return {
+            id: p.id,
+            name: p.name,
+            function: p.function,
+            address: p.address,
+            scale: p.scale,
+            offset: p.offset,
+            unit: p.unit,
+            writable: [1, 3].includes(p.function),
+            raw: rec ? rec.raw : null,
+            value: rec ? decodeValue(p, rec.raw) : null,
+            ok: rec ? rec.ok : false,
+            at: rec ? rec.at : 0,
+          }
+        }),
+        polling: mb.polling,
       },
       log: compactLog(workspace.log),
       tasks: journal.tasks,
@@ -165,6 +187,33 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
     }
   }
 
+  if (action === 'connect') {
+    const ran = connectOp(home, room.cwd, {
+      mode: args.mode,
+      port: args.port,
+      baudrate: args.baudrate,
+      bytesize: args.bytesize,
+      parity: args.parity,
+      stopbits: args.stopbits,
+      host: args.host,
+      tcpPort: args.tcpPort,
+      slave: args.slave,
+      sim: args.sim,
+    })
+    return { action, ...ran }
+  }
+
+  if (action === 'points') {
+    const ran = pointsOp(home, room.cwd, {
+      op: args.op,
+      point: args.point,
+      points: args.points,
+      id: args.id,
+      ids: args.ids,
+    })
+    return { action, ...ran }
+  }
+
   if (action === 'map') {
     const ran = await keilMap(home, room.cwd, args.path, args.target, { signal })
     if (!ran.ok) return { action, ...ran }
@@ -182,20 +231,15 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
     return { action, ...ran }
   }
 
-  const table = args.address == null && args.function == null
+  const table = args.pointId == null && args.address == null && args.function == null
   const ran = await modbusRead(home, room.cwd, {
     source: origin.source,
     sessionId: origin.sessionId,
     all: table,
-    modbus: table ? undefined : pickModbusPatch({
-      mode: args.mode,
-      port: args.port,
-      host: args.host,
-      slave: args.slave,
-      function: args.function,
-      address: args.address,
-      count: args.count,
-    }),
+    pointId: args.pointId,
+    function: args.function,
+    address: args.address,
+    count: args.count,
   }, { signal })
   return { action, ...ran }
 }
@@ -211,10 +255,13 @@ export function visionBenchTool(home) {
       + 'build：按已选或参数中的工程编译（同一类型同时只能有一个任务）；'
       + 'map：当前 Target 的组、源文件、包含路径、宏和函数名；truncated 为真时结果不完整，按组或文件再查；'
       + 'read：不传 address/function 则按点表整段读；传入则单次读；'
-      + 'write：写线圈或保持寄存器（function 只能 1 或 3，address 必填，values 数组长度 1 走单点写 FC05/06，大于 1 走批量写 FC15/16），写入后自动回读并报告一致性。'
+      + 'write：写线圈或保持寄存器（function 只能 1 或 3，address 必填且为原始地址 0–65535，不是 30001/40001 这类人类记法；values 数组长度 1 走单点写 FC05/06，大于 1 走批量写 FC15/16），写入后自动回读并报告一致性。'
       + 'Agent 发起的 write 需要用户在界面上批准：返回 needsConfirm 时告知用户去上位机页的确认卡操作，批准或拒绝后结果会以通知回到本会话；'
+      + 'connect：配置串口/TCP 连接（mode rtu|tcp、port、baudrate、bytesize 7|8、parity N|E|O、stopbits 1|2、host、tcpPort、slave）；'
+      + 'points：配置点位表——op=list 列出全部点位与当前值，op=add/update 配合 point 或 points 数组增改（每点字段 name/function/address/scale/offset/unit/alarmMin/alarmMax，function 为 01/02/03/04），op=remove 配合 ids 删除，op=clear 清空。'
+      + '配置工作流：先 status 看现状 → connect 设连接 → points 建点位表 → read 验证。'
       + 'manual：请求用户完成现场人工操作（上电、接线、按复位等），text 必填，完成后会以通知回到本会话。'
-      + '先 status，再 map，不要猜测工程路径或点表。',
+      + '不要猜测工程路径或点表，一切以工具返回为准。',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -222,8 +269,8 @@ export function visionBenchTool(home) {
       properties: {
         action: {
           type: 'string',
-          enum: ['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual'],
-          description: 'status | ls | select | build | read | write | map | manual',
+          enum: ['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual', 'connect', 'points'],
+          description: 'status | ls | select | build | read | write | map | manual | connect | points',
         },
         path: { type: 'string', description: 'ls 的目录或 select/build/map 的工程绝对路径' },
         target: { type: 'string', description: 'Keil Target' },
@@ -241,6 +288,36 @@ export function visionBenchTool(home) {
           items: { type: 'number' },
           description: 'write 的写入值数组；线圈 0/1，寄存器 0–65535',
         },
+        baudrate: { type: 'number', description: 'connect 的波特率' },
+        bytesize: { type: 'number', enum: [7, 8], description: 'connect 的数据位' },
+        parity: { type: 'string', enum: ['N', 'E', 'O'], description: 'connect 的校验位' },
+        stopbits: { type: 'number', enum: [1, 2], description: 'connect 的停止位' },
+        sim: { type: 'boolean', description: 'connect 的仿真开关（不触真机）' },
+        op: { type: 'string', enum: ['list', 'add', 'update', 'remove', 'clear'], description: 'points 的操作' },
+        point: {
+          type: 'object',
+          description: 'points 单个点位：{name, function(1-4), address, scale, offset, unit, alarmMin, alarmMax}',
+        },
+        points: {
+          type: 'array',
+          description: 'points 批量点位数组（op=add/update 时用），元素同 point',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              function: { type: 'number', enum: [1, 2, 3, 4] },
+              address: { type: 'number' },
+              scale: { type: 'number' },
+              offset: { type: 'number' },
+              unit: { type: 'string' },
+              alarmMin: { type: 'number' },
+              alarmMax: { type: 'number' },
+            },
+          },
+        },
+        id: { type: 'string', description: 'points remove 的单个点位 id' },
+        ids: { type: 'array', items: { type: 'string' }, description: 'points remove 的点位 id 数组' },
         text: { type: 'string', description: 'manual 的请求内容：需要用户完成的现场操作描述' },
       },
     },
