@@ -16,6 +16,7 @@ import {
   setPointValue,
 } from './bench-points.mjs'
 import { normalizeModbus, normalizePointV3 } from './bench-devices.mjs'
+import { evaluateAlarms, normalizeAlarmState } from './bench-alarm.mjs'
 import { planReadBatches } from './bench-pollplan.mjs'
 import { aborted, hasRunning, originOf, signalOf } from './bench-journal.mjs'
 import {
@@ -857,39 +858,53 @@ export const modbusPoll = async (home, cwd, opts) => {
       }
       pollingByConnection[connId] = { ...interval, lastAt: Date.now(), lastOk: connOk && !timedOut, error: timedOut ? '轮询超时' : (connOk ? '' : '轮询部分失败') }
     }
-    const alarms = evaluatePointAlarms(pack.points, values, pack.alarmActive)
-    if (alarms.fired.length) {
-      recordBenchEvent(home, room.cwd, {
-        action: 'alarm',
-        ok: false,
-        summary: '越限告警：' + alarms.fired.slice(0, 5).map((item) => {
-          const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
-          return pointLabel(item.point) + '=' + decodeValue(item.point, item.raw) + (item.kind === 'max' ? '>' + limit : '<' + limit)
-        }).join('；'),
-      }, { source: 'system' })
-      void notifyBenchEvent(home, room.cwd,
-        '台架告警：' + alarms.fired.slice(0, 3).map((item) => {
-          const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
-          return pointLabel(item.point) + '=' + decodeValue(item.point, item.raw) + (item.kind === 'max' ? '>' + limit : '<' + limit)
-        }).join('；')).catch(() => {})
+    const alarmEval = evaluateAlarms({ points: pack.points, values, prevState: pack.alarmState || pack.alarmActive, pollingByConnection, connections: pack.connections, opts: { deadband: 1 } })
+    const alarms = { next: alarmEval.next, fired: alarmEval.fired.filter(f=> f.point), cleared: alarmEval.recovered.filter(r=> r.point), commFired: alarmEval.fired.filter(f=> !f.point), commCleared: alarmEval.recovered.filter(r=> !r.point) }
+    const activeBool = Object.fromEntries(Object.entries(alarmEval.next).filter(([,v])=> v && v.status==='active' && v.group==='process').map(([k])=>[k,true]))
+    if (alarmEval.fired.length) {
+      const procFired = alarmEval.fired.filter(f=> f.point)
+      const commFired = alarmEval.fired.filter(f=> f.connectionId)
+      if (procFired.length) {
+        recordBenchEvent(home, room.cwd, {
+          action: 'alarm',
+          ok: false,
+          summary: '越限告警：' + procFired.slice(0, 5).map((item) => {
+            const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
+            return pointLabel(item.point) + '=' + decodeValue(item.point, item.raw ?? item.alarm?.value) + (item.kind === 'max' ? '>' + limit : '<' + limit)
+          }).join('；'),
+        }, { source: 'system' })
+        void notifyBenchEvent(home, room.cwd,
+          '台架告警：' + procFired.slice(0, 3).map((item) => {
+            const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
+            return pointLabel(item.point) + '=' + decodeValue(item.point, item.raw ?? item.alarm?.value) + (item.kind === 'max' ? '>' + limit : '<' + limit)
+          }).join('；')).catch(() => {})
+      }
+      if (commFired.length) {
+        recordBenchEvent(home, room.cwd, { action: 'alarm', ok: false, summary: '通信告警：' + commFired.slice(0,3).map(c=> c.label || c.connectionId).join('；') }, { source: 'system' })
+      }
     }
-    if (alarms.cleared.length) {
-      recordBenchEvent(home, room.cwd, {
-        action: 'alarm-clear',
-        ok: true,
-        summary: '告警恢复：' + alarms.cleared.slice(0, 5).map((item) => pointLabel(item.point) + '=' + decodeValue(item.point, item.raw)).join('；'),
-      }, { source: 'system' })
+    if (alarmEval.recovered.length) {
+      const procRec = alarmEval.recovered.filter(r=> r.point)
+      const commRec = alarmEval.recovered.filter(r=> r.connectionId && !r.point)
+      if (procRec.length) {
+        recordBenchEvent(home, room.cwd, {
+          action: 'alarm-clear',
+          ok: true,
+          summary: '告警恢复：' + procRec.slice(0, 5).map((item) => pointLabel(item.point) + '=' + decodeValue(item.point, item.raw ?? item.alarm?.value)).join('；'),
+        }, { source: 'system' })
+      }
+      if (commRec.length) {
+        recordBenchEvent(home, room.cwd, { action: 'alarm-clear', ok: true, summary: '通信恢复：' + commRec.slice(0,3).map(c=> c.connectionId).join('；') }, { source: 'system' })
+      }
     }
     const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
-    // merge pollingByConnection with latest to preserve other connections not polled
     const mergedPolling = { ...latest.pollingByConnection, ...pollingByConnection }
-    // also update legacy polling for active connection compat
     const activePolling = mergedPolling[pack.activeConnectionId] || pollingByConnection[targetConns[0]?.id] || latest.polling
     const saved = saveWorkspace(home, room.cwd, {
       modbus: {
         values,
-        alarmActive: alarms.next,
-        alarmState: alarms.next,
+        alarmActive: activeBool,
+        alarmState: alarmEval.next,
         polling: activePolling,
         pollingByConnection: mergedPolling,
         framesByConnection,

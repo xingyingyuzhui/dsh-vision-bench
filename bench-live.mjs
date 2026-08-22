@@ -3,6 +3,7 @@ import { clockOf, decodeValue, functionTag } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { TREND, TREND_CAP, TREND_WINDOW_MS, trendKey, sampleTrend } from './bench-trend.mjs'
+import { normalizeAlarmState, groupAlarms, acknowledgeAlarm, ACTIVE, RECOVERED, ACKED, PROCESS, COMM } from './bench-alarm.mjs'
 
 const TAB_TABLE = 'dsh-vision-bench:modbus'
 const TAB_CHART = 'dsh-vision-bench:charts'
@@ -430,31 +431,75 @@ export function createTrendPage(React, t) {
   }
 }
 
-export function createAlarmPage(React, t, post) {
+export function createAlarmPage(React, t, post, hooks) {
+  const openHmi = hooks && hooks.openHmi
+  const openLive = hooks && hooks.openLive
   return function AlarmPage(props) {
     const el = React.createElement
     const cwd = sessionCwd(props)
     const [events, setEvents] = React.useState([])
+    const [alarmState, setAlarmState] = React.useState({})
+    const [pack, setPack] = React.useState(null)
+    const [view, setView] = React.useState('current')
+    const [group, setGroup] = React.useState('all')
     React.useEffect(() => subscribeState(post, cwd, (data) => {
       if (!data) return
-      const timeline = data.journal && Array.isArray(data.journal.timeline)
-        ? data.journal.timeline
-        : []
+      const timeline = data.journal && Array.isArray(data.journal.timeline) ? data.journal.timeline : []
       setEvents(timeline.filter((item) => item.kind === 'alarm' || item.kind === 'alarm-clear'))
+      const mb = data.workspace && data.workspace.modbus
+      if (mb) { setAlarmState(mb.alarmState || mb.alarmActive || {}); try { setPack(normalizeModbus(mb)) } catch { setPack(null) } }
     }), [cwd, post])
+    const grouped = groupAlarms(alarmState)
+    const list = view === 'current' ? grouped.current : grouped.history
+    const filtered = group === 'all' ? list : list.filter(a=> a.group===group)
+    // enrich with point/connection/device labels
+    const enriched = filtered.map(a=>{
+      const pt = pack && a.pointId ? (pack.points||[]).find(p=> p.id===a.pointId) : null
+      const conn = pack && a.connectionId ? (pack.connections||[]).find(c=> c.id===a.connectionId) : null
+      const dev = pack && a.deviceId ? (pack.devices||[]).find(d=> d.id===a.deviceId) : null
+      const threshold = a.threshold != null ? a.threshold : (pt ? (a.kind==='max'? pt.alarmMax : pt.alarmMin) : null)
+      const label = pt ? (pt.name || a.pointId) : (a.label || a.connectionId || a.id)
+      return { a, pt, conn, dev, threshold, label }
+    }).sort((x,y)=> (y.a.lastAt||0)-(x.a.lastAt||0))
+    const doAck = (id)=>{
+      const next = acknowledgeAlarm(alarmState, id)
+      setAlarmState(next)
+      if (cwd) post('/dsh-vision-bench/workspace', { cwd, modbus:{ alarmState: next, version:3 } }).catch(()=>{})
+    }
+    const jumpPoint = (row)=>{ if (typeof openHmi==='function' && row.pt) try{ openHmi({ connectionId: row.a.connectionId, deviceId: row.a.deviceId, pointId: row.a.pointId }) }catch{} }
+    const jumpChart = ()=>{ if (typeof openLive==='function') try{ openLive() }catch{} }
+    const jumpFrames = (row)=>{ if (typeof openLive==='function') try{ openLive() }catch{} }
     return el('div', { className: 'dvb-live' },
       el('div', { className: 'dvb-live-head' },
-        el('span', { className: 'dvb-live-title' }, t('liveAlarm'))),
-      events.length
-        ? el('div', { className: 'dvb-live-list' }, events.map((item) => el('div', {
-          key: item.id,
-          className: 'dvb-task',
-          'data-ok': item.ok ? 'true' : 'false',
-        },
-          el('span', { className: 'dvb-map-meta' }, clockOf(item.at)),
-          el('span', { className: 'dvb-badge', 'data-source': item.source }, item.source),
-          el('span', { className: 'dvb-hint' }, item.summary))))
-        : el('div', { className: 'dvb-hint' }, t('alarmEmpty')))
+        el('span', { className: 'dvb-live-title' }, t('liveAlarm')),
+        el('span', { className: 'dvb-chip', 'data-kind': grouped.active.length?'err':'ready' }, grouped.active.length+' 激活')),
+      el('div', { className: 'dvb-toolbar' },
+        el('button', { type:'button', className:'dvb-btn'+(view==='current'?' is-on':''), onClick(){ setView('current') } }, '当前'),
+        el('button', { type:'button', className:'dvb-btn'+(view==='history'?' is-on':''), onClick(){ setView('history') } }, '历史'),
+        el('button', { type:'button', className:'dvb-btn'+(group==='all'?' is-on':''), onClick(){ setGroup('all') } }, '全部'),
+        el('button', { type:'button', className:'dvb-btn'+(group===PROCESS?' is-on':''), onClick(){ setGroup(PROCESS) } }, '过程'),
+        el('button', { type:'button', className:'dvb-btn'+(group===COMM?' is-on':''), onClick(){ setGroup(COMM) } }, '通信'),
+        enriched.length ? el('button', { type:'button', className:'dvb-btn', onClick(){ doAck('all') } }, '全部确认') : null),
+      enriched.length
+        ? el('div', { className: 'dvb-live-list' }, enriched.slice(0,80).map((row)=> el('div', { key: row.a.id, className: 'dvb-task', 'data-status': row.a.status, 'data-group': row.a.group },
+            el('span', { className: 'dvb-badge', 'data-status': row.a.status }, row.a.status===ACTIVE?'激活': row.a.status===RECOVERED?'恢复':'已确认'),
+            el('span', { className: 'dvb-badge', 'data-group': row.a.group }, row.a.group===COMM?'通信':'过程'),
+            el('span', { className: 'dvb-map-meta' }, clockOf(row.a.lastAt)),
+            el('span', { className: 'dvb-hint', title: row.a.id }, row.label),
+            row.conn ? el('span', { className: 'dvb-hint' }, row.conn.name) : null,
+            row.dev ? el('span', { className: 'dvb-hint' }, row.dev.name + '·Unit '+row.dev.unitId) : null,
+            el('span', { className: 'dvb-hint' }, row.a.threshold!=null?'阈值 '+row.a.threshold:''),
+            el('span', { className: 'dvb-hint' }, row.a.value!=null?'当前 '+row.a.value:''),
+            el('span', { className: 'dvb-badge', 'data-quality': row.a.quality || 'good' }, row.a.quality || 'good'),
+            row.a.count>1 ? el('span', { className: 'dvb-tag' }, '×'+row.a.count) : null,
+            row.a.status!==ACKED ? el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ doAck(row.a.id) } }, '确认') : null,
+            row.pt ? el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ jumpPoint(row) } }, '点位') : null,
+            el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick: jumpChart }, '曲线'),
+            el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ jumpFrames(row) } }, '报文')
+          )))
+        : el('div', { className: 'dvb-hint' }, t('alarmEmpty')),
+      events.length ? el('div', { className: 'dvb-hint', style:{marginTop:'8px'} }, '历史事件 '+events.length) : null,
+      events.length ? el('div', { className: 'dvb-live-list' }, events.slice(0,6).map((item)=> el('div', { key:item.id, className:'dvb-task', 'data-ok': item.ok?'true':'false' }, el('span', { className:'dvb-map-meta' }, clockOf(item.at)), el('span', { className:'dvb-badge', 'data-source':item.source }, item.source), el('span', { className:'dvb-hint' }, item.summary)))) : null)
   }
 }
 

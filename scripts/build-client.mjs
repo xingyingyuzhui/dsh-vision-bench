@@ -97,6 +97,7 @@ const parts = [
   'bench-styles.mjs',
   'bench-settings.mjs',
   'bench-points.mjs',
+  'bench-alarm.mjs',
   'bench-devices.mjs',
   'bench-shared.mjs',
   'bench-trend.mjs',

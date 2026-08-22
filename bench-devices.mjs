@@ -2,6 +2,7 @@
 // v2 legacy (single conn) migrates to v3 via c1/d1. Older segment shapes also routed through v2 first.
 
 import { functionTag, normalizePoints, normalizeValueRec } from './bench-points.mjs'
+import { normalizeAlarmState } from './bench-alarm.mjs'
 
 const PARITY = new Set(['N', 'E', 'O'])
 const VALID_ROLES = new Set(['client', 'server'])
@@ -544,7 +545,7 @@ export function normalizeModbus(input) {
     } else {
       framesByConnection = normalizeFramesByConnection(null, connections)
     }
-    let alarmState = src.alarmState && typeof src.alarmState === 'object' ? { ...src.alarmState } : (src.alarmActive && typeof src.alarmActive === 'object' ? { ...src.alarmActive } : {})
+    let alarmState = normalizeAlarmState(src.alarmState && typeof src.alarmState === 'object' ? src.alarmState : (src.alarmActive && typeof src.alarmActive === 'object' ? src.alarmActive : {}), { pointsById: Object.fromEntries((points||[]).map(p=>[p.id,p])) })
     // active ids
     let activeConnectionId = devText(src.activeConnectionId, '')
     if (!connections.some(c=>c.id===activeConnectionId)) activeConnectionId = connections[0]?.id || 'c1'
