@@ -2,47 +2,13 @@ import { pushFramesLog, subscribeState, getFramesLog, clearFramesLog, resolveSid
 import { clockOf, decodeValue, functionTag } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
+import { TREND, TREND_CAP, TREND_WINDOW_MS, trendKey, sampleTrend } from './bench-trend.mjs'
 
 const TAB_TABLE = 'dsh-vision-bench:modbus'
 const TAB_CHART = 'dsh-vision-bench:charts'
 const TAB_ALARM = 'dsh-vision-bench:alarms'
 const TAB_FRAMES = 'dsh-vision-bench:frames'
 const INTERVALS = [500, 1000, 2000, 5000]
-const TREND_CAP = 600
-const TREND_WINDOW_MS = 5 * 60 * 1000
-
-const TREND = { cwd: '', series: new Map(), meta: new Map() }
-
-const trendKey = (connectionId, deviceId, pointId) => String(connectionId) + ':' + String(deviceId) + ':' + String(pointId)
-
-const sampleTrend = (cwd, pack) => {
-  if (!cwd || TREND.cwd !== cwd) {
-    if (TREND.cwd !== cwd) {
-      TREND.cwd = cwd
-      TREND.series.clear()
-      TREND.meta.clear()
-    }
-    if (!cwd) return
-  }
-  const now = Date.now()
-  const pointsById = {}
-  for (const p of Array.isArray(pack.points) ? pack.points : []) pointsById[p.id] = p
-  for (const rec of Array.isArray(pack.values) ? pack.values : []) {
-    const pid = rec && (rec.pointId || rec.key)
-    if (!pid || !pointsById[pid]) continue
-    // quality gate: only good values produce trend points; bad quality => gap (no point)
-    if (rec.ok !== true) continue
-    const rawV = rec.value !== null && rec.value !== undefined ? Number(rec.value) : Number(rec.raw)
-    if (!Number.isFinite(rawV)) continue
-    const pt = pointsById[pid]
-    const key = trendKey(pt.connectionId || '', pt.deviceId || '', pid)
-    TREND.meta.set(key, { label: (pt.name || pid), unit: pt.unit || '', connectionId: pt.connectionId, deviceId: pt.deviceId, pointId: pid })
-    let list = TREND.series.get(key)
-    if (!list) { list = []; TREND.series.set(key, list) }
-    list.push({ t: now, v: rawV })
-    if (list.length > TREND_CAP) list.splice(0, list.length - TREND_CAP)
-  }
-}
 
 function normalizePointsSafe(pack) {
   return Array.isArray(pack.points) ? pack.points : []

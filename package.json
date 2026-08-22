@@ -43,6 +43,7 @@
     "bench-settings.mjs",
     "bench-view.mjs",
     "bench-hmi.mjs",
+    "bench-trend.mjs",
     "bench-live.mjs",
     "bench-map.mjs",
     "bench-points.mjs",

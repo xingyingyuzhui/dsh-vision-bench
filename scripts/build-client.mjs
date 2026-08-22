@@ -99,6 +99,7 @@ const parts = [
   'bench-points.mjs',
   'bench-devices.mjs',
   'bench-shared.mjs',
+  'bench-trend.mjs',
   'bench-view.mjs',
   'bench-hmi.mjs',
   'bench-live.mjs',
