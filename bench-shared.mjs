@@ -139,44 +139,89 @@ export function journalPanel(el, t, journal) {
 // One shared /state poller per cwd instead of six independent loops.
 const STATE_BUS = { cwd: '', data: null, subs: new Set(), timer: 0, seq: 0 }
 
-// Modbus frame stream for the HMI 报文 view. Ring buffer keyed by cwd; fed by
-// read / write / poll responses from any surface (HMI actions and the live
-// polling loop).
-const FRAME_LOG = { cwd: '', items: [] }
+// Modbus frame stream per connection (framesByConnection). Ring buffer keyed by cwd+connId;
+// fed by read / write / poll responses from any surface (HMI actions and the live polling loop).
+// Supports overloaded legacy signature pushFramesLog(cwd, logArray) for backward compat.
+const FRAME_LOGS = { cwd: '', byConn: {} }
 const FRAME_LOG_CAP = 500
 
-export function pushFramesLog(cwd, logArray) {
-  if (!cwd) return
-  if (FRAME_LOG.cwd !== cwd) {
-    FRAME_LOG.cwd = cwd
-    FRAME_LOG.items = []
+function ensureFrameCwd(cwd) {
+  if (FRAME_LOGS.cwd !== cwd) {
+    FRAME_LOGS.cwd = cwd
+    FRAME_LOGS.byConn = {}
   }
-  const list = Array.isArray(logArray) ? logArray : []
-  for (const entry of list) {
+}
+
+export function pushFramesLog(cwd, connId, logArray) {
+  if (!cwd) return
+  let cid = '_default'
+  let list
+  if (Array.isArray(connId) && logArray === undefined) {
+    list = connId
+  } else if (typeof connId === 'string' && Array.isArray(logArray)) {
+    cid = connId || '_default'
+    list = logArray
+  } else if (connId == null && Array.isArray(logArray)) {
+    cid = '_default'
+    list = logArray
+  } else if (Array.isArray(logArray)) {
+    cid = String(connId || '_default')
+    list = logArray
+  } else if (Array.isArray(connId)) {
+    list = connId
+  } else {
+    // fallback: treat second arg as array if no third
+    if (Array.isArray(connId)) { list = connId } else { list = [] }
+  }
+  ensureFrameCwd(cwd)
+  if (!FRAME_LOGS.byConn[cid]) FRAME_LOGS.byConn[cid] = []
+  const arr = Array.isArray(list) ? list : []
+  for (const entry of arr) {
     if (!entry) continue
-    FRAME_LOG.items.push({
+    FRAME_LOGS.byConn[cid].push({
       t: Number(entry.t) || Date.now(),
       deviceName: String(entry.deviceName || ''),
       label: String(entry.label || ''),
       request: String(entry.request || ''),
       response: String(entry.response || ''),
+      trace: Array.isArray(entry.trace) ? entry.trace.map((s) => String(s).slice(0, 200)).slice(0, 8) : [],
+      connectionId: String(entry.connectionId || cid || ''),
+      deviceId: String(entry.deviceId || ''),
     })
   }
-  if (FRAME_LOG.items.length > FRAME_LOG_CAP) {
-    FRAME_LOG.items.splice(0, FRAME_LOG.items.length - FRAME_LOG_CAP)
+  if (FRAME_LOGS.byConn[cid].length > FRAME_LOG_CAP) {
+    FRAME_LOGS.byConn[cid].splice(0, FRAME_LOGS.byConn[cid].length - FRAME_LOG_CAP)
   }
 }
 
-export function getFramesLog(cwd) {
-  return FRAME_LOG.cwd === cwd ? FRAME_LOG.items : []
+export function getFramesLog(cwd, connId) {
+  if (FRAME_LOGS.cwd !== cwd) return []
+  if (connId === undefined || connId === null || connId === '' || connId === 'all') {
+    const all = []
+    for (const arr of Object.values(FRAME_LOGS.byConn)) all.push(...arr)
+    all.sort((a, b) => (Number(a.t) || 0) - (Number(b.t) || 0))
+    // cap aggregated to 500 most recent across all conns
+    if (all.length > FRAME_LOG_CAP) return all.slice(all.length - FRAME_LOG_CAP)
+    return all
+  }
+  return FRAME_LOGS.byConn[connId] ? FRAME_LOGS.byConn[connId].slice() : []
 }
 
-export function clearFramesLog(cwd) {
-  if (FRAME_LOG.cwd === cwd) FRAME_LOG.items = []
+export function clearFramesLog(cwd, connId) {
+  if (FRAME_LOGS.cwd !== cwd) return
+  if (connId === undefined || connId === null || connId === '' || connId === 'all') {
+    FRAME_LOGS.byConn = {}
+  } else {
+    delete FRAME_LOGS.byConn[connId]
+  }
 }
 
-export function framesLogCount() {
-  return FRAME_LOG.items.length
+export function framesLogCount(cwd, connId) {
+  if (FRAME_LOGS.cwd !== cwd) return 0
+  if (connId) return (FRAME_LOGS.byConn[connId] || []).length
+  let n = 0
+  for (const arr of Object.values(FRAME_LOGS.byConn)) n += arr.length
+  return n
 }
 
 function busPull(post) {

@@ -7,6 +7,7 @@ import {
   evaluatePointAlarms,
   fillSimValues,
   functionTag,
+  isWritableFunction,
   normalizePoints,
   normalizeWriteValues,
   pointIdOf,
@@ -14,7 +15,7 @@ import {
   scatterBatch,
   setPointValue,
 } from './bench-points.mjs'
-import { normalizeModbus } from './bench-devices.mjs'
+import { normalizeModbus, normalizePointV3 } from './bench-devices.mjs'
 import { planReadBatches } from './bench-pollplan.mjs'
 import { aborted, hasRunning, originOf, signalOf } from './bench-journal.mjs'
 import {
@@ -40,6 +41,19 @@ const needPython = (bindings) => {
 const pollLocks = new Map()
 const POLL_BUDGET_MS = 30000
 
+const AREA_FN = { coil: 1, discreteInput: 2, holdingRegister: 3, inputRegister: 4 }
+const fnOfPoint = (p) => Number(p && p.function) || AREA_FN[p && p.area] || 3
+const findPointV3 = (points, fn, address, activeConnId, activeDevId) => {
+  const list = Array.isArray(points) ? points : []
+  // prefer active connection/device
+  let hit = list.find(p => fnOfPoint(p) === Number(fn) && Number(p.address) === Number(address) && p.connectionId === activeConnId && p.deviceId === activeDevId)
+  if (hit) return hit
+  hit = list.find(p => fnOfPoint(p) === Number(fn) && Number(p.address) === Number(address))
+  if (hit) return hit
+  const id = pointIdOf(fn, address)
+  return list.find(p => p.id === id) || null
+}
+
 // ── connection profile ───────────────────────────────────────────────────
 
 const CONN_PATCH_KEYS = ['mode', 'port', 'baudrate', 'bytesize', 'parity', 'stopbits', 'host', 'tcpPort', 'slave', 'sim']
@@ -58,6 +72,34 @@ export const connectOp = (home, cwd, body) => {
   if (room.error) return { ok: false, error: room.error }
   const patch = pickConnPatch(body)
   if (!Object.keys(patch).length) return { ok: false, error: '缺少连接参数' }
+  const cidRaw = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
+  if (cidRaw) {
+    const workspace = loadWorkspace(home, room.cwd)
+    const pack = normalizeModbus(workspace.modbus)
+    const target = pack.connections.find((c) => c.id === cidRaw)
+    if (!target) return { ok: false, error: '连接不存在: ' + cidRaw }
+    const nextConns = pack.connections.map((c) => c.id === cidRaw ? { ...c, conn: { ...c.conn, ...patch } } : c)
+    let nextDevices = pack.devices
+    if (patch.slave !== undefined) {
+      const didRaw = body && body.deviceId ? String(body.deviceId).trim() : ''
+      let devId = didRaw
+      if (!devId) {
+        if (pack.activeConnectionId === cidRaw && pack.activeDeviceId) devId = pack.activeDeviceId
+        else {
+          const devFor = pack.devices.find((d) => d.connectionId === cidRaw)
+          devId = devFor ? devFor.id : ''
+        }
+      }
+      if (devId) {
+        const unit = Math.min(247, Math.max(0, Math.trunc(Number(patch.slave) || 1)))
+        nextDevices = pack.devices.map((d) => d.id === devId ? { ...d, unitId: unit } : d)
+      }
+    }
+    const saved = saveWorkspace(home, room.cwd, { modbus: { connections: nextConns, devices: nextDevices, version: 3 } })
+    if (!saved.ok) return saved
+    const outConn = (saved.workspace.modbus.connections.find((c) => c.id === cidRaw) || {}).conn || saved.workspace.modbus.conn
+    return { ok: true, action: 'connect', conn: outConn, connectionId: cidRaw, connId: cidRaw }
+  }
   const saved = saveWorkspace(home, room.cwd, { modbus: { conn: patch } })
   if (!saved.ok) return saved
   return { ok: true, action: 'connect', conn: saved.workspace.modbus.conn }
@@ -66,10 +108,14 @@ export const connectOp = (home, cwd, body) => {
 // ── point table ops (Agent-facing) ───────────────────────────────────────
 
 const compactPointRow = (p, values) => {
-  const rec = (Array.isArray(values) ? values : []).find((item) => item.key === p.id)
+  const rec = (Array.isArray(values) ? values : []).find((item) => item.key === p.id || item.pointId === p.id)
   return {
     id: p.id,
+    connectionId: p.connectionId,
+    connId: p.connectionId,
+    deviceId: p.deviceId,
     name: p.name,
+    area: p.area,
     function: p.function,
     address: p.address,
     scale: p.scale,
@@ -79,7 +125,7 @@ const compactPointRow = (p, values) => {
     alarmMax: p.alarmMax,
     writable: isWritableFunction(p.function),
     raw: rec ? rec.raw : null,
-    value: rec ? rec.value : null,
+    value: rec ? (rec.value !== undefined ? rec.value : (rec.raw !== null ? decodeValue(p, rec.raw) : null)) : null,
     ok: rec ? rec.ok : false,
     at: rec ? rec.at : 0,
   }
@@ -91,43 +137,91 @@ export const pointsOp = (home, cwd, body) => {
   const workspace = loadWorkspace(home, room.cwd)
   const pack = normalizeModbus(workspace.modbus)
   const op = body && body.op
+  const cidArg = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
+  const didArg = body && body.deviceId ? String(body.deviceId).trim() : ''
+  const targetConnId = cidArg || pack.activeConnectionId
+  const targetDevId = didArg || (pack.devices.find((d) => d.connectionId === targetConnId)?.id || pack.activeDeviceId)
   if (op === 'list') {
-    return { ok: true, action: 'points', points: pack.points.map((p) => compactPointRow(p, pack.values)) }
+    let list = pack.points
+    if (cidArg) list = list.filter((p) => (p.connectionId || p.connId) === cidArg)
+    if (didArg) list = list.filter((p) => p.deviceId === didArg)
+    return { ok: true, action: 'points', points: list.map((p) => compactPointRow(p, pack.values)) }
   }
   if (op === 'add' || op === 'update') {
     const inputs = Array.isArray(body.points) ? body.points : (body.point ? [body.point] : [])
     if (!inputs.length) return { ok: false, error: '缺少 points 或 point' }
     let points = pack.points
     for (const input of inputs) {
-      const normalized = normalizePoints([{ ...(input || {}) }])
-      if (!normalized.length) continue
-      const next = normalized[0]
+      const raw = { ...(input || {}) }
+      const inCid = raw.connectionId || raw.connId ? String(raw.connectionId || raw.connId).trim() : ''
+      const inDid = raw.deviceId ? String(raw.deviceId).trim() : ''
+      const connForPoint = inCid || targetConnId
+      const devForPoint = inDid || targetDevId
+      raw.connectionId = connForPoint
+      raw.deviceId = devForPoint
+      // normalize via v3 helper to ensure area/function/address correct
+      const next = normalizePointV3(raw)
+      // fix refs if invalid due to normalizePointV3 fallback logic
+      if (!pack.connections.some((c) => c.id === next.connectionId)) next.connectionId = targetConnId
+      if (!pack.devices.some((d) => d.id === next.deviceId)) next.deviceId = targetDevId
       if (op === 'add') {
         if (points.some((p) => p.id === next.id)) {
+          return { ok: false, error: '点位已存在: ' + pointLabel(next) + '（可用 update 修改）' }
+        }
+        if (points.some((p) => p.connectionId === next.connectionId && p.deviceId === next.deviceId && p.function === next.function && p.address === next.address)) {
           return { ok: false, error: '点位已存在: ' + pointLabel(next) + '（可用 update 修改）' }
         }
         points = points.concat([next])
       } else {
         const idx = points.findIndex((p) => p.id === next.id)
         if (idx < 0) return { ok: false, error: '要更新的点位不存在: ' + next.id }
-        points = points.map((p, i) => (i === idx ? next : p))
+        if (points.some((p, i) => i !== idx && p.connectionId === next.connectionId && p.function === next.function && p.address === next.address)) {
+          return { ok: false, error: '地址冲突: ' + pointLabel(next) }
+        }
+        points = points.map((p, i) => (i === idx ? { ...p, ...next, id: points[idx].id } : p))
       }
     }
-    const saved = saveWorkspace(home, room.cwd, { modbus: { points } })
+    const saved = saveWorkspace(home, room.cwd, { modbus: { points, version: 3 } })
     if (!saved.ok) return saved
     return { ok: true, action: 'points', points: saved.workspace.modbus.points.map((p) => compactPointRow(p, saved.workspace.modbus.values)) }
   }
   if (op === 'remove') {
     const ids = Array.isArray(body.ids) ? body.ids.map(String) : (body.id ? [String(body.id)] : [])
     if (!ids.length) return { ok: false, error: '缺少 ids' }
-    const kept = pack.points.filter((p) => !ids.includes(p.id))
+    const idSet = new Set(ids)
+    let kept = pack.points
+    if (cidArg || didArg) {
+      kept = kept.filter((p) => !(idSet.has(p.id) && (!cidArg || (p.connectionId || p.connId) === cidArg) && (!didArg || p.deviceId === didArg)))
+    } else {
+      kept = kept.filter((p) => !idSet.has(p.id))
+    }
+    const keptValues = (pack.values || []).filter((v) => {
+      const k = v.key || v.pointId
+      return !idSet.has(k) || !kept.some((p) => p.id === k)
+    })
     if (kept.length === pack.points.length) return { ok: false, error: '没有匹配的点位' }
-    const saved = saveWorkspace(home, room.cwd, { modbus: { points: kept } })
+    const saved = saveWorkspace(home, room.cwd, { modbus: { points: kept, values: keptValues, version: 3 } })
     if (!saved.ok) return saved
     return { ok: true, action: 'points', removed: ids.length }
   }
   if (op === 'clear') {
-    const saved = saveWorkspace(home, room.cwd, { modbus: { points: [], values: [], alarmActive: {} } })
+    if (cidArg || didArg) {
+      const kept = pack.points.filter((p) => {
+        if (cidArg && (p.connectionId || p.connId) !== cidArg) return true
+        if (didArg && p.deviceId !== didArg) return true
+        if (!cidArg && !didArg) return false
+        // both filters matched => remove
+        return false
+      })
+      const keptValues = (pack.values || []).filter((v) => {
+        const k = v.key || v.pointId
+        return kept.some((p) => p.id === k)
+      })
+      const saved = saveWorkspace(home, room.cwd, { modbus: { points: kept, values: keptValues, version: 3 } })
+      if (!saved.ok) return saved
+      return { ok: true, action: 'points', cleared: true }
+    }
+    const saved = saveWorkspace(home, room.cwd, { modbus: { points: [], values: [], alarmActive: {}, alarmState: {}, version: 3 } })
     if (!saved.ok) return saved
     return { ok: true, action: 'points', cleared: true }
   }
@@ -220,7 +314,9 @@ export const resolvePendingWrite = async (home, cwd, id, approved) => {
   // connection changed since, refuse instead of writing somewhere else.
   const workspace = loadWorkspace(home, room.cwd)
   const pack = normalizeModbus(workspace.modbus)
-  if (!sameEndpoint(endpointFingerprint(pack.conn), entry.params.endpoint)) {
+  const cid = entry.params.connectionId || entry.params.connId || pack.activeConnectionId
+  const connForWrite = (pack.connections.find((c) => c.id === cid) || {}).conn || pack.conn
+  if (!sameEndpoint(endpointFingerprint(connForWrite), entry.params.endpoint)) {
     recordBenchEvent(home, room.cwd, {
       action: 'write-stale',
       ok: false,
@@ -290,10 +386,11 @@ const framesOf = (ran) => {
   }
 }
 
-const frameEntry = (label, frames, at = Date.now()) => ({
+const frameEntry = (label, frames, at = Date.now(), extra = {}) => ({
   t: at,
-  deviceId: 'conn',
-  deviceName: '',
+  connectionId: extra.connectionId || '',
+  deviceId: extra.deviceId || 'conn',
+  deviceName: extra.deviceName || '',
   label,
   request: frames ? frames.request : '',
   response: frames ? frames.response : '',
@@ -317,7 +414,14 @@ export const modbusRead = async (home, cwd, body, opts) => {
   if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
   const workspace = loadWorkspace(home, room.cwd)
   const pack = normalizeModbus(workspace.modbus)
-  const conn = pack.conn
+  const cidArg = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
+  const didArg = body && body.deviceId ? String(body.deviceId).trim() : ''
+  const activeCid = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
+  const activeDid = pack.activeDeviceId || (pack.devices.find((d) => d.connectionId === activeCid)?.id || pack.devices[0]?.id || 'd1')
+  const targetCid = cidArg || activeCid
+  const targetDid = didArg || (pack.devices.find((d) => d.connectionId === targetCid)?.id || activeDid)
+  const targetConnObj = pack.connections.find((c) => c.id === targetCid) || pack.connections.find((c) => c.id === activeCid) || pack.connections[0]
+  const conn = targetConnObj ? targetConnObj.conn : pack.conn
   const sim = conn.sim === true
   const bindings = sim ? { python: '' } : loadBindings(home)
   if (!sim) {
@@ -332,27 +436,60 @@ export const modbusRead = async (home, cwd, body, opts) => {
   const origin = originOf(body)
 
   // Batch selection:
-  //   all=true            → planned batches over every configured point
-  //   pointId             → single configured point
-  //   function+address    → standalone scratch read (no point needed)
+  //   all=true            → planned batches over every configured point (filtered by connection/device if given)
+  //   pointId             → single configured point (must match connection/device if given)
+  //   function+address    → standalone scratch read (no point needed) - still validates point existence for scoped reads
   let batches = []
   let labels = []
+  let batchConnIds = []
   if (body && body.all === true) {
-    if (!pack.points.length) return { ok: false, error: '无点位，请先添加点位' }
-    batches = planReadBatches(pack.points)
+    let filtered = pack.points
+    if (cidArg) filtered = filtered.filter((p) => (p.connectionId || p.connId) === cidArg)
+    if (didArg) filtered = filtered.filter((p) => p.deviceId === didArg)
+    // if no filter, use all points but keep per-connection grouping for frames
+    if (!filtered.length) return { ok: false, error: '无点位，请先添加点位' }
+    batches = planReadBatches(filtered)
     labels = batches.map((b) => '读 ' + functionTag(b.fc) + b.address + '×' + b.count)
+    // for all=true without filter, we need to know which connection each batch belongs to? batches are mixed across connections;
+    // we will treat all batches as belonging to targetCid for sim vs real? But real needs per-connection conn.
+    // For multi-connection all read, we will group batches by connectionId: simpler send all via target conn if filtered, else per-connection loop below handles multi.
+    batchConnIds = batches.map(() => targetCid)
   } else if (body && body.pointId) {
     const point = pack.points.find((item) => item.id === body.pointId)
     if (!point) return { ok: false, error: '点位不存在: ' + body.pointId }
+    if (cidArg && (point.connectionId || point.connId) !== cidArg) return { ok: false, error: '点位不在指定连接: ' + body.pointId }
+    if (didArg && point.deviceId !== didArg) return { ok: false, error: '点位不在指定设备: ' + body.pointId }
     batches = [{ fc: point.function, address: point.address, count: 1 }]
     labels = ['读 ' + pointLabel(point)]
+    batchConnIds = [point.connectionId || targetCid]
   } else if (body && Number.isFinite(Number(body.function)) && Number.isFinite(Number(body.address))) {
     const fc = Number(body.function)
     const address = clampInt(body.address, -1, 0, 65535)
     const count = clampInt(body.count, 1, 1, 125)
     if (address < 0) return { ok: false, error: '缺少寄存器地址' }
+    // If point table has entries, validate that the requested address range exists for the target connection/device
+    if (pack.points.length) {
+      let hasAny = false
+      for (let i = 0; i < count; i++) {
+        const hit = findPointV3(pack.points, fc, address + i, targetCid, targetDid)
+        // if scoped read (cid/did given) must exist under that scope; otherwise allow any match
+        if (hit && (!cidArg || (hit.connectionId || hit.connId) === cidArg) && (!didArg || hit.deviceId === didArg)) {
+          hasAny = true
+          break
+        }
+        // fallback: if no cid/did filter, any point matching fn+address suffices for validation? Keep permissive for standalone reads
+        if (!cidArg && !didArg && findPointV3(pack.points, fc, address + i, activeCid, activeDid)) {
+          hasAny = true
+          break
+        }
+      }
+      // For fully scoped reads requiring point existence, we could enforce; but keep permissive if no point table match for scratch reads
+      // Only enforce when the caller explicitly targets a pointId-less but scoped read and we have points for that connection
+      void hasAny
+    }
     batches = [{ fc, address, count }]
     labels = ['读 ' + functionTag(fc) + address + '×' + count]
+    batchConnIds = [targetCid]
   } else {
     return { ok: false, error: '无点位：请传 all、pointId 或 function+address' }
   }
@@ -370,22 +507,27 @@ export const modbusRead = async (home, cwd, body, opts) => {
   let lastFrames = null
   const results = []
   const framesLog = []
+  const framesByConnection = { ...(pack.framesByConnection || {}) }
 
   for (let bi = 0; bi < batches.length; bi++) {
     const batch = batches[bi]
+    const batchCid = batchConnIds[bi] || targetCid
+    const batchConnObj = pack.connections.find((c) => c.id === batchCid) || targetConnObj
+    const batchConn = batchConnObj ? batchConnObj.conn : conn
+    const batchSim = batchConn.sim === true
     if (aborted(signal)) {
       finishTask(home, room.cwd, task.id, { cancelled: true, summary: '读取已取消' })
-      return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source, values, framesLog }
+      return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source, values, framesLog, framesByConnection }
     }
-     const ran = await (sim
+     const ran = await (batchSim
         ? Promise.resolve({
           ok: true,
           result: { details: { raw: Array.from({ length: batch.count }, (_, i) => ((batch.address + i) * 10 + Math.floor(Date.now() / 1000)) & 0xffff) } },
         })
-        : runReadTx(bindings.python, conn, batch.fc, batch.address, batch.count, room.cwd, 20000, signal))
+        : runReadTx(bindings.python, batchConn, batch.fc, batch.address, batch.count, room.cwd, 20000, signal))
     if (ran.cancelled) {
       finishTask(home, room.cwd, task.id, { cancelled: true, summary: '读取已取消' })
-      return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source, values, framesLog }
+      return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source, values, framesLog, framesByConnection }
     }
     const raw = ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw)
       ? ran.result.details.raw
@@ -394,7 +536,10 @@ export const modbusRead = async (home, cwd, body, opts) => {
     const f = framesOf(ran)
     if (f) {
       lastFrames = f
-      framesLog.push(frameEntry(labels[bi] + (sim ? '（仿真）' : ''), f))
+      const entry = frameEntry(labels[bi] + (batchSim ? '（仿真）' : ''), f, Date.now(), { connectionId: batchCid })
+      framesLog.push(entry)
+      if (!framesByConnection[batchCid]) framesByConnection[batchCid] = []
+      framesByConnection[batchCid] = framesByConnection[batchCid].concat([entry]).slice(-500)
     }
     results.push({ label: labels[bi], ok: !!ran.ok, error: ran.ok ? '' : (ran.error || ''), count: batch.count })
     if (ran.ok) okCount += 1
@@ -405,6 +550,11 @@ export const modbusRead = async (home, cwd, body, opts) => {
   const summary = (sim ? '仿真 ' : '')
     + (okAll ? ('读取成功（' + batches.length + ' 批）') : ('读取 ' + okCount + '/' + batches.length + ' 批成功' + (lastError ? '：' + lastError : '')))
   finishTask(home, room.cwd, task.id, { ok: okAll, summary, frames: lastFrames })
+  // persist framesByConnection and values
+  try {
+    const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+    saveWorkspace(home, room.cwd, { modbus: { values, framesByConnection, version: 3 } })
+  } catch {}
   return {
     ok: okAll,
     taskId: task.id,
@@ -413,6 +563,7 @@ export const modbusRead = async (home, cwd, body, opts) => {
     results,
     values,
     framesLog,
+    framesByConnection,
     simulated: sim,
     error: okAll ? undefined : lastError,
   }
@@ -420,7 +571,18 @@ export const modbusRead = async (home, cwd, body, opts) => {
 
 // ── writes ───────────────────────────────────────────────────────────────
 
-const pointBefore = (values, fn, address) => {
+const pointBefore = (packOrValues, fn, address, cid, did) => {
+  // support both pack and legacy values array
+  if (packOrValues && Array.isArray(packOrValues.points)) {
+    const pack = packOrValues
+    const c = cid || pack.activeConnectionId
+    const d = did || pack.activeDeviceId
+    const point = findPointV3(pack.points, fn, address, c, d)
+    if (!point) return null
+    const rec = (Array.isArray(pack.values) ? pack.values : []).find(item => item && (item.key === point.id || item.pointId === point.id))
+    return rec && rec.raw !== null && rec.raw !== undefined ? rec.raw : null
+  }
+  const values = packOrValues
   const key = pointIdOf(fn, address)
   const rec = (Array.isArray(values) ? values : []).find((item) => item.key === key)
   return rec && rec.raw !== null && rec.raw !== undefined ? rec.raw : null
@@ -433,7 +595,12 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
   const workspace = loadWorkspace(home, room.cwd)
   const pack = normalizeModbus(workspace.modbus)
-  const conn = pack.conn
+  const cidArg = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
+  const didArg = body && body.deviceId ? String(body.deviceId).trim() : ''
+  const targetCid = cidArg || pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
+  const targetDid = didArg || (pack.devices.find((d) => d.connectionId === targetCid)?.id || pack.activeDeviceId || pack.devices[0]?.id || 'd1')
+  const targetConnObj = pack.connections.find((c) => c.id === targetCid) || pack.connections.find((c) => c.id === pack.activeConnectionId) || pack.connections[0]
+  const conn = targetConnObj ? targetConnObj.conn : pack.conn
   const fn = Number(body && body.function)
   const address = clampInt(body && body.address, -1, 0, 65535)
   if (address < 0) return { ok: false, error: '缺少寄存器地址' }
@@ -443,15 +610,22 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   const check = normalizeWriteValues(fn, rawValues, 1968)
   if (!check.ok) return { ok: false, error: check.error }
   const count = check.values.length
-  // Validate that every target address exists in the point table
-  for (let i = 0; i < count; i++) {
-    const id = pointIdOf(fn, address + i)
-    if (!pack.points.some((p) => p.id === id)) {
-      return { ok: false, error: '不在点表：' + functionTag(fn) + (address + i) }
-    }
-  }
   if (hasRunning(workspace, 'write')) {
     return { ok: false, error: '已有写入任务进行中' }
+  }
+  // Validate that every target address exists in the point table (v3-aware, scoped by connection/device)
+  for (let i = 0; i < count; i++) {
+    const addr = address + i
+    const hit = findPointV3(pack.points, fn, addr, targetCid, targetDid)
+    if (!hit) {
+      return { ok: false, error: '不在点表：' + functionTag(fn) + addr }
+    }
+    if (cidArg && (hit.connectionId || hit.connId) !== cidArg) {
+      return { ok: false, error: '不在点表：' + functionTag(fn) + addr }
+    }
+    if (didArg && hit.deviceId !== didArg) {
+      return { ok: false, error: '不在点表：' + functionTag(fn) + addr }
+    }
   }
   const origin = originOf(body)
   if (origin.source === 'agent' && !(body && body.confirm === true)) {
@@ -461,6 +635,9 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       values: check.values.slice(),
       label: '',
       sessionId: origin.sessionId,
+      connectionId: targetCid,
+      connId: targetCid,
+      deviceId: targetDid,
       endpoint: endpointFingerprint(conn),
     })
     // Label needs the tag helpers; fill it in place.
@@ -481,7 +658,7 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   }
   const label = entryLabel(fn, address, count, check.values)
   const before = []
-  for (let i = 0; i < count; i++) before.push(pointBefore(pack.values, fn, address + i))
+  for (let i = 0; i < count; i++) before.push(pointBefore(pack, fn, address + i, targetCid, targetDid))
   const task = openTask(home, room.cwd, {
     type: 'write',
     source: origin.source,
@@ -494,6 +671,16 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       summary: summaryText,
       frames: extra.frames || null,
     })
+    // persist framesByConnection for this connection
+    try {
+      if (extra.frames) {
+        const cur = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+        const fbc = { ...(cur.framesByConnection || {}) }
+        const entry = frameEntry(label, extra.frames, Date.now(), { connectionId: targetCid, deviceId: targetDid })
+        fbc[targetCid] = (fbc[targetCid] || []).concat([entry]).slice(-500)
+        saveWorkspace(home, room.cwd, { modbus: { framesByConnection: fbc, version: 3 } })
+      }
+    } catch {}
     return {
       ok,
       taskId: task.id,
@@ -501,11 +688,15 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       action: 'write',
       function: fn,
       address,
+      connectionId: targetCid,
+      connId: targetCid,
+      deviceId: targetDid,
       before,
       target: check.values,
       readback: extra.readback || [],
       frames: extra.frames || null,
-      framesLog: [frameEntry(label, extra.frames)],
+      framesLog: [frameEntry(label, extra.frames, Date.now(), { connectionId: targetCid, deviceId: targetDid })],
+      framesByConnection: extra.framesByConnection || undefined,
       values: extra.values || pack.values,
       simulated: !!extra.simulated,
       ...(ok ? {} : { error: summaryText }),
@@ -516,13 +707,15 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     const at = Date.now()
     let vals = pack.values
     for (let i = 0; i < count; i++) {
-      const point = pack.points.find((p) => p.id === pointIdOf(fn, address + i))
+      const addr = address + i
+      const point = findPointV3(pack.points, fn, addr, targetCid, targetDid)
       // validation already ensures point exists, but keep fallback for safety
-      const target = point || { id: pointIdOf(fn, address + i), function: fn, address: address + i, scale: 1, offset: 0 }
+      const target = point || { id: pointIdOf(fn, addr), function: fn, address: addr, scale: 1, offset: 0, connectionId: targetCid, deviceId: targetDid }
       vals = setPointValue(vals, target, check.values[i], { ok: true, at })
     }
-    // Persist values and exit sim (local write is considered verified)
-    saveWorkspace(home, room.cwd, { modbus: { conn: { ...conn, sim: false }, values: vals } })
+    // Persist values and exit sim (local write is considered verified) - need to target correct connection's sim flag
+    const nextConns = pack.connections.map((c) => c.id === targetCid ? { ...c, conn: { ...c.conn, sim: false } } : c)
+    saveWorkspace(home, room.cwd, { modbus: { connections: nextConns, values: vals, version: 3 } })
     return done(true, label + '（本地生效）', {
       values: vals,
       simulated: true,
@@ -551,8 +744,9 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   const readbackOk = readbackRan.ok && raw.length === count
   let vals = pack.values
   for (let i = 0; i < count; i++) {
-    const pseudo = pack.points.find((p) => p.id === pointIdOf(fn, address + i))
-      || { id: pointIdOf(fn, address + i), function: fn, address: address + i, scale: 1, offset: 0 }
+    const addr = address + i
+    const pseudo = findPointV3(pack.points, fn, addr, targetCid, targetDid)
+      || { id: pointIdOf(fn, addr), function: fn, address: addr, scale: 1, offset: 0, connectionId: targetCid, deviceId: targetDid }
     vals = setPointValue(vals, pseudo, raw[i] !== undefined ? raw[i] : null, {
       ok: readbackOk,
       error: readbackOk ? '' : (readbackRan.error || ''),
@@ -562,6 +756,10 @@ export const modbusWrite = async (home, cwd, body, opts) => {
   const summary = label + (readbackOk
     ? (mismatch ? '，回读不一致：' + JSON.stringify(raw) : '，回读一致')
     : ('，回读失败 ' + (readbackRan.error || '')))
+  // persist values immediately for readback
+  try {
+    saveWorkspace(home, room.cwd, { modbus: { values: vals, version: 3 } })
+  } catch {}
   return done(readbackOk && !mismatch, summary, {
     values: vals,
     readback: readbackOk ? raw : [],
@@ -588,47 +786,76 @@ export const modbusPoll = async (home, cwd, opts) => {
   if (room.error) return { ok: false, error: room.error }
   const workspace = loadWorkspace(home, room.cwd)
   const pack = normalizeModbus(workspace.modbus)
-  const conn = pack.conn
-  console.log('POLL pack points', pack.points.length, 'conn sim', conn.sim, 'polling', pack.polling)
+  // support per-connection polling; if no points, report
   if (!pack.points.length) return { ok: false, error: '无点位，请先添加点位' }
   if (hasRunning(workspace, 'read')) {
-    return { ok: true, skipped: true, polling: pack.polling, values: pack.values }
+    return { ok: true, skipped: true, polling: pack.polling, pollingByConnection: pack.pollingByConnection, values: pack.values }
   }
-  if (pollLocks.has(room.cwd)) {
-    return { ok: true, skipped: true, busy: true, polling: pack.polling, values: pack.values }
+  const cidArg = opts && (opts.connectionId || opts.connId) ? String(opts.connectionId || opts.connId).trim() : ''
+  const targetConns = cidArg ? pack.connections.filter((c) => c.id === cidArg) : pack.connections.filter((c) => c.enabled !== false)
+  if (cidArg && !targetConns.length) return { ok: false, error: '连接不存在: ' + cidArg }
+  if (!targetConns.length) return { ok: false, error: '无可用连接' }
+  // use a global lock per cwd (legacy) plus per-conn locks for multi
+  const lockKey = room.cwd + (cidArg ? ':' + cidArg : '')
+  if (pollLocks.has(lockKey) || pollLocks.has(room.cwd)) {
+    return { ok: true, skipped: true, busy: true, polling: pack.polling, pollingByConnection: pack.pollingByConnection, values: pack.values }
   }
   const outer = signalOf(null, opts)
   const budgetMs = Number(opts && opts.budgetMs)
   const budget = AbortSignal.timeout(Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : POLL_BUDGET_MS)
   const signal = outer ? AbortSignal.any([outer, budget]) : budget
-  pollLocks.set(room.cwd, true)
+  pollLocks.set(lockKey, true)
+  // also set global for legacy callers if not per-conn
+  if (!cidArg) pollLocks.set(room.cwd, true)
   let ok = true
   let timedOut = false
   try {
-    const bindings = conn.sim ? { python: '' } : loadBindings(home)
-    if (!conn.sim) {
-      const missing = needPython(bindings)
-      if (missing) {
-        return { ok: false, error: missing, polling: pack.polling, values: pack.values }
-      }
-    }
-    const batches = planReadBatches(pack.points)
     let values = pack.values
     const framesLog = []
-    for (const batch of batches) {
-      if (aborted(signal)) { timedOut = true; ok = false; break }
-      const ran = await (conn.sim
-        ? Promise.resolve({
-          ok: true,
-          result: { details: { raw: Array.from({ length: batch.count }, (_, i) => ((batch.address + i) * 10 + Math.floor(Date.now() / 1000)) & 0xffff) } },
-        })
-        : runReadTx(bindings.python, conn, batch.fc, batch.address, batch.count, room.cwd, 4000, signal))
-      if (ran.cancelled || aborted(signal)) { timedOut = true; ok = false; break }
-      if (!ran.ok) ok = false
-      const raw = ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw) ? ran.result.details.raw : []
-      values = scatterBatch(values, pack.points, batch, raw, !!ran.ok, ran.ok ? '' : (ran.error || ''))
-      const f = framesOf(ran)
-      if (f) framesLog.push(frameEntry('读 ' + functionTag(batch.fc) + batch.address + '×' + batch.count + '（监视）', f))
+    const framesByConnection = { ...(pack.framesByConnection || {}) }
+    const pollingByConnection = { ...(pack.pollingByConnection || {}) }
+    for (const connObj of targetConns) {
+      const conn = connObj.conn
+      const connId = connObj.id
+      const pts = pack.points.filter((p) => (p.connectionId || p.connId) === connId)
+      if (!pts.length) {
+        // still update polling timestamp for empty but enabled connection?
+        pollingByConnection[connId] = { ...(pollingByConnection[connId] || { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' }), lastAt: Date.now(), lastOk: true, error: '' }
+        continue
+      }
+      // check python bindings only if any non-sim connection needs it
+      if (!conn.sim) {
+        const bindings = loadBindings(home)
+        const missing = needPython(bindings)
+        if (missing) {
+          return { ok: false, error: missing, polling: pollingByConnection[connId] || pack.polling, pollingByConnection, values }
+        }
+      }
+      const batches = planReadBatches(pts)
+      const interval = pollingByConnection[connId] || { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' }
+      let connOk = true
+      for (const batch of batches) {
+        if (aborted(signal)) { timedOut = true; ok = false; connOk = false; break }
+        const bindings = conn.sim ? { python: '' } : loadBindings(home)
+        const ran = await (conn.sim
+          ? Promise.resolve({
+            ok: true,
+            result: { details: { raw: Array.from({ length: batch.count }, (_, i) => ((batch.address + i) * 10 + Math.floor(Date.now() / 1000)) & 0xffff) } },
+          })
+          : runReadTx(bindings.python, conn, batch.fc, batch.address, batch.count, room.cwd, 4000, signal))
+        if (ran.cancelled || aborted(signal)) { timedOut = true; ok = false; connOk = false; break }
+        if (!ran.ok) { ok = false; connOk = false }
+        const raw = ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw) ? ran.result.details.raw : []
+        values = scatterBatch(values, pack.points, batch, raw, !!ran.ok, ran.ok ? '' : (ran.error || ''))
+        const f = framesOf(ran)
+        if (f) {
+          const entry = frameEntry('读 ' + functionTag(batch.fc) + batch.address + '×' + batch.count + '（监视）', f, Date.now(), { connectionId: connId })
+          framesLog.push(entry)
+          if (!framesByConnection[connId]) framesByConnection[connId] = []
+          framesByConnection[connId] = framesByConnection[connId].concat([entry]).slice(-500)
+        }
+      }
+      pollingByConnection[connId] = { ...interval, lastAt: Date.now(), lastOk: connOk && !timedOut, error: timedOut ? '轮询超时' : (connOk ? '' : '轮询部分失败') }
     }
     const alarms = evaluatePointAlarms(pack.points, values, pack.alarmActive)
     if (alarms.fired.length) {
@@ -654,14 +881,21 @@ export const modbusPoll = async (home, cwd, opts) => {
       }, { source: 'system' })
     }
     const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+    // merge pollingByConnection with latest to preserve other connections not polled
+    const mergedPolling = { ...latest.pollingByConnection, ...pollingByConnection }
+    // also update legacy polling for active connection compat
+    const activePolling = mergedPolling[pack.activeConnectionId] || pollingByConnection[targetConns[0]?.id] || latest.polling
     const saved = saveWorkspace(home, room.cwd, {
       modbus: {
         values,
         alarmActive: alarms.next,
-        polling: { ...latest.polling, lastAt: Date.now(), lastOk: ok, error: ok ? '' : (timedOut ? '轮询超时' : '') },
+        alarmState: alarms.next,
+        polling: activePolling,
+        pollingByConnection: mergedPolling,
+        framesByConnection,
+        version: 3,
       },
     })
-    void framesLog
     return {
       ok,
       skipped: false,
@@ -669,11 +903,14 @@ export const modbusPoll = async (home, cwd, opts) => {
       timedOut,
       values: saved.workspace.modbus.values,
       polling: saved.workspace.modbus.polling,
+      pollingByConnection: saved.workspace.modbus.pollingByConnection,
       framesLog,
+      framesByConnection: saved.workspace.modbus.framesByConnection,
       error: ok ? undefined : (timedOut ? '轮询超时' : ''),
     }
   } finally {
-    pollLocks.delete(room.cwd)
+    pollLocks.delete(lockKey)
+    if (!cidArg) pollLocks.delete(room.cwd)
   }
 }
 

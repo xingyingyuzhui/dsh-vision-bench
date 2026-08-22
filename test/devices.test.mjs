@@ -45,18 +45,49 @@ test('legacy devices+segments workspaces migrate into points', async () => {
     })
     const ws = await import('../bench-store.mjs').then((m) => m.loadWorkspace(home, cwd))
     const mb = ws.modbus
-    assert.equal(mb.version, 2)
+    assert.equal(mb.version, 3)
+    // legacy getters still work
     assert.equal(mb.conn.port, 'COM5')
     assert.equal(mb.conn.slave, 3)
     assert.equal(mb.conn.sim, true)
+    // v3 structures
+    assert.equal(mb.connections.length, 1)
+    assert.equal(mb.connections[0].conn.port, 'COM5')
+    assert.equal(mb.connections[0].role, 'client')
+    assert.equal(mb.devices.length, 1)
+    assert.equal(mb.devices[0].connectionId, 'c1')
+    assert.equal(mb.devices[0].unitId, 3)
     assert.equal(mb.points.length, 3)
-    assert.deepEqual(mb.points.map((p) => p.id), ['p3_0', 'p3_1', 'p1_9'])
+    // points carry connectionId/deviceId/area mapping, ids are stable nanoid-style and unique
+    const ids = mb.points.map((p) => p.id)
+    assert.equal(new Set(ids).size, 3)
+    for (const id of ids) assert.ok(typeof id === 'string' && id.length >= 2)
+    // verify area mapping and addresses
+    const sorted = [...mb.points].sort((a,b)=> a.address - b.address)
+    // addresses 0,1,9 - check areas
+    const p0 = mb.points.find(p=> p.address===0)
+    const p1 = mb.points.find(p=> p.address===1)
+    const p9 = mb.points.find(p=> p.address===9)
+    assert.equal(p0.area, 'holdingRegister')
+    assert.equal(p1.area, 'holdingRegister')
+    assert.equal(p9.area, 'coil')
+    assert.equal(p0.connectionId, 'c1')
+    assert.equal(p0.deviceId, 'd1')
     // batch segment drops its block name; single-point segment keeps it
-    assert.equal(mb.points[2].name, '阀门')
-    assert.equal(mb.points[0].scale, 0.1)
-    // migrated values keep their payload under the new key
-    const valve = mb.values.find((v) => v.key === 'p1_9')
+    assert.equal(p9.name, '阀门')
+    assert.equal(p0.scale, 0.1)
+    // migrated values keep their payload under the new pointId key
+    const valvePoint = mb.points.find(p=> p.area==='coil' && p.address===9)
+    const valve = mb.values.find((v) => v.key === valvePoint.id || v.pointId === valvePoint.id)
     assert.ok(valve && valve.value === 1 && valve.at === 42)
+    // qualified values carry redundant connection/device for filtering (may be via point)
+    const qConn = valve.connectionId || valvePoint.connectionId
+    const qDev = valve.deviceId || valvePoint.deviceId
+    assert.equal(qConn, 'c1')
+    assert.equal(qDev, 'd1')
+    // frames migrated to c1
+    assert.ok(mb.framesByConnection && mb.framesByConnection['c1'] !== undefined)
+    assert.ok(mb.pollingByConnection && mb.pollingByConnection['c1'] !== undefined)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

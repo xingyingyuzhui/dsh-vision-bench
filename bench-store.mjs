@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync, copyFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { emptyLog, mergeLog, normalizeEvent } from './bench-prompt.mjs'
-import { normalizeConn, normalizeModbus } from './bench-devices.mjs'
+import { normalizeConn, normalizeModbus, validateConnections } from './bench-devices.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import {
   MAX_TASKS,
@@ -96,7 +96,7 @@ export const emptyWorkspace = () => ({
   timeline: [],
   session: { boundId: '' },
   manualRequests: [],
-  modbus: normalizeModbus({}),
+  modbus: normalizeModbus({ version: 3 }),
 })
 
 const MANUAL_STATUSES = new Set(['pending', 'done', 'rejected'])
@@ -140,39 +140,141 @@ export const normalizeWorkspace = (input) => {
 
 export const loadWorkspace = (home, cwd) => {
   try {
-    return normalizeWorkspace(JSON.parse(readFileSync(workspacePath(home, cwd), 'utf8')))
+    const raw = JSON.parse(readFileSync(workspacePath(home, cwd), 'utf8'))
+    return normalizeWorkspace(raw)
   } catch {
     return emptyWorkspace()
   }
 }
 
+const isV3Patch = (incoming) => {
+  if (!incoming || typeof incoming !== 'object') return false
+  return incoming.version === 3
+    || Array.isArray(incoming.connections)
+    || Array.isArray(incoming.devices) && incoming.devices.some(d=> d && (d.connectionId || d.unitId !== undefined))
+    || incoming.pollingByConnection !== undefined
+    || incoming.framesByConnection !== undefined
+    || incoming.activeConnectionId !== undefined
+    || incoming.activeDeviceId !== undefined
+    || incoming.alarmState !== undefined
+}
+
+const isV2Partial = (incoming, looksLegacy) => {
+  if (looksLegacy) return false
+  if (!incoming || typeof incoming !== 'object') return false
+  return ['conn','points','values','polling','alarmActive','alarmState','version','frames','framesLog','framesByConnection'].some(k=> Object.prototype.hasOwnProperty.call(incoming,k))
+}
+
 export const saveWorkspace = (home, cwd, input) => {
   const prev = loadWorkspace(home, cwd)
-  // v2 patches deep-merge per key onto the previous model. A legacy-shaped
-  // payload (devices[] / flat mode+port) passes through raw so that
-  // normalizeModbus can migrate it on the way in.
   const incoming = (input && input.modbus) || {}
-  // Legacy wins when its signature fields are present (flat mode/port or
-  // devices[]); everything else is treated as a v2 partial patch.
   const looksLegacy = incoming.conn === undefined && (
-    Array.isArray(incoming.devices) || incoming.mode !== undefined || incoming.segments !== undefined
+    Array.isArray(incoming.devices) && incoming.devices.some(d=> d && (d.mode !== undefined || d.port !== undefined || Array.isArray(d.segments)))
+    || incoming.mode !== undefined || incoming.segments !== undefined
   )
-  const isV2Partial = !looksLegacy && ['conn', 'points', 'values', 'polling', 'alarmActive', 'version']
-    .some((key) => Object.prototype.hasOwnProperty.call(incoming, key))
+  const v3Patch = isV3Patch(incoming)
+  const v2Partial = isV2Partial(incoming, looksLegacy)
   let mergedModbus
   if (looksLegacy) {
     mergedModbus = incoming
-  } else if (isV2Partial) {
+  } else if (v3Patch) {
     mergedModbus = { ...prev.modbus }
+    if (incoming.connections !== undefined) mergedModbus.connections = incoming.connections
+    if (incoming.devices !== undefined) mergedModbus.devices = incoming.devices
+    if (incoming.points !== undefined) mergedModbus.points = incoming.points
+    if (incoming.values !== undefined) mergedModbus.values = incoming.values
+    if (incoming.pollingByConnection !== undefined) {
+      mergedModbus.pollingByConnection = { ...mergedModbus.pollingByConnection, ...incoming.pollingByConnection }
+    }
+    if (incoming.framesByConnection !== undefined) {
+      mergedModbus.framesByConnection = { ...mergedModbus.framesByConnection, ...incoming.framesByConnection }
+    }
+    if (incoming.activeConnectionId !== undefined) mergedModbus.activeConnectionId = incoming.activeConnectionId
+    if (incoming.activeDeviceId !== undefined) mergedModbus.activeDeviceId = incoming.activeDeviceId
+    if (incoming.alarmState !== undefined) mergedModbus.alarmState = incoming.alarmState
+    if (incoming.alarmActive !== undefined && incoming.alarmState === undefined) mergedModbus.alarmState = incoming.alarmActive
+    // legacy polling -> pollingByConnection mapping
+    if (incoming.polling !== undefined && incoming.pollingByConnection === undefined) {
+      const aid = incoming.activeConnectionId || mergedModbus.activeConnectionId || (mergedModbus.connections && mergedModbus.connections[0] && mergedModbus.connections[0].id)
+      if (aid) {
+        mergedModbus.pollingByConnection = { ...mergedModbus.pollingByConnection, [aid]: { ...(mergedModbus.pollingByConnection[aid]||{}), ...incoming.polling } }
+      }
+    }
+    // conn patch to active connection when connections not directly patched
+    if (incoming.conn && typeof incoming.conn === 'object' && incoming.connections === undefined) {
+      const aid = mergedModbus.activeConnectionId || (mergedModbus.connections && mergedModbus.connections[0] && mergedModbus.connections[0].id)
+      if (aid) {
+        mergedModbus.connections = (mergedModbus.connections||[]).map(c=> c.id===aid ? { ...c, conn: { ...c.conn, ...incoming.conn } } : c)
+        // slave -> unitId
+        if (incoming.conn.slave !== undefined) {
+          const devId = mergedModbus.activeDeviceId || (mergedModbus.devices && mergedModbus.devices[0] && mergedModbus.devices[0].id)
+          if (devId) {
+            mergedModbus.devices = (mergedModbus.devices||[]).map(d=> d.id===devId ? { ...d, unitId: Math.min(247, Math.max(0, Math.trunc(Number(incoming.conn.slave)||1))) } : d)
+          }
+        }
+      }
+    }
+    if (incoming.version !== undefined) mergedModbus.version = incoming.version
+    // ensure version 3
+    mergedModbus.version = 3
+  } else if (v2Partial) {
+    mergedModbus = { ...prev.modbus }
+    // conn patch
     if (incoming.conn && typeof incoming.conn === 'object') {
-      mergedModbus.conn = normalizeConn({ ...mergedModbus.conn, ...incoming.conn })
+      const aid = mergedModbus.activeConnectionId || (mergedModbus.connections && mergedModbus.connections[0] && mergedModbus.connections[0].id)
+      mergedModbus.connections = (mergedModbus.connections||[]).map(c=> c.id===aid ? { ...c, conn: normalizeConn({ ...c.conn, ...incoming.conn }) } : c)
+      if (incoming.conn.slave !== undefined) {
+        const devId = mergedModbus.activeDeviceId || (mergedModbus.devices && mergedModbus.devices[0] && mergedModbus.devices[0].id)
+        if (devId) {
+          mergedModbus.devices = (mergedModbus.devices||[]).map(d=> d.id===devId ? { ...d, unitId: Math.min(247, Math.max(0, Math.trunc(Number(incoming.conn.slave)||1))) } : d)
+        }
+      }
     }
     if (incoming.points !== undefined) {
-      mergedModbus.points = incoming.points
+      const AREA_BY_FN = { 1:'coil', 2:'discreteInput', 3:'holdingRegister', 4:'inputRegister' }
+      const activeConnId = mergedModbus.activeConnectionId || (mergedModbus.connections && mergedModbus.connections[0] && mergedModbus.connections[0].id) || 'c1'
+      const activeDevId = mergedModbus.activeDeviceId || (mergedModbus.devices && mergedModbus.devices[0] && mergedModbus.devices[0].id) || 'd1'
+      const kept = (mergedModbus.points||[]).filter(p=> !(p.connectionId===activeConnId && p.deviceId===activeDevId))
+      const genId = (pref)=> pref + Date.now().toString(36) + Math.random().toString(36).slice(2,8)
+      const newPts = (Array.isArray(incoming.points)?incoming.points:[]).map(raw=>{
+        const fn = Number(raw && raw.function)
+        const area = AREA_BY_FN[fn] || 'holdingRegister'
+        const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : genId('p')
+        const address = Number(raw && raw.address)
+        return {
+          id,
+          connectionId: activeConnId,
+          deviceId: activeDevId,
+          name: typeof raw.name==='string'?raw.name.slice(0,40):'',
+          area,
+          function: [1,2,3,4].includes(fn)?fn:3,
+          address: Number.isFinite(address) && address>=0 && address<=65535 ? Math.trunc(address):0,
+          scale: Number.isFinite(Number(raw && raw.scale))?Number(raw.scale):1,
+          offset: Number.isFinite(Number(raw && raw.offset))?Number(raw.offset):0,
+          unit: typeof raw.unit==='string'?raw.unit.slice(0,12):'',
+          alarmMin: raw.alarmMin===null||raw.alarmMin===undefined||raw.alarmMin==='' ? null : (Number.isFinite(Number(raw.alarmMin))?Number(raw.alarmMin):null),
+          alarmMax: raw.alarmMax===null||raw.alarmMax===undefined||raw.alarmMax==='' ? null : (Number.isFinite(Number(raw.alarmMax))?Number(raw.alarmMax):null),
+        }
+      })
+      mergedModbus.points = kept.concat(newPts)
     }
     if (incoming.values !== undefined) mergedModbus.values = incoming.values
-    if (incoming.polling !== undefined) mergedModbus.polling = { ...mergedModbus.polling, ...incoming.polling }
-    if (incoming.alarmActive !== undefined) mergedModbus.alarmActive = incoming.alarmActive
+    if (incoming.polling !== undefined) {
+      const aid = mergedModbus.activeConnectionId || (mergedModbus.connections && mergedModbus.connections[0] && mergedModbus.connections[0].id)
+      if (aid) mergedModbus.pollingByConnection = { ...mergedModbus.pollingByConnection, [aid]: { ...(mergedModbus.pollingByConnection[aid]||{}), ...incoming.polling } }
+    }
+    if (incoming.alarmActive !== undefined) mergedModbus.alarmState = incoming.alarmActive
+    if (incoming.alarmState !== undefined) mergedModbus.alarmState = incoming.alarmState
+    if (incoming.frames !== undefined || incoming.framesLog !== undefined || incoming.framesByConnection !== undefined) {
+      const aid = mergedModbus.activeConnectionId || (mergedModbus.connections && mergedModbus.connections[0] && mergedModbus.connections[0].id)
+      const frames = incoming.frames || incoming.framesLog || incoming.framesByConnection
+      if (Array.isArray(frames)) {
+        mergedModbus.framesByConnection = { ...mergedModbus.framesByConnection, [aid]: frames }
+      } else if (frames && typeof frames==='object') {
+        mergedModbus.framesByConnection = { ...mergedModbus.framesByConnection, ...frames }
+      }
+    }
+    mergedModbus.version = 3
   } else {
     mergedModbus = prev.modbus
   }
@@ -186,6 +288,11 @@ export const saveWorkspace = (home, cwd, input) => {
     manualRequests: input && input.manualRequests !== undefined ? input.manualRequests : prev.manualRequests,
   }
   const workspace = normalizeWorkspace(merged)
+  // COM uniqueness check before persist
+  const connErrors = validateConnections(workspace.modbus.connections)
+  if (connErrors.length) {
+    return { ok: false, error: connErrors.join('；'), workspace }
+  }
   const keilProject = workspace.keil.project
   if (keilProject && !isAbsolute(keilProject)) {
     return { ok: false, error: 'keil.project 必须是绝对路径', workspace }
@@ -209,6 +316,27 @@ export const saveWorkspace = (home, cwd, input) => {
       summary,
     }))
   }
+  // Backup v2 file if migrating
+  try {
+    const rawPath = workspacePath(home, cwd)
+    if (existsSync(rawPath)) {
+      const rawContent = readFileSync(rawPath, 'utf8')
+      const rawJson = JSON.parse(rawContent)
+      const rawModbus = rawJson && rawJson.modbus
+      const isV2OnDisk = rawModbus && (rawModbus.version === 2 || (rawModbus.version === undefined && (rawModbus.conn || rawModbus.points)))
+      if (isV2OnDisk && workspace.modbus.version === 3) {
+        const bakPath = rawPath + '.v2.bak'
+        if (!existsSync(bakPath)) {
+          writeFileSync(bakPath, rawContent)
+        }
+        // also keep copy as .bak for recoverable
+        const legacyBak = join(storeDir(home), 'workspaces', workspaceKey(cwd) + '.v2.json')
+        if (!existsSync(legacyBak)) {
+          writeFileSync(legacyBak, rawContent)
+        }
+      }
+    }
+  } catch { /* ignore backup errors */ }
   mkdirSync(join(storeDir(home), 'workspaces'), { recursive: true })
   writeFileSync(workspacePath(home, cwd), JSON.stringify(workspace, null, 2) + '\n')
   return { ok: true, workspace, prev }

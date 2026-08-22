@@ -99,6 +99,27 @@ const respond = async (req, res, fn) => {
   }
 }
 
+const normalizeConnAlias = (body) => {
+  if (!body || typeof body !== 'object') return body
+  if (body.connId && !body.connectionId) body.connectionId = body.connId
+  if (body.connectionId && !body.connId) body.connId = body.connectionId
+  // normalize points array alias inside pointsOp body
+  if (Array.isArray(body.points)) {
+    for (const p of body.points) {
+      if (p && typeof p === 'object') {
+        if (p.connId && !p.connectionId) p.connectionId = p.connId
+        if (p.connectionId && !p.connId) p.connId = p.connectionId
+      }
+    }
+  }
+  if (body.point && typeof body.point === 'object') {
+    const p = body.point
+    if (p.connId && !p.connectionId) p.connectionId = p.connId
+    if (p.connectionId && !p.connId) p.connId = p.connectionId
+  }
+  return body
+}
+
 const route = (path, fn) => ({
   kind: 'exact',
   path,
@@ -144,7 +165,7 @@ export function apply(ctx, config = {}) {
         keil: body && body.keil,
         modbus: body && body.modbus,
       })
-      if (!saved.ok) return saved
+      if (!saved.ok) return { ok: false, error: saved.error, workspace: saved.workspace }
       return { ok: true, workspace: saved.workspace, journal: journalView(saved.workspace) }
     }),
     route('/dsh-vision-bench/fs/list', async (req) => {
@@ -184,11 +205,11 @@ export function apply(ctx, config = {}) {
       return ran
     }),
     route('/dsh-vision-bench/modbus/read', async (req) => {
-      const body = await readJsonBody(req)
+      const body = normalizeConnAlias(await readJsonBody(req))
       return modbusRead(dshHome, body && body.cwd, body)
     }),
     route('/dsh-vision-bench/modbus/write', async (req) => {
-      const body = await readJsonBody(req)
+      const body = normalizeConnAlias(await readJsonBody(req))
       const ran = await modbusWrite(dshHome, body && body.cwd, body)
       maybeNotifyResult(dshHome, body && body.cwd, '写点', ran)
       return ran
@@ -202,11 +223,11 @@ export function apply(ctx, config = {}) {
       return ran
     }),
     route('/dsh-vision-bench/modbus/connect', async (req) => {
-      const body = await readJsonBody(req)
+      const body = normalizeConnAlias(await readJsonBody(req))
       return connectOp(dshHome, body && body.cwd, body)
     }),
     route('/dsh-vision-bench/modbus/points', async (req) => {
-      const body = await readJsonBody(req)
+      const body = normalizeConnAlias(await readJsonBody(req))
       return pointsOp(dshHome, body && body.cwd, body)
     }),
     route('/dsh-vision-bench/session/bind', async (req) => {
@@ -230,8 +251,8 @@ export function apply(ctx, config = {}) {
       return ran
     }),
     route('/dsh-vision-bench/modbus/poll', async (req) => {
-      const body = await readJsonBody(req)
-      return modbusPoll(dshHome, body && body.cwd)
+      const body = normalizeConnAlias(await readJsonBody(req))
+      return modbusPoll(dshHome, body && body.cwd, body)
     }),
     route('/dsh-vision-bench/serial/ports', async () => listSerialPorts()),
     route('/dsh-vision-bench/selfcheck', async (req) => {

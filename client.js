@@ -1367,10 +1367,31 @@ const csvToSegments = (input) => {
   return { ok: true, segments: normalized }
 }
 
-// Modbus model v2: ONE connection profile per workspace + a flat point table.
-// Legacy workspaces (devices[] with register segments) are migrated on load.
+// Modbus model v3: multi-connection + device/unit + stable point IDs
+// v2 legacy (single conn) migrates to v3 via c1/d1. Older segment shapes also routed through v2 first.
 
 const PARITY = new Set(['N', 'E', 'O'])
+const VALID_ROLES = new Set(['client', 'server'])
+const VALID_AREAS = new Set(['coil', 'discreteInput', 'holdingRegister', 'inputRegister'])
+const AREA_BY_FN = { 1: 'coil', 2: 'discreteInput', 3: 'holdingRegister', 4: 'inputRegister' }
+const FN_BY_AREA = { coil: 1, discreteInput: 2, holdingRegister: 3, inputRegister: 4 }
+
+const MAX_VALUES_SAFE = 512
+const MAX_FRAMES_PER_CONN = 500
+
+const devText = (v, fb='') => {
+  const s = typeof v === 'string' ? v.trim() : ''
+  return s || fb
+}
+const genId = (prefix) => prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+const devClampInt = (v, fb, min, max) => {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return fb
+  const i = Math.trunc(n)
+  if (i < min) return min
+  if (i > max) return max
+  return i
+}
 
 const emptyConn = () => ({
   mode: 'rtu',
@@ -1410,6 +1431,140 @@ const connLabel = (conn) => conn.mode === 'tcp'
   ? ((conn.host || '?') + ':' + conn.tcpPort + ' · 站号 ' + conn.slave)
   : ((conn.port || '?') + ' @ ' + conn.baudrate + ' · 站号 ' + conn.slave)
 
+const emptyConnection = () => ({
+  id: 'c1',
+  name: '连接1',
+  role: 'client',
+  enabled: true,
+  conn: emptyConn(),
+})
+
+const normalizeConnection = (input) => {
+  const raw = input && typeof input === 'object' ? input : {}
+  const base = emptyConnection()
+  const id = devText(raw.id, '') || genId('c')
+  const name = devText(raw.name, '') || base.name
+  const role = VALID_ROLES.has(raw.role) ? raw.role : (raw.role === 'master' ? 'client' : raw.role === 'slave' ? 'server' : 'client')
+  // accept legacy master/slave as role
+  return {
+    id,
+    name: name.slice(0, 40),
+    role,
+    enabled: raw.enabled !== false,
+    conn: normalizeConn(raw.conn || raw),
+  }
+}
+
+const normalizeConnections = (list) => {
+  if (!Array.isArray(list)) return [normalizeConnection({ id: 'c1' })]
+  const seen = new Set()
+  const out = []
+  for (const raw of list) {
+    const c = normalizeConnection(raw)
+    if (seen.has(c.id)) continue
+    seen.add(c.id)
+    out.push(c)
+    if (out.length >= 16) break
+  }
+  if (!out.length) out.push(normalizeConnection({ id: 'c1' }))
+  return out
+}
+
+const normalizeDevice = (input, fallbackConnId) => {
+  const raw = input && typeof input === 'object' ? input : {}
+  const id = devText(raw.id, '') || genId('d')
+  const connectionId = devText(raw.connectionId, '') || devText(raw.connId, '') || fallbackConnId || 'c1'
+  const name = devText(raw.name, '') || '设备1'
+  const unitRaw = raw.unitId !== undefined ? raw.unitId : (raw.unit !== undefined ? raw.unit : (raw.slave !== undefined ? raw.slave : 1))
+  const unitId = devClampInt(unitRaw, 1, 0, 247)
+  return {
+    id,
+    connectionId,
+    name: name.slice(0, 40),
+    unitId,
+    enabled: raw.enabled !== false,
+  }
+}
+
+const normalizeDevices = (list, connections) => {
+  if (!Array.isArray(list)) {
+    const first = Array.isArray(connections) && connections[0] ? connections[0].id : 'c1'
+    return [normalizeDevice({ id: 'd1', connectionId: first, unitId: 1 }, first)]
+  }
+  const validConnIds = new Set((connections || []).map(c => c.id))
+  const seen = new Set()
+  const out = []
+  for (const raw of list) {
+    const d = normalizeDevice(raw, Array.isArray(connections) && connections[0] ? connections[0].id : 'c1')
+    // fix invalid connectionId to first
+    if (!validConnIds.has(d.connectionId)) {
+      d.connectionId = Array.isArray(connections) && connections[0] ? connections[0].id : 'c1'
+    }
+    if (seen.has(d.id)) continue
+    seen.add(d.id)
+    out.push(d)
+    if (out.length >= 64) break
+  }
+  if (!out.length) {
+    const first = Array.isArray(connections) && connections[0] ? connections[0].id : 'c1'
+    out.push(normalizeDevice({ id: 'd1', connectionId: first, unitId: 1 }, first))
+  }
+  return out
+}
+
+const normalizePointV3 = (input) => {
+  const raw = input && typeof input === 'object' ? input : {}
+  const id = devText(raw.id, '') || genId('p')
+  const connectionId = devText(raw.connectionId, '') || devText(raw.connId, '') || 'c1'
+  const deviceId = devText(raw.deviceId, '') || 'd1'
+  let area = devText(raw.area, '')
+  if (!VALID_AREAS.has(area)) {
+    const fn = Number(raw.function ?? raw.fn)
+    if ([1,2,3,4].includes(fn)) area = AREA_BY_FN[fn]
+    else area = 'holdingRegister'
+  }
+  const fnFromArea = FN_BY_AREA[area] || 3
+  const address = devClampInt(raw.address, 0, 0, 65535)
+  const scale = Number(raw.scale)
+  const offset = Number(raw.offset)
+  const name = devText(raw.name, '') .slice(0, 40)
+  const unit = devText(raw.unit, '').slice(0, 12)
+  const finiteOrNull = (v) => (v===null||v===undefined||v==='' ? null : (Number.isFinite(Number(v)) ? Number(v) : null))
+  return {
+    id,
+    connectionId,
+    deviceId,
+    name,
+    area,
+    function: fnFromArea,
+    address,
+    scale: Number.isFinite(scale) ? scale : 1,
+    offset: Number.isFinite(offset) ? offset : 0,
+    unit,
+    alarmMin: finiteOrNull(raw.alarmMin),
+    alarmMax: finiteOrNull(raw.alarmMax),
+  }
+}
+
+const normalizePointsV3 = (list, connections, devices) => {
+  if (!Array.isArray(list)) return []
+  const validConnIds = new Set((connections || []).map(c => c.id))
+  const validDevIds = new Set((devices || []).map(d => d.id))
+  const seen = new Set()
+  const out = []
+  for (const raw of list) {
+    const p = normalizePointV3(raw)
+    // fix refs
+    if (!validConnIds.has(p.connectionId)) p.connectionId = (connections && connections[0] ? connections[0].id : 'c1')
+    if (!validDevIds.has(p.deviceId)) p.deviceId = (devices && devices[0] ? devices[0].id : 'd1')
+    if (seen.has(p.id)) continue
+    seen.add(p.id)
+    out.push(p)
+    if (out.length >= 256) break
+  }
+  return out
+}
+
 const normalizePolling = (input) => {
   const p = input && typeof input === 'object' ? input : {}
   const interval = Number(p.intervalMs)
@@ -1420,6 +1575,39 @@ const normalizePolling = (input) => {
     lastOk: p.lastOk !== false,
     error: typeof p.error === 'string' ? p.error.slice(0, 180) : '',
   }
+}
+
+const normalizePollingByConnection = (input, connections) => {
+  const out = {}
+  const base = connections || []
+  for (const c of base) out[c.id] = normalizePolling(null)
+  if (!input || typeof input !== 'object') return out
+  for (const [k, v] of Object.entries(input)) {
+    if (out[k] !== undefined) out[k] = normalizePolling(v)
+    else out[k] = normalizePolling(v)
+  }
+  return out
+}
+
+const normalizeFramesByConnection = (input, connections) => {
+  const out = {}
+  const base = connections || []
+  for (const c of base) out[c.id] = []
+  if (!input || typeof input !== 'object') return out
+  for (const [k, v] of Object.entries(input)) {
+    const arr = Array.isArray(v) ? v.slice(0, MAX_FRAMES_PER_CONN) : []
+    // sanitize each frame: keep t,label,request,response,trace
+    out[k] = arr.map(f => ({
+      t: Number(f && f.t) || Date.now(),
+      label: typeof (f && f.label) === 'string' ? String(f.label).slice(0, 200) : '',
+      request: typeof (f && f.request) === 'string' ? String(f.request).slice(0, 200) : '',
+      response: typeof (f && f.response) === 'string' ? String(f.response).slice(0, 200) : '',
+      trace: Array.isArray(f && f.trace) ? f.trace.map(s => String(s).slice(0, 200)).slice(0, 8) : [],
+      deviceId: typeof (f && f.deviceId) === 'string' ? f.deviceId : '',
+      connectionId: typeof (f && f.connectionId) === 'string' ? f.connectionId : k,
+    })).slice(-MAX_FRAMES_PER_CONN)
+  }
+  return out
 }
 
 const filterValues = (list, validKeys) => {
@@ -1436,12 +1624,74 @@ const filterValues = (list, validKeys) => {
   return out
 }
 
-const MAX_VALUES_SAFE = 512
+const normalizeQualifiedValues = (list, points) => {
+  if (!Array.isArray(list)) return []
+  const byPoint = new Map()
+  for (const p of points || []) byPoint.set(p.id, p)
+  const seen = new Set()
+  const out = []
+  for (const raw of list) {
+    if (!raw || typeof raw !== 'object') continue
+    const pointId = devText(raw.pointId || raw.key || raw.id, '')
+    if (!pointId || !byPoint.has(pointId) || seen.has(pointId)) continue
+    const pt = byPoint.get(pointId)
+    const rec = normalizeValueRec({ ...raw, key: pointId })
+    // enrich with redundant ids for filtering
+    const enriched = {
+      ...rec,
+      pointId,
+      key: pointId,
+      connectionId: devText(raw.connectionId, '') || pt.connectionId,
+      deviceId: devText(raw.deviceId, '') || pt.deviceId,
+    }
+    seen.add(pointId)
+    out.push(enriched)
+    if (out.length >= MAX_VALUES_SAFE) break
+  }
+  return out
+}
+
+// Validate RTU port uniqueness among enabled connections and TCP listenHost:listenPort for server role
+const validateConnections = (connections) => {
+  const errors = []
+  const enabled = (connections || []).filter(c => c && c.enabled !== false)
+  // RTU port uniqueness
+  const portMap = new Map()
+  for (const c of enabled) {
+    const conn = c.conn || {}
+    if (conn.mode === 'rtu') {
+      const port = typeof conn.port === 'string' ? conn.port.trim() : ''
+      if (!port) continue
+      const key = port.toLowerCase()
+      if (portMap.has(key)) {
+        const other = portMap.get(key)
+        errors.push(`COM 已被 ${other.name} 占用: ${port}`)
+      } else {
+        portMap.set(key, c)
+      }
+    }
+  }
+  // TCP server listenHost:listenPort uniqueness
+  const tcpMap = new Map()
+  for (const c of enabled) {
+    if (c.role !== 'server') continue
+    const conn = c.conn || {}
+    if (conn.mode !== 'tcp') continue
+    const host = typeof conn.host === 'string' ? conn.host.trim() : ''
+    const port = Number(conn.tcpPort) || 502
+    const key = (host || '0.0.0.0').toLowerCase() + ':' + port
+    // allow empty host to mean 0.0.0.0, treat similarly
+    if (tcpMap.has(key)) {
+      const other = tcpMap.get(key)
+      errors.push(`监听地址已被 ${other.name} 占用: ${host || '0.0.0.0'}:${port}`)
+    } else {
+      tcpMap.set(key, c)
+    }
+  }
+  return errors
+}
 
 // Migrate a legacy layout into the v2 point table. Two legacy shapes exist:
-//   flat:   { mode, port, slave, sim, segments[], values[] }
-//   nested: { devices: [ { ...same fields } ] }
-// The first device wins when both are present; top-level fields fill gaps.
 function migrateLegacy(modbusLike) {
   const flat = modbusLike && typeof modbusLike === 'object' ? modbusLike : {}
   const devices = Array.isArray(flat.devices) ? flat.devices : []
@@ -1461,7 +1711,6 @@ function migrateLegacy(modbusLike) {
   })
   const segments = Array.isArray(dev.segments) ? dev.segments : (Array.isArray(flat.segments) ? flat.segments : [])
   const oldValues = Array.isArray(dev.values) ? dev.values : (Array.isArray(flat.values) ? flat.values : [])
-  // Handle legacy single-point flat function/address (store.test)
   if (!segments.length && Number.isFinite(Number(flat.function)) && Number.isFinite(Number(flat.address))) {
     const fn = Number(flat.function)
     const addr = Number(flat.address)
@@ -1471,7 +1720,6 @@ function migrateLegacy(modbusLike) {
   }
   const points = []
   const valueMap = []
-  // DEBUG
   for (const seg of segments) {
     const fn = Number(seg && seg.function)
     const start = Number(seg && seg.address)
@@ -1498,66 +1746,308 @@ function migrateLegacy(modbusLike) {
   return { conn, points, values: valueMap }
 }
 
+function migrateV2ToV3(v2) {
+  // v2 shape: { version:2, conn, points:[{id:p3_0,function,address...}], values:[{key:p3_0 ...}], polling, alarmActive }
+  const conn = normalizeConn(v2.conn || {})
+  const connection = {
+    id: 'c1',
+    name: conn.port ? `连接-${conn.port}` : (conn.host ? `连接-${conn.host}:${conn.tcpPort}` : '连接1'),
+    role: 'client',
+    enabled: true,
+    conn,
+  }
+  // device from conn.slave
+  const unitId = devClampInt(conn.slave, 1, 0, 247)
+  const device = {
+    id: 'd1',
+    connectionId: 'c1',
+    name: '设备1',
+    unitId,
+    enabled: true,
+  }
+  // points: generate new stable IDs and map area
+  const oldPoints = Array.isArray(v2.points) ? v2.points : []
+  const idMap = new Map() // oldId -> newId
+  const newPoints = []
+  for (const p of oldPoints) {
+    const oldId = devText(p && p.id, '')
+    const fn = Number(p && p.function)
+    const area = AREA_BY_FN[fn] || 'holdingRegister'
+    const newId = genId('p')
+    if (oldId) idMap.set(oldId, newId)
+    // also map legacy p${fn}_${addr} maybe not equal id? but handle
+    const legacyKey = 'p' + fn + '_' + (p && p.address)
+    if (legacyKey && !idMap.has(legacyKey)) idMap.set(legacyKey, newId)
+    newPoints.push({
+      id: newId,
+      connectionId: 'c1',
+      deviceId: 'd1',
+      name: devText(p && p.name, ''),
+      area,
+      function: fn,
+      address: devClampInt(p && p.address, 0, 0, 65535),
+      scale: Number.isFinite(Number(p && p.scale)) ? Number(p.scale) : 1,
+      offset: Number.isFinite(Number(p && p.offset)) ? Number(p.offset) : 0,
+      unit: devText(p && p.unit, '').slice(0,12),
+      alarmMin: (p && (p.alarmMin===null||p.alarmMin===undefined||p.alarmMin==='')?null:(Number.isFinite(Number(p.alarmMin))?Number(p.alarmMin):null)),
+      alarmMax: (p && (p.alarmMax===null||p.alarmMax===undefined||p.alarmMax==='')?null:(Number.isFinite(Number(p.alarmMax))?Number(p.alarmMax):null)),
+    })
+  }
+  const oldValues = Array.isArray(v2.values) ? v2.values : []
+  const newValues = []
+  for (const v of oldValues) {
+    const oldKey = devText(v && (v.key || v.pointId), '')
+    const newId = idMap.get(oldKey)
+    if (!newId) continue
+    const rec = normalizeValueRec({ ...v, key: newId, pointId: newId })
+    newValues.push({
+      ...rec,
+      pointId: newId,
+      key: newId,
+      connectionId: 'c1',
+      deviceId: 'd1',
+    })
+  }
+  // polling
+  const pollingByConnection = { c1: normalizePolling(v2.polling) }
+  // frames: old single-track frames -> framesByConnection[c1]
+  let framesByConnection = { c1: [] }
+  if (v2.frames && Array.isArray(v2.frames)) framesByConnection.c1 = v2.frames.slice(0, MAX_FRAMES_PER_CONN)
+  else if (v2.framesLog && Array.isArray(v2.framesLog)) framesByConnection.c1 = v2.framesLog.slice(0, MAX_FRAMES_PER_CONN)
+  else if (v2.framesByConnection && typeof v2.framesByConnection === 'object') {
+    framesByConnection = normalizeFramesByConnection(v2.framesByConnection, [connection])
+    if (!framesByConnection.c1) framesByConnection.c1 = []
+  }
+  const alarmState = v2.alarmActive && typeof v2.alarmActive === 'object' ? { ...v2.alarmActive } : (v2.alarmState && typeof v2.alarmState === 'object' ? { ...v2.alarmState } : {})
+  // remap alarmState keys via idMap
+  const nextAlarm = {}
+  for (const [k, val] of Object.entries(alarmState)) {
+    const nid = idMap.get(k) || k
+    nextAlarm[nid] = val
+  }
+  return {
+    connections: [connection],
+    devices: [device],
+    points: newPoints,
+    values: newValues,
+    activeConnectionId: 'c1',
+    activeDeviceId: 'd1',
+    pollingByConnection,
+    framesByConnection: normalizeFramesByConnection(framesByConnection, [connection]),
+    alarmState: nextAlarm,
+    _migratedFromV2: true,
+    _idMap: idMap,
+  }
+}
+
 function normalizeModbus(input) {
   const src = input && typeof input === 'object' ? input : {}
+  // Detect v3
+  const isV3 = src.version === 3 || Array.isArray(src.connections) || Array.isArray(src.devices) && src.points && Array.isArray(src.points) && src.points.some(p => p && p.area)
+  // Detect legacy v2 or older flat
   const looksLegacy = src.conn === undefined && (
     Array.isArray(src.devices) || src.mode !== undefined || src.segments !== undefined || src.port !== undefined
   )
-  let conn
-  let pointsRaw
-  let valuesRaw
+  // v3 path
+  if (isV3) {
+    let connections = normalizeConnections(src.connections)
+    let devices = normalizeDevices(src.devices, connections)
+    // ensure at least one device per connection? keep as is
+    let points = normalizePointsV3(src.points, connections, devices)
+    // values: qualified
+    let values = normalizeQualifiedValues(src.values, points)
+    // handle pollingByConnection vs polling
+    let pollingByConnection
+    if (src.pollingByConnection && typeof src.pollingByConnection === 'object') {
+      pollingByConnection = normalizePollingByConnection(src.pollingByConnection, connections)
+    } else if (src.polling) {
+      // single polling -> assign to active or first
+      const pid = devText(src.activeConnectionId, '') || (connections[0]?.id || 'c1')
+      pollingByConnection = normalizePollingByConnection({ [pid]: src.polling }, connections)
+      // fill others
+      for (const c of connections) if (!pollingByConnection[c.id]) pollingByConnection[c.id] = normalizePolling(null)
+    } else {
+      pollingByConnection = normalizePollingByConnection(null, connections)
+    }
+    let framesByConnection
+    if (src.framesByConnection && typeof src.framesByConnection === 'object') {
+      framesByConnection = normalizeFramesByConnection(src.framesByConnection, connections)
+    } else if (src.frames && Array.isArray(src.frames)) {
+      const first = connections[0]?.id || 'c1'
+      framesByConnection = normalizeFramesByConnection({ [first]: src.frames }, connections)
+    } else if (src.framesLog && Array.isArray(src.framesLog)) {
+      const first = connections[0]?.id || 'c1'
+      framesByConnection = normalizeFramesByConnection({ [first]: src.framesLog }, connections)
+    } else {
+      framesByConnection = normalizeFramesByConnection(null, connections)
+    }
+    let alarmState = src.alarmState && typeof src.alarmState === 'object' ? { ...src.alarmState } : (src.alarmActive && typeof src.alarmActive === 'object' ? { ...src.alarmActive } : {})
+    // active ids
+    let activeConnectionId = devText(src.activeConnectionId, '')
+    if (!connections.some(c=>c.id===activeConnectionId)) activeConnectionId = connections[0]?.id || 'c1'
+    let activeDeviceId = devText(src.activeDeviceId, '')
+    if (!devices.some(d=>d.id===activeDeviceId)) {
+      const devForConn = devices.find(d=>d.connectionId===activeConnectionId)
+      activeDeviceId = devForConn ? devForConn.id : (devices[0]?.id || 'd1')
+    }
+    // also need to filter points/values that reference invalid connection/device? already fixed refs but keep check
+    const ret = {
+      version: 3,
+      connections,
+      devices,
+      points,
+      values,
+      activeConnectionId,
+      activeDeviceId,
+      pollingByConnection,
+      framesByConnection,
+      alarmState,
+    }
+    // Legacy enumerable:false compat
+    Object.defineProperties(ret, {
+      conn: {
+        get() {
+          const ac = ret.connections.find(c=>c.id===ret.activeConnectionId) || ret.connections[0]
+          return ac ? ac.conn : emptyConn()
+        },
+        enumerable: false,
+      },
+      mode: { get(){ return ret.conn.mode }, enumerable:false },
+      port: { get(){ return ret.conn.port }, enumerable:false },
+      host: { get(){ return ret.conn.host }, enumerable:false },
+      baudrate: { get(){ return ret.conn.baudrate }, enumerable:false },
+      slave: {
+        get(){
+          const ad = ret.devices.find(d=>d.id===ret.activeDeviceId) || ret.devices[0]
+          return ad ? ad.unitId : 1
+        },
+        enumerable:false
+      },
+      sim: { get(){ return ret.conn.sim }, enumerable:false },
+      polling: {
+        get(){ return ret.pollingByConnection[ret.activeConnectionId] || normalizePolling(null) },
+        enumerable:false
+      },
+      alarmActive: {
+        get(){ return ret.alarmState },
+        enumerable:false
+      },
+      pointsLegacy: { get(){ return ret.points }, enumerable:false },
+      function: { get(){ return ret.points[0]?.function }, enumerable:false },
+      address: { get(){ return ret.points[0]?.address }, enumerable:false },
+      segments: {
+        get(){ return ret.points.map(p=>({ ...p, count:1, id:p.id })) },
+        enumerable:false
+      },
+      devices_legacy: {
+        get(){ return ret.devices },
+        enumerable:false
+      },
+    })
+    // Also provide flat points/values for old code expecting ret.points etc? Already version 3 has new points; keep them enumerable.
+    return ret
+  }
+
+  // v2 or legacy path -> produce v3 via migration
+  let v2
   if (looksLegacy) {
     const m = migrateLegacy(src)
-    conn = m.conn
-    pointsRaw = m.points
-    valuesRaw = m.values
+    v2 = {
+      version: 2,
+      conn: m.conn,
+      points: normalizePoints(m.points),
+      values: filterValues(m.values, new Set(m.points.map(p=>p.id))),
+      polling: normalizePolling(src.polling),
+      alarmActive: src.alarmActive && typeof src.alarmActive === 'object' ? { ...src.alarmActive } : {},
+      frames: src.frames || src.framesLog || src.framesByConnection,
+    }
+    // preserve frames if any from legacy flat? not needed
+  } else if (src.version === 2 || src.conn !== undefined) {
+    const conn = normalizeConn(src.conn)
+    const points = normalizePoints(src.points)
+    const validKeys = new Set(points.map(p=>p.id))
+    const normValues = filterValues(src.values, validKeys)
+    v2 = {
+      version:2,
+      conn,
+      points,
+      values: normValues,
+      polling: normalizePolling(src.polling),
+      alarmActive: src.alarmActive && typeof src.alarmActive === 'object' ? { ...src.alarmActive } : {},
+      frames: src.frames || src.framesLog || src.framesByConnection,
+      framesByConnection: src.framesByConnection,
+    }
+    // also carry over possible framesByConnection from v2 partial?
+    if (src.framesByConnection) v2.framesByConnection = src.framesByConnection
   } else {
-    conn = normalizeConn(src.conn)
-    pointsRaw = src.points
-    valuesRaw = src.values
+    // empty or unknown -> treat as v2 empty
+    v2 = {
+      version:2,
+      conn: normalizeConn(null),
+      points: [],
+      values: [],
+      polling: normalizePolling(null),
+      alarmActive: {},
+    }
   }
-  const points = normalizePoints(pointsRaw)
-  const validKeys = new Set(points.map((p) => p.id))
-  const normValues = filterValues(valuesRaw, validKeys)
+  const migrated = migrateV2ToV3(v2)
   const ret = {
-    version: 2,
-    conn,
-    points,
-    values: normValues,
-    polling: normalizePolling(src.polling),
-    alarmActive: src.alarmActive && typeof src.alarmActive === 'object' ? { ...src.alarmActive } : {},
+    version:3,
+    connections: migrated.connections,
+    devices: migrated.devices,
+    points: migrated.points,
+    values: migrated.values,
+    activeConnectionId: migrated.activeConnectionId,
+    activeDeviceId: migrated.activeDeviceId,
+    pollingByConnection: migrated.pollingByConnection,
+    framesByConnection: migrated.framesByConnection,
+    alarmState: migrated.alarmState,
   }
-  // Legacy compat for old tests and bench-slave (flat fields + segments/devices)
-  // Made non-enumerable so JSON.stringify and { ...ret } don't persist legacy shape
   Object.defineProperties(ret, {
-    mode: { get() { return ret.conn.mode }, enumerable: false },
-    port: { get() { return ret.conn.port }, enumerable: false },
-    host: { get() { return ret.conn.host }, enumerable: false },
-    baudrate: { get() { return ret.conn.baudrate }, enumerable: false },
-    slave: { get() { return ret.conn.slave }, enumerable: false },
-    sim: { get() { return ret.conn.sim }, enumerable: false },
-    function: { get() { return ret.points[0]?.function }, enumerable: false },
-    address: { get() { return ret.points[0]?.address }, enumerable: false },
-    segments: {
-      get() {
-        return ret.points.map((p) => ({ ...p, count: 1, id: p.id }))
-      },
-      enumerable: false,
+    conn: {
+      get(){ const ac = ret.connections.find(c=>c.id===ret.activeConnectionId) || ret.connections[0]; return ac ? ac.conn : emptyConn() },
+      enumerable:false
     },
-    devices: {
-      get() {
-        return [{ ...ret.conn, segments: ret.points.map((p) => ({ ...p, count: 1, id: p.id })), values: ret.values, polling: ret.polling }]
-      },
-      enumerable: false,
+    mode: { get(){ return ret.conn.mode }, enumerable:false },
+    port: { get(){ return ret.conn.port }, enumerable:false },
+    host: { get(){ return ret.conn.host }, enumerable:false },
+    baudrate: { get(){ return ret.conn.baudrate }, enumerable:false },
+    slave: {
+      get(){ const ad = ret.devices.find(d=>d.id===ret.activeDeviceId) || ret.devices[0]; return ad ? ad.unitId : 1 },
+      enumerable:false
+    },
+    sim: { get(){ return ret.conn.sim }, enumerable:false },
+    polling: {
+      get(){ return ret.pollingByConnection[ret.activeConnectionId] || normalizePolling(null) },
+      enumerable:false
+    },
+    alarmActive: { get(){ return ret.alarmState }, enumerable:false },
+    function: { get(){ return ret.points[0]?.function }, enumerable:false },
+    address: { get(){ return ret.points[0]?.address }, enumerable:false },
+    segments: {
+      get(){ return ret.points.map(p=>({ ...p, count:1, id:p.id })) },
+      enumerable:false
     },
   })
   return ret
 }
 
-const patchConn = (modbus, patch) => ({
-  ...modbus,
-  conn: normalizeConn({ ...modbus.conn, ...(patch || {}) }),
-})
+const patchConn = (modbus, patch) => {
+  const normalized = normalizeModbus(modbus)
+  const activeId = normalized.activeConnectionId
+  const nextConns = normalized.connections.map(c => c.id===activeId ? { ...c, conn: normalizeConn({ ...c.conn, ...(patch||{}) }) } : c)
+  let nextDevices = normalized.devices
+  if (patch && patch.slave !== undefined) {
+    const devId = normalized.activeDeviceId
+    const unit = Math.min(247, Math.max(0, Math.trunc(Number(patch.slave)||1)))
+    if (devId) nextDevices = normalized.devices.map(d=> d.id===devId ? { ...d, unitId: unit } : d)
+  }
+  return normalizeModbus({
+    ...normalized,
+    connections: nextConns,
+    devices: nextDevices,
+  })
+}
 
 // ── Legacy compat for old tests (recipePair etc.) ─────────────────────
 const recipePair = () => ({
@@ -1731,44 +2221,89 @@ function journalPanel(el, t, journal) {
 // One shared /state poller per cwd instead of six independent loops.
 const STATE_BUS = { cwd: '', data: null, subs: new Set(), timer: 0, seq: 0 }
 
-// Modbus frame stream for the HMI 报文 view. Ring buffer keyed by cwd; fed by
-// read / write / poll responses from any surface (HMI actions and the live
-// polling loop).
-const FRAME_LOG = { cwd: '', items: [] }
+// Modbus frame stream per connection (framesByConnection). Ring buffer keyed by cwd+connId;
+// fed by read / write / poll responses from any surface (HMI actions and the live polling loop).
+// Supports overloaded legacy signature pushFramesLog(cwd, logArray) for backward compat.
+const FRAME_LOGS = { cwd: '', byConn: {} }
 const FRAME_LOG_CAP = 500
 
-function pushFramesLog(cwd, logArray) {
-  if (!cwd) return
-  if (FRAME_LOG.cwd !== cwd) {
-    FRAME_LOG.cwd = cwd
-    FRAME_LOG.items = []
+function ensureFrameCwd(cwd) {
+  if (FRAME_LOGS.cwd !== cwd) {
+    FRAME_LOGS.cwd = cwd
+    FRAME_LOGS.byConn = {}
   }
-  const list = Array.isArray(logArray) ? logArray : []
-  for (const entry of list) {
+}
+
+function pushFramesLog(cwd, connId, logArray) {
+  if (!cwd) return
+  let cid = '_default'
+  let list
+  if (Array.isArray(connId) && logArray === undefined) {
+    list = connId
+  } else if (typeof connId === 'string' && Array.isArray(logArray)) {
+    cid = connId || '_default'
+    list = logArray
+  } else if (connId == null && Array.isArray(logArray)) {
+    cid = '_default'
+    list = logArray
+  } else if (Array.isArray(logArray)) {
+    cid = String(connId || '_default')
+    list = logArray
+  } else if (Array.isArray(connId)) {
+    list = connId
+  } else {
+    // fallback: treat second arg as array if no third
+    if (Array.isArray(connId)) { list = connId } else { list = [] }
+  }
+  ensureFrameCwd(cwd)
+  if (!FRAME_LOGS.byConn[cid]) FRAME_LOGS.byConn[cid] = []
+  const arr = Array.isArray(list) ? list : []
+  for (const entry of arr) {
     if (!entry) continue
-    FRAME_LOG.items.push({
+    FRAME_LOGS.byConn[cid].push({
       t: Number(entry.t) || Date.now(),
       deviceName: String(entry.deviceName || ''),
       label: String(entry.label || ''),
       request: String(entry.request || ''),
       response: String(entry.response || ''),
+      trace: Array.isArray(entry.trace) ? entry.trace.map((s) => String(s).slice(0, 200)).slice(0, 8) : [],
+      connectionId: String(entry.connectionId || cid || ''),
+      deviceId: String(entry.deviceId || ''),
     })
   }
-  if (FRAME_LOG.items.length > FRAME_LOG_CAP) {
-    FRAME_LOG.items.splice(0, FRAME_LOG.items.length - FRAME_LOG_CAP)
+  if (FRAME_LOGS.byConn[cid].length > FRAME_LOG_CAP) {
+    FRAME_LOGS.byConn[cid].splice(0, FRAME_LOGS.byConn[cid].length - FRAME_LOG_CAP)
   }
 }
 
-function getFramesLog(cwd) {
-  return FRAME_LOG.cwd === cwd ? FRAME_LOG.items : []
+function getFramesLog(cwd, connId) {
+  if (FRAME_LOGS.cwd !== cwd) return []
+  if (connId === undefined || connId === null || connId === '' || connId === 'all') {
+    const all = []
+    for (const arr of Object.values(FRAME_LOGS.byConn)) all.push(...arr)
+    all.sort((a, b) => (Number(a.t) || 0) - (Number(b.t) || 0))
+    // cap aggregated to 500 most recent across all conns
+    if (all.length > FRAME_LOG_CAP) return all.slice(all.length - FRAME_LOG_CAP)
+    return all
+  }
+  return FRAME_LOGS.byConn[connId] ? FRAME_LOGS.byConn[connId].slice() : []
 }
 
-function clearFramesLog(cwd) {
-  if (FRAME_LOG.cwd === cwd) FRAME_LOG.items = []
+function clearFramesLog(cwd, connId) {
+  if (FRAME_LOGS.cwd !== cwd) return
+  if (connId === undefined || connId === null || connId === '' || connId === 'all') {
+    FRAME_LOGS.byConn = {}
+  } else {
+    delete FRAME_LOGS.byConn[connId]
+  }
 }
 
-function framesLogCount() {
-  return FRAME_LOG.items.length
+function framesLogCount(cwd, connId) {
+  if (FRAME_LOGS.cwd !== cwd) return 0
+  if (connId) return (FRAME_LOGS.byConn[connId] || []).length
+  let n = 0
+  for (const arr of Object.values(FRAME_LOGS.byConn)) n += arr.length
+  return n
 }
 
 function busPull(post) {
@@ -2358,8 +2893,8 @@ function fnOptionLabel(t, fn) {
   return t(key) + (isWritableFunction(fn) ? ' ' + t('writableTag') : '')
 }
 
-function pickConn(modbus, patch) {
-  return { ...modbus, conn: { ...(modbus.conn || {}), ...(patch || {}) } }
+function hmiGenId(prefix) {
+  return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
 
 function createHmiView(React, t, post, openLive) {
@@ -2375,19 +2910,18 @@ function createHmiView(React, t, post, openLive) {
     const [ports, setPorts] = React.useState([])
     const [scanning, setScanning] = React.useState(false)
     const [pending, setPending] = React.useState([])
-    // point form
     const [form, setForm] = React.useState({ mode: 'hidden', id: '', name: '', function: 3, address: 0, scale: 1, offset: 0, unit: '', alarmMin: '', alarmMax: '' })
     const [batch, setBatch] = React.useState({ open: false, prefix: '', fc: 3, start: 0, count: 5 })
-    // inline write strip: {pointId, fn, address, text}
     const [writeRow, setWriteRow] = React.useState(null)
-    // csv
     const [csvOpen, setCsvOpen] = React.useState(false)
     const [csvText, setCsvText] = React.useState('')
     const [csvNote, setCsvNote] = React.useState('')
-    // serial log / frames dual-mode
     const [logMode, setLogMode] = React.useState('serial')
     const [serial, setSerial] = React.useState({ open: false, port: '', baudrate: 115200, lines: [], filter: '', paused: false, error: '', lastId: 0 })
     const [copiedSerial, setCopiedSerial] = React.useState(false)
+    const [connForm, setConnForm] = React.useState({ open: false, id: '', name: '', role: 'client', enabled: true, conn: { mode: 'rtu', port: '', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, host: '', tcpPort: 502, slave: 1, sim: false } })
+    const [pendingDeleteId, setPendingDeleteId] = React.useState('')
+    const [frameFilter, setFrameFilter] = React.useState('all')
     const serialRef = React.useRef(serial)
     serialRef.current = serial
     const workspaceRef = React.useRef(workspace)
@@ -2434,7 +2968,6 @@ function createHmiView(React, t, post, openLive) {
       if (data.health) setHealth(data.health)
       if (Array.isArray(data.pendingWrites)) setPending(data.pendingWrites)
       setJournal(pickJournal(data))
-      // Skip echoing server state back while one of our own writes is in flight.
       if (inflight.current > 0) return
       if (data.workspace && data.workspace.modbus) {
         setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus }))
@@ -2443,22 +2976,59 @@ function createHmiView(React, t, post, openLive) {
 
     function normalizePack() {
       const mb = (workspaceRef.current.modbus) || emptyWorkspace().modbus
-      return mb.version === 2 ? mb : emptyWorkspace().modbus
+      // 兼容 v2 与 v3：v3 含 connections/devices，v2 为单 conn
+      try {
+        if (mb && mb.version === 3) {
+          // normalize via bench-devices to ensure defaults
+          return normalizeModbus(mb)
+        }
+        if (mb && mb.version === 2) {
+          // 仍通过 normalizeModbus 迁移到 v3，保证上层统一使用 v3 结构
+          return normalizeModbus(mb)
+        }
+        // 未标记 version 时尝试按 v3 归一化，失败则回退
+        if (mb && (Array.isArray(mb.connections) || Array.isArray(mb.devices))) {
+          return normalizeModbus(mb)
+        }
+        return normalizeModbus(mb)
+      } catch {
+        if (mb && mb.version === 2) return mb
+        if (mb && mb.version === 3) return mb
+        return emptyWorkspace().modbus
+      }
     }
 
     function persist(modbusPatch) {
       if (!cwd) return Promise.resolve()
       const seq = ++inflight.current
-      setWorkspace((prev) => ({
-        ...prev,
-        modbus: { ...prev.modbus, ...(modbusPatch.conn ? { conn: { ...prev.modbus.conn, ...modbusPatch.conn } } : {}), ...(modbusPatch.points !== undefined ? { points: modbusPatch.points } : {}), ...(modbusPatch.values !== undefined ? { values: modbusPatch.values } : {}), ...(modbusPatch.polling ? { polling: { ...prev.modbus.polling, ...modbusPatch.polling } } : {}) },
-      }))
+      // 乐观更新：按 connId 定向合并，避免闪烁
+      setWorkspace((prev) => {
+        const next = { ...prev, modbus: { ...prev.modbus } }
+        // v3 keys直接合并；v2 legacy conn/polling 按 activeConnId 定向已在 bench-store 处理
+        for (const k of Object.keys(modbusPatch)) {
+          if (k === 'connections' || k === 'devices' || k === 'points' || k === 'values' || k === 'pollingByConnection' || k === 'framesByConnection' || k === 'activeConnectionId' || k === 'activeDeviceId' || k === 'alarmState' || k === 'alarmActive' || k === 'version') {
+            next.modbus[k] = modbusPatch[k]
+          } else if (k === 'conn' || k === 'polling') {
+            // 保留给 bench-store 做定向映射，本地也做一份便于立即显示
+            if (k === 'conn') {
+              next.modbus.conn = { ...(next.modbus.conn||{}), ...modbusPatch.conn }
+            } else {
+              next.modbus.polling = { ...(next.modbus.polling||{}), ...modbusPatch.polling }
+            }
+          } else {
+            next.modbus[k] = modbusPatch[k]
+          }
+        }
+        workspaceRef.current = next
+        return next
+      })
       return post('/dsh-vision-bench/workspace', { cwd, modbus: modbusPatch }).then((data) => {
         if (seq === inflight.current && data && data.workspace && data.workspace.modbus) {
           setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus }))
           workspaceRef.current = { ...workspaceRef.current, modbus: data.workspace.modbus }
         }
         if (data) setJournal(pickJournal(data))
+        if (data && data.ok === false && data.error) setError(data.error)
       }).catch((err) => {
         setError(String((err && err.message) || t('fail')))
       }).finally(() => {
@@ -2466,9 +3036,111 @@ function createHmiView(React, t, post, openLive) {
       })
     }
 
-    function setConn(patch) {
+    // ── connection list operations ──
+    function addConnection() {
       const pack = normalizePack()
-      persist({ conn: { ...(pack.conn || {}), ...patch } })
+      const nid = hmiGenId('c')
+      const did = hmiGenId('d')
+      const newConn = { id: nid, name: '连接' + (pack.connections.length + 1), role: 'client', enabled: true, conn: { mode: 'rtu', port: '', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, host: '', tcpPort: 502, slave: 1, sim: false } }
+      const newDev = { id: did, connectionId: nid, name: '设备1', unitId: 1, enabled: true }
+      const nextConns = (pack.connections || []).concat([newConn])
+      const nextDevs = (pack.devices || []).concat([newDev])
+      const nextPolling = { ...(pack.pollingByConnection||{}), [nid]: { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' } }
+      const nextFrames = { ...(pack.framesByConnection||{}), [nid]: [] }
+      persist({ connections: nextConns, devices: nextDevs, pollingByConnection: nextPolling, framesByConnection: nextFrames, activeConnectionId: nid, activeDeviceId: did, version: 3 })
+    }
+
+    function selectConnection(connId) {
+      const pack = normalizePack()
+      const devFor = (pack.devices||[]).find((d) => d.connectionId === connId)
+      persist({ activeConnectionId: connId, activeDeviceId: devFor ? devFor.id : (pack.devices[0] && pack.devices[0].id) || '', version: 3 })
+      setPendingDeleteId('')
+    }
+
+    function toggleConnEnabled(connId) {
+      const pack = normalizePack()
+      const nextConns = (pack.connections||[]).map((c) => c.id === connId ? { ...c, enabled: !c.enabled } : c)
+      persist({ connections: nextConns, version: 3 })
+    }
+
+    function requestDeleteConnection(connId) {
+      if (pendingDeleteId !== connId) {
+        setPendingDeleteId(connId)
+        return
+      }
+      const pack = normalizePack()
+      if ((pack.connections||[]).length <= 1) {
+        setError('至少保留一个连接')
+        setPendingDeleteId('')
+        return
+      }
+      const nextConns = (pack.connections||[]).filter((c) => c.id !== connId)
+      const nextDevs = (pack.devices||[]).filter((d) => d.connectionId !== connId)
+      const nextPoints = (pack.points||[]).filter((p) => (p.connectionId || p.connId) !== connId)
+      const nextValues = (pack.values||[]).filter((v) => {
+        const pid = v.key || v.pointId
+        return !nextPoints.some((pt) => pt.id === pid) ? false : true
+      })
+      // 保留仍存在的 values（更简单：过滤掉被删连接关联的 points 对应的 values）
+      const keptValues = (pack.values||[]).filter((v) => {
+        const pt = (pack.points||[]).find((p) => p.id === (v.key || v.pointId))
+        return pt && (pt.connectionId || pt.connId) !== connId
+      })
+      const nextPolling = { ...(pack.pollingByConnection||{}) }; delete nextPolling[connId]
+      const nextFrames = { ...(pack.framesByConnection||{}) }; delete nextFrames[connId]
+      let nextActive = pack.activeConnectionId
+      let nextActiveDev = pack.activeDeviceId
+      if (nextActive === connId) {
+        nextActive = (nextConns[0] && nextConns[0].id) || ''
+        const devFor = (nextDevs||[]).find((d) => d.connectionId === nextActive)
+        nextActiveDev = devFor ? devFor.id : (nextDevs[0] && nextDevs[0].id) || ''
+        setFrameFilter('all')
+      }
+      clearFramesLog(cwd, connId)
+      setPendingDeleteId('')
+      persist({ connections: nextConns, devices: nextDevs, points: nextPoints, values: keptValues, pollingByConnection: nextPolling, framesByConnection: nextFrames, activeConnectionId: nextActive, activeDeviceId: nextActiveDev, version: 3 })
+    }
+
+    function openConnEdit(conn) {
+      setConnForm({ open: true, id: conn.id, name: conn.name, role: conn.role, enabled: conn.enabled !== false, conn: { ...(conn.conn||{}) } })
+    }
+
+    function saveConnEdit() {
+      const pack = normalizePack()
+      const targetId = connForm.id
+      const nextConns = (pack.connections||[]).map((c) => c.id === targetId ? { ...c, name: connForm.name.slice(0,40), role: connForm.role === 'server' || connForm.role === 'slave' ? 'server' : 'client', enabled: !!connForm.enabled, conn: { ...(c.conn||{}), mode: connForm.conn.mode === 'tcp' ? 'tcp' : 'rtu', port: String(connForm.conn.port||'').trim(), baudrate: Number(connForm.conn.baudrate)||9600, bytesize: Number(connForm.conn.bytesize)===7?7:8, parity: ['N','E','O'].includes(connForm.conn.parity)?connForm.conn.parity:'N', stopbits: Number(connForm.conn.stopbits)===2?2:1, host: String(connForm.conn.host||'').trim(), tcpPort: Math.max(1, Math.min(65535, Number(connForm.conn.tcpPort)||502)), slave: Math.max(0, Math.min(247, Number(connForm.conn.slave)||1)), sim: !!connForm.conn.sim } } : c)
+      let nextDevs = pack.devices
+      const editedConn = nextConns.find((c)=>c.id===targetId)
+      if (editedConn && editedConn.conn && editedConn.conn.slave !== undefined) {
+        const devFor = (pack.devices||[]).find((d)=>d.connectionId===targetId)
+        if (devFor) {
+          const unit = Math.max(0, Math.min(247, Number(editedConn.conn.slave)||1))
+          nextDevs = (pack.devices||[]).map((d)=> d.id===devFor.id ? { ...d, unitId: unit } : d)
+        }
+      }
+      setConnForm((prev)=> ({ ...prev, open: false }))
+      persist({ connections: nextConns, devices: nextDevs, version: 3 })
+    }
+
+    function setActiveConnPatch(patch) {
+      const pack = normalizePack()
+      const aid = pack.activeConnectionId
+      if (!aid) return
+      const nextConns = (pack.connections||[]).map((c)=> c.id===aid ? { ...c, conn: { ...(c.conn||{}), ...patch } } : c)
+      let nextDevs = pack.devices
+      if (patch.slave !== undefined) {
+        const devId = pack.activeDeviceId
+        const unit = Math.max(0, Math.min(247, Math.trunc(Number(patch.slave)||1)))
+        if (devId) nextDevs = (pack.devices||[]).map((d)=> d.id===devId ? { ...d, unitId: unit } : d)
+      }
+      persist({ connections: nextConns, devices: nextDevs, version: 3 })
+    }
+
+    function updateActiveConnMeta(patch) {
+      const pack = normalizePack()
+      const aid = pack.activeConnectionId
+      const nextConns = (pack.connections||[]).map((c)=> c.id===aid ? { ...c, ...patch } : c)
+      persist({ connections: nextConns, version: 3 })
     }
 
     // ── point form ──
@@ -2502,19 +3174,25 @@ function createHmiView(React, t, post, openLive) {
 
     function submitPoint() {
       const pack = normalizePack()
+      const activeConnId = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
+      const activeDevId = pack.activeDeviceId || ((pack.devices||[]).find((d)=>d.connectionId===activeConnId) && (pack.devices||[]).find((d)=>d.connectionId===activeConnId).id) || (pack.devices[0] && pack.devices[0].id) || 'd1'
       const fnNum = Number(form.function)
       const addrNum = Number(form.address)
       if (!Number.isFinite(addrNum) || addrNum < 0 || addrNum > 65535) {
         setError(t('ptAddr') + ' 0–65535')
         return
       }
-      const dup = pack.points.some((p) => p.function === fnNum && p.address === addrNum && p.id !== form.id)
+      // 去重仅在同一连接内校验，已按 activeConnId 过滤
+      const dup = (pack.points||[]).some((p) => (p.connectionId||p.connId) === activeConnId && p.function === fnNum && p.address === addrNum && p.id !== form.id)
       if (dup) {
         setError('已存在相同功能码和地址的点位')
         return
       }
       const base = {
-        id: 'p' + fnNum + '_' + addrNum,
+        id: form.mode === 'edit' ? form.id : hmiGenId('p'),
+        connectionId: activeConnId,
+        connId: activeConnId,
+        deviceId: activeDevId,
         name: form.name,
         function: fnNum,
         address: addrNum,
@@ -2523,31 +3201,35 @@ function createHmiView(React, t, post, openLive) {
         unit: form.unit,
         alarmMin: form.alarmMin === '' ? null : Number(form.alarmMin),
         alarmMax: form.alarmMax === '' ? null : Number(form.alarmMax),
+        area: fnNum===1?'coil': fnNum===2?'discreteInput': fnNum===4?'inputRegister':'holdingRegister',
+      }
+      if (form.mode !== 'edit' && (pack.points||[]).some((p)=> p.id===base.id)) {
+        base.id = hmiGenId('p')
       }
       let points
       if (form.mode === 'edit') {
-        points = pack.points.map((p) => (p.id === form.id ? base : p))
+        points = (pack.points||[]).map((p) => (p.id === form.id ? { ...p, ...base, id: form.id } : p))
       } else {
-        if (pack.points.some((p) => p.id === base.id)) {
-          setError('已存在相同功能码和地址的点位')
-          return
-        }
-        points = pack.points.concat([base])
+        points = (pack.points||[]).concat([base])
       }
       closeForm()
-      persist({ points })
+      persist({ points, version: 3 })
     }
 
     function generateBatch() {
       const pack = normalizePack()
+      const activeConnId = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
+      const activeDevId = pack.activeDeviceId || ((pack.devices||[]).find((d)=>d.connectionId===activeConnId) && (pack.devices||[]).find((d)=>d.connectionId===activeConnId).id) || (pack.devices[0] && pack.devices[0].id) || 'd1'
       const count = Math.max(1, Math.min(Number(batch.count) || 1, 64))
-      const existing = new Set(pack.points.map((p) => p.id))
+      const existingIds = new Set((pack.points||[]).filter((p)=> (p.connectionId||p.connId)===activeConnId).map((p)=> p.id))
+      const existingAddr = new Set((pack.points||[]).filter((p)=> (p.connectionId||p.connId)===activeConnId && p.function===Number(batch.fc)).map((p)=> p.address))
       const additions = []
       for (let i = 0; i < count; i++) {
         const address = Number(batch.start) + i
-        const id = 'p' + batch.fc + '_' + address
-        if (existing.has(id)) continue
-        additions.push({ id, name: (batch.prefix || '') + i, function: Number(batch.fc), address })
+        if (existingAddr.has(address)) continue
+        const id = hmiGenId('p')
+        if (existingIds.has(id)) continue
+        additions.push({ id, connectionId: activeConnId, connId: activeConnId, deviceId: activeDevId, name: (batch.prefix || '') + i, function: Number(batch.fc), address, area: Number(batch.fc)===1?'coil':'holdingRegister', scale: 1, offset: 0, unit: '', alarmMin: null, alarmMax: null })
       }
       if (!additions.length) {
         setError('批量点位的地址全部与现有点位重复')
@@ -2555,14 +3237,15 @@ function createHmiView(React, t, post, openLive) {
       }
       setError('')
       setBatch((prev) => ({ ...prev, open: false }))
-      persist({ points: pack.points.concat(additions) })
+      persist({ points: (pack.points||[]).concat(additions), version: 3 })
     }
 
     function removePointRow(point) {
       const pack = normalizePack()
       persist({
-        points: pack.points.filter((p) => p.id !== point.id),
-        values: pack.values.filter((v) => v.key !== point.id),
+        points: (pack.points||[]).filter((p) => p.id !== point.id),
+        values: (pack.values||[]).filter((v) => (v.key||v.pointId) !== point.id),
+        version: 3,
       })
     }
 
@@ -2576,6 +3259,8 @@ function createHmiView(React, t, post, openLive) {
         setError(t('needWorkspace'))
         return
       }
+      const pack = normalizePack()
+      const activeConnId = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
       setBusy(pointId || 'read')
       setError('')
       post('/dsh-vision-bench/modbus/read', {
@@ -2586,7 +3271,8 @@ function createHmiView(React, t, post, openLive) {
         pointId: pointId || undefined,
       }, 120000).then((data) => {
         if (!data) return
-        pushFramesLog(cwd, data.framesLog)
+        // 报文分轨：按 activeConnId 切轨
+        pushFramesLog(cwd, activeConnId, data.framesLog || data.frames || [])
         if (Array.isArray(data.values)) {
           setWorkspace((prev) => ({ ...prev, modbus: { ...prev.modbus, values: data.values } }))
           workspaceRef.current = { ...workspaceRef.current, modbus: { ...workspaceRef.current.modbus, values: data.values } }
@@ -2608,7 +3294,7 @@ function createHmiView(React, t, post, openLive) {
     function openWriteRow(point) {
       setError('')
       setForm((prev) => ({ ...prev, mode: 'hidden' }))
-      const rec = (normalizePack().values || []).find((item) => item.key === point.id)
+      const rec = ((normalizePack().values) || []).find((item) => (item.key||item.pointId) === point.id)
       const current = rec && rec.raw !== null && rec.raw !== undefined ? String(rec.raw) : ''
       setWriteRow({ pointId: point.id, name: point.name, fn: point.function, address: point.address, text: current, busy: false, result: null })
     }
@@ -2625,6 +3311,8 @@ function createHmiView(React, t, post, openLive) {
         return
       }
       setWriteRow((prev) => ({ ...prev, busy: true, result: null }))
+      const pack = normalizePack()
+      const activeConnId = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
       post('/dsh-vision-bench/modbus/write', {
         cwd,
         source: 'user',
@@ -2634,7 +3322,7 @@ function createHmiView(React, t, post, openLive) {
         values,
       }, 60000).then((data) => {
         setWriteRow((prev) => ({ ...prev, busy: false, result: data }))
-        pushFramesLog(cwd, (data && data.framesLog) || [])
+        pushFramesLog(cwd, activeConnId, (data && (data.framesLog||data.frames)) || [])
         if (Array.isArray(data.values)) {
           setWorkspace((prev) => ({ ...prev, modbus: { ...prev.modbus, values: data.values } }))
           workspaceRef.current = { ...workspaceRef.current, modbus: { ...workspaceRef.current.modbus, values: data.values } }
@@ -2653,7 +3341,11 @@ function createHmiView(React, t, post, openLive) {
 
     // ── csv ──
     function exportCsv() {
-      navigator.clipboard.writeText(pointsToCsv(normalizePack().points)).then(() => {
+      const pack = normalizePack()
+      // 导出按 activeConnId 过滤的点表
+      const activeConnId = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
+      const filtered = (pack.points||[]).filter((p)=> (p.connectionId||p.connId)===activeConnId)
+      navigator.clipboard.writeText(pointsToCsv(filtered)).then(() => {
         setCsvNote(t('csvDone'))
         setTimeout(() => setCsvNote(''), 1500)
       }).catch(() => { /* clipboard unavailable */ })
@@ -2665,41 +3357,84 @@ function createHmiView(React, t, post, openLive) {
         setError(parsed.error)
         return
       }
+      const pack = normalizePack()
+      const activeConnId = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
+      const activeDevId = pack.activeDeviceId || ((pack.devices||[]).find((d)=>d.connectionId===activeConnId) && (pack.devices||[]).find((d)=>d.connectionId===activeConnId).id) || (pack.devices[0] && pack.devices[0].id) || 'd1'
+      // form/batch/csv 均带 connId：为导入点附上 activeConnId/deviceId
+      const withConn = parsed.points.map((p)=> ({ ...p, id: p.id || hmiGenId('p'), connectionId: activeConnId, connId: activeConnId, deviceId: activeDevId, area: p.function===1?'coil': p.function===2?'discreteInput': p.function===4?'inputRegister':'holdingRegister' }))
       setError('')
       setCsvOpen(false)
       setCsvText('')
-      persist({ points: parsed.points, values: [] })
+      // 导入替换当前连接下的点表，其余连接保留
+      const kept = (pack.points||[]).filter((p)=> (p.connectionId||p.connId)!==activeConnId)
+      persist({ points: kept.concat(withConn), values: [], version: 3 })
     }
 
     // ── derived ──
     const pack = normalizePack()
-    const conn = pack.conn || {}
-    const points = Array.isArray(pack.points) ? pack.points : []
+    const connections = Array.isArray(pack.connections) ? pack.connections : []
+    const devices = Array.isArray(pack.devices) ? pack.devices : []
+    const activeConnId = pack.activeConnectionId || (connections[0] && connections[0].id) || ''
+    const activeDeviceId = pack.activeDeviceId || ((devices||[]).find((d)=>d.connectionId===activeConnId) && (devices||[]).find((d)=>d.connectionId===activeConnId).id) || (devices[0] && devices[0].id) || ''
+    const activeConnObj = connections.find((c)=>c.id===activeConnId) || connections[0] || { conn: {} }
+    const conn = (activeConnObj && activeConnObj.conn) || {}
+    // 点位表按 activeConnId 过滤
+    const allPoints = Array.isArray(pack.points) ? pack.points : []
+    const points = allPoints.filter((p)=> (p.connectionId||p.connId)===activeConnId)
+    // 设备树：选中连接后列出该连接下 devices
+    const activeDevices = devices.filter((d)=> d.connectionId===activeConnId)
     const valuesArr = Array.isArray(pack.values) ? pack.values : []
     const valueMap = {}
-    for (const item of valuesArr) valueMap[item.key] = item
+    for (const item of valuesArr) {
+      const k = item.key || item.pointId
+      if (k) valueMap[k] = item
+    }
     const pythonReady = statusKind(health.python) === 'ready'
     const sim = conn.sim === true
     const canDevice = sim || pythonReady
     const connMissing = !sim && (conn.mode === 'tcp' ? !conn.host : !conn.port)
-    const watchEnabled = !!(pack.polling && pack.polling.enabled)
+    const pollingByConnection = pack.pollingByConnection || {}
+    const polling = pollingByConnection[activeConnId] || { enabled: false, intervalMs: 1000 }
+    const watchEnabled = !!polling.enabled
 
     function toggleSim() {
       const next = !sim
-      const patch = { sim: next }
-      if (next && !points.length) {
-        setError('')
-      }
-      setConn(patch)
+      // persist 按 connId 定向，toggleSim 按 activeConnId
+      setActiveConnPatch({ sim: next })
       if (next && typeof openLive === 'function') openLive()
     }
 
     function toggleWatch() {
-      persist({ polling: { enabled: !watchEnabled, intervalMs: (pack.polling && pack.polling.intervalMs) || 1000 } })
+      const nextPolling = { ...(pollingByConnection||{}), [activeConnId]: { ...polling, enabled: !watchEnabled, intervalMs: polling.intervalMs || 1000 } }
+      persist({ pollingByConnection: nextPolling, version: 3 })
       if (!watchEnabled && typeof openLive === 'function') openLive()
     }
 
-    // ── serial log / frames ──
+    function setPollingInterval(ms) {
+      const nextPolling = { ...(pollingByConnection||{}), [activeConnId]: { ...polling, enabled: true, intervalMs: Number(ms)||1000 } }
+      persist({ pollingByConnection: nextPolling, version: 3 })
+    }
+
+    // ── COM 去重：rtu port 全局置灰、tcp host:port 同理，sim 仍占位 ──
+    function findRtuOccupier(port, excludeId) {
+      if (!port) return null
+      const key = String(port).trim().toLowerCase()
+      const hit = connections.find((c)=> c.id!==excludeId && c.enabled!==false && c.conn && c.conn.mode==='rtu' && String(c.conn.port||'').trim().toLowerCase()===key)
+      return hit ? hit.name : null
+    }
+    function findTcpOccupier(host, tcpPort, excludeId) {
+      const key = String(host||'').trim().toLowerCase() + ':' + String(tcpPort||502)
+      const hit = connections.find((c)=> {
+        if (c.id===excludeId || c.enabled===false) return false
+        const cc = c.conn||{}
+        if (cc.mode!=='tcp') return false
+        const k = String(cc.host||'').trim().toLowerCase() + ':' + String(cc.tcpPort||502)
+        return k===key
+      })
+      return hit ? hit.name : null
+    }
+
+    // ── serial log / frames 分轨 ──
     function openSerial() {
       if (!cwd) return
       post('/dsh-vision-bench/serial/open', {
@@ -2722,6 +3457,24 @@ function createHmiView(React, t, post, openLive) {
       post('/dsh-vision-bench/serial/close', { cwd }, 10000).catch(() => { /* ignore */ })
       setSerial((prev) => ({ ...prev, open: false, lines: [], lastId: 0, error: '' }))
     }
+
+    const serialFilterText = serial.filter.trim().toLowerCase()
+    const serialLines = serialFilterText
+      ? serial.lines.filter((item) => item.line.toLowerCase().includes(serialFilterText))
+      : serial.lines
+    // 报文分轨：framesByConnection 按 activeConnId 切轨，顶部 全部|COM3|COM4 切轨
+    // getFramesLog 支持按 connId，'all' 聚合
+    const framesAll = frameFilter === 'all' ? getFramesLog(cwd) : getFramesLog(cwd, frameFilter)
+    // 若当前 filter 为 all 但 activeConnId 存在时，仍可按 activeConnId 高亮？保持按 filter 展示
+    const frameRows = framesAll.map((item) => ({
+      t: item.t,
+      tx: '→ ' + (item.request || '(无帧)') + ' · ' + item.label + (item.deviceName ? ' · ' + item.deviceName : ''),
+      rx: item.response ? '← ' + item.response : '',
+      connectionId: item.connectionId || '',
+    }))
+    const frameRowsFiltered = serialFilterText
+      ? frameRows.filter((item) => (item.tx + item.rx).toLowerCase().includes(serialFilterText))
+      : frameRows
 
     function copyLogText() {
       if (logMode === 'frames') {
@@ -2746,20 +3499,6 @@ function createHmiView(React, t, post, openLive) {
       }).catch(() => { /* clipboard unavailable */ })
     }
 
-    const serialFilterText = serial.filter.trim().toLowerCase()
-    const serialLines = serialFilterText
-      ? serial.lines.filter((item) => item.line.toLowerCase().includes(serialFilterText))
-      : serial.lines
-    const framesAll = getFramesLog(cwd)
-    const frameRows = framesAll.map((item) => ({
-      t: item.t,
-      tx: '→ ' + (item.request || '(无帧)') + ' · ' + item.label + (item.deviceName ? ' · ' + item.deviceName : ''),
-      rx: item.response ? '← ' + item.response : '',
-    }))
-    const frameRowsFiltered = serialFilterText
-      ? frameRows.filter((item) => (item.tx + item.rx).toLowerCase().includes(serialFilterText))
-      : frameRows
-
     function logBody() {
       if (logMode === 'frames') {
         if (!frameRowsFiltered.length) return el('div', { className: 'dvb-empty' }, t('framesEmpty'))
@@ -2771,7 +3510,6 @@ function createHmiView(React, t, post, openLive) {
         }, frameRowsFiltered.map((item, idx) => el('div', {
           key: item.t + ':' + idx,
           className: 'dvb-serial-line',
-          title: framesAll[idx] && framesAll[idx].trace ? undefined : undefined,
         },
           '[' + clockOf(item.t) + '] ' + item.tx,
           item.rx ? el('div', null, '  ' + item.rx) : null)))
@@ -2803,10 +3541,26 @@ function createHmiView(React, t, post, openLive) {
           onClick() { setLogMode('frames') },
         }, t('logTabFrames')),
         logMode === 'frames'
-          ? el('button', {
-            type: 'button', className: 'dvb-btn',
-            onClick() { clearFramesLog(cwd) },
-          }, t('framesClear'))
+          ? el('span', { style: { display: 'flex', gap: '4px', alignItems: 'center', marginLeft: '8px' } },
+              el('button', {
+                type: 'button',
+                className: 'dvb-btn' + (frameFilter === 'all' ? ' is-on' : ''),
+                onClick() { setFrameFilter('all') },
+              }, '全部'),
+              connections.map((c)=> {
+                const label = c.conn && c.conn.mode==='tcp' ? ((c.conn.host||'TCP') + ':' + (c.conn.tcpPort||502)) : (c.conn && c.conn.port ? c.conn.port : c.name)
+                return el('button', {
+                  key: c.id,
+                  type: 'button',
+                  className: 'dvb-btn' + (frameFilter===c.id ? ' is-on' : ''),
+                  title: c.name + ' · ' + connLabel(c.conn||{}),
+                  onClick() { setFrameFilter(c.id) },
+                }, label)
+              }),
+              el('button', {
+                type: 'button', className: 'dvb-btn',
+                onClick() { clearFramesLog(cwd, frameFilter) },
+              }, t('framesClear')))
           : null,
         el('div', { style: { flex: 1 } }),
         logMode === 'serial'
@@ -2832,96 +3586,315 @@ function createHmiView(React, t, post, openLive) {
         placeholder: 'error, assert…',
         spellCheck: false,
         autoComplete: 'off',
-        onChange(event) { setSerial((prev) => ({ ...prev, filter: event.target.value })) },
+        onChange: (event)=>{ setSerial((prev) => ({ ...prev, filter: event.target.value })) },
       })),
       logBody())
 
-    // ── connection bar ──
-    const connBar = el('div', { className: 'dvb-panel' },
+    // ── 顶部连接列表 ──
+    const connListPanel = el('div', { className: 'dvb-panel' },
       el('div', { className: 'dvb-panel-head' },
-        el('span', { className: 'dvb-panel-title' }, t('connBar')),
-        el('span', { className: 'dvb-tag' }, connLabel(conn)),
+        el('span', { className: 'dvb-panel-title' }, t('connBar') || '连接'),
+        el('span', { className: 'dvb-tag' }, connections.length + ' 个连接'),
+        el('button', {
+          type: 'button',
+          className: 'dvb-btn dvb-btn-primary',
+          disabled: !cwd,
+          onClick: addConnection,
+        }, '＋连接'),
+        activeConnObj ? el('span', { className: 'dvb-tag' }, connLabel(activeConnObj.conn||{})) : null,
         sim ? el('span', { className: 'dvb-tag' }, t('sim')) : null,
         el('button', {
           type: 'button',
           className: 'dvb-btn' + (sim ? ' is-on' : ''),
-          disabled: !cwd,
+          disabled: !cwd || !activeConnId,
           title: t('simHint'),
           onClick: toggleSim,
         }, t('sim')),
-        el('button', {
-          type: 'button', className: 'dvb-btn', disabled: !cwd,
-          onClick() { setConn(emptyConnPatch()) },
-        }, t('removeDevice')),
         !canDevice ? el('span', { className: 'dvb-need' }, t('needBindingsRead')) : null),
-      el('div', { className: 'dvb-toolbar' },
-        field(t('mode'), el('select', {
-          className: 'dvb-input',
-          value: conn.mode,
-          onChange(event) { setConn({ mode: event.target.value }) },
-        },
-          el('option', { value: 'rtu' }, 'RTU'),
-          el('option', { value: 'tcp' }, 'TCP'))),
-        conn.mode === 'rtu'
-          ? field(t('serial'), el('div', { className: 'dvb-combo' },
-            el('select', {
-              className: 'dvb-input dvb-input-mono',
-              value: conn.port || '',
-              disabled: scanning,
-              onChange(event) { setConn({ port: event.target.value }) },
-            },
-              el('option', { value: '' }, scanning ? t('serialScanning') : (ports.length ? t('serialPick') : t('serialNone'))),
-              conn.port && !ports.some((item) => item.path === conn.port)
-                ? el('option', { value: conn.port }, conn.port + ' · ' + t('serialGone'))
-                : null,
-              ports.map((item) => el('option', { key: item.path, value: item.path }, item.label || item.path))),
-            el('button', {
-              type: 'button', className: 'dvb-btn',
-              disabled: scanning,
-              title: t('serialScan'),
-              onClick: scanPorts,
-            }, t('serialScan'))))
-          : field(t('host'), el('input', {
-            className: 'dvb-input dvb-input-mono',
-            value: conn.host || '',
-            spellCheck: false,
-            autoComplete: 'off',
-            onChange(event) { setConn({ host: event.target.value }) },
-          })),
-        field(t('baudrate'), el('input', {
-          className: 'dvb-input dvb-input-mono', type: 'number', value: conn.baudrate || 9600,
-          onChange(event) { setConn({ baudrate: Number(event.target.value) }) },
-        })),
-        field(t('slave'), el('input', {
-          className: 'dvb-input dvb-input-mono', type: 'number', value: conn.slave, min: 0, max: 247,
-          onChange(event) { setConn({ slave: Number(event.target.value) }) },
-        })),
-        field(t('databits'), el('select', {
-          className: 'dvb-input',
-          value: String(conn.bytesize || 8),
-          onChange(event) { setConn({ bytesize: Number(event.target.value) }) },
-        }, el('option', { value: '8' }, '8'), el('option', { value: '7' }, '7'))),
-        field(t('parityBit'), el('select', {
-          className: 'dvb-input',
-          value: conn.parity || 'N',
-          onChange(event) { setConn({ parity: event.target.value }) },
-        }, el('option', { value: 'N' }, 'N'), el('option', { value: 'E' }, 'E'), el('option', { value: 'O' }, 'O'))),
-        field(t('stopbit'), el('select', {
-          className: 'dvb-input',
-          value: String(conn.stopbits || 1),
-          onChange(event) { setConn({ stopbits: Number(event.target.value) }) },
-        }, el('option', { value: '1' }, '1'), el('option', { value: '2' }, '2')))))
+      connections.length
+        ? el('div', { className: 'dvb-table-wrap' },
+            el('table', { className: 'dvb-table' },
+              el('thead', null, el('tr', null,
+                el('th', null, '名称'),
+                el('th', null, t('role') || '角色'),
+                el('th', null, '启用'),
+                el('th', null, t('connBar')),
+                el('th', null, '操作'))),
+              el('tbody', null, connections.map((c)=> {
+                const isActive = c.id === activeConnId
+                const roleLabel = (c.role === 'server' || c.role === 'slave') ? (t('roleSlave')||'从机') : (t('roleMaster')||'主机')
+                const enabled = c.enabled !== false
+                const occupiedPort = c.conn && c.conn.mode==='rtu' && c.conn.port ? findRtuOccupier(c.conn.port, c.id) : null
+                return el('tr', { key: c.id, 'data-active': isActive ? 'true' : 'false', style: isActive ? { background: 'var(--dsw-alias-bg-layer-2,rgba(128,128,128,.1))' } : null },
+                  el('td', null,
+                    el('button', {
+                      type: 'button',
+                      className: 'dvb-btn' + (isActive ? ' is-on dvb-btn-primary' : ''),
+                      title: isActive ? '当前连接' : '切换到此连接',
+                      onClick() { selectConnection(c.id) },
+                    }, c.name + (isActive ? ' ●' : ''))),
+                  el('td', null,
+                    el('select', {
+                      className: 'dvb-input',
+                      value: c.role === 'server' || c.role === 'slave' ? 'server' : 'client',
+                      disabled: !cwd,
+                      onChange: (event)=>{
+                        const nextRole = event.target.value
+                        const nextConns = connections.map((x)=> x.id===c.id ? { ...x, role: nextRole } : x)
+                        persist({ connections: nextConns, version: 3 })
+                      },
+                    },
+                      el('option', { value: 'client' }, t('roleMaster')||'主机(master)'),
+                      el('option', { value: 'server' }, t('roleSlave')||'从机(slave)'))),
+                  el('td', null,
+                    el('label', { style: { display: 'flex', alignItems: 'center', gap: '4px' } },
+                      el('input', {
+                        type: 'checkbox',
+                        checked: enabled,
+                        disabled: !cwd,
+                        onChange() { toggleConnEnabled(c.id) },
+                      }),
+                      enabled ? '启用' : '禁用')),
+                  el('td', { title: occupiedPort ? '已被 ' + occupiedPort + ' 占用' : '' }, connLabel(c.conn||{}) + (occupiedPort ? ' · 已被 ' + occupiedPort + ' 占用' : '')),
+                  el('td', null,
+                    el('div', { className: 'dvb-actions' },
+                      el('button', {
+                        type: 'button', className: 'dvb-btn',
+                        onClick() { openConnEdit(c) },
+                      }, '编辑'),
+                      pendingDeleteId === c.id
+                        ? el('span', { style: { display: 'flex', gap: '4px', alignItems: 'center' } },
+                            el('span', { className: 'dvb-need' }, '确认删除？'),
+                            el('button', {
+                              type: 'button', className: 'dvb-btn dvb-btn-primary',
+                              onClick() { requestDeleteConnection(c.id) },
+                            }, '确认'),
+                            el('button', {
+                              type: 'button', className: 'dvb-btn',
+                              onClick() { setPendingDeleteId('') },
+                            }, '取消'))
+                        : el('button', {
+                            type: 'button', className: 'dvb-btn',
+                            disabled: connections.length<=1,
+                            title: connections.length<=1 ? '至少保留一个连接' : '',
+                            onClick() { requestDeleteConnection(c.id) },
+                          }, t('removeDevice')))))
+              }))))
+        : el('div', { className: 'dvb-empty' }, '暂无连接，点击「＋连接」创建'))
 
-    function emptyConnPatch() {
-      return { host: '', tcpPort: 502, slave: 1, bytesize: 8, parity: 'N', stopbits: 1, baudrate: 9600 }
-    }
+    const connFormPanel = connForm.open
+      ? el('div', { className: 'dvb-panel dvb-write-panel' },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, '编辑连接 · ' + connForm.id),
+            el('button', { type: 'button', className: 'dvb-btn', onClick(){ setConnForm((prev)=>({...prev, open:false})) } }, t('csvCancel'))),
+          el('div', { className: 'dvb-toolbar' },
+            field('名称', el('input', {
+              className: 'dvb-input',
+              value: connForm.name,
+              onChange: (event)=>{ setConnForm((prev)=> ({ ...prev, name: event.target.value })) },
+            })),
+            field(t('role')||'角色', el('select', {
+              className: 'dvb-input',
+              value: connForm.role === 'server' || connForm.role==='slave' ? 'server' : 'client',
+              onChange: (event)=>{ setConnForm((prev)=> ({ ...prev, role: event.target.value })) },
+            },
+              el('option', { value: 'client' }, '主机(master)'),
+              el('option', { value: 'server' }, '从机(slave)'))),
+            field('启用', el('label', { style:{display:'flex',gap:'4px',alignItems:'center'} },
+              el('input', { type:'checkbox', checked: !!connForm.enabled, onChange: (event)=>{ setConnForm((prev)=>({...prev, enabled: event.target.checked})) } }),
+              connForm.enabled ? '启用' : '禁用')),
+            field(t('mode'), el('select', {
+              className: 'dvb-input',
+              value: connForm.conn.mode || 'rtu',
+              onChange: (event)=>{ setConnForm((prev)=> ({ ...prev, conn: { ...prev.conn, mode: event.target.value } })) },
+            },
+              el('option', { value: 'rtu' }, 'RTU'),
+              el('option', { value: 'tcp' }, 'TCP'))),
+            connForm.conn.mode === 'rtu'
+              ? field(t('serial'), el('div', { className: 'dvb-combo' },
+                  el('select', {
+                    className: 'dvb-input dvb-input-mono',
+                    value: connForm.conn.port || '',
+                    disabled: scanning,
+                    onChange: (event)=>{ setConnForm((prev)=> ({ ...prev, conn: { ...prev.conn, port: event.target.value } })) },
+                  },
+                    el('option', { value: '' }, scanning ? t('serialScanning') : (ports.length ? t('serialPick') : t('serialNone'))),
+                    connForm.conn.port && !ports.some((item)=> item.path===connForm.conn.port)
+                      ? el('option', { value: connForm.conn.port }, connForm.conn.port + ' · ' + t('serialGone'))
+                      : null,
+                    ports.map((item)=>{
+                      const occupier = findRtuOccupier(item.path, connForm.id)
+                      return el('option', { key: item.path, value: item.path, disabled: !!occupier, title: occupier ? '已被 ' + occupier + ' 占用' : '' }, (item.label||item.path) + (occupier ? ' · 已被 ' + occupier + ' 占用' : ''))
+                    })),
+                  el('button', { type:'button', className:'dvb-btn', disabled: scanning, title: t('serialScan'), onClick: scanPorts }, t('serialScan'))))
+              : field(t('host'), el('div', { className: 'dvb-combo' },
+                  el('input', {
+                    className: 'dvb-input dvb-input-mono',
+                    value: connForm.conn.host || '',
+                    placeholder: t('hostPh')||'192.168.1.10',
+                    spellCheck: false,
+                    autoComplete: 'off',
+                    onChange: (event)=>{
+                      const host = event.target.value
+                      setConnForm((prev)=> ({ ...prev, conn: { ...prev.conn, host } }))
+                    },
+                  }),
+                  el('input', {
+                    className: 'dvb-input dvb-input-mono',
+                    value: connForm.conn.tcpPort || 502,
+                    type: 'number',
+                    style: { width: '80px', flex: 'none' },
+                    onChange: (event)=>{ setConnForm((prev)=> ({ ...prev, conn: { ...prev.conn, tcpPort: Number(event.target.value) } })) },
+                  }),
+                  (()=>{ const occupier = findTcpOccupier(connForm.conn.host, connForm.conn.tcpPort, connForm.id); return occupier ? el('span', { className:'dvb-need', title:'已被 ' + occupier + ' 占用' }, '已被 ' + occupier + ' 占用') : null })()
+                  )),
+            field(t('baudrate'), el('input', { className:'dvb-input dvb-input-mono', type:'number', value: connForm.conn.baudrate||9600, onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, baudrate: Number(event.target.value)}})) } })),
+            field(t('slave')||'站号/单元', el('input', { className:'dvb-input dvb-input-mono', type:'number', value: connForm.conn.slave, min:0, max:247, onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, slave: Number(event.target.value)}})) } })),
+            field(t('databits'), el('select', { className:'dvb-input', value: String(connForm.conn.bytesize||8), onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, bytesize: Number(event.target.value)}})) } }, el('option',{value:'8'},'8'), el('option',{value:'7'},'7'))),
+            field(t('parityBit'), el('select', { className:'dvb-input', value: connForm.conn.parity||'N', onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, parity: event.target.value}})) } }, el('option',{value:'N'},'N'), el('option',{value:'E'},'E'), el('option',{value:'O'},'O'))),
+            field(t('stopbit'), el('select', { className:'dvb-input', value: String(connForm.conn.stopbits||1), onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, stopbits: Number(event.target.value)}})) } }, el('option',{value:'1'},'1'), el('option',{value:'2'},'2'))),
+            field(t('sim'), el('label', { style:{display:'flex',gap:'4px',alignItems:'center'} },
+              el('input', { type:'checkbox', checked: !!connForm.conn.sim, onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, sim: event.target.checked}})) } }),
+              t('simHint')||'仿真'))),
+          el('div', { className:'dvb-actions' },
+            el('button', { type:'button', className:'dvb-btn dvb-btn-primary', disabled: !cwd, onClick: saveConnEdit }, t('savePoint')||'保存'),
+            el('button', { type:'button', className:'dvb-btn', onClick(){ setConnForm((prev)=>({...prev, open:false})) } }, t('csvCancel'))))
+      : null
+
+    // ── 设备树 ──
+    const devicePanel = el('div', { className: 'dvb-panel' },
+      el('div', { className: 'dvb-panel-head' },
+        el('span', { className: 'dvb-panel-title' }, '设备 · ' + (activeConnObj ? activeConnObj.name : '')),
+        el('span', { className: 'dvb-tag' }, activeDevices.length + ' 设备'),
+        el('button', {
+          type: 'button', className: 'dvb-btn',
+          disabled: !cwd || !activeConnId,
+          onClick(){
+            const pack = normalizePack()
+            const nid = hmiGenId('d')
+            const newDev = { id: nid, connectionId: activeConnId, name: '设备' + (activeDevices.length+1), unitId: 1, enabled: true }
+            persist({ devices: (pack.devices||[]).concat([newDev]), activeDeviceId: nid, version:3 })
+          },
+        }, '＋设备')),
+      activeDevices.length
+        ? el('div', { className: 'dvb-table-wrap' },
+            el('table', { className:'dvb-table' },
+              el('thead', null, el('tr', null, el('th', null, '名称'), el('th', null, '站号'), el('th', null, '启用'), el('th', null, '点位数'), el('th', null, ''))),
+              el('tbody', null, activeDevices.map((d)=>{
+                const isActiveDev = d.id===activeDeviceId
+                const ptCount = (allPoints||[]).filter((p)=> (p.deviceId||'d1')===d.id && (p.connectionId||p.connId)===activeConnId).length
+                return el('tr', { key: d.id, 'data-active': isActiveDev?'true':'false', style: isActiveDev?{background:'var(--dsw-alias-bg-layer-2,rgba(128,128,128,.1))'}:null },
+                  el('td', null,
+                    el('button', {
+                      type:'button',
+                      className:'dvb-btn' + (isActiveDev ? ' is-on dvb-btn-primary' : ''),
+                      onClick(){ persist({ activeDeviceId: d.id, version:3 }) },
+                    }, d.name + (isActiveDev ? ' ●' : ''))),
+                  el('td', null, String(d.unitId)),
+                  el('td', null, d.enabled!==false ? '启用' : '禁用'),
+                  el('td', null, String(ptCount)),
+                  el('td', null,
+                    el('div', { className:'dvb-actions' },
+                      el('button', {
+                        type:'button', className:'dvb-btn',
+                        onClick(){
+                          const name = typeof prompt==='function' ? prompt('设备名称', d.name) : null
+                          if (name===null) return
+                          const nextDevs = devices.map((x)=> x.id===d.id ? { ...x, name: String(name).slice(0,40)||x.name } : x)
+                          persist({ devices: nextDevs, version:3 })
+                        },
+                      }, '重命名'),
+                      el('button', {
+                        type:'button', className:'dvb-btn',
+                        disabled: activeDevices.length<=1,
+                        onClick(){
+                          const nextDevs = devices.filter((x)=> x.id!==d.id)
+                          const nextPoints = allPoints.filter((p)=> p.deviceId!==d.id)
+                          persist({ devices: nextDevs, points: nextPoints, version:3 })
+                        },
+                      }, '删除'))) )
+              }))))
+        : el('div', { className:'dvb-empty' }, '该连接暂无设备'))
+
+
+    // ── 当前连接详情（旧 connBar 兼容，展示 active 连接可编辑字段，COM 去重）──
+    const activeConnDetail = activeConnId
+      ? el('div', { className: 'dvb-panel' },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, '当前连接 · ' + (activeConnObj.name||activeConnId)),
+            el('span', { className: 'dvb-tag' }, connLabel(conn)),
+            sim ? el('span', { className: 'dvb-tag' }, t('sim')) : null,
+            !canDevice ? el('span', { className: 'dvb-need' }, t('needBindingsRead')) : null),
+          el('div', { className: 'dvb-toolbar' },
+            field(t('mode'), el('select', {
+              className: 'dvb-input',
+              value: conn.mode || 'rtu',
+              onChange: (event)=>{ setActiveConnPatch({ mode: event.target.value }) },
+            },
+              el('option', { value: 'rtu' }, 'RTU'),
+              el('option', { value: 'tcp' }, 'TCP'))),
+            conn.mode === 'rtu'
+              ? field(t('serial'), el('div', { className: 'dvb-combo' },
+                  el('select', {
+                    className: 'dvb-input dvb-input-mono',
+                    value: conn.port || '',
+                    disabled: scanning,
+                    onChange: (event)=>{ setActiveConnPatch({ port: event.target.value }) },
+                  },
+                    el('option', { value: '' }, scanning ? t('serialScanning') : (ports.length ? t('serialPick') : t('serialNone'))),
+                    conn.port && !ports.some((item)=> item.path===conn.port)
+                      ? el('option', { value: conn.port }, conn.port + ' · ' + t('serialGone'))
+                      : null,
+                    ports.map((item)=>{
+                      const occupier = findRtuOccupier(item.path, activeConnId)
+                      return el('option', { key: item.path, value: item.path, disabled: !!occupier, title: occupier ? '已被 ' + occupier + ' 占用' : '' }, (item.label||item.path) + (occupier ? ' · 已被 ' + occupier + ' 占用' : ''))
+                    })),
+                  el('button', { type:'button', className:'dvb-btn', disabled: scanning, title: t('serialScan'), onClick: scanPorts }, t('serialScan'))))
+              : field(t('host'), el('div', { className:'dvb-combo' },
+                  el('input', {
+                    className:'dvb-input dvb-input-mono',
+                    value: conn.host||'',
+                    placeholder: t('hostPh')||'192.168.1.10',
+                    spellCheck:false,
+                    autoComplete:'off',
+                    onChange: (event)=>{
+                      const host = event.target.value
+                      const occupier = findTcpOccupier(host, conn.tcpPort, activeConnId)
+                      if (occupier) setError('已被 ' + occupier + ' 占用: ' + host + ':' + (conn.tcpPort||502))
+                      else setError('')
+                      setActiveConnPatch({ host })
+                    },
+                  }),
+                  el('input', {
+                    className:'dvb-input dvb-input-mono',
+                    value: conn.tcpPort||502,
+                    type:'number',
+                    style:{width:'90px', flex:'none'},
+                    onChange: (event)=>{ setActiveConnPatch({ tcpPort: Number(event.target.value) }) },
+                  }),
+                  (()=>{ const occupier = findTcpOccupier(conn.host, conn.tcpPort, activeConnId); return occupier ? el('span', {className:'dvb-need', title:'已被 ' + occupier + ' 占用'}, '已被 ' + occupier + ' 占用') : null })()
+                  )),
+            field(t('baudrate'), el('input', { className:'dvb-input dvb-input-mono', type:'number', value: conn.baudrate||9600, onChange: (event)=>{ setActiveConnPatch({ baudrate: Number(event.target.value) }) } })),
+            field(t('slave')||'站号', el('input', { className:'dvb-input dvb-input-mono', type:'number', value: (activeDevices.find((d)=>d.id===activeDeviceId) && activeDevices.find((d)=>d.id===activeDeviceId).unitId) || conn.slave || 1, min:0, max:247, onChange: (event)=>{ setActiveConnPatch({ slave: Number(event.target.value) }) } })),
+            field(t('databits'), el('select', { className:'dvb-input', value: String(conn.bytesize||8), onChange: (event)=>{ setActiveConnPatch({ bytesize: Number(event.target.value) }) } }, el('option',{value:'8'},'8'), el('option',{value:'7'},'7'))),
+            field(t('parityBit'), el('select', { className:'dvb-input', value: conn.parity||'N', onChange: (event)=>{ setActiveConnPatch({ parity: event.target.value }) } }, el('option',{value:'N'},'N'), el('option',{value:'E'},'E'), el('option',{value:'O'},'O'))),
+            field(t('stopbit'), el('select', { className:'dvb-input', value: String(conn.stopbits||1), onChange: (event)=>{ setActiveConnPatch({ stopbits: Number(event.target.value) }) } }, el('option',{value:'1'},'1'), el('option',{value:'2'},'2'))),
+            field('角色', el('select', {
+              className:'dvb-input',
+              value: activeConnObj.role === 'server' || activeConnObj.role==='slave' ? 'server' : 'client',
+              onChange: (event)=>{ updateActiveConnMeta({ role: event.target.value }) },
+            }, el('option',{value:'client'}, '主机(master)'), el('option',{value:'server'}, '从机(slave)'))),
+            field('启用', el('label', { style:{display:'flex',gap:'4px',alignItems:'center'} },
+              el('input', { type:'checkbox', checked: activeConnObj.enabled!==false, onChange(){ toggleConnEnabled(activeConnId) } }),
+              activeConnObj.enabled!==false ? '启用' : '禁用'))))
+      : null
 
     // ── point form ──
     const formPanel = form.mode !== 'hidden'
       ? el('div', { className: 'dvb-panel dvb-write-panel' },
         el('div', { className: 'dvb-panel-head' },
           el('span', { className: 'dvb-panel-title' }, (form.mode === 'edit' ? t('editing') : t('addPoint'))
-            + (form.mode === 'edit' ? ' · ' + form.id : '')),
+            + (form.mode === 'edit' ? ' · ' + form.id : '') + ' · ' + (activeConnObj ? activeConnObj.name : '')),
           el('button', {
             type: 'button', className: 'dvb-btn', onClick: closeForm,
           }, t('csvCancel'))),
@@ -2930,12 +3903,12 @@ function createHmiView(React, t, post, openLive) {
             className: 'dvb-input',
             value: form.name,
             placeholder: t('ptNamePh'),
-            onChange(event) { setForm((prev) => ({ ...prev, name: event.target.value })) },
+            onChange: (event)=>{ setForm((prev) => ({ ...prev, name: event.target.value })) },
           })),
           field(t('ptFc'), el('select', {
             className: 'dvb-input',
             value: String(form.function),
-            onChange(event) { setForm((prev) => ({ ...prev, function: Number(event.target.value) })) },
+            onChange: (event)=>{ setForm((prev) => ({ ...prev, function: Number(event.target.value) })) },
           },
             el('option', { value: '1' }, fnOptionLabel(t, 1)),
             el('option', { value: '2' }, fnOptionLabel(t, 2)),
@@ -2945,32 +3918,37 @@ function createHmiView(React, t, post, openLive) {
             className: 'dvb-input dvb-input-mono', type: 'number',
             value: form.address,
             min: 0, max: 65535,
-            onChange(event) { setForm((prev) => ({ ...prev, address: Number(event.target.value) })) },
+            onChange: (event)=>{ setForm((prev) => ({ ...prev, address: Number(event.target.value) })) },
           })),
+          field('所属设备', el('select', {
+            className: 'dvb-input',
+            value: (form.deviceId || activeDeviceId || (activeDevices[0] && activeDevices[0].id) || ''),
+            onChange: (event)=>{ setForm((prev)=> ({ ...prev, deviceId: event.target.value })) },
+          }, activeDevices.map((d)=> el('option', { key:d.id, value:d.id }, d.name + ' · 站号 ' + d.unitId)))),
           field(t('ptScale'), el('input', {
             className: 'dvb-input dvb-input-mono', type: 'number', step: 'any',
             value: form.scale,
-            onChange(event) { setForm((prev) => ({ ...prev, scale: Number(event.target.value) })) },
+            onChange: (event)=>{ setForm((prev) => ({ ...prev, scale: Number(event.target.value) })) },
           })),
           field(t('ptOffset'), el('input', {
             className: 'dvb-input dvb-input-mono', type: 'number', step: 'any',
             value: form.offset,
-            onChange(event) { setForm((prev) => ({ ...prev, offset: Number(event.target.value) })) },
+            onChange: (event)=>{ setForm((prev) => ({ ...prev, offset: Number(event.target.value) })) },
           })),
           field(t('ptUnit'), el('input', {
             className: 'dvb-input',
             value: form.unit,
-            onChange(event) { setForm((prev) => ({ ...prev, unit: event.target.value })) },
+            onChange: (event)=>{ setForm((prev) => ({ ...prev, unit: event.target.value })) },
           })),
           field(t('ptAlarmMin'), el('input', {
             className: 'dvb-input dvb-input-mono', type: 'number', step: 'any',
             value: form.alarmMin,
-            onChange(event) { setForm((prev) => ({ ...prev, alarmMin: event.target.value })) },
+            onChange: (event)=>{ setForm((prev) => ({ ...prev, alarmMin: event.target.value })) },
           })),
           field(t('ptAlarmMax'), el('input', {
             className: 'dvb-input dvb-input-mono', type: 'number', step: 'any',
             value: form.alarmMax,
-            onChange(event) { setForm((prev) => ({ ...prev, alarmMax: event.target.value })) },
+            onChange: (event)=>{ setForm((prev) => ({ ...prev, alarmMax: event.target.value })) },
           }))),
         el('div', { className: 'dvb-actions' },
           el('button', {
@@ -2982,18 +3960,18 @@ function createHmiView(React, t, post, openLive) {
 
     const batchPanel = batch.open
       ? el('div', { className: 'dvb-panel dvb-write-panel' },
-        el('div', { className: 'dvb-hint' }, t('batchAdd')),
+        el('div', { className: 'dvb-hint' }, t('batchAdd') + ' · ' + (activeConnObj ? activeConnObj.name : '')),
         el('div', { className: 'dvb-toolbar' },
           field(t('batchPrefix'), el('input', {
             className: 'dvb-input',
             value: batch.prefix,
             placeholder: 'HR',
-            onChange(event) { setBatch((prev) => ({ ...prev, prefix: event.target.value })) },
+            onChange: (event)=>{ setBatch((prev) => ({ ...prev, prefix: event.target.value })) },
           })),
           field(t('ptFc'), el('select', {
             className: 'dvb-input',
             value: String(batch.fc),
-            onChange(event) { setBatch((prev) => ({ ...prev, fc: Number(event.target.value) })) },
+            onChange: (event)=>{ setBatch((prev) => ({ ...prev, fc: Number(event.target.value) })) },
           },
             el('option', { value: '1' }, fnOptionLabel(t, 1)),
             el('option', { value: '3' }, fnOptionLabel(t, 3)))),
@@ -3001,13 +3979,18 @@ function createHmiView(React, t, post, openLive) {
             className: 'dvb-input dvb-input-mono', type: 'number',
             value: batch.start,
             min: 0, max: 65535,
-            onChange(event) { setBatch((prev) => ({ ...prev, start: Number(event.target.value) })) },
+            onChange: (event)=>{ setBatch((prev) => ({ ...prev, start: Number(event.target.value) })) },
           })),
           field(t('batchCount'), el('input', {
             className: 'dvb-input dvb-input-mono', type: 'number',
             value: batch.count, min: 1, max: 64,
-            onChange(event) { setBatch((prev) => ({ ...prev, count: Number(event.target.value) })) },
+            onChange: (event)=>{ setBatch((prev) => ({ ...prev, count: Number(event.target.value) })) },
           })),
+          field('设备', el('select', {
+            className:'dvb-input',
+            value: batch.deviceId || activeDeviceId || (activeDevices[0]&&activeDevices[0].id)||'',
+            onChange: (event)=>{ setBatch((prev)=> ({...prev, deviceId: event.target.value})) },
+          }, activeDevices.map((d)=> el('option', {key:d.id, value:d.id}, d.name)))),
           field('\u00a0', el('button', {
             type: 'button', className: 'dvb-btn dvb-btn-primary', onClick: generateBatch,
           }, t('batchGenerate')))))
@@ -3022,44 +4005,46 @@ function createHmiView(React, t, post, openLive) {
         ? decodeValue(point, typeof rec.raw === 'boolean' ? (rec.raw ? 1 : 0) : rec.raw)
         : (rec && rec.ok === false ? rec.error : '—')
       const writable = isWritableFunction(point.function)
-      const isWriting = writeRow && writeRow.pointId === point.id
+      const devName = (devices.find((d)=>d.id===(point.deviceId||point.deviceId)) && devices.find((d)=>d.id===(point.deviceId)).name) || point.deviceId || '—'
       return el('tr', { key: point.id, 'data-kind': 'pt' },
         el('td', null, point.name || functionTag(point.function) + point.address),
+        el('td', null, devName),
         el('td', null, functionTag(point.function)),
         el('td', { className: 'dvb-val' }, String(point.address)),
         el('td', { className: 'dvb-val' }, (point.scale === 1 ? '' : '×' + point.scale) + (point.offset ? (point.offset > 0 ? '+' : '') + point.offset : '') || '—'),
         el('td', null, point.unit || '—'),
+        el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' }, String(shown)),
         el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' },
           rec && rec.at ? clockOf(rec.at) : '—'),
         writable
-          ? el('button', {
+          ? el('td', null, el('button', {
             type: 'button',
             className: 'dvb-btn dvb-btn-write',
             disabled: !cwd || !canDevice || connMissing || !!busy || writeRunning,
             onClick() { openWriteRow(point) },
-          }, t('quickWrite'))
-          : null,
-        el('button', {
+          }, t('quickWrite')))
+          : el('td', null, '—'),
+        el('td', null, el('button', {
           type: 'button', className: 'dvb-btn',
           disabled: !cwd || !!busy,
           onClick() { readOne(point.id) },
-        }, busy === point.id ? t('reading') : t('readSegment')),
-        el('button', {
+        }, busy === point.id ? t('reading') : t('readSegment'))),
+        el('td', null, el('button', {
           type: 'button', className: 'dvb-btn',
           onClick() { openEditPoint(point) },
-        }, t('editing').slice(0, 2)),
-        el('button', {
+        }, t('editing').slice(0, 2))),
+        el('td', null, el('button', {
           type: 'button', className: 'dvb-btn', disabled: !!busy,
           onClick() { removePointRow(point) },
-        }, t('deleteSegment')))
+        }, t('deleteSegment'))))
     })
 
     const pointsPanel = el('div', { className: 'dvb-panel' },
       el('div', { className: 'dvb-panel-head' },
-        el('span', { className: 'dvb-panel-title' }, t('pointTable')),
+        el('span', { className: 'dvb-panel-title' }, t('pointTable') + ' · ' + (activeConnObj ? activeConnObj.name : '') + ' (' + points.length + ')'),
         el('button', {
           type: 'button', className: 'dvb-btn dvb-btn-primary',
-          disabled: !cwd,
+          disabled: !cwd || !activeConnId,
           onClick: openAddPoint,
         }, t('addPoint')),
         el('button', {
@@ -3092,8 +4077,8 @@ function createHmiView(React, t, post, openLive) {
         watchEnabled
           ? el('select', {
             className: 'dvb-input dvb-live-interval',
-            value: String((pack.polling && pack.polling.intervalMs) || 1000),
-            onChange(event) { persist({ polling: { enabled: true, intervalMs: Number(event.target.value) } }) },
+            value: String(polling.intervalMs || 1000),
+            onChange: (event)=>{ setPollingInterval(event.target.value) },
           }, POLL_INTERVALS.map((ms) => el('option', { key: String(ms), value: String(ms) }, (ms / 1000) + 's')))
           : null,
         !canDevice || connMissing
@@ -3109,7 +4094,7 @@ function createHmiView(React, t, post, openLive) {
             rows: 5,
             spellCheck: false,
             placeholder: 'name,function,address,scale,offset,unit,alarmMin,alarmMax',
-            onChange(event) { setCsvText(event.target.value) },
+            onChange: (event)=>{ setCsvText(event.target.value) },
           }),
           el('div', { className: 'dvb-actions' },
             el('button', {
@@ -3127,12 +4112,17 @@ function createHmiView(React, t, post, openLive) {
           el('table', { className: 'dvb-table' },
             el('thead', null, el('tr', null,
               el('th', null, t('colName')),
+              el('th', null, '设备'),
               el('th', null, t('colFn')),
               el('th', null, t('colAddr')),
               el('th', null, '×/+'),
               el('th', null, t('ptUnit')),
+              el('th', null, '值'),
               el('th', null, t('time')),
-              el('th', null, ''))),
+              el('th', null, '写入'),
+              el('th', null, '读取'),
+              el('th', null, '编辑'),
+              el('th', null, '删除'))),
             el('tbody', null, tableRows)))
         : el('div', { className: 'dvb-empty' }, t('noPoints')))
 
@@ -3191,7 +4181,7 @@ function createHmiView(React, t, post, openLive) {
               className: 'dvb-input',
               value: String(Number(writeRow.text) ? 1 : 0),
               disabled: writeRow.busy,
-              onChange(event) { setWriteRow((prev) => ({ ...prev, text: event.target.value })) },
+              onChange: (event)=>{ setWriteRow((prev) => ({ ...prev, text: event.target.value })) },
             },
               el('option', { value: '0' }, t('coilOff')),
               el('option', { value: '1' }, t('coilOn')))
@@ -3200,7 +4190,7 @@ function createHmiView(React, t, post, openLive) {
               value: writeRow.text,
               disabled: writeRow.busy,
               spellCheck: false,
-              onChange(event) { setWriteRow((prev) => ({ ...prev, text: event.target.value })) },
+              onChange: (event)=>{ setWriteRow((prev) => ({ ...prev, text: event.target.value })) },
               onKeyDown(event) {
                 if (event.key === 'Enter' && !writeRow.busy) submitWriteRow()
               },
@@ -3225,7 +4215,10 @@ function createHmiView(React, t, post, openLive) {
     return el('div', { className: 'dvb-page' },
       statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
-      connBar,
+      connListPanel,
+      connFormPanel,
+      activeConnDetail,
+      devicePanel,
       pointsPanel,
       formPanel,
       writeStrip,
