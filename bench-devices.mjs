@@ -285,7 +285,7 @@ const normalizeQualifiedValues = (list, points) => {
 }
 
 // Validate RTU port uniqueness among enabled connections and TCP listenHost:listenPort for server role
-export const validateConnections = (connections) => {
+export const validateConnections = (connections, devices) => {
   const errors = []
   const enabled = (connections || []).filter(c => c && c.enabled !== false)
   // RTU port uniqueness
@@ -319,6 +319,36 @@ export const validateConnections = (connections) => {
       errors.push(`监听地址已被 ${other.name} 占用: ${host || '0.0.0.0'}:${port}`)
     } else {
       tcpMap.set(key, c)
+    }
+  }
+  // Optional second arg: also validate devices unitId uniqueness within same connection when provided
+  if (Array.isArray(devices)) {
+    const devErrs = validateDevices(devices, connections)
+    errors.push(...devErrs)
+  }
+  return errors
+}
+
+export const validateDevices = (devices, connections) => {
+  const errors = []
+  if (!Array.isArray(devices) || !devices.length) return errors
+  const connEnabled = new Map()
+  if (Array.isArray(connections)) {
+    for (const c of connections) if (c && c.id) connEnabled.set(c.id, c.enabled !== false)
+  }
+  const enabledDevices = devices.filter(d => d && d.enabled !== false)
+  const byConn = new Map()
+  for (const d of enabledDevices) {
+    const cid = d.connectionId || 'c1'
+    if (connEnabled.has(cid) && connEnabled.get(cid) === false) continue
+    const unit = Number(d.unitId)
+    if (!byConn.has(cid)) byConn.set(cid, new Map())
+    const unitMap = byConn.get(cid)
+    if (unitMap.has(unit)) {
+      const other = unitMap.get(unit)
+      errors.push(`同一连接下 Unit ID 重复: ${unit}（${other.name} 与 ${d.name} 在 ${cid}）`)
+    } else {
+      unitMap.set(unit, d)
     }
   }
   return errors

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync,
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { emptyLog, mergeLog, normalizeEvent } from './bench-prompt.mjs'
-import { normalizeConn, normalizeModbus, validateConnections } from './bench-devices.mjs'
+import { normalizeConn, normalizeModbus, validateConnections, validateDevices } from './bench-devices.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import {
   MAX_TASKS,
@@ -288,10 +288,17 @@ export const saveWorkspace = (home, cwd, input) => {
     manualRequests: input && input.manualRequests !== undefined ? input.manualRequests : prev.manualRequests,
   }
   const workspace = normalizeWorkspace(merged)
-  // COM uniqueness check before persist
-  const connErrors = validateConnections(workspace.modbus.connections)
-  if (connErrors.length) {
-    return { ok: false, error: connErrors.join('；'), workspace }
+  // COM / TCP server + Unit ID uniqueness check before persist
+  const connErrors = validateConnections(workspace.modbus.connections, workspace.modbus.devices)
+  // also keep explicit device check for callers that only use validateDevices
+  const devErrors = validateDevices(workspace.modbus.devices, workspace.modbus.connections)
+  const allErrs = [...connErrors]
+  // avoid double counting if validateConnections already included device errors (when devices arg provided)
+  // connErrors already contains device errors when devices were passed, so dedup by not double-adding
+  // we only add devErrors that are not already in connErrors
+  for (const e of devErrors) if (!allErrs.includes(e)) allErrs.push(e)
+  if (allErrs.length) {
+    return { ok: false, error: allErrs.join('；'), workspace }
   }
   const keilProject = workspace.keil.project
   if (keilProject && !isAbsolute(keilProject)) {
