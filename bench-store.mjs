@@ -987,7 +987,7 @@ export const applyConfigDraft = (home, cwd, draftId, opts = {}) => {
   })
   if (!saved.ok) return { ok: false, error: saved.error, summary }
   try {
-    recordBenchEvent(home, room.cwd, { action: 'config-apply', ok: true, summary: '应用配置草稿 ' + id + '（v' + draft.baseConfigVersion + ' → v' + (saved.workspace.modbus.configVersion || 1) + '）' }, { source: opts.source || 'user', sessionId: opts.sessionId || '' })
+    recordBenchEvent(home, room.cwd, { action: 'config-apply', ok: true, summary: '应用配置草稿 ' + id + '（v' + draft.baseConfigVersion + ' → v' + (saved.workspace.modbus.configVersion || 1) + '）' }, { source: 'user', sessionId: opts.sessionId || '' })
   } catch {}
   return { ok: true, draftId: id, prevVersion: draft.baseConfigVersion, nextVersion: saved.workspace.modbus.configVersion || 1, summary, workspace: saved.workspace }
 }

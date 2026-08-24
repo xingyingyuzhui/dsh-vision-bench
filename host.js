@@ -334,7 +334,7 @@ export function apply(ctx, config = {}) {
       const body = await readJsonBody(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
-      const ran = applyConfigDraft(dshHome, room.cwd, body.draftId || body.id, { source: body.source || 'user', sessionId: body.sessionId || '' })
+      const ran = applyConfigDraft(dshHome, room.cwd, body.draftId || body.id, { source: 'user', sessionId: body.sessionId || '' })
       if (ran.ok) {
         void notifyBenchEvent(dshHome, room.cwd, '配置草稿已应用 ' + (body.draftId || body.id) + ' → v' + ran.nextVersion, '', { sessionId: body.sessionId || '' }).catch(() => {})
       } else if (ran.errorCode === 'CONFIG_DRIFT') {

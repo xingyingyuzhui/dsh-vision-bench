@@ -208,15 +208,20 @@ test('config draft cannot apply after base config version drift (§16.5-35)', as
     assert.equal(created.ok, true)
     // adding a point bumps configVersion -> the stale draft must refuse to apply
     saveWorkspace(home, cwd, { modbus: { points: [{ id: 'px', connectionId: 'c1', deviceId: 'd1', name: 'PX', area: 'holdingRegister', function: 3, address: 9 }] } })
-    const drifted = await runVisionBench(home, { action: 'draftApply', draftId: created.draft.id }, cwd, { source: 'user' })
+    const { applyConfigDraft } = await import('../bench-store.mjs')
+    const drifted = await applyConfigDraft(home, cwd, created.draft.id, { source: 'user' })
     assert.equal(drifted.ok, false)
     assert.equal(drifted.errorCode, 'CONFIG_DRIFT')
     // positive control: a fresh draft against the new baseline applies cleanly
     const cv2 = loadWorkspace(home, cwd).modbus.configVersion
     const fresh = await runVisionBench(home, { ...draftArgs, baseConfigVersion: cv2 }, cwd, { source: 'user' })
-    const applied = fresh.ok ? await runVisionBench(home, { action: 'draftApply', draftId: fresh.draft.id }, cwd, { source: 'user' }) : fresh
+    const applied = fresh.ok ? await applyConfigDraft(home, cwd, fresh.draft.id, { source: 'user' }) : fresh
     assert.equal(applied.ok, true)
     assert.equal(applied.nextVersion, cv2 + 1)
+    // Agent direct apply must be rejected (tool no longer exposes draftApply)
+    const agentApply = await runVisionBench(home, { action: 'draftApply', draftId: created.draft.id }, cwd, { source: 'agent' })
+    assert.equal(agentApply.ok, false)
+    assert.match(String(agentApply.error || ''), /action 必须是|draftApply/i)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

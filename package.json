@@ -86,6 +86,7 @@
     }
   },
   "dependencies": {
-    "yaml": "^2.9.0"
+    "fast-json-patch": "3.1.1",
+    "yaml": "2.9.0"
   }
 }
