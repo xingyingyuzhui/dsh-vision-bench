@@ -3,7 +3,7 @@ import { clockOf, decodeValue, functionTag } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { TREND, TREND_CAP, TREND_WINDOW_MS, trendKey, sampleTrend, toUplotData, UPLOT_PROTO, exportRangeCsv } from './bench-trend.mjs'
-import { normalizeAlarmState, groupAlarms, acknowledgeAlarm, ACTIVE, RECOVERED, ACKED, PROCESS, COMM } from './bench-alarm.mjs'
+import { normalizeAlarmState, groupAlarms, acknowledgeAlarm, ACTIVE, RECOVERED, ACKED, PROCESS, COMM, COND_ACTIVE, COND_RECOVERED } from './bench-alarm.mjs'
 
 const TAB_TABLE = 'dsh-vision-bench:modbus'
 const TAB_CHART = 'dsh-vision-bench:charts'
@@ -664,7 +664,7 @@ export function createAlarmPage(React, t, post, hooks) {
     const [events, setEvents] = React.useState([])
     const [alarmState, setAlarmState] = React.useState({})
     const [pack, setPack] = React.useState(null)
-    const [view, setView] = React.useState('current')
+    const [view, setView] = React.useState('activeUnacked')
     const [group, setGroup] = React.useState('all')
     React.useEffect(() => subscribeState(post, cwd, (data) => {
       if (!data) return
@@ -674,7 +674,9 @@ export function createAlarmPage(React, t, post, hooks) {
       if (mb) { setAlarmState(mb.alarmState || mb.alarmActive || {}); try { setPack(normalizeModbus(mb)) } catch { setPack(null) } }
     }), [cwd, post])
     const grouped = groupAlarms(alarmState)
-    const list = view === 'current' ? grouped.current : grouped.history
+    const bucketMap = grouped.buckets || { activeUnacked: grouped.activeUnacked || [], activeAcked: grouped.activeAcked || [], recoveredUnacked: grouped.recoveredUnacked || [], recoveredAcked: grouped.recoveredAcked || [] }
+    const legacyMap = { current: grouped.current, history: grouped.history }
+    const list = bucketMap[view] || legacyMap[view] || grouped.current || []
     const filtered = group === 'all' ? list : list.filter(a=> a.group===group)
     // enrich with point/connection/device labels
     const [copiedAlarm, setCopiedAlarm] = React.useState('')
@@ -687,7 +689,8 @@ export function createAlarmPage(React, t, post, hooks) {
       return { a, pt, conn, dev, threshold, label }
     }).sort((x,y)=> (y.a.lastAt||0)-(x.a.lastAt||0))
     const doAck = (id)=>{
-      const next = acknowledgeAlarm(alarmState, id)
+      const next = acknowledgeAlarm(alarmState, id, { by: 'user' })
+      if (next && next._suggested) return
       setAlarmState(next)
       if (cwd) post('/dsh-vision-bench/workspace', { cwd, modbus:{ alarmState: next, version:3 } }).catch(()=>{})
     }
@@ -719,19 +722,27 @@ export function createAlarmPage(React, t, post, hooks) {
     return el('div', { className: 'dvb-live' },
       el('div', { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('liveAlarm')),
-        el('span', { className: 'dvb-chip', 'data-kind': grouped.active.length?'err':'ready' }, grouped.active.length+' 激活')),
+        el('span', { className: 'dvb-chip', 'data-kind': (grouped.activeAll && grouped.activeAll.length) || grouped.active.length?'err':'ready' }, ((grouped.activeAll && grouped.activeAll.length) || grouped.active.length)+' 激活')),
       el('div', { className: 'dvb-toolbar' },
-        el('button', { type:'button', className:'dvb-btn'+(view==='current'?' is-on':''), onClick(){ setView('current') } }, '当前'),
-        el('button', { type:'button', className:'dvb-btn'+(view==='history'?' is-on':''), onClick(){ setView('history') } }, '历史'),
+        el('button', { type:'button', className:'dvb-btn'+(view==='activeUnacked'?' is-on':''), onClick(){ setView('activeUnacked') } }, '激活未确认'+(grouped.buckets? '·'+grouped.buckets.activeUnacked.length:'')),
+        el('button', { type:'button', className:'dvb-btn'+(view==='activeAcked'?' is-on':''), onClick(){ setView('activeAcked') } }, '激活已确认'+(grouped.buckets? '·'+grouped.buckets.activeAcked.length:'')),
+        el('button', { type:'button', className:'dvb-btn'+(view==='recoveredUnacked'?' is-on':''), onClick(){ setView('recoveredUnacked') } }, '已恢复未确认'+(grouped.buckets? '·'+grouped.buckets.recoveredUnacked.length:'')),
+        el('button', { type:'button', className:'dvb-btn'+(view==='recoveredAcked'?' is-on':''), onClick(){ setView('recoveredAcked') } }, '已恢复已确认·历史'+(grouped.buckets? '·'+grouped.buckets.recoveredAcked.length:'')),
+        el('span', { style:{width:'8px', display:'inline-block'}}),
         el('button', { type:'button', className:'dvb-btn'+(group==='all'?' is-on':''), onClick(){ setGroup('all') } }, '全部'),
         el('button', { type:'button', className:'dvb-btn'+(group===PROCESS?' is-on':''), onClick(){ setGroup(PROCESS) } }, '过程'),
         el('button', { type:'button', className:'dvb-btn'+(group===COMM?' is-on':''), onClick(){ setGroup(COMM) } }, '通信'),
         enriched.length ? el('button', { type:'button', className:'dvb-btn', onClick(){ doAck('all') } }, '全部确认') : null),
       copiedAlarm ? el('div', { className: 'dvb-hint' }, '已复制告警引用 ' + copiedAlarm + ' · 粘贴给 Agent') : null,
       enriched.length
-        ? el('div', { className: 'dvb-live-list' }, enriched.slice(0,80).map((row)=> el('div', { key: row.a.id, className: 'dvb-task', 'data-status': row.a.status, 'data-group': row.a.group },
-            el('span', { className: 'dvb-badge', 'data-status': row.a.status }, row.a.status===ACTIVE?'激活': row.a.status===RECOVERED?'恢复':'已确认'),
+        ? el('div', { className: 'dvb-live-list' }, enriched.slice(0,80).map((row)=> {
+            const condLabel = row.a.condition===COND_ACTIVE ? (row.a.acknowledged ? '激活已确认' : '激活未确认') : (row.a.acknowledged ? '已恢复已确认' : '已恢复未确认')
+            const ackInfo = row.a.acknowledged ? ('已确认·'+(row.a.ackedBy||'user')+'@'+clockOf(row.a.ackedAt)) : (row.a.suggestedBy ? '建议·'+row.a.suggestedBy : '未确认')
+            const dur = row.a.durationMs ? (Math.round(row.a.durationMs/1000)+'s') : (row.a.recoveredAt ? Math.round((row.a.recoveredAt - row.a.firstAt)/1000)+'s' : '')
+            return el('div', { key: row.a.id, className: 'dvb-task', 'data-status': row.a.status, 'data-condition': row.a.condition, 'data-acked': row.a.acknowledged?'true':'false', 'data-group': row.a.group },
+            el('span', { className: 'dvb-badge', 'data-status': row.a.status, 'data-condition': row.a.condition }, condLabel),
             el('span', { className: 'dvb-badge', 'data-group': row.a.group }, row.a.group===COMM?'通信':'过程'),
+            el('span', { className: 'dvb-badge', 'data-severity': row.a.severity || 'medium' }, row.a.severity || ''),
             el('span', { className: 'dvb-map-meta' }, clockOf(row.a.lastAt)),
             el('span', { className: 'dvb-hint', title: row.a.id }, row.label),
             row.conn ? el('span', { className: 'dvb-hint' }, row.conn.name) : null,
@@ -740,10 +751,13 @@ export function createAlarmPage(React, t, post, hooks) {
             el('span', { className: 'dvb-hint' }, row.a.value!=null?'当前 '+row.a.value:''),
             el('span', { className: 'dvb-badge', 'data-quality': row.a.quality || 'good' }, row.a.quality || 'good'),
             row.a.count>1 ? el('span', { className: 'dvb-tag' }, '×'+row.a.count) : null,
-            row.a.status!==ACKED ? el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ doAck(row.a.id) } }, '确认') : null,
+            dur ? el('span', { className: 'dvb-tag' }, '持续'+dur) : null,
+            el('span', { className: 'dvb-hint' }, ackInfo),
+            row.a.frameId ? el('span', { className: 'dvb-hint', title: row.a.frameId }, '帧:'+row.a.frameId.slice(0,8)) : null,
+            !row.a.acknowledged ? el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ doAck(row.a.id) } }, '确认') : null,
             el('button', {
               type:'button', className:'dvb-btn dvb-btn-sm',
-              title: '复制告警结构化引用（稳定 ID+配置版本+时间范围）',
+              title: '复制告警结构化引用（稳定 ID+配置版本+时间范围，含 point/connection/device/frame/transaction/task）',
               onClick(){ sendToAgentAlarm(row) },
             }, copiedAlarm===row.a.id ? '已复制' : '让 Agent 分析'),
             el('button', {
@@ -754,7 +768,7 @@ export function createAlarmPage(React, t, post, hooks) {
             row.pt ? el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ jumpPoint(row) } }, '点位') : null,
             el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick: jumpChart }, '曲线'),
             el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ jumpFrames(row) } }, '报文')
-          )))
+          )}))
         : el('div', { className: 'dvb-hint' }, t('alarmEmpty')),
       events.length ? el('div', { className: 'dvb-hint', style:{marginTop:'8px'} }, '历史事件 '+events.length) : null,
       events.length ? el('div', { className: 'dvb-live-list' }, events.slice(0,6).map((item)=> el('div', { key:item.id, className:'dvb-task', 'data-ok': item.ok?'true':'false' }, el('span', { className:'dvb-map-meta' }, clockOf(item.at)), el('span', { className:'dvb-badge', 'data-source':item.source }, item.source), el('span', { className:'dvb-hint' }, item.summary)))) : null)

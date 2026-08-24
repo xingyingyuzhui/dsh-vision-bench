@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { emptyLog, mergeLog, normalizeEvent } from './bench-prompt.mjs'
 import { normalizeConn, normalizeModbus, validateConnections, validateDevices, normalizeConfigVersion } from './bench-devices.mjs'
+// alarmState persists condition( active|recovered ) + acknowledged(bool)+ackedAt/ackedBy split for Task12
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import { applyPatch, compare as patchCompare, validatePatch } from './bench-patch.mjs'
 import { resolveTarget } from './bench-targets.mjs'

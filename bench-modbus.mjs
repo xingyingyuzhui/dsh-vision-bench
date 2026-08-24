@@ -1035,7 +1035,7 @@ export const modbusPoll = async (home, cwd, opts) => {
     }
     const alarmEval = evaluateAlarms({ points: pack.points, values, prevState: pack.alarmState || pack.alarmActive, pollingByConnection, connections: pack.connections, opts: { deadband: 1 } })
     const alarms = { next: alarmEval.next, fired: alarmEval.fired.filter(f=> f.point), cleared: alarmEval.recovered.filter(r=> r.point), commFired: alarmEval.fired.filter(f=> !f.point), commCleared: alarmEval.recovered.filter(r=> !r.point) }
-    const activeBool = Object.fromEntries(Object.entries(alarmEval.next).filter(([,v])=> v && v.status==='active' && v.group==='process').map(([k])=>[k,true]))
+    const activeBool = Object.fromEntries(Object.entries(alarmEval.next).filter(([,v])=> v && v.condition==='active' && v.group==='process').map(([k])=>[k,true]))
     if (alarmEval.fired.length) {
       const procFired = alarmEval.fired.filter(f=> f.point)
       const commFired = alarmEval.fired.filter(f=> f.connectionId)
