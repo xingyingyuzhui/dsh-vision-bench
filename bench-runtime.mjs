@@ -6,6 +6,7 @@ import { closeBetterTab, createAlarmPage, createLiveView, createTrendPage, openM
 import { createMapView, openProjectTab, registerMap } from './bench-map.mjs'
 import { createDebugView, registerView } from './bench-view.mjs'
 import { createFramesPage } from './bench-frames-view.mjs'
+// Task15: Harness inputActions dispatch in bench-shared, runtime respects focus badgeOnly
 import { getFocusState, shouldHighlightFocus, subscribeFocus } from './bench-shared.mjs'
 
 export function apply(ctx) {

@@ -4,6 +4,8 @@ import {
   clearFramesLog,
   clockOf,
   copyAgentRef,
+  dispatchAgentRef,
+  hasHarnessInput,
   getFocusState,
   getTempWatch,
   clearTempWatch,
@@ -242,9 +244,10 @@ export function createHmiView(React, t, post, openLive) {
 
     function sendToAgent(kind, payload) {
       const ref = agentRefFor(kind, payload)
-      const ok = copyAgentRef(ref)
-      setAgentCopied(kind + ':' + (payload && (payload.id || payload.pointId || payload.frameId || payload.connectionId) || ''))
-      setTimeout(() => setAgentCopied(''), 2000)
+      const res = dispatchAgentRef(ref, props)
+      const key = kind + ':' + (payload && (payload.id || payload.pointId || payload.frameId || payload.connectionId) || '')
+      setAgentCopied(key + ':' + res.mode + ':' + res.status)
+      setTimeout(() => setAgentCopied(''), 2500)
       // Also emit a bench event for evidence back-mount via dedicated appendEvidence (merge, keep last 20, validate)
       try {
         const ev = { kind: ref.kind, id: ref.pointId || ref.frameId || ref.connectionId || ref.deviceId, connectionId: ref.connectionId, deviceId: ref.deviceId, at: ref.at, version: ref.configVersion }
@@ -252,6 +255,8 @@ export function createHmiView(React, t, post, openLive) {
       } catch {}
       return ref
     }
+
+    function agentBtnLabel(k,p){const key=k+':'+(p&&(p.id||p.pointId||p.frameId||p.connectionId)||'');if(agentCopied.startsWith(key+':'))return agentCopied.slice(key.length+1).split(':').slice(1).join(':')||'仅复制';return hasHarnessInput(props)?'让 Agent 分析':'复制给 Agent'}
 
     function requestFocusUi(target, opts) {
       if (!cwd) return
@@ -781,7 +786,7 @@ export function createHmiView(React, t, post, openLive) {
                 type: 'button', className: 'dvb-btn dvb-btn-sm',
                 title: '复制报文结构化引用（稳定 ID+配置版本+时间范围）',
                 onClick() { sendToAgent('frame', { frameId: fid, connectionId: item.connectionId, deviceId: item.deviceId, label: item.label }) },
-              }, agentCopied === 'frame:' + fid ? '已复制' : '让 Agent 分析'),
+              }, agentBtnLabel('frame', { frameId: fid })),
               el('button', {
                 type: 'button', className: 'dvb-btn dvb-btn-sm' + (isFocused ? ' is-on' : ''),
                 title: '聚焦此报文，高亮并支持证据跳转',
@@ -888,13 +893,13 @@ export function createHmiView(React, t, post, openLive) {
             focusState.request && focusState.request.pointId ? el('button', {
               type: 'button', className: 'dvb-btn',
               onClick() { sendToAgent('point', { pointId: focusState.request.pointId, connectionId: focusState.request.connectionId, deviceId: focusState.request.deviceId }) },
-            }, agentCopied.startsWith('point:') ? '已复制' : '让 Agent 分析') : null,
+            }, agentBtnLabel('point', { pointId: focusState.request.pointId })) : null,
             focusState.request && focusState.request.frameId ? el('button', {
               type: 'button', className: 'dvb-btn',
               onClick() { sendToAgent('frame', { frameId: focusState.request.frameId, connectionId: focusState.request.connectionId }) },
-            }, '让 Agent 分析报文') : null,
+            }, agentBtnLabel('frame', { frameId: focusState.request.frameId })) : null,
             tempWatchNote ? el('span', { className: 'dvb-hint' }, tempWatchNote) : null,
-            agentCopied ? el('span', { className: 'dvb-hint' }, '已复制引用 · 粘贴给 Agent') : null))
+            agentCopied ? el('span', { className: 'dvb-hint' }, agentCopied.split(':').pop() + ' · 引用已处理') : null))
       : null
 
     // ── 顶部连接列表 ──
@@ -973,7 +978,7 @@ export function createHmiView(React, t, post, openLive) {
                         type: 'button', className: 'dvb-btn dvb-btn-sm',
                         title: '复制结构化引用（稳定 ID+配置版本）并让 Agent 分析',
                         onClick() { sendToAgent('connection', { connectionId: c.id, name: c.name }) },
-                      }, agentCopied === 'connection:' + c.id ? '已复制' : '让 Agent 分析'),
+                      }, agentBtnLabel('connection', { connectionId: c.id })),
                       el('button', {
                         type: 'button', className: 'dvb-btn dvb-btn-sm' + (shouldHighlightFocus(focusState) && focusState.request.connectionId === c.id && !focusState.request.pointId ? ' is-on' : ''),
                         title: '聚焦此连接标签，高亮并支持返回原焦点',
@@ -1126,11 +1131,11 @@ export function createHmiView(React, t, post, openLive) {
                         type:'button', className:'dvb-btn dvb-btn-sm',
                         title: '复制设备结构化引用并让 Agent 分析',
                         onClick(){ sendToAgent('device', { deviceId: d.id, connectionId: d.connectionId, name: d.name }) },
-                      }, agentCopied === 'device:' + d.id ? '已复制' : '让 Agent 分析'),
+                      }, agentBtnLabel('device', { deviceId: d.id })),
                       el('button', {
-                        type:'button', className:'dvb-btn dvb-btn-sm' + (focusState.request && focusState.request.deviceId === d.id ? ' is-on' : ''),
+                        type:'button', className:'dvb-btn dvb-btn-sm' + (shouldHighlightFocus(focusState) && focusState.request.deviceId === d.id ? ' is-on' : ''),
                         title: '聚焦此设备',
-                        onClick(){ requestFocusUi({ connectionId: d.connectionId, deviceId: d.id, kind: 'device' }) },
+                        onClick(){ requestFocusUi({ connectionId: d.connectionId, deviceId: d.id, kind: 'device' }, { badgeOnly: false }) },
                       }, '聚焦'),
                       el('button', {
                         type:'button', className:'dvb-btn',
@@ -1334,7 +1339,7 @@ export function createHmiView(React, t, post, openLive) {
         : (rec && rec.ok === false ? rec.error : '—')
       const writable = isWritableFunction(point.function)
       const devName = (devices.find((d)=>d.id===(point.deviceId||point.deviceId)) && devices.find((d)=>d.id===(point.deviceId)).name) || point.deviceId || '—'
-      const isFocused = focusState && focusState.request && focusState.request.pointId === point.id
+      const isFocused = shouldHighlightFocus(focusState) && focusState.request.pointId === point.id
       return el('tr', { key: point.id, 'data-kind': 'pt', className: 'dvb-row' + focusHighlightClass(isFocused), 'data-focused': isFocused ? 'true' : 'false' },
         el('td', null, point.name || functionTag(point.function) + point.address),
         el('td', null, devName),
@@ -1370,7 +1375,7 @@ export function createHmiView(React, t, post, openLive) {
           type: 'button', className: 'dvb-btn dvb-btn-sm',
           title: '复制结构化引用（稳定 ID+配置版本+时间范围）',
           onClick() { sendToAgent('point', { pointId: point.id, connectionId: point.connectionId, deviceId: point.deviceId, name: point.name }) },
-        }, agentCopied === 'point:' + point.id ? '已复制' : '让 Agent 分析')),
+        }, agentBtnLabel('point', { pointId: point.id }))),
         el('td', null, el('button', {
           type: 'button', className: 'dvb-btn dvb-btn-sm' + (isFocused ? ' is-on' : ''),
           title: 'Agent 聚焦此点位 · 支持临时监视组与返回原焦点',
@@ -1743,7 +1748,7 @@ export function createHmiView(React, t, post, openLive) {
         statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),
         visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
         error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
-        agentCopied ? el('div', { className: 'dvb-msg', 'data-kind': 'ok' }, '已复制「让 Agent 分析」引用 · 粘贴到会话中让 Agent 分析') : null,
+        agentCopied ? el('div', { className: 'dvb-msg', 'data-kind': 'ok' }, agentCopied.split(':').pop() + ' · ' + agentCopied.split(':').slice(0,2).join(':')) : null,
         tabBar,
         focusBanner,
         connListPanel,
@@ -1756,7 +1761,7 @@ export function createHmiView(React, t, post, openLive) {
       statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),
       visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
-      agentCopied ? el('div', { className: 'dvb-msg', 'data-kind': 'ok' }, '已复制「让 Agent 分析」引用 ' + agentCopied + ' · 粘贴到会话中让 Agent 分析') : null,
+      agentCopied ? el('div', { className: 'dvb-msg', 'data-kind': 'ok' }, agentCopied.split(':').pop() + ' · ' + agentCopied.split(':').slice(0,2).join(':')) : null,
       tabBar,
       focusBanner,
       activeConnDetail,
