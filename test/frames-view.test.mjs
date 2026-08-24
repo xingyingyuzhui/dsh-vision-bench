@@ -6,6 +6,7 @@ import test from 'node:test'
 import {
   parseFramePortSelection,
   buildFramePortOptions,
+  resolveFrameSelection,
   selectProtocolFrames,
   mergeFramesDedup,
   framesShouldStickToBottom,
@@ -111,4 +112,27 @@ test('bench-frames-view.mjs exists and registers dsh-vision-bench:frames', () =>
   const src = readFileSync(p, 'utf8')
   assert.match(src, /dsh-vision-bench:frames/)
   assert.match(src, /createFramesPage/)
+})
+
+test('Task3: resolveFrameSelection maps conn:<id> to its real COM port in raw mode', () => {
+  const conns = CONNECTIONS
+  // raw mode: conn:c1 resolves to COM3 (the connection's port)
+  assert.deepEqual(resolveFrameSelection('conn:c1', conns, { mode: 'raw' }), { kind: 'conn', connectionId: 'c1', port: 'COM3' })
+  // raw mode: raw:COM7 stays as-is
+  assert.deepEqual(resolveFrameSelection('raw:COM7', conns, { mode: 'raw' }), { kind: 'raw', connectionId: '', port: 'COM7' })
+  // proto mode: conn: without port requirement resolves connection id only
+  assert.deepEqual(resolveFrameSelection('conn:c2', conns, { mode: 'proto' }), { kind: 'conn', connectionId: 'c2', port: 'COM4' })
+  // all modes
+  assert.deepEqual(resolveFrameSelection('all', conns, { mode: 'raw' }), { kind: 'all', connectionId: '', port: '' })
+  // conn whose port is empty (e.g. TCP) can't open raw
+  const tcpOnly = [{ id: 't1', name: 'T1', conn: { mode: 'tcp', host: '10.0.0.8', tcpPort: 502 } }]
+  assert.deepEqual(resolveFrameSelection('conn:t1', tcpOnly, { mode: 'raw' }), { kind: 'all', connectionId: '', port: '' })
+})
+
+test('Task3: mode switch keeps valid conn selection and drops raw only in proto', () => {
+  const conns = CONNECTIONS
+  // raw: conn:c1 stays valid (its port resolvable)
+  assert.equal(resolveFrameSelection('conn:c1', conns, { mode: 'raw' }).kind, 'conn')
+  // switching to proto: raw selection must degrade to all (never treated as key)
+  assert.equal(resolveFrameSelection('raw:COM7', conns, { mode: 'proto' }).kind, 'all')
 })

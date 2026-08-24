@@ -13,6 +13,11 @@ async function buildVendor(root) {
     globalName: 'DvbVendor',
     minify: true,
     target: ['es2020'],
+    // Task2/0.18.2: harness provides React via the ModuleLoader factory
+    // `require` — never bundle a second React. react-dom is aliased to a tiny
+    // flushSync shim so the bundle never issues require('react-dom').
+    external: ['react'],
+    alias: { 'react-dom': join(root, 'scripts/react-dom-shim.mjs') },
     logLevel: 'error',
     write: false,
   })

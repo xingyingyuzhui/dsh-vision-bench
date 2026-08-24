@@ -8,4 +8,7 @@ const _vendor = (typeof DvbVendor !== 'undefined' && DvbVendor) || null
 export const vendorUPlot = (_vendor && _vendor.uPlot) || null
 export const vendorVirtualizer = (_vendor && _vendor.Virtualizer) || null
 export const vendorElementScroll = (_vendor && _vendor.elementScroll) || null
+// Task2/0.18.2: official React adapter — its internal `require('react')`
+// resolves to the harness React inside the ModuleLoader factory scope.
+export const vendorUseVirtualizer = (_vendor && _vendor.useVirtualizer) || null
 export const vendorAvailable = !!(vendorUPlot && vendorVirtualizer)

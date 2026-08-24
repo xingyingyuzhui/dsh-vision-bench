@@ -43,6 +43,11 @@ function makeReact() {
   R.useState = (init) => [typeof init === 'function' ? init() : init, () => {}]
   R.useRef = (init) => ({ current: init })
   R.useEffect = () => {}
+  R.useLayoutEffect = () => {}
+  R.useCallback = (fn) => fn
+  R.useMemo = (fn) => fn()
+  R.useReducer = (reducer, init) => [typeof init === 'function' ? init() : init, () => {}]
+  R.useContext = () => null
   return R
 }
 const requireStub = (name) => {

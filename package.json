@@ -90,6 +90,7 @@
     }
   },
   "dependencies": {
+    "@tanstack/react-virtual": "3.13.12",
     "@tanstack/virtual-core": "3.13.12",
     "fast-json-patch": "3.1.1",
     "uplot": "1.6.32",

@@ -97,3 +97,26 @@ export function mergeFramesDedup(persisted, memory, limit = 500) {
 export function framesShouldStickToBottom(scrollTop, scrollHeight, clientHeight, threshold = 5) {
   return scrollHeight - scrollTop - clientHeight <= threshold
 }
+
+// Task3/0.18.2: resolve a selection against real connections so raw mode can
+// open a CONFIGURED connection's port. Returns {kind, connectionId, port}.
+export function resolveFrameSelection(selection, connections, options) {
+  const sel = typeof selection === 'object' && selection !== null
+    ? parseFramePortSelection(selection.value)
+    : parseFramePortSelection(selection)
+  const mode = options && options.mode
+  const conns = Array.isArray(connections) ? connections : []
+  if (sel.kind === 'conn') {
+    const c = conns.find((cc) => cc && cc.id === sel.connectionId)
+    const port = c && c.conn && c.conn.mode === 'rtu' ? String(c.conn.port || '') : ''
+    if (mode === 'raw' && port) return { kind: 'conn', connectionId: sel.connectionId, port }
+    if (mode === 'raw' && !port) return { kind: 'all', connectionId: '', port: '' }
+    return { kind: 'conn', connectionId: sel.connectionId, port }
+  }
+  if (sel.kind === 'raw') {
+    // Task3: raw selections are only valid in raw mode; proto mode degrades to all
+    if (mode === 'proto') return { kind: 'all', connectionId: '', port: '' }
+    return { kind: 'raw', connectionId: '', port: sel.port }
+  }
+  return { kind: 'all', connectionId: '', port: '' }
+}
