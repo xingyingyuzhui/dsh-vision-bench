@@ -18,6 +18,8 @@ import {
   setFocusState,
   shouldStealFocus,
   shouldHighlightFocus,
+  postEvidence,
+  evidenceFromRef,
 } from './bench-shared.mjs'
 import {
   emptyJournal,
@@ -248,10 +250,10 @@ export function createHmiView(React, t, post, openLive) {
       const key = kind + ':' + (payload && (payload.id || payload.pointId || payload.frameId || payload.connectionId) || '')
       setAgentCopied(key + ':' + res.mode + ':' + res.status)
       setTimeout(() => setAgentCopied(''), 2500)
-      // Also emit a bench event for evidence back-mount via dedicated appendEvidence (merge, keep last 20, validate)
+      // Task4/0.18.2: typed evidence back-mount via evidenceFromRef — failures surface
+      // CONFIG_DRIFT/TARGET_MISMATCH instead of a silent .catch(() => {})
       try {
-        const ev = { kind: ref.kind, id: ref.pointId || ref.frameId || ref.connectionId || ref.deviceId, connectionId: ref.connectionId, deviceId: ref.deviceId, at: ref.at, version: ref.configVersion }
-        post('/dsh-vision-bench/evidence', { cwd, evidence: [ev] }).catch(() => {})
+        postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setError(reason))
       } catch {}
       return ref
     }

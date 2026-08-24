@@ -1,4 +1,5 @@
 import { getFramesLog, pushFramesLog, clearFramesLog, buildAgentRef, copyAgentRef, dispatchAgentRef, hasHarnessInput } from './bench-shared.mjs'
+import { postEvidence, evidenceFromRef } from './bench-shared.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { NS } from './bench-i18n.mjs'
 import { buildFramePortOptions, parseFramePortSelection, resolveFrameSelection, selectProtocolFrames, mergeFramesDedup, framesShouldStickToBottom } from './bench-frames-model.mjs'
@@ -307,14 +308,9 @@ export function createFramesPage(React, t, post, hooks) {
       const labelByMode = { input: '已加入输入框', sent: '已发送', copied: '仅复制', failed: '处理失败' }
       setCopied(labelByMode[res.mode] || '仅复制')
       setTimeout(() => setCopied(''), 2000)
-      // evidence append must surface failures, never .catch(() => {})
-      post('/dsh-vision-bench/evidence', {
-        cwd: realCwd,
-        evidence: [{ kind: 'frame', frameId: frame.frameId || frame.id, id: frame.frameId || frame.id, connectionId: frame.connectionId, deviceId: frame.deviceId, at: frame.t || frame.at || Date.now(), version: configVersion, timeRange: { start: (frame.t || frame.at || Date.now()) - 5 * 60 * 1000, end: frame.t || frame.at || Date.now() } }],
-      }).then((data) => {
-        if (data && data.ok === false) setError((data.errorCode ? data.errorCode + ': ' : '') + (data.error || '证据保存失败'))
-      }).catch((e) => {
-        setError('证据保存失败: ' + String(e && e.message || e))
+      // Task4/0.18.2: evidence append must surface CONFIG_DRIFT/TARGET_MISMATCH, never silent
+      postEvidence(post, realCwd, evidenceFromRef(ref), (reason) => {
+        setError(reason)
         // reference already entered the input — keep the ref text visible
         try { copyAgentRef(ref) } catch {}
       })

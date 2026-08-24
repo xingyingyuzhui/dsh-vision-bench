@@ -2929,23 +2929,64 @@ function hasTempWatch(cwd) {
 }
 
 // Structured Agent reference for “让 Agent 分析” — stable ID + configVersion + timeRange
+// Task4/0.18.2: kind decides which id field carries the target:
+//   point → pointId, frame → frameId, alarm → alarmId, trend → trendKey
+// trendKey must be connectionId:deviceId:pointId and backfills those ids.
+const parseTrendKey = (key) => {
+  if (typeof key !== 'string') return null
+  const parts = key.split(':')
+  if (parts.length !== 3) return null
+  const [a, b, c] = parts.map((x) => x.trim())
+  if (!a || !b || !c) return null
+  return { connectionId: a, deviceId: b, pointId: c }
+}
+
 function buildAgentRef(kind, payload, opts) {
   const now = Date.now()
+  const k = String(kind || 'point')
   const base = {
-    kind: String(kind || 'point'),
+    kind: k,
     at: now,
     configVersion: opts && opts.configVersion != null ? Number(opts.configVersion) : 3,
   }
   if (payload && typeof payload === 'object') {
-    base.connectionId = String(payload.connectionId || payload.connId || opts?.connectionId || '').slice(0, 64)
-    base.deviceId = String(payload.deviceId || opts?.deviceId || '').slice(0, 64)
-    base.pointId = String(payload.pointId || payload.id || opts?.pointId || '').slice(0, 64)
-    base.frameId = String(payload.frameId || opts?.frameId || '').slice(0, 64)
-    base.alarmId = String(payload.alarmId || opts?.alarmId || '').slice(0, 64)
-    if (payload.start != null || payload.end != null) {
+    const p = payload
+    const connId = String(p.connectionId || p.connId || (opts && opts.connectionId) || '').slice(0, 64)
+    base.connectionId = connId
+    base.deviceId = String(p.deviceId || (opts && opts.deviceId) || '').slice(0, 64)
+    base.pointId = ''
+    base.frameId = ''
+    base.alarmId = ''
+    base.trendKey = ''
+    if (k === 'trend') {
+      const tk = String(p.trendKey || p.key || p.id || '').slice(0, 96)
+      if (tk) {
+        const parsed = parseTrendKey(tk)
+        if (!parsed) throw new Error('trendKey 格式应为 connectionId:deviceId:pointId: ' + tk)
+        base.connectionId = base.connectionId || parsed.connectionId
+        base.deviceId = base.deviceId || parsed.deviceId
+        base.pointId = parsed.pointId
+        base.trendKey = tk
+      }
+    } else if (k === 'point') {
+      base.pointId = String(p.pointId || p.id || (opts && opts.pointId) || '').slice(0, 64)
+    } else if (k === 'frame') {
+      base.frameId = String(p.frameId || p.id || (opts && opts.frameId) || '').slice(0, 64)
+    } else if (k === 'alarm') {
+      base.alarmId = String(p.alarmId || p.id || (opts && opts.alarmId) || '').slice(0, 64)
+      // alarm refs keep explicit point context in its own typed field
+      if (p.pointId) base.pointId = String(p.pointId).slice(0, 64)
+    } else {
+      // generic targets (connection/device/focus/…) carry only what was given
+      base.pointId = String(p.pointId || p.id || (opts && opts.pointId) || '').slice(0, 64)
+      base.frameId = String(p.frameId || (opts && opts.frameId) || '').slice(0, 64)
+      base.alarmId = String(p.alarmId || (opts && opts.alarmId) || '').slice(0, 64)
+      base.trendKey = String(p.trendKey || (opts && opts.trendKey) || '').slice(0, 96)
+    }
+    if (p.start != null || p.end != null) {
       base.timeRange = {
-        start: Number(payload.start ?? opts?.start ?? (now - 5 * 60 * 1000)),
-        end: Number(payload.end ?? opts?.end ?? now),
+        start: Number(p.start ?? (opts && opts.start) ?? (now - 5 * 60 * 1000)),
+        end: Number(p.end ?? (opts && opts.end) ?? now),
       }
     } else if (opts && (opts.start != null || opts.end != null)) {
       base.timeRange = { start: Number(opts.start ?? (now - 5 * 60 * 1000)), end: Number(opts.end ?? now) }
@@ -2953,16 +2994,70 @@ function buildAgentRef(kind, payload, opts) {
       base.timeRange = { start: now - 5 * 60 * 1000, end: now }
     }
     // Include human label if available
-    if (payload.name || payload.label) base.label = String(payload.name || payload.label).slice(0, 80)
+    if (p.name || p.label) base.label = String(p.name || p.label).slice(0, 80)
   } else {
     base.timeRange = { start: now - 5 * 60 * 1000, end: now }
   }
   return base
 }
 
+// Task4/0.18.2: map an agent ref to the standard evidence shape
+// { kind, id, connectionId, deviceId, pointId, frameId, trendKey, alarmId, at, version, timeRange }
+function evidenceFromRef(ref) {
+  const r = ref || {}
+  const kind = String(r.kind || 'point')
+  const at = Number(r.at) > 0 ? Number(r.at) : Date.now()
+  const timeRange = r.timeRange && Number.isFinite(Number(r.timeRange.start))
+    ? { start: Number(r.timeRange.start), end: Number(r.timeRange.end) >= Number(r.timeRange.start) ? Number(r.timeRange.end) : Number(r.timeRange.start) }
+    : { start: at - 5 * 60 * 1000, end: at }
+  let pointId = '', frameId = '', trendKey = '', alarmId = ''
+  if (kind === 'point') pointId = String(r.pointId || '')
+  else if (kind === 'frame') frameId = String(r.frameId || '')
+  else if (kind === 'alarm') alarmId = String(r.alarmId || '')
+  else if (kind === 'trend') {
+    trendKey = String(r.trendKey || '')
+    pointId = String(r.pointId || '')
+  } else pointId = String(r.pointId || '')
+  const id = pointId || frameId || trendKey || alarmId || String(r.connectionId || '') || String(r.deviceId || '')
+  return {
+    kind,
+    id,
+    connectionId: String(r.connectionId || ''),
+    deviceId: String(r.deviceId || ''),
+    pointId,
+    frameId,
+    trendKey,
+    alarmId,
+    at,
+    version: Number(r.configVersion) > 0 ? Number(r.configVersion) : 1,
+    timeRange,
+  }
+}
+
+// Task4/0.18.2: evidence POST must surface CONFIG_DRIFT / TARGET_MISMATCH reasons,
+// never a silent .catch(() => {}). onFail receives the human reason.
+function postEvidence(post, cwd, evidence, onFail) {
+  if (typeof post !== 'function' || !cwd) return Promise.resolve(null)
+  const list = Array.isArray(evidence) ? evidence : (evidence ? [evidence] : [])
+  if (!list.length) return Promise.resolve(null)
+  return post('/dsh-vision-bench/evidence', { cwd, evidence: list }, 15000)
+    .then((data) => {
+      if (data && data.ok === false) {
+        if (typeof onFail === 'function') {
+          onFail(((data.errorCode && data.errorCode !== 'CONFIG_DRIFT' && data.errorCode !== 'TARGET_MISMATCH') ? '' : (data.errorCode ? data.errorCode + ': ' : '')) + (data.error || '证据保存失败'))
+        }
+      }
+      return data
+    })
+    .catch((err) => {
+      if (typeof onFail === 'function') onFail('证据保存失败: ' + String((err && err.message) || err))
+      return null
+    })
+}
+
 function agentRefToText(ref) {
   const range = ref && ref.timeRange ? (' [' + new Date(ref.timeRange.start).toISOString() + ' → ' + new Date(ref.timeRange.end).toISOString() + ']') : ''
-  const ids = [ref.connectionId, ref.deviceId, ref.pointId || ref.frameId || ref.alarmId].filter(Boolean).join('/')
+  const ids = [ref.connectionId, ref.deviceId, ref.pointId || ref.frameId || ref.alarmId || ref.trendKey].filter(Boolean).join('/')
   return '[' + (ref.kind || 'ref') + '] ' + (ids || 'unknown') + ' v' + (ref.configVersion || 3) + range
 }
 
@@ -3917,10 +4012,10 @@ function createHmiView(React, t, post, openLive) {
       const key = kind + ':' + (payload && (payload.id || payload.pointId || payload.frameId || payload.connectionId) || '')
       setAgentCopied(key + ':' + res.mode + ':' + res.status)
       setTimeout(() => setAgentCopied(''), 2500)
-      // Also emit a bench event for evidence back-mount via dedicated appendEvidence (merge, keep last 20, validate)
+      // Task4/0.18.2: typed evidence back-mount via evidenceFromRef — failures surface
+      // CONFIG_DRIFT/TARGET_MISMATCH instead of a silent .catch(() => {})
       try {
-        const ev = { kind: ref.kind, id: ref.pointId || ref.frameId || ref.connectionId || ref.deviceId, connectionId: ref.connectionId, deviceId: ref.deviceId, at: ref.at, version: ref.configVersion }
-        post('/dsh-vision-bench/evidence', { cwd, evidence: [ev] }).catch(() => {})
+        postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setError(reason))
       } catch {}
       return ref
     }
@@ -5600,10 +5695,9 @@ function createLiveView(React, t, post, hooks) {
       const key = kind + ':' + (payload && (payload.pointId || payload.id || payload.frameId || payload.connectionId) || '')
       setAgentCopied(key + ':' + res.mode + ':' + res.status)
       setTimeout(() => setAgentCopied(''), 2500)
+      // Task4/0.18.2: typed evidence back-mount — failures surface CONFIG_DRIFT/TARGET_MISMATCH
       try {
-        const packTmp = normalizeModbus(modbus)
-        const ev = { kind: ref.kind, id: ref.pointId || ref.frameId || ref.connectionId || ref.deviceId, connectionId: ref.connectionId, deviceId: ref.deviceId, at: ref.at, version: ref.configVersion }
-        post('/dsh-vision-bench/evidence', { cwd, evidence: [ev] }).catch(() => {})
+        postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setTickError(reason))
       } catch {}
       return ref
     }
@@ -6069,6 +6163,7 @@ function createTrendPage(React, t, post, hooks) {
       const start = Date.now() - TREND_WINDOW_MS
       const end = Date.now()
       const key = entry ? entry.key : (entries[0] && entries[0].key) || ''
+      if (!key) return
       const ref = buildAgentRef('trend', {
         trendKey: key,
         start,
@@ -6080,7 +6175,8 @@ function createTrendPage(React, t, post, hooks) {
       setCopied((entry ? entry.key : 'trend') + ':' + (labelByMode[res.mode] || '仅复制'))
       setTimeout(() => setCopied(''), 2000)
       if (post && cwd) {
-        try { post('/dsh-vision-bench/evidence', { cwd, evidence: [{ kind: 'trend', id: key, at: Date.now(), version: cv, timeRange: { start, end } }] }).catch(() => {}) } catch {}
+        // Task4/0.18.2: typed evidence back-mount — failures surface CONFIG_DRIFT/TARGET_MISMATCH
+        try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setTickError(reason)) } catch {}
       }
     }
     const focusTrend = (entry) => {
@@ -6166,6 +6262,7 @@ function createAlarmPage(React, t, post, hooks) {
     const filtered = group === 'all' ? list : list.filter(a=> a.group===group)
     // enrich with point/connection/device labels
     const [copiedAlarm, setCopiedAlarm] = React.useState('')
+    const [evNote, setEvNote] = React.useState('')
     const enriched = filtered.map(a=>{
       const pt = pack && a.pointId ? (pack.points||[]).find(p=> p.id===a.pointId) : null
       const conn = pack && a.connectionId ? (pack.connections||[]).find(c=> c.id===a.connectionId) : null
@@ -6195,7 +6292,8 @@ function createAlarmPage(React, t, post, hooks) {
       setCopiedAlarm(row.a.id)
       setTimeout(()=> setCopiedAlarm(''), 2000)
       if (cwd) {
-        try { post('/dsh-vision-bench/evidence', { cwd, evidence: [{ kind: 'alarm', id: row.a.id, connectionId: row.a.connectionId, deviceId: row.a.deviceId, at: row.a.lastAt, version: cv }] }).catch(()=>{}) } catch {}
+        // Task4/0.18.2: typed evidence back-mount — failures surface CONFIG_DRIFT/TARGET_MISMATCH
+        try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => { setEvNote(reason); setTimeout(() => setEvNote(''), 4000) }) } catch {}
       }
     }
     const focusAlarm = (row)=>{
@@ -6219,7 +6317,7 @@ function createAlarmPage(React, t, post, hooks) {
         el('button', { type:'button', className:'dvb-btn'+(group===PROCESS?' is-on':''), onClick(){ setGroup(PROCESS) } }, '过程'),
         el('button', { type:'button', className:'dvb-btn'+(group===COMM?' is-on':''), onClick(){ setGroup(COMM) } }, '通信'),
         enriched.length ? el('button', { type:'button', className:'dvb-btn', onClick(){ doAck('all') } }, '全部确认') : null),
-      copiedAlarm ? el('div', { className: 'dvb-hint' }, copiedAlarm.split(':').pop() + ' · ' + copiedAlarm.split(':')[0] ) : null,
+      (copiedAlarm || evNote) ? el('div', { className: 'dvb-hint' + (evNote ? ' dvb-err' : ''), 'data-kind': evNote ? 'err' : undefined }, evNote || (copiedAlarm.split(':').pop() + ' · ' + copiedAlarm.split(':')[0]) ) : null,
       enriched.length
         ? el('div', { className: 'dvb-live-list' }, enriched.slice(0,80).map((row)=> {
             const condLabel = row.a.condition===COND_ACTIVE ? (row.a.acknowledged ? '激活已确认' : '激活未确认') : (row.a.acknowledged ? '已恢复已确认' : '已恢复未确认')
@@ -6741,14 +6839,9 @@ function createFramesPage(React, t, post, hooks) {
       const labelByMode = { input: '已加入输入框', sent: '已发送', copied: '仅复制', failed: '处理失败' }
       setCopied(labelByMode[res.mode] || '仅复制')
       setTimeout(() => setCopied(''), 2000)
-      // evidence append must surface failures, never .catch(() => {})
-      post('/dsh-vision-bench/evidence', {
-        cwd: realCwd,
-        evidence: [{ kind: 'frame', frameId: frame.frameId || frame.id, id: frame.frameId || frame.id, connectionId: frame.connectionId, deviceId: frame.deviceId, at: frame.t || frame.at || Date.now(), version: configVersion, timeRange: { start: (frame.t || frame.at || Date.now()) - 5 * 60 * 1000, end: frame.t || frame.at || Date.now() } }],
-      }).then((data) => {
-        if (data && data.ok === false) setError((data.errorCode ? data.errorCode + ': ' : '') + (data.error || '证据保存失败'))
-      }).catch((e) => {
-        setError('证据保存失败: ' + String(e && e.message || e))
+      // Task4/0.18.2: evidence append must surface CONFIG_DRIFT/TARGET_MISMATCH, never silent
+      postEvidence(post, realCwd, evidenceFromRef(ref), (reason) => {
+        setError(reason)
         // reference already entered the input — keep the ref text visible
         try { copyAgentRef(ref) } catch {}
       })

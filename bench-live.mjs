@@ -1,4 +1,5 @@
 import { pushFramesLog, subscribeState, getFramesLog, clearFramesLog, resolveSidebarScope, getSidebarPin, setSidebarPin, buildAgentRef, copyAgentRef, dispatchAgentRef, hasHarnessInput, agentRefToText, getFocusState, setFocusState, isFocusTarget, focusHighlightClass, getTempWatch, setTempWatch, clearTempWatch, shouldStealFocus, shouldHighlightFocus } from './bench-shared.mjs'
+import { postEvidence, evidenceFromRef } from './bench-shared.mjs'
 import { clockOf, decodeValue, functionTag } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
@@ -162,10 +163,9 @@ export function createLiveView(React, t, post, hooks) {
       const key = kind + ':' + (payload && (payload.pointId || payload.id || payload.frameId || payload.connectionId) || '')
       setAgentCopied(key + ':' + res.mode + ':' + res.status)
       setTimeout(() => setAgentCopied(''), 2500)
+      // Task4/0.18.2: typed evidence back-mount — failures surface CONFIG_DRIFT/TARGET_MISMATCH
       try {
-        const packTmp = normalizeModbus(modbus)
-        const ev = { kind: ref.kind, id: ref.pointId || ref.frameId || ref.connectionId || ref.deviceId, connectionId: ref.connectionId, deviceId: ref.deviceId, at: ref.at, version: ref.configVersion }
-        post('/dsh-vision-bench/evidence', { cwd, evidence: [ev] }).catch(() => {})
+        postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setTickError(reason))
       } catch {}
       return ref
     }
@@ -631,6 +631,7 @@ export function createTrendPage(React, t, post, hooks) {
       const start = Date.now() - TREND_WINDOW_MS
       const end = Date.now()
       const key = entry ? entry.key : (entries[0] && entries[0].key) || ''
+      if (!key) return
       const ref = buildAgentRef('trend', {
         trendKey: key,
         start,
@@ -642,7 +643,8 @@ export function createTrendPage(React, t, post, hooks) {
       setCopied((entry ? entry.key : 'trend') + ':' + (labelByMode[res.mode] || '仅复制'))
       setTimeout(() => setCopied(''), 2000)
       if (post && cwd) {
-        try { post('/dsh-vision-bench/evidence', { cwd, evidence: [{ kind: 'trend', id: key, at: Date.now(), version: cv, timeRange: { start, end } }] }).catch(() => {}) } catch {}
+        // Task4/0.18.2: typed evidence back-mount — failures surface CONFIG_DRIFT/TARGET_MISMATCH
+        try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setTickError(reason)) } catch {}
       }
     }
     const focusTrend = (entry) => {
@@ -728,6 +730,7 @@ export function createAlarmPage(React, t, post, hooks) {
     const filtered = group === 'all' ? list : list.filter(a=> a.group===group)
     // enrich with point/connection/device labels
     const [copiedAlarm, setCopiedAlarm] = React.useState('')
+    const [evNote, setEvNote] = React.useState('')
     const enriched = filtered.map(a=>{
       const pt = pack && a.pointId ? (pack.points||[]).find(p=> p.id===a.pointId) : null
       const conn = pack && a.connectionId ? (pack.connections||[]).find(c=> c.id===a.connectionId) : null
@@ -757,7 +760,8 @@ export function createAlarmPage(React, t, post, hooks) {
       setCopiedAlarm(row.a.id)
       setTimeout(()=> setCopiedAlarm(''), 2000)
       if (cwd) {
-        try { post('/dsh-vision-bench/evidence', { cwd, evidence: [{ kind: 'alarm', id: row.a.id, connectionId: row.a.connectionId, deviceId: row.a.deviceId, at: row.a.lastAt, version: cv }] }).catch(()=>{}) } catch {}
+        // Task4/0.18.2: typed evidence back-mount — failures surface CONFIG_DRIFT/TARGET_MISMATCH
+        try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => { setEvNote(reason); setTimeout(() => setEvNote(''), 4000) }) } catch {}
       }
     }
     const focusAlarm = (row)=>{
@@ -781,7 +785,7 @@ export function createAlarmPage(React, t, post, hooks) {
         el('button', { type:'button', className:'dvb-btn'+(group===PROCESS?' is-on':''), onClick(){ setGroup(PROCESS) } }, '过程'),
         el('button', { type:'button', className:'dvb-btn'+(group===COMM?' is-on':''), onClick(){ setGroup(COMM) } }, '通信'),
         enriched.length ? el('button', { type:'button', className:'dvb-btn', onClick(){ doAck('all') } }, '全部确认') : null),
-      copiedAlarm ? el('div', { className: 'dvb-hint' }, copiedAlarm.split(':').pop() + ' · ' + copiedAlarm.split(':')[0] ) : null,
+      (copiedAlarm || evNote) ? el('div', { className: 'dvb-hint' + (evNote ? ' dvb-err' : ''), 'data-kind': evNote ? 'err' : undefined }, evNote || (copiedAlarm.split(':').pop() + ' · ' + copiedAlarm.split(':')[0]) ) : null,
       enriched.length
         ? el('div', { className: 'dvb-live-list' }, enriched.slice(0,80).map((row)=> {
             const condLabel = row.a.condition===COND_ACTIVE ? (row.a.acknowledged ? '激活已确认' : '激活未确认') : (row.a.acknowledged ? '已恢复已确认' : '已恢复未确认')

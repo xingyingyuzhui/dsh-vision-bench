@@ -133,16 +133,34 @@ export const normalizeFocusState = (input) => {
   }
   out.badgeOnly = input.badgeOnly === true
   if (Array.isArray(input.evidence)) {
+    // Task4/0.18.2: typed evidence contract — kind decides which typed id field
+    // carries the target; timeRange/version/at survive restart unchanged.
     out.evidence = input.evidence.slice(0, 20).map((e) => {
       if (!e || typeof e !== 'object') return null
       const kind = typeof e.kind === 'string' ? e.kind.slice(0, 32) : ''
+      const at = Number(e.at) > 0 ? Number(e.at) : Date.now()
+      const pointId = focusText(e.pointId || (kind === 'point' ? e.id : ''))
+      const frameId = focusText(e.frameId || (kind === 'frame' ? e.id : ''))
+      const alarmId = focusText(e.alarmId || (kind === 'alarm' ? e.id : ''))
+      const trendKey = focusText(e.trendKey || (kind === 'trend' ? e.id : ''))
+      const rawRange = e && e.timeRange
+      const rangeStart = Number(rawRange && rawRange.start)
+      const rangeEnd = Number(rawRange && rawRange.end)
+      const timeRange = Number.isFinite(rangeStart) && rangeStart > 0 && Number.isFinite(rangeEnd) && rangeEnd >= rangeStart
+        ? { start: rangeStart, end: rangeEnd }
+        : { start: at - 5 * 60 * 1000, end: at }
       return {
         kind,
-        id: focusText(e.id || e.pointId || e.frameId || e.alarmId),
+        id: focusText(e.id || pointId || frameId || trendKey || alarmId),
         connectionId: focusText(e.connectionId || e.connId),
         deviceId: focusText(e.deviceId),
-        at: Number(e.at) > 0 ? Number(e.at) : Date.now(),
+        pointId,
+        frameId,
+        trendKey,
+        alarmId,
+        at,
         version: Number(e.version) > 0 ? Number(e.version) : 0,
+        timeRange,
       }
     }).filter(Boolean)
   }
@@ -1046,19 +1064,25 @@ export const appendEvidence = (home, cwd, evidence) => {
   if (!list.length) return { ok: false, error: '缺少 evidence' }
   for (const ev of list) {
     if (!ev || typeof ev !== 'object') return { ok: false, error: 'invalid evidence' }
-    const hasId = ev.id || ev.pointId || ev.frameId || ev.alarmId || ev.trendKey || ev.connectionId || ev.deviceId || ev.connId
+    // Task4/0.18.2: kind decides which typed id carries the generic id — a frame
+    // id must never be validated as a point (no unconditional pointId = ev.pointId || ev.id)
+    const kind = typeof ev.kind === 'string' ? ev.kind : ''
+    const pointId = kind === 'point' ? (ev.pointId || ev.id) : ev.pointId
+    const frameId = kind === 'frame' ? (ev.frameId || ev.id) : ev.frameId
+    const alarmId = kind === 'alarm' ? (ev.alarmId || ev.id) : ev.alarmId
+    const trendKey = kind === 'trend' ? (ev.trendKey || ev.id) : ev.trendKey
+    const hasId = ev.id || pointId || frameId || alarmId || trendKey || ev.connectionId || ev.deviceId || ev.connId
     if (!hasId) return { ok: false, error: '证据缺少 ID', errorCode: 'TARGET_REQUIRED' }
     const rt = resolveTarget(pack, {
       connectionId: ev.connectionId || ev.connId,
       deviceId: ev.deviceId,
-      pointId: ev.pointId || ev.id,
-      frameId: ev.frameId,
-      alarmId: ev.alarmId,
-      trendKey: ev.trendKey,
+      pointId,
+      frameId,
+      alarmId,
+      trendKey,
     })
     // For evidence that is a generic point/build/log, allow if it has no resolvable target? But if it has id that is not a point, resolveTarget will fail for point not found, which is not desired for build/log evidence.
     // So only validate if the evidence kind is point/frame/alarm/trend and has those IDs; for build/log, skip strict validation
-    const kind = typeof ev.kind === 'string' ? ev.kind : ''
     const isStrict = kind === 'point' || kind === 'frame' || kind === 'alarm' || kind === 'trend' || ev.pointId || ev.frameId || ev.alarmId || ev.trendKey
     if (isStrict && !rt.ok) return { ok: false, error: rt.error, errorCode: rt.errorCode }
     const evVer = Number(ev.version ?? ev.configVersion)
