@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
-import { mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { apply } from '../host.js'
-import { ensurePresetOverlay, PRESET_PERSONA, seedVisionBenchPreset } from '../bench-preset.mjs'
+import { ensurePresetOverlay, PRESET_PERSONA, REBUILD_INSTRUCTIONS, seedVisionBenchPreset } from '../bench-preset.mjs'
 import { runVisionBench } from '../bench-tool.mjs'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
 
@@ -133,5 +133,44 @@ test('seedVisionBenchPreset does not overlay a foreign preset', async () => {
     assert.equal(text, 'name: other\n')
   } finally {
     await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('preset yaml error does not overwrite', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dvb-yaml-'))
+  try {
+    const bad = '- id: persona\n  config: [unclosed\n'
+    await writeFile(join(dir, 'agent.cordis.yml'), bad)
+    const out = ensurePresetOverlay(dir)
+    assert.equal(out.ok, false)
+    assert.ok(out.rebuildHelp)
+    assert.equal(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'), bad)
+  } finally { await rm(dir, { recursive: true, force: true }) }
+})
+test('preset backup and write-failure recovery', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dvb-bak-'))
+  let bak = null
+  try {
+    const legacy = 'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场工程、编译产物和 Modbus 连接以 vision_bench 工具为准：先 action=status，再 ls/select/build/read。不要猜测用户选了哪个工程。'
+    await writeFile(join(dir, 'agent.cordis.yml'), ['- id: persona', '  name: x', '  config:', '    text: >-', '      ' + legacy, ''].join('\n'))
+    await writeFile(join(dir, 'preset.yml'), 'name: old\n')
+    await writeFile(join(dir, '.dsh-vision-bench'), JSON.stringify({ owner: 'dsh-vision-bench' }))
+    const out = ensurePresetOverlay(dir)
+    assert.ok(out.backupDir)
+    bak = out.backupDir
+    assert.ok((await readdir(bak)).includes('agent.cordis.yml'))
+    assert.equal((await readFile(join(dir, 'agent.cordis.yml'), 'utf8')).match(/vision-bench-tools/g).length, 1)
+    const orig = await readFile(join(dir, 'agent.cordis.yml'), 'utf8')
+    const { createRequire } = await import('node:module')
+    const fs = createRequire(import.meta.url)('node:fs')
+    const ow = fs.writeFileSync
+    let once = true
+    fs.writeFileSync = (p, ...r) => { if (String(p).includes(dir) && String(p).endsWith('agent.cordis.yml') && once) { once = false; throw new Error('x') } return ow(p, ...r) }
+    let out2
+    try { out2 = ensurePresetOverlay(dir) } finally { fs.writeFileSync = ow }
+    if (!out2.ok) assert.equal(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'), orig)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+    if (bak) await rm(bak, { recursive: true, force: true }).catch(() => {})
   }
 })

@@ -1,6 +1,13 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { createRequire } from 'node:module'
 import * as yaml from 'yaml'
+
+const _require = createRequire(import.meta.url)
+function _writeFileSync(...args) {
+  const m = _require('node:fs')
+  return m.writeFileSync(...args)
+}
 
 export const PRESET_ID = 'vision-bench'
 export const PRESET_TITLE = 'Vision模式'
@@ -46,14 +53,33 @@ const OWNERSHIP_TEMPLATE = {
   pluginRowId: 'vision-bench-tools',
 }
 
+export const REBUILD_INSTRUCTIONS = '安全重建：备份 $DSH_HOME/.agent-presets/vision-bench 到带时间戳目录(.vision-bench.backup.<ISO>含 agent.cordis.yml/preset.yml/.dsh-vision-bench)，删除旧目录后 agentPresets.copy("standard","vision-bench","Vision模式")并重启'
+
 function writeOwnership(dir) {
   const markerPath = join(dir, MARKER)
   const payload = {
     ...OWNERSHIP_TEMPLATE,
     lastManagedAt: new Date().toISOString(),
   }
-  writeFileSync(markerPath, JSON.stringify(payload, null, 2) + '\n')
+  _writeFileSync(markerPath, JSON.stringify(payload, null, 2) + '\n')
   return payload
+}
+
+function createBackup(dir) {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const backupDir = join(dirname(dir), `.${PRESET_ID}.backup.${timestamp}`)
+    mkdirSync(backupDir, { recursive: true })
+    for (const name of ['agent.cordis.yml', 'preset.yml', MARKER]) {
+      const src = join(dir, name)
+      if (existsSync(src)) {
+        try { copyFileSync(src, join(backupDir, name)) } catch {}
+      }
+    }
+    return backupDir
+  } catch {
+    return null
+  }
 }
 
 export const ensurePresetOverlay = (dir) => {
@@ -64,11 +90,30 @@ export const ensurePresetOverlay = (dir) => {
   try {
     doc = yaml.parseDocument(raw)
   } catch (e) {
-    return { ok: false, error: 'invalid yaml: ' + String(e && e.message || e) }
+    return { ok: false, error: 'invalid yaml: ' + String(e && e.message || e), rebuildHelp: REBUILD_INSTRUCTIONS }
+  }
+  if (doc.errors && doc.errors.length) {
+    return { ok: false, error: 'invalid yaml: ' + String(doc.errors[0].message || doc.errors[0]), hasYamlError: true, rebuildHelp: REBUILD_INSTRUCTIONS }
+  }
+  if (doc.warnings && doc.warnings.length) {
+    return { ok: false, error: 'invalid yaml: ' + String(doc.warnings[0].message || doc.warnings[0]), hasYamlError: true, rebuildHelp: REBUILD_INSTRUCTIONS }
   }
   const seq = doc.contents
   if (!seq || !Array.isArray(seq.items)) {
-    return { ok: false, error: 'invalid composition: expected sequence' }
+    return { ok: false, error: 'invalid composition: expected sequence', rebuildHelp: REBUILD_INSTRUCTIONS }
+  }
+
+  // only manage ownership-declared nodes
+  const markerPath = join(dir, MARKER)
+  if (existsSync(markerPath)) {
+    try {
+      const raw = readFileSync(markerPath, 'utf8').trim()
+      if (raw && raw !== 'dsh-vision-bench') {
+        const obj = JSON.parse(raw)
+        if (!obj || obj.owner !== 'dsh-vision-bench') return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir, rebuildHelp: REBUILD_INSTRUCTIONS }
+      }
+      if (!raw) return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir, rebuildHelp: REBUILD_INSTRUCTIONS }
+    } catch {}
   }
 
   // Locate tool row via YAML Document API (id: vision-bench-tools)
@@ -112,11 +157,10 @@ export const ensurePresetOverlay = (dir) => {
           personaNode.setIn(['config', 'text'], STANDARD_PERSONA)
         }
         personaRestored = true
-      } catch {}
+      } catch (e) {
+        return { ok: false, error: ' persona 迁移失败：' + String(e && e.message || e), needsReview: true, dir, rebuildHelp: REBUILD_INSTRUCTIONS }
+      }
     } else if (!isStandard && !isLegacy && looksVision) {
-      // Vision-like but not exact legacy => still treat as legacy to migrate? Better migrate exact only,
-      // but this variant also contains Vision marker; we should not auto-overwrite if unknown user modification.
-      // Check if it's exactly one of legacy: already false, so unknown -> needs review
       needsReview = true
     } else if (!isStandard && !isLegacy) {
       // Completely unknown persona: user-modified
@@ -141,18 +185,36 @@ export const ensurePresetOverlay = (dir) => {
   if (!nextText.endsWith('\n')) nextText += '\n'
 
   const changed = nextText !== raw
+  // metadata/marker always refreshed when we own the preset; but avoid overwriting unknown persona
+  // For unknown persona, we still ensure tool row but do not overwrite persona text (kept above)
+  // If needsReview, we keep nextText as-is (persona untouched) — still may have addedRow
 
-  // If needsReview, we still write tool row/metadata/ownership but return diagnostic
-  if (changed) {
-    writeFileSync(file, nextText)
+  // Backup before any write that would modify existing files
+  let backupDir = null
+  const willWrite = changed || addedRow || personaRestored
+  if (willWrite) {
+    backupDir = createBackup(dir)
   }
-  writeFileSync(join(dir, 'preset.yml'), PRESET_METADATA)
-  writeOwnership(dir)
+
+  try {
+    if (changed) {
+      _writeFileSync(file, nextText)
+    }
+    // only refresh metadata/ownership when we are not in needsReview with write failure? keep consistent:
+    // ownership is plugin-managed node, so we write it idempotently
+    _writeFileSync(join(dir, 'preset.yml'), PRESET_METADATA)
+    writeOwnership(dir)
+  } catch (e) {
+    if (backupDir && existsSync(join(backupDir, 'agent.cordis.yml'))) {
+      try { copyFileSync(join(backupDir, 'agent.cordis.yml'), file) } catch {}
+    }
+    return { ok: false, error: '预设写入失败：' + String(e && e.message || e), backupDir, needsReview: true, rebuildHelp: REBUILD_INSTRUCTIONS }
+  }
 
   if (needsReview) {
-    return { ok: false, error: '预设需要人工检查', needsReview: true, dir, addedRow, personaNeedsReview: true }
+    return { ok: false, error: '预设需要人工检查', needsReview: true, dir, addedRow, personaNeedsReview: true, backupDir, rebuildHelp: REBUILD_INSTRUCTIONS }
   }
-  return { ok: true, dir, addedRow }
+  return { ok: true, dir, addedRow, backupDir, personaRestored }
 }
 
 export const userPresetDir = (home) => join(home, '.agent-presets', PRESET_ID)
@@ -164,7 +226,7 @@ export async function seedVisionBenchPreset(agentPresets, home) {
   const hasComposition = existsSync(composition)
   const hasMarker = existsSync(marker)
   if (hasComposition && !hasMarker) {
-    return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir }
+    return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir, rebuildHelp: REBUILD_INSTRUCTIONS }
   }
   if (hasComposition && hasMarker) {
     try {
@@ -173,11 +235,11 @@ export async function seedVisionBenchPreset(agentPresets, home) {
         try {
           const obj = JSON.parse(raw)
           if (!obj || obj.owner !== 'dsh-vision-bench') {
-            return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir }
+            return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir, rebuildHelp: REBUILD_INSTRUCTIONS }
           }
         } catch {
           if (raw !== 'dsh-vision-bench') {
-            return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir }
+            return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir, rebuildHelp: REBUILD_INSTRUCTIONS }
           }
         }
       }
@@ -191,7 +253,7 @@ export async function seedVisionBenchPreset(agentPresets, home) {
     }
   }
   if (!existsSync(composition)) {
-    return { ok: false, error: '未能创建Vision预设（需要可从 standard 复制）' }
+    return { ok: false, error: '未能创建Vision预设（需要可从 standard 复制）', rebuildHelp: REBUILD_INSTRUCTIONS }
   }
   return ensurePresetOverlay(dir)
 }
@@ -202,4 +264,5 @@ export const _internal = {
   LEGACY_VISION_PERSONAS,
   OWNERSHIP_TEMPLATE,
   MARKER,
+  REBUILD_INSTRUCTIONS,
 }
