@@ -1,6 +1,11 @@
 import { createServer } from 'node:net'
 import { applyPointWrite, segmentCovering, simulateRaw } from './bench-points.mjs'
 
+// Task6: stable frameId/transactionId - slave also generates rich frame fields for Task6
+export const SCHEMA_VERSION = 3
+const genFrameId = (trans, unit, at) => `slave:${trans}:${unit}:${at}`
+const genTxId = (trans, unit) => `tx-slave:${trans}:${unit}`
+
 const servers = new Map()
 const listenErrors = new Map()
 

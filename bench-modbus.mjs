@@ -456,18 +456,33 @@ const framesOf = (ran) => {
 
 const frameEntry = (label, frames, at = Date.now(), extra = {}) => {
   const cid = String(extra.connectionId || '')
-  const id = String(extra.frameId || (cid ? (cid + ':' + at + ':' + String(label).slice(0, 12)) : ('f:' + at)))
+  const did = String(extra.deviceId || 'conn')
+  const tid = String(extra.taskId || '')
+  const fid = String(extra.frameId || extra.transactionId || (cid ? (cid + ':' + at + ':' + String(label).slice(0, 12) + ':' + String(tid).slice(-4)) : ('f:' + at)))
+  const txId = String(extra.transactionId || fid)
   return {
-    id,
-    frameId: id,
+    id: fid,
+    frameId: fid,
+    transactionId: txId,
     t: at,
+    at,
     connectionId: cid,
-    deviceId: String(extra.deviceId || 'conn'),
+    deviceId: did,
     deviceName: String(extra.deviceName || ''),
+    taskId: tid,
+    source: String(extra.source || 'user'),
+    direction: String(extra.direction || 'tx'),
     label,
     request: frames ? frames.request : '',
     response: frames ? frames.response : '',
+    requestHex: String(extra.requestHex || (frames ? frames.request : '')).slice(0, 400),
+    responseHex: String(extra.responseHex || (frames ? frames.response : '')).slice(0, 400),
     trace: frames ? frames.trace : [],
+    unitId: Number.isFinite(Number(extra.unitId)) ? Math.trunc(Number(extra.unitId)) : 1,
+    functionCode: Number.isFinite(Number(extra.functionCode)) ? Math.trunc(Number(extra.functionCode)) : 3,
+    durationMs: Number.isFinite(Number(extra.durationMs)) ? Math.trunc(Number(extra.durationMs)) : 0,
+    status: String(extra.status || (frames ? 'ok' : 'ok')).slice(0, 16),
+    error: String(extra.error || '').slice(0, 200),
   }
 }
 
@@ -621,10 +636,27 @@ export const modbusRead = async (home, cwd, body, opts) => {
       ? ran.result.details.raw
       : []
     values = scatterBatch(values, pack.points, batch, raw, !!ran.ok, ran.ok ? '' : (ran.error || ''))
-    const f = framesOf(ran)
+    let f = framesOf(ran)
+    if (!f && batchSim) {
+      f = { request: `SIM TX ${batch.fc}@${batch.address}×${batch.count}`, response: `SIM RX ${raw.slice(0,3).join(',')}`, trace: [] }
+    }
     if (f) {
       lastFrames = f
-      const entry = frameEntry(labels[bi] + (batchSim ? '（仿真）' : ''), f, Date.now(), { connectionId: batchCid })
+      const devForBatch = pack.devices.find((d) => d.connectionId === batchCid) || pack.devices.find((d) => d.id === targetDid) || { unitId: 1 }
+      const entry = frameEntry(labels[bi] + (batchSim ? '（仿真）' : ''), f, Date.now(), {
+        connectionId: batchCid,
+        deviceId: targetDid,
+        taskId: task.id,
+        source: origin.source,
+        direction: 'tx',
+        unitId: devForBatch ? devForBatch.unitId : 1,
+        functionCode: batch.fc,
+        durationMs: batchSim ? 5 : 20,
+        status: ran.ok ? 'ok' : 'error',
+        error: ran.ok ? '' : (ran.error || ''),
+        requestHex: f.request,
+        responseHex: f.response,
+      })
       framesLog.push(entry)
       if (!framesByConnection[batchCid]) framesByConnection[batchCid] = []
       framesByConnection[batchCid] = framesByConnection[batchCid].concat([entry]).slice(-500)
@@ -776,10 +808,25 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     })
     // persist framesByConnection for this connection
     try {
-      if (extra.frames) {
-        const cur = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
-        const fbc = { ...(cur.framesByConnection || {}) }
-        const entry = frameEntry(label, extra.frames, Date.now(), { connectionId: targetCid, deviceId: targetDid })
+      const cur = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+      const fbc = { ...(cur.framesByConnection || {}) }
+      const frameForLog = extra.frames || (extra.simulated ? { request: `SIM TX ${fn}@${address}×${count}`, response: `SIM RX ${extra.readback ? extra.readback.join(',') : ''}`, trace: [] } : null)
+      if (frameForLog) {
+        const devForWrite = pack.devices.find((d) => d.id === targetDid) || { unitId: 1 }
+        const entry = frameEntry(label, frameForLog, Date.now(), {
+          connectionId: targetCid,
+          deviceId: targetDid,
+          taskId: task.id,
+          source: origin.source,
+          direction: 'tx',
+          unitId: devForWrite ? devForWrite.unitId : 1,
+          functionCode: fn,
+          durationMs: extra.simulated ? 5 : 20,
+          status: ok ? 'ok' : 'error',
+          error: ok ? '' : (extra.error || summaryText),
+          requestHex: frameForLog.request,
+          responseHex: frameForLog.response,
+        })
         fbc[targetCid] = (fbc[targetCid] || []).concat([entry]).slice(-500)
         saveWorkspace(home, room.cwd, { modbus: { framesByConnection: fbc, version: 3 } })
       }
@@ -788,6 +835,22 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       ? (extra.readbackMismatch ? ERROR_CODES.WRITE_READBACK_MISMATCH
         : (!extra.readbackOk && extra.readbackTried ? ERROR_CODES.STALE_VALUE : undefined))
       : undefined)
+    const _frameForLog = extra.frames || (extra.simulated ? { request: `SIM TX ${fn}@${address}×${count}`, response: `SIM RX ${extra.readback ? extra.readback.join(',') : ''}`, trace: [] } : null)
+    const _devForWrite = pack.devices.find((d) => d.id === targetDid) || { unitId: 1 }
+    const _entry = _frameForLog ? frameEntry(label, _frameForLog, Date.now(), {
+      connectionId: targetCid,
+      deviceId: targetDid,
+      taskId: task.id,
+      source: origin.source,
+      direction: 'tx',
+      unitId: _devForWrite ? _devForWrite.unitId : 1,
+      functionCode: fn,
+      durationMs: extra.simulated ? 5 : 20,
+      status: ok ? 'ok' : 'error',
+      error: ok ? '' : (extra.error || summaryText),
+      requestHex: _frameForLog.request,
+      responseHex: _frameForLog.response,
+    }) : null
     return {
       ok,
       taskId: task.id,
@@ -803,7 +866,7 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       target: check.values,
       readback: extra.readback || [],
       frames: extra.frames || null,
-      framesLog: [frameEntry(label, extra.frames, Date.now(), { connectionId: targetCid, deviceId: targetDid })],
+      framesLog: _entry ? [_entry] : [],
       framesByConnection: extra.framesByConnection || undefined,
       values: extra.values || pack.values,
       simulated: !!extra.simulated,

@@ -96,6 +96,10 @@ def attach_frame_capture() -> FrameCapture | None:
     logger.addHandler(capture)
     return capture
 
+# Task6: stable frame fields helper
+def _stable_hex(s: str) -> str:
+    return s.strip().replace(" ", "")[:400] if s else ""
+
 
 def call_read(client, function: int, address: int, count: int, slave: int):
     """Call a read method across pymodbus 3.15+ (device_id), 3.x (slave) and 2.x (unit)."""
@@ -159,6 +163,8 @@ def main() -> int:
             return 1
         client = ModbusTcpClient(host=args.host, port=args.tcp_port, timeout=args.timeout)
 
+    import time as _t
+    _start = _t.time()
     try:
         connected = client.connect()
         if not connected:
@@ -173,6 +179,17 @@ def main() -> int:
         else:
             raw = list(getattr(response, "registers", []) or [])[: args.count]
         value = raw[0] if len(raw) == 1 else raw
+        _dur = int((_t.time() - _start) * 1000)
+        _frames = capture.frames() if capture is not None else {"request": "", "response": "", "trace": []}
+        # enrich frames with stable fields for Task6
+        _frames["requestHex"] = _stable_hex(_frames.get("request", ""))
+        _frames["responseHex"] = _stable_hex(_frames.get("response", ""))
+        _frames["transactionId"] = f"tx-{int(_start*1000)}-{args.slave}-{args.function}-{args.address}"
+        _frames["unitId"] = args.slave
+        _frames["functionCode"] = args.function
+        _frames["durationMs"] = _dur
+        _frames["status"] = "ok"
+        _frames["error"] = ""
         details = {
             "slave": args.slave,
             "function": args.function,
@@ -180,9 +197,16 @@ def main() -> int:
             "count": args.count,
             "raw": raw,
             "value": value,
+            "requestHex": _frames["requestHex"],
+            "responseHex": _frames["responseHex"],
+            "transactionId": _frames["transactionId"],
+            "unitId": args.slave,
+            "functionCode": args.function,
+            "durationMs": _dur,
+            "status": "ok",
+            "error": "",
+            "frames": _frames,
         }
-        if capture is not None:
-            details["frames"] = capture.frames()
         output_json({
             "status": "ok",
             "action": "read",

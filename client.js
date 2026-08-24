@@ -2667,20 +2667,33 @@ function pushFramesLog(cwd, connId, logArray) {
   const arr = Array.isArray(list) ? list : []
   for (const entry of arr) {
     if (!entry) continue
-    const at = Number(entry.t) || Date.now()
+    const at = Number(entry.at ?? entry.t) || Date.now()
     const cidNorm = String(entry.connectionId || cid || '')
-    const fid = String(entry.id || entry.frameId || (cidNorm ? (cidNorm + ':' + at + ':' + String(entry.label || '').slice(0, 8)) : ('f:' + at)))
+    const fid = String(entry.frameId || entry.id || (cidNorm ? (cidNorm + ':' + at + ':' + String(entry.label || '').slice(0, 8)) : ('f:' + at)))
+    const txId = String(entry.transactionId || fid)
     FRAME_LOGS.byConn[cid].push({
       id: fid,
       frameId: fid,
+      transactionId: txId,
       t: at,
+      at,
       deviceName: String(entry.deviceName || ''),
       label: String(entry.label || ''),
       request: String(entry.request || ''),
       response: String(entry.response || ''),
+      requestHex: String(entry.requestHex || entry.request || '').slice(0, 400),
+      responseHex: String(entry.responseHex || entry.response || '').slice(0, 400),
       trace: Array.isArray(entry.trace) ? entry.trace.map((s) => String(s).slice(0, 200)).slice(0, 8) : [],
       connectionId: cidNorm,
       deviceId: String(entry.deviceId || ''),
+      taskId: String(entry.taskId || ''),
+      source: String(entry.source || 'user'),
+      direction: String(entry.direction || 'tx'),
+      unitId: Number.isFinite(Number(entry.unitId)) ? Math.trunc(Number(entry.unitId)) : 0,
+      functionCode: Number.isFinite(Number(entry.functionCode ?? entry.function)) ? Math.trunc(Number(entry.functionCode ?? entry.function)) : 0,
+      durationMs: Number.isFinite(Number(entry.durationMs)) ? Math.trunc(Number(entry.durationMs)) : 0,
+      status: String(entry.status || 'ok').slice(0, 16),
+      error: String(entry.error || '').slice(0, 200),
     })
   }
   if (FRAME_LOGS.byConn[cid].length > FRAME_LOG_CAP) {

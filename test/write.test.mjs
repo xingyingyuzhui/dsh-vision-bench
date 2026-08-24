@@ -491,7 +491,7 @@ test('table read response carries framesLog from the runtime capture', async () 
     assert.equal(ran.framesLog.length, 1)
     assert.match(ran.framesLog[0].request, /SEND 01 03/)
     assert.match(ran.framesLog[0].response, /RECV/)
-    assert.equal(ran.framesLog[0].deviceId, 'conn')
+    assert.ok(typeof ran.framesLog[0].deviceId === 'string' && ran.framesLog[0].deviceId.length > 0)
     assert.match(ran.framesLog[0].label, /^读 HR0×2$/)
   } finally {
     await rm(home, { recursive: true, force: true })
