@@ -75,6 +75,13 @@ const targetRequired = (origin, pack, cidArg, didArg) => {
   if (!origin || origin.source !== 'agent') return null
   const enabledConns = (pack.connections || []).filter((c) => c.enabled !== false)
   if (!cidArg && enabledConns.length > 1) return { error: '缺少 connectionId', errorCode: ERROR_CODES.TARGET_REQUIRED }
+  // §16.5-30: a single connection exposing several devices is still ambiguous —
+  // Agent must name the device explicitly instead of silently hitting the first one.
+  if (!didArg && (cidArg || enabledConns.length === 1)) {
+    const scopeCid = cidArg || enabledConns[0].id
+    const enabledDevs = (pack.devices || []).filter((d) => d.connectionId === scopeCid && d.enabled !== false)
+    if (enabledDevs.length > 1) return { error: '缺少 deviceId', errorCode: ERROR_CODES.TARGET_REQUIRED }
+  }
   return null
 }
 
@@ -274,7 +281,7 @@ const PENDING_TTL_MS = 5 * 60 * 1000
 const pendingWrites = new Map()
 let pendingSeq = 0
 
-const endpointFingerprint = (conn) => ({
+const endpointFingerprint = (conn, dev) => ({
   mode: conn.mode,
   port: (conn.port || '').trim(),
   baudrate: Number(conn.baudrate) || 0,
@@ -284,6 +291,9 @@ const endpointFingerprint = (conn) => ({
   host: (conn.host || '').trim(),
   tcpPort: Number(conn.tcpPort) || 0,
   slave: Number(conn.slave) || 0,
+  // §16.5-32: in v3 the RTU unit id lives on the device, so bind it too —
+  // a Unit ID switch between request and approval must void the old request.
+  unitId: Math.min(247, Math.max(0, Math.trunc(Number(dev && dev.unitId) || Number(conn.slave) || 0))),
 })
 
 const endpointLabelText = (conn) => conn.mode === 'tcp'
@@ -301,6 +311,7 @@ const sameEndpoint = (a, b) =>
     && a.host === b.host
     && a.tcpPort === b.tcpPort
     && a.slave === b.slave
+    && a.unitId === b.unitId
 
 const prunePendingWrites = () => {
   const now = Date.now()
@@ -356,7 +367,8 @@ export const resolvePendingWrite = async (home, cwd, id, approved) => {
   const pack = normalizeModbus(workspace.modbus)
   const cid = entry.params.connectionId || entry.params.connId || pack.activeConnectionId
   const connForWrite = (pack.connections.find((c) => c.id === cid) || {}).conn || pack.conn
-  if (!sameEndpoint(endpointFingerprint(connForWrite), entry.params.endpoint)) {
+  const devForWrite = (pack.devices || []).find((d) => d.id === entry.params.deviceId)
+  if (!sameEndpoint(endpointFingerprint(connForWrite, devForWrite), entry.params.endpoint)) {
     recordBenchEvent(home, room.cwd, {
       action: 'write-stale',
       ok: false,
@@ -366,6 +378,20 @@ export const resolvePendingWrite = async (home, cwd, id, approved) => {
       '写点请求已失效：串口/TCP 连接在批准前发生了变化，请让 Agent 重新发起',
       '', { sessionId: entry.params.sessionId }).catch(() => {})
     return { ok: false, error: '设备连接已变更，原批准已失效，请让 Agent 重新发起请求', errorCode: ERROR_CODES.ENDPOINT_DRIFT }
+  }
+  // §16.5-31: the approval also binds the config version; if connections/
+  // devices/points changed since the request was issued, it is stale too.
+  const boundConfigVersion = Number(entry.params.endpoint && entry.params.endpoint.configVersion)
+  if (boundConfigVersion > 0 && (pack.configVersion || 1) !== boundConfigVersion) {
+    recordBenchEvent(home, room.cwd, {
+      action: 'write-stale',
+      ok: false,
+      summary: '写点请求过期（配置版本已漂移 v' + boundConfigVersion + '→v' + (pack.configVersion || 1) + '）：' + entry.params.label,
+    }, { source: 'system' })
+    void notifyBenchEvent(home, room.cwd,
+      '写点请求已失效：配置在批准前发生了变化，请让 Agent 重新发起',
+      '', { sessionId: entry.params.sessionId }).catch(() => {})
+    return { ok: false, error: '配置版本已漂移（v' + boundConfigVersion + '→v' + (pack.configVersion || 1) + '），原批准已失效，请让 Agent 重新发起请求', errorCode: ERROR_CODES.CONFIG_DRIFT }
   }
   return modbusWrite(home, room.cwd, {
     ...entry.params,
@@ -684,6 +710,7 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     return { ok: false, error: '已有写入任务进行中' }
   }
   // Validate that every target address exists in the point table (v3-aware, scoped by connection/device)
+  const targetPointIds = []
   for (let i = 0; i < count; i++) {
     const addr = address + i
     const hit = findPointV3(pack.points, fn, addr, targetCid, targetDid)
@@ -696,8 +723,12 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     if (didArg && hit.deviceId !== didArg) {
       return { ok: false, error: '不在点表：' + functionTag(fn) + addr, errorCode: ERROR_CODES.TARGET_REQUIRED }
     }
+    targetPointIds.push(hit.id)
   }
   if (origin.source === 'agent' && !(body && body.confirm === true)) {
+    // §16.5-31: the confirmation card binds connection, device, points, config
+    // version and the endpoint fingerprint so approval can re-validate all of them.
+    const devForWrite = pack.devices.find((d) => d.id === targetDid)
     const request = createPendingWrite(room.cwd, {
       function: fn,
       address,
@@ -707,7 +738,8 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       connectionId: targetCid,
       connId: targetCid,
       deviceId: targetDid,
-      endpoint: endpointFingerprint(conn),
+      pointIds: targetPointIds.slice(),
+      endpoint: { ...endpointFingerprint(conn, devForWrite), configVersion: pack.configVersion || 1 },
     })
     // Label needs the tag helpers; fill it in place.
     request.label = entryLabel(fn, address, count, check.values)
@@ -759,6 +791,7 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       taskId: task.id,
       source: origin.source,
       action: 'write',
+      summary: summaryText,
       function: fn,
       address,
       connectionId: targetCid,
@@ -790,7 +823,7 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     // Persist values and exit sim (local write is considered verified) - need to target correct connection's sim flag
     const nextConns = pack.connections.map((c) => c.id === targetCid ? { ...c, conn: { ...c.conn, sim: false } } : c)
     saveWorkspace(home, room.cwd, { modbus: { connections: nextConns, values: vals, version: 3 } })
-    return done(true, label + '（本地生效）', {
+    return done(true, label + '（本地生效，回读一致）', {
       values: vals,
       simulated: true,
       readback: check.values.slice(),
