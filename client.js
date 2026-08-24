@@ -3839,14 +3839,10 @@ function createHmiView(React, t, post, openLive) {
       const ok = copyAgentRef(ref)
       setAgentCopied(kind + ':' + (payload && (payload.id || payload.pointId || payload.frameId || payload.connectionId) || ''))
       setTimeout(() => setAgentCopied(''), 2000)
-      // Also emit a bench event for evidence back-mount (best effort)
+      // Also emit a bench event for evidence back-mount via dedicated appendEvidence (merge, keep last 20, validate)
       try {
-        const cur = workspaceRef.current
         const ev = { kind: ref.kind, id: ref.pointId || ref.frameId || ref.connectionId || ref.deviceId, connectionId: ref.connectionId, deviceId: ref.deviceId, at: ref.at, version: ref.configVersion }
-        const prevFocus = cur.focus || { request: null, prev: null, tempWatchIds: [], evidence: [] }
-        const nextEvidence = (prevFocus.evidence || []).concat([ev]).slice(-20)
-        // Persist evidence locally (non-blocking)
-        post('/dsh-vision-bench/workspace', { cwd, focus: { ...prevFocus, evidence: nextEvidence } }).catch(() => {})
+        post('/dsh-vision-bench/evidence', { cwd, evidence: [ev] }).catch(() => {})
       } catch {}
       return ref
     }
@@ -5528,10 +5524,7 @@ function createLiveView(React, t, post, hooks) {
       try {
         const packTmp = normalizeModbus(modbus)
         const ev = { kind: ref.kind, id: ref.pointId || ref.frameId || ref.connectionId || ref.deviceId, connectionId: ref.connectionId, deviceId: ref.deviceId, at: ref.at, version: ref.configVersion }
-        // persist evidence
-        const curFocus = focusState || { request: null, prev: null, tempWatchIds: [], evidence: [] }
-        const nextEvidence = (curFocus.evidence || []).concat([ev]).slice(-20)
-        post('/dsh-vision-bench/workspace', { cwd, focus: { ...curFocus, evidence: nextEvidence } }).catch(() => {})
+        post('/dsh-vision-bench/evidence', { cwd, evidence: [ev] }).catch(() => {})
       } catch {}
       return ref
     }
@@ -5950,8 +5943,7 @@ function createTrendPage(React, t, post, hooks) {
       setCopied(entry ? entry.key : 'trend')
       setTimeout(() => setCopied(''), 2000)
       if (post && cwd) {
-        // persist evidence
-        try { post('/dsh-vision-bench/workspace', { cwd, focus: { evidence: [{ kind: 'trend', id: entry ? entry.key : 'trend-interval', at: Date.now(), version: cv }] } }).catch(() => {}) } catch {}
+        try { post('/dsh-vision-bench/evidence', { cwd, evidence: [{ kind: 'trend', id: entry ? entry.key : 'trend-interval', at: Date.now(), version: cv }] }).catch(() => {}) } catch {}
       }
     }
     const focusTrend = (entry) => {
@@ -6046,7 +6038,7 @@ function createAlarmPage(React, t, post, hooks) {
       setCopiedAlarm(row.a.id)
       setTimeout(()=> setCopiedAlarm(''), 2000)
       if (cwd) {
-        try { post('/dsh-vision-bench/workspace', { cwd, focus: { evidence: [{ kind: 'alarm', id: row.a.id, connectionId: row.a.connectionId, deviceId: row.a.deviceId, at: row.a.lastAt, version: cv }] } }).catch(()=>{}) } catch {}
+        try { post('/dsh-vision-bench/evidence', { cwd, evidence: [{ kind: 'alarm', id: row.a.id, connectionId: row.a.connectionId, deviceId: row.a.deviceId, at: row.a.lastAt, version: cv }] }).catch(()=>{}) } catch {}
       }
     }
     const focusAlarm = (row)=>{

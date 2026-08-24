@@ -3,6 +3,7 @@ import { runSelfCheck } from './bench-check.mjs'
 import { artifactInfo, readBuildLog } from './bench-fs.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
 import {
+  appendEvidence,
   applyConfigDraft,
   bindSession,
   createConfigDraft,
@@ -254,6 +255,15 @@ export function apply(ctx, config = {}) {
     route('/dsh-vision-bench/focus', async (req) => {
       const body = normalizeConnAlias(await readJsonBody(req))
       return requestFocus(dshHome, body && body.cwd, body)
+    }),
+    route('/dsh-vision-bench/evidence', async (req) => {
+      const body = await readJsonBody(req)
+      const room = requireWorkspaceCwd(body && body.cwd)
+      if (room.error) return { ok: false, error: room.error }
+      const ev = body && (body.evidence || body.evidences || body.item)
+      const list = Array.isArray(ev) ? ev : (ev ? [ev] : [])
+      if (!list.length) return { ok: false, error: '缺少 evidence' }
+      return appendEvidence(dshHome, room.cwd, list)
     }),
     route('/dsh-vision-bench/session/bind', async (req) => {
       const body = await readJsonBody(req)

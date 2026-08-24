@@ -2,7 +2,7 @@ import { buildEvidenceRefs, connectOp, keilBuild, keilMap, listDir, listFrames, 
 import { requireKeilProject, requireWorkspaceCwd } from './bench-paths.mjs'
 import { decodeValue } from './bench-points.mjs'
 import { connLabel, normalizeModbus } from './bench-devices.mjs'
-import { applyConfigDraft, createConfigDraft, createManualRequest, discardConfigDraft, getConfigDraft, journalView, listConfigDrafts, loadWorkspace, saveWorkspace } from './bench-store.mjs'
+import { appendEvidence, applyConfigDraft, createConfigDraft, createManualRequest, discardConfigDraft, getConfigDraft, journalView, listConfigDrafts, loadWorkspace, saveWorkspace } from './bench-store.mjs'
 import { resolveTarget } from './bench-targets.mjs'
 
 const ACTIONS = new Set(['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual', 'connect', 'points', 'frames', 'focus', 'trend', 'alarm', 'evidence', 'draft'])
@@ -352,25 +352,10 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
   if (action === 'evidence') {
     const evidence = buildEvidenceRefs(home, room.cwd)
     const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
-    // Optionally also persist provided evidence refs
+    // Optionally also persist provided evidence refs via dedicated appendEvidence (merge, keep last 20, validate)
     if (Array.isArray(args.evidence) && args.evidence.length) {
-      for (const ev of args.evidence) {
-        if (!ev || typeof ev !== 'object') continue
-        const rt = resolveTarget(pack, {
-          connectionId: ev.connectionId || ev.connId,
-          deviceId: ev.deviceId,
-          pointId: ev.pointId || ev.id,
-          frameId: ev.frameId,
-          alarmId: ev.alarmId,
-          trendKey: ev.trendKey,
-        })
-        // Only validate if target has at least one ID; empty evidence item is allowed? skip
-        const hasId = ev.connectionId || ev.connId || ev.deviceId || ev.pointId || ev.id || ev.frameId || ev.alarmId || ev.trendKey
-        if (hasId && !rt.ok) return { ok: false, action, error: rt.error, errorCode: rt.errorCode }
-      }
-      const ws = loadWorkspace(home, room.cwd)
-      const mergedEvidence = (ws.focus && ws.focus.evidence ? ws.focus.evidence : []).concat(args.evidence.slice(0, 20))
-      saveWorkspace(home, room.cwd, { focus: { ...ws.focus, evidence: mergedEvidence.slice(0, 20) } })
+      const appended = appendEvidence(home, room.cwd, args.evidence)
+      if (!appended.ok) return { ok: false, action, error: appended.error, errorCode: appended.errorCode }
     }
     return { ok: true, action, evidence, configVersion: pack.configVersion || 1 }
   }

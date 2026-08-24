@@ -224,14 +224,10 @@ export function createHmiView(React, t, post, openLive) {
       const ok = copyAgentRef(ref)
       setAgentCopied(kind + ':' + (payload && (payload.id || payload.pointId || payload.frameId || payload.connectionId) || ''))
       setTimeout(() => setAgentCopied(''), 2000)
-      // Also emit a bench event for evidence back-mount (best effort)
+      // Also emit a bench event for evidence back-mount via dedicated appendEvidence (merge, keep last 20, validate)
       try {
-        const cur = workspaceRef.current
         const ev = { kind: ref.kind, id: ref.pointId || ref.frameId || ref.connectionId || ref.deviceId, connectionId: ref.connectionId, deviceId: ref.deviceId, at: ref.at, version: ref.configVersion }
-        const prevFocus = cur.focus || { request: null, prev: null, tempWatchIds: [], evidence: [] }
-        const nextEvidence = (prevFocus.evidence || []).concat([ev]).slice(-20)
-        // Persist evidence locally (non-blocking)
-        post('/dsh-vision-bench/workspace', { cwd, focus: { ...prevFocus, evidence: nextEvidence } }).catch(() => {})
+        post('/dsh-vision-bench/evidence', { cwd, evidence: [ev] }).catch(() => {})
       } catch {}
       return ref
     }

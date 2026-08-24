@@ -6,6 +6,7 @@ import { emptyLog, mergeLog, normalizeEvent } from './bench-prompt.mjs'
 import { normalizeConn, normalizeModbus, validateConnections, validateDevices, normalizeConfigVersion } from './bench-devices.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import { applyPatch, compare as patchCompare, validatePatch } from './bench-patch.mjs'
+import { resolveTarget } from './bench-targets.mjs'
 import {
   MAX_TASKS,
   capTasks,
@@ -990,4 +991,39 @@ export const applyConfigDraft = (home, cwd, draftId, opts = {}) => {
     recordBenchEvent(home, room.cwd, { action: 'config-apply', ok: true, summary: '应用配置草稿 ' + id + '（v' + draft.baseConfigVersion + ' → v' + (saved.workspace.modbus.configVersion || 1) + '）' }, { source: 'user', sessionId: opts.sessionId || '' })
   } catch {}
   return { ok: true, draftId: id, prevVersion: draft.baseConfigVersion, nextVersion: saved.workspace.modbus.configVersion || 1, summary, workspace: saved.workspace }
+}
+
+export const appendEvidence = (home, cwd, evidence) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const ws = loadWorkspace(home, room.cwd)
+  const pack = normalizeModbus(ws.modbus)
+  const list = Array.isArray(evidence) ? evidence : (evidence && typeof evidence === 'object' ? [evidence] : [])
+  if (!list.length) return { ok: false, error: '缺少 evidence' }
+  for (const ev of list) {
+    if (!ev || typeof ev !== 'object') return { ok: false, error: 'invalid evidence' }
+    const hasId = ev.id || ev.pointId || ev.frameId || ev.alarmId || ev.trendKey || ev.connectionId || ev.deviceId || ev.connId
+    if (!hasId) return { ok: false, error: '证据缺少 ID', errorCode: 'TARGET_REQUIRED' }
+    const rt = resolveTarget(pack, {
+      connectionId: ev.connectionId || ev.connId,
+      deviceId: ev.deviceId,
+      pointId: ev.pointId || ev.id,
+      frameId: ev.frameId,
+      alarmId: ev.alarmId,
+      trendKey: ev.trendKey,
+    })
+    // For evidence that is a generic point/build/log, allow if it has no resolvable target? But if it has id that is not a point, resolveTarget will fail for point not found, which is not desired for build/log evidence.
+    // So only validate if the evidence kind is point/frame/alarm/trend and has those IDs; for build/log, skip strict validation
+    const kind = typeof ev.kind === 'string' ? ev.kind : ''
+    const isStrict = kind === 'point' || kind === 'frame' || kind === 'alarm' || kind === 'trend' || ev.pointId || ev.frameId || ev.alarmId || ev.trendKey
+    if (isStrict && !rt.ok) return { ok: false, error: rt.error, errorCode: rt.errorCode }
+    const evVer = Number(ev.version ?? ev.configVersion)
+    if (Number.isFinite(evVer) && evVer !== (pack.configVersion || 1)) {
+      return { ok: false, error: `版本漂移：证据基于 v${evVer} 当前 v${pack.configVersion || 1}`, errorCode: 'CONFIG_DRIFT' }
+    }
+  }
+  const nextEvidence = [...(ws.focus.evidence || []), ...list].slice(-20)
+  const saved = saveWorkspace(home, room.cwd, { focus: { ...ws.focus, evidence: nextEvidence } })
+  if (!saved.ok) return saved
+  return { ok: true, evidence: saved.workspace.focus.evidence }
 }
