@@ -1,5 +1,5 @@
 import { pushFramesLog, subscribeState, getFramesLog, clearFramesLog, resolveSidebarScope, getSidebarPin, setSidebarPin, buildAgentRef, copyAgentRef, dispatchAgentRef, hasHarnessInput, agentRefToText, getFocusState, setFocusState, isFocusTarget, focusHighlightClass, getTempWatch, setTempWatch, clearTempWatch, shouldStealFocus, shouldHighlightFocus } from './bench-shared.mjs'
-import { postEvidence, evidenceFromRef } from './bench-shared.mjs'
+import { postEvidence, evidenceFromRef, readInputDraft, buildInputBridge } from './bench-shared.mjs'
 import { clockOf, decodeValue, functionTag } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
@@ -59,6 +59,9 @@ export function createLiveView(React, t, post, hooks) {
   return function LiveView(props) {
     const el = React.createElement
     const cwd = sessionCwd(props)
+    // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
+    const inputDraft = readInputDraft(props && props.useInput)
+    const agentBridge = buildInputBridge(props, inputDraft)
     const [health, setHealth] = React.useState({})
     const [modbus, setModbus] = React.useState({ version: 3, connections: [], devices: [], points: [], values: [], pollingByConnection: {} })
     const [tickError, setTickError] = React.useState('')
@@ -159,7 +162,7 @@ export function createLiveView(React, t, post, hooks) {
 
     function sendToAgent(kind, payload) {
       const ref = agentRefFor(kind, payload)
-      const res = dispatchAgentRef(ref, props)
+      const res = dispatchAgentRef(ref, agentBridge)
       const key = kind + ':' + (payload && (payload.pointId || payload.id || payload.frameId || payload.connectionId) || '')
       setAgentCopied(key + ':' + res.mode + ':' + res.status)
       setTimeout(() => setAgentCopied(''), 2500)
@@ -638,7 +641,7 @@ export function createTrendPage(React, t, post, hooks) {
         end,
         label: entry ? entry.label : 'trend-interval',
       }, { configVersion: cv, start, end })
-      const res = dispatchAgentRef(ref, props) || { mode: 'copied' }
+      const res = dispatchAgentRef(ref, agentBridge) || { mode: 'copied' }
       const labelByMode = { input: '已加入输入框', sent: '已发送', copied: '仅复制', failed: '处理失败' }
       setCopied((entry ? entry.key : 'trend') + ':' + (labelByMode[res.mode] || '仅复制'))
       setTimeout(() => setCopied(''), 2000)
@@ -711,6 +714,9 @@ export function createAlarmPage(React, t, post, hooks) {
   return function AlarmPage(props) {
     const el = React.createElement
     const cwd = sessionCwd(props)
+    // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
+    const inputDraft = readInputDraft(props && props.useInput)
+    const agentBridge = buildInputBridge(props, inputDraft)
     const [events, setEvents] = React.useState([])
     const [alarmState, setAlarmState] = React.useState({})
     const [pack, setPack] = React.useState(null)
@@ -756,8 +762,9 @@ export function createAlarmPage(React, t, post, hooks) {
         start: row.a.firstAt || row.a.lastAt,
         end: row.a.lastAt,
       }, { configVersion: cv, start: row.a.firstAt || row.a.lastAt, end: row.a.lastAt })
-      dispatchAgentRef(ref, props)
-      setCopiedAlarm(row.a.id)
+      const res = dispatchAgentRef(ref, agentBridge)
+      // Task5/0.18.2: unified status enum input|sent|copied|failed — surface it on screen
+      setCopiedAlarm(row.a.id + ':' + res.status)
       setTimeout(()=> setCopiedAlarm(''), 2000)
       if (cwd) {
         // Task4/0.18.2: typed evidence back-mount — failures surface CONFIG_DRIFT/TARGET_MISMATCH

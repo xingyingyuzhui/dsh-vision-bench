@@ -1,6 +1,7 @@
 import {
   agentRefToText,
   buildAgentRef,
+  buildInputBridge,
   clearFramesLog,
   clockOf,
   copyAgentRef,
@@ -15,6 +16,7 @@ import {
   getFramesLog,
   lineKind,
   pushFramesLog,
+  readInputDraft,
   setFocusState,
   shouldStealFocus,
   shouldHighlightFocus,
@@ -60,6 +62,9 @@ export function createHmiView(React, t, post, openLive) {
     const el = React.createElement
     const cwd = useSessionCwd(React, props)
     const sessionId = (props && props.sessionId) || ''
+    // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
+    const inputDraft = readInputDraft(props && props.useInput)
+    const agentBridge = buildInputBridge(props, inputDraft)
     const [health, setHealth] = React.useState({})
     const [workspace, setWorkspace] = React.useState(emptyWorkspace)
     const [journal, setJournal] = React.useState(emptyJournal)
@@ -246,7 +251,7 @@ export function createHmiView(React, t, post, openLive) {
 
     function sendToAgent(kind, payload) {
       const ref = agentRefFor(kind, payload)
-      const res = dispatchAgentRef(ref, props)
+      const res = dispatchAgentRef(ref, agentBridge)
       const key = kind + ':' + (payload && (payload.id || payload.pointId || payload.frameId || payload.connectionId) || '')
       setAgentCopied(key + ':' + res.mode + ':' + res.status)
       setTimeout(() => setAgentCopied(''), 2500)

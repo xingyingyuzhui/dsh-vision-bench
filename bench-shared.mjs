@@ -574,7 +574,55 @@ export function copyAgentRef(ref) {
   return false
 }
 
-export function dispatchAgentRef(ref, props, opts){const t=JSON.stringify(ref,null,2);const tryDraft=(a)=>{if(!a||typeof a.setDraft!=='function')return null;try{let cur='';if(props&&typeof props.useInput==='function'){try{const v=props.useInput(s=>s&&s.draft);if(typeof v==='string')cur=v}catch{}}const n=cur?cur+'\n'+t:t;a.setDraft(n);if(opts&&opts.send&&typeof a.submit==='function'){try{a.submit();return{mode:'sent',ok:true,status:'已发送',text:t}}catch{}}return{mode:'draft',ok:true,status:'已加入输入框',text:t}}catch{return null}};let r=null;if(props&&props.inputActions)r=tryDraft(props.inputActions);if(!r&&props&&props.session&&props.session.inputActions)r=tryDraft(props.session.inputActions);if(r&&r.ok)return r;const ok=copyAgentRef(ref);return{mode:'copied',ok,status:'仅复制',text:t,fallback:true}}
+// Task5/0.18.2: Session Agent input bridge. dispatchAgentRef is a PURE command:
+// the bridge carries { currentDraft, setDraft, submit } and no React hook is ever
+// called inside dispatch (hooks are read at component render top level only).
+
+// Read the draft via the harness reader hook — call this at the TOP of a render,
+// never inside an event handler (prevents Invalid Hook Call).
+export function readInputDraft(useInput) {
+  if (typeof useInput !== 'function') return ''
+  try {
+    const v = useInput((s) => (s && s.draft) || '')
+    return typeof v === 'string' ? v : ''
+  } catch {
+    return ''
+  }
+}
+
+// Resolve writer actions from harness props; keep reader value out of dispatch.
+export function buildInputBridge(props, currentDraft) {
+  const actions = (props && props.inputActions) || (props && props.session && props.session.inputActions) || null
+  return {
+    currentDraft: typeof currentDraft === 'string' ? currentDraft : '',
+    setDraft: actions && typeof actions.setDraft === 'function' ? actions.setDraft : null,
+    submit: actions && typeof actions.submit === 'function' ? actions.submit : null,
+  }
+}
+
+export function dispatchAgentRef(ref, bridge, opts) {
+  const t = JSON.stringify(ref, null, 2)
+  const b = bridge || {}
+  const hasWriter = typeof b.setDraft === 'function'
+  if (hasWriter) {
+    try {
+      // 追加规则：不覆盖用户已有文本，换行后接序列化引用
+      const cur = typeof b.currentDraft === 'string' ? b.currentDraft : ''
+      const next = cur ? cur + '\n' + t : t
+      b.setDraft(next)
+      if (opts && opts.send && typeof b.submit === 'function') {
+        try {
+          b.submit()
+          return { mode: 'sent', ok: true, status: '已发送', text: t }
+        } catch {}
+      }
+      return { mode: 'input', ok: true, status: '已加入输入框', text: t }
+    } catch {}
+  }
+  // 无写接口 → 剪贴板回退
+  const ok = copyAgentRef(ref)
+  return { mode: ok ? 'copied' : 'failed', ok, status: ok ? '仅复制' : '处理失败', text: t, fallback: true }
+}
 export const hasHarnessInput = (p) => !!(p && (
   (p.inputActions && typeof p.inputActions.setDraft === 'function')
   || (p.session && p.session.inputActions && typeof p.session.inputActions.setDraft === 'function')

@@ -1,5 +1,5 @@
 import { getFramesLog, pushFramesLog, clearFramesLog, buildAgentRef, copyAgentRef, dispatchAgentRef, hasHarnessInput } from './bench-shared.mjs'
-import { postEvidence, evidenceFromRef } from './bench-shared.mjs'
+import { postEvidence, evidenceFromRef, readInputDraft, buildInputBridge } from './bench-shared.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { NS } from './bench-i18n.mjs'
 import { buildFramePortOptions, parseFramePortSelection, resolveFrameSelection, selectProtocolFrames, mergeFramesDedup, framesShouldStickToBottom } from './bench-frames-model.mjs'
@@ -20,6 +20,9 @@ export function createFramesPage(React, t, post, hooks) {
   const openHmi = hooks && hooks.openHmi
   return function FramesPage(props) {
     const el = React.createElement
+    // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
+    const inputDraft = readInputDraft(props && props.useInput)
+    const agentBridge = buildInputBridge(props, inputDraft)
     const realCwd = (() => {
       try {
         if (props && props.scope && props.scope.cwd) return props.scope.cwd
@@ -304,7 +307,7 @@ export function createFramesPage(React, t, post, hooks) {
         deviceId: frame.deviceId,
         label: frame.label,
       }, { configVersion, start: (frame.t || frame.at || Date.now()) - 5 * 60 * 1000, end: frame.t || frame.at || Date.now() })
-      const res = dispatchAgentRef(ref, props) || { mode: 'copied' }
+      const res = dispatchAgentRef(ref, agentBridge) || { mode: 'copied' }
       const labelByMode = { input: '已加入输入框', sent: '已发送', copied: '仅复制', failed: '处理失败' }
       setCopied(labelByMode[res.mode] || '仅复制')
       setTimeout(() => setCopied(''), 2000)

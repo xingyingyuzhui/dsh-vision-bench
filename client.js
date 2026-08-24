@@ -3072,7 +3072,55 @@ function copyAgentRef(ref) {
   return false
 }
 
-function dispatchAgentRef(ref, props, opts){const t=JSON.stringify(ref,null,2);const tryDraft=(a)=>{if(!a||typeof a.setDraft!=='function')return null;try{let cur='';if(props&&typeof props.useInput==='function'){try{const v=props.useInput(s=>s&&s.draft);if(typeof v==='string')cur=v}catch{}}const n=cur?cur+'\n'+t:t;a.setDraft(n);if(opts&&opts.send&&typeof a.submit==='function'){try{a.submit();return{mode:'sent',ok:true,status:'已发送',text:t}}catch{}}return{mode:'draft',ok:true,status:'已加入输入框',text:t}}catch{return null}};let r=null;if(props&&props.inputActions)r=tryDraft(props.inputActions);if(!r&&props&&props.session&&props.session.inputActions)r=tryDraft(props.session.inputActions);if(r&&r.ok)return r;const ok=copyAgentRef(ref);return{mode:'copied',ok,status:'仅复制',text:t,fallback:true}}
+// Task5/0.18.2: Session Agent input bridge. dispatchAgentRef is a PURE command:
+// the bridge carries { currentDraft, setDraft, submit } and no React hook is ever
+// called inside dispatch (hooks are read at component render top level only).
+
+// Read the draft via the harness reader hook — call this at the TOP of a render,
+// never inside an event handler (prevents Invalid Hook Call).
+function readInputDraft(useInput) {
+  if (typeof useInput !== 'function') return ''
+  try {
+    const v = useInput((s) => (s && s.draft) || '')
+    return typeof v === 'string' ? v : ''
+  } catch {
+    return ''
+  }
+}
+
+// Resolve writer actions from harness props; keep reader value out of dispatch.
+function buildInputBridge(props, currentDraft) {
+  const actions = (props && props.inputActions) || (props && props.session && props.session.inputActions) || null
+  return {
+    currentDraft: typeof currentDraft === 'string' ? currentDraft : '',
+    setDraft: actions && typeof actions.setDraft === 'function' ? actions.setDraft : null,
+    submit: actions && typeof actions.submit === 'function' ? actions.submit : null,
+  }
+}
+
+function dispatchAgentRef(ref, bridge, opts) {
+  const t = JSON.stringify(ref, null, 2)
+  const b = bridge || {}
+  const hasWriter = typeof b.setDraft === 'function'
+  if (hasWriter) {
+    try {
+      // 追加规则：不覆盖用户已有文本，换行后接序列化引用
+      const cur = typeof b.currentDraft === 'string' ? b.currentDraft : ''
+      const next = cur ? cur + '\n' + t : t
+      b.setDraft(next)
+      if (opts && opts.send && typeof b.submit === 'function') {
+        try {
+          b.submit()
+          return { mode: 'sent', ok: true, status: '已发送', text: t }
+        } catch {}
+      }
+      return { mode: 'input', ok: true, status: '已加入输入框', text: t }
+    } catch {}
+  }
+  // 无写接口 → 剪贴板回退
+  const ok = copyAgentRef(ref)
+  return { mode: ok ? 'copied' : 'failed', ok, status: ok ? '仅复制' : '处理失败', text: t, fallback: true }
+}
 const hasHarnessInput = (p) => !!(p && (
   (p.inputActions && typeof p.inputActions.setDraft === 'function')
   || (p.session && p.session.inputActions && typeof p.session.inputActions.setDraft === 'function')
@@ -3822,6 +3870,9 @@ function createHmiView(React, t, post, openLive) {
     const el = React.createElement
     const cwd = useSessionCwd(React, props)
     const sessionId = (props && props.sessionId) || ''
+    // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
+    const inputDraft = readInputDraft(props && props.useInput)
+    const agentBridge = buildInputBridge(props, inputDraft)
     const [health, setHealth] = React.useState({})
     const [workspace, setWorkspace] = React.useState(emptyWorkspace)
     const [journal, setJournal] = React.useState(emptyJournal)
@@ -4008,7 +4059,7 @@ function createHmiView(React, t, post, openLive) {
 
     function sendToAgent(kind, payload) {
       const ref = agentRefFor(kind, payload)
-      const res = dispatchAgentRef(ref, props)
+      const res = dispatchAgentRef(ref, agentBridge)
       const key = kind + ':' + (payload && (payload.id || payload.pointId || payload.frameId || payload.connectionId) || '')
       setAgentCopied(key + ':' + res.mode + ':' + res.status)
       setTimeout(() => setAgentCopied(''), 2500)
@@ -5591,6 +5642,9 @@ function createLiveView(React, t, post, hooks) {
   return function LiveView(props) {
     const el = React.createElement
     const cwd = sessionCwd(props)
+    // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
+    const inputDraft = readInputDraft(props && props.useInput)
+    const agentBridge = buildInputBridge(props, inputDraft)
     const [health, setHealth] = React.useState({})
     const [modbus, setModbus] = React.useState({ version: 3, connections: [], devices: [], points: [], values: [], pollingByConnection: {} })
     const [tickError, setTickError] = React.useState('')
@@ -5691,7 +5745,7 @@ function createLiveView(React, t, post, hooks) {
 
     function sendToAgent(kind, payload) {
       const ref = agentRefFor(kind, payload)
-      const res = dispatchAgentRef(ref, props)
+      const res = dispatchAgentRef(ref, agentBridge)
       const key = kind + ':' + (payload && (payload.pointId || payload.id || payload.frameId || payload.connectionId) || '')
       setAgentCopied(key + ':' + res.mode + ':' + res.status)
       setTimeout(() => setAgentCopied(''), 2500)
@@ -6170,7 +6224,7 @@ function createTrendPage(React, t, post, hooks) {
         end,
         label: entry ? entry.label : 'trend-interval',
       }, { configVersion: cv, start, end })
-      const res = dispatchAgentRef(ref, props) || { mode: 'copied' }
+      const res = dispatchAgentRef(ref, agentBridge) || { mode: 'copied' }
       const labelByMode = { input: '已加入输入框', sent: '已发送', copied: '仅复制', failed: '处理失败' }
       setCopied((entry ? entry.key : 'trend') + ':' + (labelByMode[res.mode] || '仅复制'))
       setTimeout(() => setCopied(''), 2000)
@@ -6243,6 +6297,9 @@ function createAlarmPage(React, t, post, hooks) {
   return function AlarmPage(props) {
     const el = React.createElement
     const cwd = sessionCwd(props)
+    // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
+    const inputDraft = readInputDraft(props && props.useInput)
+    const agentBridge = buildInputBridge(props, inputDraft)
     const [events, setEvents] = React.useState([])
     const [alarmState, setAlarmState] = React.useState({})
     const [pack, setPack] = React.useState(null)
@@ -6288,8 +6345,9 @@ function createAlarmPage(React, t, post, hooks) {
         start: row.a.firstAt || row.a.lastAt,
         end: row.a.lastAt,
       }, { configVersion: cv, start: row.a.firstAt || row.a.lastAt, end: row.a.lastAt })
-      dispatchAgentRef(ref, props)
-      setCopiedAlarm(row.a.id)
+      const res = dispatchAgentRef(ref, agentBridge)
+      // Task5/0.18.2: unified status enum input|sent|copied|failed — surface it on screen
+      setCopiedAlarm(row.a.id + ':' + res.status)
       setTimeout(()=> setCopiedAlarm(''), 2000)
       if (cwd) {
         // Task4/0.18.2: typed evidence back-mount — failures surface CONFIG_DRIFT/TARGET_MISMATCH
@@ -6551,6 +6609,9 @@ function createFramesPage(React, t, post, hooks) {
   const openHmi = hooks && hooks.openHmi
   return function FramesPage(props) {
     const el = React.createElement
+    // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
+    const inputDraft = readInputDraft(props && props.useInput)
+    const agentBridge = buildInputBridge(props, inputDraft)
     const realCwd = (() => {
       try {
         if (props && props.scope && props.scope.cwd) return props.scope.cwd
@@ -6835,7 +6896,7 @@ function createFramesPage(React, t, post, hooks) {
         deviceId: frame.deviceId,
         label: frame.label,
       }, { configVersion, start: (frame.t || frame.at || Date.now()) - 5 * 60 * 1000, end: frame.t || frame.at || Date.now() })
-      const res = dispatchAgentRef(ref, props) || { mode: 'copied' }
+      const res = dispatchAgentRef(ref, agentBridge) || { mode: 'copied' }
       const labelByMode = { input: '已加入输入框', sent: '已发送', copied: '仅复制', failed: '处理失败' }
       setCopied(labelByMode[res.mode] || '仅复制')
       setTimeout(() => setCopied(''), 2000)
