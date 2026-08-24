@@ -76,6 +76,8 @@ export const CSS = [
   'body[' + ATTR + '] .dvb-table tr[data-kind="seg"] td{background:transparent}',
   'body[' + ATTR + '] .dvb-table .dvb-val{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}',
   'body[' + ATTR + '] .dvb-table tr[data-ok="false"] .dvb-val{color:var(--dsw-alias-label-danger,#c62828)}',
+  'body[' + ATTR + '] .dvb-table tr{display:table-row}',
+  'body[' + ATTR + '] .dvb-table th,body[' + ATTR + '] .dvb-table td{display:table-cell;vertical-align:middle}',
   'body[' + ATTR + '] .dvb-seg-actions{display:flex;gap:6px;justify-content:flex-end}',
   'body[' + ATTR + '] .dvb-seg-actions .dvb-btn{height:24px;padding:0 8px;font-size:12px}',
   'body[' + ATTR + '] .dvb-live{width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:10px 12px}',
