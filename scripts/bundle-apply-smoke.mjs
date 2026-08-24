@@ -4,18 +4,37 @@
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+// The bundle now embeds browser-only vendor libs (uPlot / virtual-core) that
+// read document/window at init — install a minimal DOM stub like a real browser.
+import { installDomStub } from '../test/dom-stub.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const src = readFileSync(join(root, 'client.js'), 'utf8')
 
+const restore = installDomStub()
 let loaded = null
 const sandboxWindow = {
   __ModuleLoader__: {
     load(mod) { loaded = mod },
   },
+  dispatchEvent: () => true,
+  addEventListener() {}, removeEventListener() {},
+  CustomEvent: class { constructor(type) { this.type = type } },
+  matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+  devicePixelRatio: 1,
+  ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
+  requestAnimationFrame: (cb) => setTimeout(cb, 0), cancelAnimationFrame: (id) => clearTimeout(id),
+  navigator: { userAgent: 'node' },
 }
-new Function('window', src)(sandboxWindow)
-if (!loaded) throw new Error('bundle never called __ModuleLoader__.load')
+// Keep DOM globals installed for the whole script (factory + component mount run
+// after load), then clean up at the very end.
+try {
+  new Function('window', src)(sandboxWindow)
+  if (!loaded) throw new Error('bundle never called __ModuleLoader__.load')
+} catch (e) {
+  restore()
+  throw e
+}
 
 let ReactStub = null
 function makeReact() {
@@ -90,3 +109,4 @@ for (const [id, entry] of Object.entries(pages)) {
   }
 }
 for (const [id, status] of results) console.log(id.padEnd(40), status)
+restore()
