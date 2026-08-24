@@ -211,12 +211,12 @@ export function createHmiView(React, t, post, openLive) {
     }
 
     function cfgVersion() {
-      try { return normalizePack().version || 3 } catch { return 3 }
+      try { return normalizePack().configVersion || 1 } catch { return 1 }
     }
 
     function agentRefFor(kind, payload) {
       const pack = normalizePack()
-      return buildAgentRef(kind, payload, { configVersion: pack.version || 3 })
+      return buildAgentRef(kind, payload, { configVersion: pack.configVersion || 1 })
     }
 
     function sendToAgent(kind, payload) {

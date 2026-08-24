@@ -27,7 +27,7 @@ test('Agent frames requires explicit connectionId (TARGET_REQUIRED) and lists wi
     const ok = await runVisionBench(home, { action: 'frames', connectionId: 'c1', limit: 10 }, cwd, { source: 'agent', sessionId: 's1' })
     assert.equal(ok.ok, true)
     assert.equal(ok.connectionId, 'c1')
-    assert.equal(ok.configVersion, 3)
+    assert.equal(ok.configVersion, loadWorkspace(home, cwd).modbus.configVersion)
     // Device disabled -> DEVICE_DISABLED
     const disabledC1 = { ...c1, enabled: false }
     saveWorkspace(home, cwd, { modbus: { connections: [disabledC1, c2] } })
@@ -54,11 +54,12 @@ test('Agent focus creates highlight with stable IDs, temp watch and badgeOnly', 
     assert.equal(bad.ok, false)
     assert.equal(bad.errorCode, ERROR_CODES.TARGET_REQUIRED)
     // Valid focus with explicit IDs
-    const ok = await runVisionBench(home, { action: 'focus', connectionId: 'c1', deviceId: 'd1', pointId: 'p1', tempWatchIds: ['p1', 'p2'], badgeOnly: true, evidence: [{ kind: 'point', id: 'p1', connectionId: 'c1', at: Date.now(), version: 3 }] }, cwd, { source: 'agent', sessionId: 's1' })
+    const expectedCv = loadWorkspace(home, cwd).modbus.configVersion
+    const ok = await runVisionBench(home, { action: 'focus', connectionId: 'c1', deviceId: 'd1', pointId: 'p1', tempWatchIds: ['p1', 'p2'], badgeOnly: true, evidence: [{ kind: 'point', id: 'p1', connectionId: 'c1', at: Date.now(), version: expectedCv }] }, cwd, { source: 'agent', sessionId: 's1' })
     assert.equal(ok.ok, true)
     assert.equal(ok.focus.connectionId, 'c1')
     assert.equal(ok.focus.pointId, 'p1')
-    assert.equal(ok.focus.version, 3)
+    assert.equal(ok.focus.version, expectedCv)
     assert.equal(ok.badgeOnly, true)
     assert.deepEqual(ok.tempWatchIds, ['p1', 'p2'])
     // Verify persisted focusState

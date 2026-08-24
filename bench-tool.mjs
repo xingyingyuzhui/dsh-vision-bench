@@ -322,7 +322,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
         pointIds: pointIds.length ? pointIds : pack.points.filter((p) => !connectionId || p.connectionId === connectionId).slice(0, 8).map((p) => p.id),
         start,
         end,
-        configVersion: pack.version || 3,
+        configVersion: pack.configVersion || 1,
       },
     }
   }
@@ -344,7 +344,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
       action,
       alarms: pack.alarmState,
       connectionId: connectionId || pack.activeConnectionId,
-      configVersion: pack.version || 3,
+      configVersion: pack.configVersion || 1,
       evidence: buildEvidenceRefs(home, room.cwd),
     }
   }
@@ -372,7 +372,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
       const mergedEvidence = (ws.focus && ws.focus.evidence ? ws.focus.evidence : []).concat(args.evidence.slice(0, 20))
       saveWorkspace(home, room.cwd, { focus: { ...ws.focus, evidence: mergedEvidence.slice(0, 20) } })
     }
-    return { ok: true, action, evidence, configVersion: pack.version || 3 }
+    return { ok: true, action, evidence, configVersion: pack.configVersion || 1 }
   }
 
   if (action === 'draft') {
@@ -391,7 +391,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
     }
     // create: requires baseConfigVersion + patch (or target)
     const ran = createConfigDraft(home, room.cwd, {
-      baseConfigVersion: args.baseConfigVersion ?? args.configVersion ?? args.version,
+      baseConfigVersion: args.baseConfigVersion ?? args.configVersion,
       patch: args.patch || args.operations || args.ops,
       target: args.target,
       source: origin.source,

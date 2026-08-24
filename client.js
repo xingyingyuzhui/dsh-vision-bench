@@ -2461,7 +2461,6 @@ const patchActiveDevice = (modbus, patch) => {
   return { ...modbus, ...patch }
 }
 
-
 // Shared client widgets and helpers for every conversation view.
 // Everything here is explicitly imported by its consumers — no hidden
 // strip-concat scope sharing.
@@ -3814,12 +3813,12 @@ function createHmiView(React, t, post, openLive) {
     }
 
     function cfgVersion() {
-      try { return normalizePack().version || 3 } catch { return 3 }
+      try { return normalizePack().configVersion || 1 } catch { return 1 }
     }
 
     function agentRefFor(kind, payload) {
       const pack = normalizePack()
-      return buildAgentRef(kind, payload, { configVersion: pack.version || 3 })
+      return buildAgentRef(kind, payload, { configVersion: pack.configVersion || 1 })
     }
 
     function sendToAgent(kind, payload) {
@@ -5504,7 +5503,7 @@ function createLiveView(React, t, post, hooks) {
 
     function agentRefFor(kind, payload) {
       const p = normalizeModbus(modbus)
-      return buildAgentRef(kind, payload, { configVersion: p.version || 3 })
+      return buildAgentRef(kind, payload, { configVersion: p.configVersion || 1 })
     }
 
     function sendToAgent(kind, payload) {
@@ -5926,18 +5925,20 @@ function createTrendPage(React, t, post, hooks) {
       if (entries.length >= 8) break
     }
     const sendTrend = (entry) => {
+      const packTmp = normalizeModbus(modbus)
+      const cv = packTmp.configVersion || 1
       const ref = buildAgentRef('trend', {
         trendKey: entry ? entry.key : (entries[0] && entries[0].key) || '',
         start: Date.now() - TREND_WINDOW_MS,
         end: Date.now(),
         label: entry ? entry.label : 'trend-interval',
-      }, { configVersion: 3, start: Date.now() - TREND_WINDOW_MS, end: Date.now() })
+      }, { configVersion: cv, start: Date.now() - TREND_WINDOW_MS, end: Date.now() })
       copyAgentRef(ref)
       setCopied(entry ? entry.key : 'trend')
       setTimeout(() => setCopied(''), 2000)
       if (post && cwd) {
         // persist evidence
-        try { post('/dsh-vision-bench/workspace', { cwd, focus: { evidence: [{ kind: 'trend', id: entry ? entry.key : 'trend-interval', at: Date.now(), version: 3 }] } }).catch(() => {}) } catch {}
+        try { post('/dsh-vision-bench/workspace', { cwd, focus: { evidence: [{ kind: 'trend', id: entry ? entry.key : 'trend-interval', at: Date.now(), version: cv }] } }).catch(() => {}) } catch {}
       }
     }
     const focusTrend = (entry) => {
@@ -6018,6 +6019,7 @@ function createAlarmPage(React, t, post, hooks) {
       if (cwd) post('/dsh-vision-bench/workspace', { cwd, modbus:{ alarmState: next, version:3 } }).catch(()=>{})
     }
     const sendToAgentAlarm = (row)=>{
+      const cv = pack ? (pack.configVersion || 1) : 1
       const ref = buildAgentRef('alarm', {
         alarmId: row.a.id,
         connectionId: row.a.connectionId,
@@ -6026,12 +6028,12 @@ function createAlarmPage(React, t, post, hooks) {
         label: row.label,
         start: row.a.firstAt || row.a.lastAt,
         end: row.a.lastAt,
-      }, { configVersion: pack ? pack.version : 3, start: row.a.firstAt || row.a.lastAt, end: row.a.lastAt })
+      }, { configVersion: cv, start: row.a.firstAt || row.a.lastAt, end: row.a.lastAt })
       copyAgentRef(ref)
       setCopiedAlarm(row.a.id)
       setTimeout(()=> setCopiedAlarm(''), 2000)
       if (cwd) {
-        try { post('/dsh-vision-bench/workspace', { cwd, focus: { evidence: [{ kind: 'alarm', id: row.a.id, connectionId: row.a.connectionId, deviceId: row.a.deviceId, at: row.a.lastAt, version: 3 }] } }).catch(()=>{}) } catch {}
+        try { post('/dsh-vision-bench/workspace', { cwd, focus: { evidence: [{ kind: 'alarm', id: row.a.id, connectionId: row.a.connectionId, deviceId: row.a.deviceId, at: row.a.lastAt, version: cv }] } }).catch(()=>{}) } catch {}
       }
     }
     const focusAlarm = (row)=>{

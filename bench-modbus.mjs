@@ -1142,7 +1142,7 @@ export const listFrames = (home, cwd, body) => {
     if (!hit) return { ok: false, error: '报文不存在: ' + frameId, errorCode: ERROR_CODES.TARGET_MISMATCH }
     // Include stale check: if frame too old? mark stale
     const stale = hit.t && Date.now() - hit.t > 5 * 60 * 1000
-    return { ok: true, frame: hit, stale: !!stale, connectionId: targetCid, configVersion: pack.version || 3, errorCode: stale ? ERROR_CODES.STALE_VALUE : undefined }
+    return { ok: true, frame: hit, stale: !!stale, connectionId: targetCid, configVersion: pack.configVersion || 1, errorCode: stale ? ERROR_CODES.STALE_VALUE : undefined }
   }
   const slice = enriched.slice(Math.max(0, enriched.length - limit - offset), enriched.length - offset)
   // Detect stale: last frame older than 60s?
@@ -1154,7 +1154,7 @@ export const listFrames = (home, cwd, body) => {
     total: enriched.length,
     connectionId: targetCid,
     deviceId: didArg || (pack.devices.find((d) => d.connectionId === targetCid)?.id || ''),
-    configVersion: pack.version || 3,
+    configVersion: pack.configVersion || 1,
     stale: !!stale,
     ...(stale ? { errorCode: ERROR_CODES.STALE_VALUE, warning: '报文较旧，可能已过期' } : {}),
   }
@@ -1175,7 +1175,7 @@ export const requestFocus = (home, cwd, body) => {
     trendKey: rawTarget.trendKey,
     alarmId: rawTarget.alarmId,
     kind: rawTarget.kind,
-    version: pack.version || 3,
+    version: pack.configVersion || 1,
     by: origin.source === 'agent' ? 'agent' : 'user',
   })
   if (!target) return { ok: false, error: '缺少聚焦目标 connectionId/deviceId/pointId/frameId', errorCode: ERROR_CODES.TARGET_REQUIRED }
@@ -1204,7 +1204,7 @@ export const requestFocus = (home, cwd, body) => {
     kind: target.kind || '',
     at: Date.now(),
     by: origin.source === 'agent' ? 'agent' : 'user',
-    version: pack.version || 3,
+    version: pack.configVersion || 1,
   }
   const tempWatchIds = Array.isArray(body.tempWatchIds) ? body.tempWatchIds.map((x) => String(x).trim()).filter(Boolean).slice(0, 32)
     : (Array.isArray(body.tempWatch) ? body.tempWatch.map((x) => String(x).trim()).filter(Boolean).slice(0, 32) : [])
@@ -1228,7 +1228,7 @@ export const requestFocus = (home, cwd, body) => {
       summary: '聚焦 ' + [nextReq.connectionId, nextReq.deviceId, nextReq.pointId, nextReq.frameId].filter(Boolean).join('/') || '未知目标',
     }, { source: origin.source, sessionId: origin.sessionId })
   } catch {}
-  return { ok: true, focus: nextReq, prev, tempWatchIds, badgeOnly, evidence, configVersion: pack.version || 3 }
+  return { ok: true, focus: nextReq, prev, tempWatchIds, badgeOnly, evidence, configVersion: pack.configVersion || 1 }
 }
 
 export const buildEvidenceRefs = (home, cwd) => {
@@ -1237,12 +1237,12 @@ export const buildEvidenceRefs = (home, cwd) => {
   const refs = []
   // compile evidence: latest build task
   const latestBuild = (workspace.tasks || []).find((t) => t.type === 'build')
-  if (latestBuild) refs.push({ kind: 'build', id: latestBuild.id, at: latestBuild.endedAt || latestBuild.startedAt, version: pack.version || 3 })
+  if (latestBuild) refs.push({ kind: 'build', id: latestBuild.id, at: latestBuild.endedAt || latestBuild.startedAt, version: pack.configVersion || 1 })
   // log evidence: last timeline
   const lastLog = (workspace.timeline || [])[0]
-  if (lastLog) refs.push({ kind: 'log', id: lastLog.id, at: lastLog.at, version: pack.version || 3 })
+  if (lastLog) refs.push({ kind: 'log', id: lastLog.id, at: lastLog.at, version: pack.configVersion || 1 })
   // point/frame/trend slices
-  for (const p of pack.points.slice(0, 5)) refs.push({ kind: 'point', id: p.id, connectionId: p.connectionId, deviceId: p.deviceId, version: pack.version || 3 })
+  for (const p of pack.points.slice(0, 5)) refs.push({ kind: 'point', id: p.id, connectionId: p.connectionId, deviceId: p.deviceId, version: pack.configVersion || 1 })
   return refs
 }
 
