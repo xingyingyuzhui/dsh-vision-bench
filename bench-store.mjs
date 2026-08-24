@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync,
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { emptyLog, mergeLog, normalizeEvent } from './bench-prompt.mjs'
-import { normalizeConn, normalizeModbus, validateConnections, validateDevices, normalizeConfigVersion } from './bench-devices.mjs'
+import { normalizeConn, normalizeFramesByConnection, normalizeModbus, validateConnections, validateDevices, normalizeConfigVersion } from './bench-devices.mjs'
 // alarmState persists condition( active|recovered ) + acknowledged(bool)+ackedAt/ackedBy split for Task12
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import { applyPatch, compare as patchCompare, validatePatch } from './bench-patch.mjs'
@@ -390,6 +390,19 @@ export const saveWorkspace = (home, cwd, input) => {
     }
     if (incoming.framesByConnection !== undefined) {
       mergedModbus.framesByConnection = { ...mergedModbus.framesByConnection, ...incoming.framesByConnection }
+    }
+    // Task1/0.18.2: explicit WHOLE-replacement semantics — merge cannot express
+    // deletion. normalizeFramesByConnection pre-seeds every connection id, which
+    // would resurrect cleared keys as empty arrays; normalize only provided keys.
+    if (input && input._replaceFramesByConnection !== undefined) {
+      const replaceMap = input._replaceFramesByConnection && typeof input._replaceFramesByConnection === 'object'
+        ? input._replaceFramesByConnection
+        : {}
+      const replaced = {}
+      for (const [k, v] of Object.entries(replaceMap)) {
+        replaced[k] = normalizeFramesByConnection({ [k]: v }, [])[k] || []
+      }
+      mergedModbus.framesByConnection = replaced
     }
     if (incoming.activeConnectionId !== undefined) mergedModbus.activeConnectionId = incoming.activeConnectionId
     if (incoming.activeDeviceId !== undefined) mergedModbus.activeDeviceId = incoming.activeDeviceId
@@ -992,6 +1005,36 @@ export const applyConfigDraft = (home, cwd, draftId, opts = {}) => {
     recordBenchEvent(home, room.cwd, { action: 'config-apply', ok: true, summary: '应用配置草稿 ' + id + '（v' + draft.baseConfigVersion + ' → v' + (saved.workspace.modbus.configVersion || 1) + '）' }, { source: 'user', sessionId: opts.sessionId || '' })
   } catch {}
   return { ok: true, draftId: id, prevVersion: draft.baseConfigVersion, nextVersion: saved.workspace.modbus.configVersion || 1, summary, workspace: saved.workspace }
+}
+
+// Task1/0.18.2: explicit frame-deletion semantics. Merge cannot express delete;
+// this performs a whole-replacement of framesByConnection.
+// options: { connectionId: 'c1' } | { all: true }
+export const clearFramesByConnection = (home, cwd, options) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const ws = loadWorkspace(home, room.cwd)
+  const pack = normalizeModbus(ws.modbus)
+  const current = pack.framesByConnection || {}
+  const connId = typeof (options && options.connectionId) === 'string' ? (options && options.connectionId).trim() : ''
+  const all = options && options.all === true
+  if (!all && !connId) return { ok: false, error: '缺少 connectionId 或 all' }
+  let nextFrames
+  if (all) {
+    nextFrames = {}
+  } else {
+    // validate against connection list (not against the frames map) → idempotent
+    const exists = (pack.connections || []).some((c) => c.id === connId)
+    if (!exists) return { ok: false, error: '连接不存在: ' + connId, errorCode: 'CONNECTION_NOT_FOUND' }
+    nextFrames = { ...current }
+    delete nextFrames[connId]
+  }
+  const saved = saveWorkspace(home, room.cwd, {
+    modbus: { version: 3 },
+    _replaceFramesByConnection: nextFrames,
+  })
+  if (!saved.ok) return saved
+  return { ok: true, cleared: all ? 'all' : connId, workspace: saved.workspace }
 }
 
 export const appendEvidence = (home, cwd, evidence) => {

@@ -130,8 +130,10 @@ test('多连接轮询跳过 disabled 连接', async () => {
     })
     const ran = await modbusPoll(home, cwd)
     assert.equal(ran.ok, true)
-    // only c1 should have frames, c2 disabled should not be polled (but polling entry still exists via normalize?)
-    assert.ok(ran.framesByConnection['c1'])
+    // only c1 should have frames (c2 disabled, not polled); no pre-seeded empty
+    // keys after Task1 — assert c1 got at least one frame and c2 absent
+    assert.ok(Array.isArray(ran.framesByConnection['c1']) && ran.framesByConnection['c1'].length > 0)
+    assert.equal(ran.framesByConnection['c2'], undefined, 'disabled connection must not produce frames key')
     // disabled connection's polling should not be marked lastOk? Actually modbusPoll filters disabled, so it won't update c2. But ensure overall ok.
   } finally {
     await rm(home, { recursive: true, force: true })

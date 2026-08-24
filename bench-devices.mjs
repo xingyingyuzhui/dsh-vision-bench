@@ -225,8 +225,9 @@ export const normalizePollingByConnection = (input, connections) => {
 
 export const normalizeFramesByConnection = (input, connections) => {
   const out = {}
-  const base = connections || []
-  for (const c of base) out[c.id] = []
+  // NOTE (Task1/0.18.2): no pre-seeding of every connection id with []. Clear
+  // semantics require the key to be ABSENT after deletion; readers use `|| []`.
+  void connections
   if (!input || typeof input !== 'object') return out
   for (const [k, v] of Object.entries(input)) {
     const arr = Array.isArray(v) ? v.slice(0, MAX_FRAMES_PER_CONN) : []

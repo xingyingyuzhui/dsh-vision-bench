@@ -1023,7 +1023,10 @@ export const modbusPoll = async (home, cwd, opts) => {
         if (!ran.ok) { ok = false; connOk = false }
         const raw = ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw) ? ran.result.details.raw : []
         values = scatterBatch(values, pack.points, batch, raw, !!ran.ok, ran.ok ? '' : (ran.error || ''))
-        const f = framesOf(ran)
+        let f = framesOf(ran)
+        if (!f && conn.sim) {
+          f = { request: `SIM TX ${batch.fc}@${batch.address}×${batch.count}`, response: 'SIM RX ' + raw.slice(0, 3).join(','), trace: [] }
+        }
         if (f) {
           const entry = frameEntry('读 ' + functionTag(batch.fc) + batch.address + '×' + batch.count + '（监视）', f, Date.now(), { connectionId: connId })
           framesLog.push(entry)
