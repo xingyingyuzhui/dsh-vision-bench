@@ -14,7 +14,8 @@ const OVERS_CAN = 10
 
 // Task2/0.18.2: official React virtualizer adapter. `useViz` is stable across
 // renders (module scope), so this is a legal unconditional hook call.
-const useViz = vendorUseVirtualizer || (() => null)
+// lazy: vendor only exists after the ModuleLoader factory runs (or late global install in tests)
+const useViz = vendorUseVirtualizer() || (() => null)
 
 export function createFramesPage(React, t, post, hooks) {
   const openHmi = hooks && hooks.openHmi
@@ -226,7 +227,7 @@ export function createFramesPage(React, t, post, hooks) {
         }
       },
     })
-    const measureRow = vendorUseVirtualizer && vizer && typeof vizer.measureElement === 'function'
+    const measureRow = vendorUseVirtualizer() && vizer && typeof vizer.measureElement === 'function'
       ? (node) => { if (node) vizer.measureElement(node) }
       : undefined
     const trackingRef = measureRow
@@ -335,7 +336,7 @@ export function createFramesPage(React, t, post, hooks) {
       : (paused ? '已暂停' + (pendingNew > 0 ? '，新增 ' + pendingNew + ' 条' : '') : '')
 
     // fallback rows (vendor missing) shape: {index,start,size,key} per plan
-    const fallbackRows = !vizer && vendorVirtualizer === null
+    const fallbackRows = !vizer && vendorVirtualizer() === null
       ? filtered.slice(0, 30).map((f, index) => ({ index, start: index * ESTIMATE_SIZE, size: ESTIMATE_SIZE, key: f.frameId || f.id || String(index), f }))
       : []
     const rows = vizer ? virtualRows : fallbackRows
@@ -379,7 +380,7 @@ export function createFramesPage(React, t, post, hooks) {
       serial.error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, serial.error) : null,
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
       copied ? el('div', { className: 'dvb-hint' }, copied) : null,
-      !filtered.length && !vizer && vendorVirtualizer === null ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, '虚拟列表依赖未加载') : null,
+      !filtered.length && !vizer && vendorVirtualizer() === null ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, '虚拟列表依赖未加载') : null,
       !filtered.length ? el('div', { className: 'dvb-hint' }, t('framesEmpty') || '暂无报文') : null,
       banner ? el('div', { className: 'dvb-hint dvb-new-banner', onClick: () => scrollToLatest(), role: 'button' }, banner) : null,
       el('div', { className: 'dvb-live-list dvb-frames-virtual', style: { height: '320px', overflowY: 'auto', position: 'relative' }, ref: listRef, onScroll: () => {

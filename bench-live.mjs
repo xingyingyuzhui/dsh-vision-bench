@@ -495,7 +495,7 @@ function createSoonPage(React, t, titleKey, bodyKey) {
 // Only a guarded minimal canvas renderer is kept for the (bundle-less) fallback.
 export const drawTrend = (container, now = Date.now()) => {
   if (!container) return null
-  const UPlot = vendorUPlot
+  const UPlot = vendorUPlot()
   if (!UPlot) return null
   const { data, keys, meta } = toUplotData({ now, windowMs: TREND_WINDOW_MS })
   const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -600,7 +600,7 @@ export function createTrendPage(React, t, post, hooks) {
 
     // Task5: build uPlot once; rebuild only when the series set changes.
     React.useEffect(() => {
-      if (!entries.length || !vendorAvailable) return
+      if (!entries.length || !vendorAvailable()) return
       const c = wrapRef.current
       if (!c) return
       if (mountKeyRef.current !== chartMountKey) {
