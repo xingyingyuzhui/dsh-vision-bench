@@ -2,7 +2,7 @@ import { pushFramesLog, subscribeState, getFramesLog, clearFramesLog, resolveSid
 import { clockOf, decodeValue, functionTag } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
-import { TREND, TREND_CAP, TREND_WINDOW_MS, trendKey, sampleTrend } from './bench-trend.mjs'
+import { TREND, TREND_CAP, TREND_WINDOW_MS, trendKey, sampleTrend, toUplotData, UPLOT_PROTO, exportRangeCsv } from './bench-trend.mjs'
 import { normalizeAlarmState, groupAlarms, acknowledgeAlarm, ACTIVE, RECOVERED, ACKED, PROCESS, COMM } from './bench-alarm.mjs'
 
 const TAB_TABLE = 'dsh-vision-bench:modbus'
@@ -482,6 +482,17 @@ function createSoonPage(React, t, titleKey, bodyKey) {
 
 export const drawTrend = (canvas, now = Date.now()) => {
   if (!canvas) return
+  if (canvas.nodeType === 1 && canvas.tagName !== 'CANVAS') {
+    const UPlot = (typeof globalThis !== 'undefined' && globalThis.uPlot) || (typeof window !== 'undefined' && window.uPlot) || null
+    const { data, keys, meta } = toUplotData({ now, windowMs: TREND_WINDOW_MS })
+    if (UPlot) {
+      const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
+      const ks = keys.slice(0, 8), ms = meta.slice(0, 8)
+      const opts = { ...UPLOT_PROTO, width: canvas.clientWidth || 560, height: 190, pxRatio: dpr, spanGaps: false, cursor: { drag: { x: true, y: false, uni: 10 } }, select: { show: true }, scales: { x: { time: true }, y: { auto: true } }, axes: [{ stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } }, { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } }], series: [{ label: 'time' }].concat(ks.map((k, i) => ({ label: (ms[i] && ms[i].label) || k, stroke: TREND_COLORS[i % 8], width: 1.5, spanGaps: false, points: { show: false } }))), hooks: { setSelect: [(u) => { try { const s = u.select; canvas._uplotSel = !s || !s.width ? null : { start: Math.round(u.posToVal(s.left, 'x') * 1000), end: Math.round(u.posToVal(s.left + s.width, 'x') * 1000) } } catch { canvas._uplotSel = null } }] } }
+      try { return new UPlot(opts, data, canvas) } catch {}
+    } else if (canvas.nodeType === 1) return null
+  }
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   const w = canvas.width
@@ -537,15 +548,27 @@ export function createTrendPage(React, t, post, hooks) {
     const el = React.createElement
     const cwd = (props && props.scope && props.scope.cwd) || sessionCwd(props) || ''
     const canvasRef = React.useRef(null)
+    const wrapRef = React.useRef(null)
+    const uplotRef = React.useRef(null)
+    const [paused, setPaused] = React.useState(false)
     const [, setTick] = React.useState(0)
     const [copied, setCopied] = React.useState('')
+    const [exportNote, setExportNote] = React.useState('')
     React.useEffect(() => {
+      if (paused) return
       const timer = setInterval(() => setTick((n) => n + 1), 500)
       return () => clearInterval(timer)
-    }, [])
+    }, [paused])
     React.useEffect(() => {
       drawTrend(canvasRef.current)
     })
+    React.useEffect(() => {
+      const c = wrapRef.current; if (!c) return; const u = drawTrend(c); if (u) uplotRef.current = u
+      const onResize = () => { const uu = uplotRef.current, cc = wrapRef.current; if (!uu || !uu.setSize || !cc) return; uu.setSize({ width: cc.clientWidth || 560, height: 190 }) }
+      if (typeof window !== 'undefined') { window.addEventListener('resize', onResize); const mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)'); const onDark = () => { try { uplotRef.current && uplotRef.current.destroy && uplotRef.current.destroy() } catch {}; const n = drawTrend(wrapRef.current); if (n) uplotRef.current = n }; if (mq) { if (mq.addEventListener) mq.addEventListener('change', onDark); else if (mq.addListener) mq.addListener(onDark) } return () => { window.removeEventListener('resize', onResize); try { mq && mq.removeEventListener ? mq.removeEventListener('change', onDark) : mq && mq.removeListener && mq.removeListener(onDark) } catch {}; try { uplotRef.current && uplotRef.current.destroy && uplotRef.current.destroy() } catch {}; uplotRef.current = null } }
+      return () => { try { u && u.destroy && u.destroy() } catch {}; if (uplotRef.current === u) uplotRef.current = null }
+    }, [])
+    React.useEffect(() => { if (paused) return; const u = uplotRef.current; if (!u || !u.setData) return; try { const { data } = toUplotData(); u.setData(data) } catch {} })
     const entries = []
     let i = 0
     for (const [key, list] of TREND.series) {
@@ -571,8 +594,7 @@ export function createTrendPage(React, t, post, hooks) {
       if (entries.length >= 8) break
     }
     const sendTrend = (entry) => {
-      const packTmp = normalizeModbus(modbus)
-      const cv = packTmp.configVersion || 1
+      let cv = 1; try { const p = typeof modbus !== 'undefined' && modbus ? normalizeModbus(modbus) : null; if (p && p.configVersion) cv = p.configVersion } catch { cv = 1 }
       const ref = buildAgentRef('trend', {
         trendKey: entry ? entry.key : (entries[0] && entries[0].key) || '',
         start: Date.now() - TREND_WINDOW_MS,
@@ -591,10 +613,15 @@ export function createTrendPage(React, t, post, hooks) {
       const key = entry ? entry.key : (entries[0] && entries[0].key) || ''
       post('/dsh-vision-bench/focus', { cwd, target: { trendKey: key, kind: 'trend' } }).catch(() => {})
     }
+    const doExport = () => { const w = wrapRef.current, s = w && w._uplotSel, csv = s ? exportRangeCsv({ start: s.start, end: s.end }) : exportRangeCsv(); try { if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(csv) } catch {}; setExportNote(s ? '已导出区间 ' + new Date(s.start).toLocaleTimeString() + '→' + new Date(s.end).toLocaleTimeString() : '已导出最近 5 分钟'); setTimeout(() => setExportNote(''), 2000) }
+    const resetZoom = () => { const w = wrapRef.current; if (w) w._uplotSel = null; const u = uplotRef.current; if (u && u.setSelect) try { u.setSelect({ left: 0, width: 0, top: 0, height: 0 }, false) } catch {}; if (u && u.setData) try { const { data } = toUplotData(); u.setData(data) } catch {} }
     return el('div', { className: 'dvb-live' },
       el('div', { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('liveChart')),
         el('span', { className: 'dvb-map-meta' }, t('chartWindow')),
+        entries.length ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm' + (paused ? ' is-on' : ''), onClick() { setPaused((v) => !v) } }, paused ? '恢复' : '暂停') : null,
+        entries.length ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: doExport }, '导出CSV') : null,
+        entries.length ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: resetZoom }, '重置缩放') : null,
         entries.length ? el('button', {
           type: 'button', className: 'dvb-btn dvb-btn-sm',
           title: '复制趋势区间结构化引用（稳定 ID+配置版本+时间范围）让 Agent 分析',
@@ -605,8 +632,9 @@ export function createTrendPage(React, t, post, hooks) {
           onClick() { focusTrend(null) },
         }, '聚焦区间') : null),
       copied ? el('div', { className: 'dvb-hint' }, '已复制趋势引用 · 粘贴给 Agent') : null,
+      exportNote ? el('div', { className: 'dvb-hint' }, exportNote) : null,
       entries.length
-        ? el('canvas', { ref: canvasRef, className: 'dvb-trend-canvas', width: 560, height: 190 })
+        ? el('div', { ref: wrapRef, className: 'dvb-uplot', style: { width: '100%', height: '190px' } })
         : el('div', { className: 'dvb-hint' }, t('chartEmpty')),
       entries.length
         ? el('div', { className: 'dvb-trend-legend' }, entries.map((item) => el('div', { key: item.key, className: 'dvb-trend-row' },
