@@ -4,6 +4,7 @@ import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { TREND, TREND_CAP, TREND_WINDOW_MS, trendKey, sampleTrend, toUplotData, UPLOT_PROTO, exportRangeCsv } from './bench-trend.mjs'
 import { normalizeAlarmState, groupAlarms, acknowledgeAlarm, ACTIVE, RECOVERED, ACKED, PROCESS, COMM, COND_ACTIVE, COND_RECOVERED } from './bench-alarm.mjs'
+import { vendorUPlot, vendorVirtualizer, vendorAvailable } from './bench-vendor.mjs'
 
 const TAB_TABLE = 'dsh-vision-bench:modbus'
 const TAB_CHART = 'dsh-vision-bench:charts'
@@ -491,7 +492,7 @@ function createSoonPage(React, t, titleKey, bodyKey) {
 export const drawTrend = (canvas, now = Date.now()) => {
   if (!canvas) return
   if (canvas.nodeType === 1 && canvas.tagName !== 'CANVAS') {
-    const UPlot = (typeof globalThis !== 'undefined' && globalThis.uPlot) || (typeof window !== 'undefined' && window.uPlot) || null
+    const UPlot = vendorUPlot
     const { data, keys, meta } = toUplotData({ now, windowMs: TREND_WINDOW_MS })
     if (UPlot) {
       const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches

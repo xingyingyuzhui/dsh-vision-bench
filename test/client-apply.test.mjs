@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import { installDomStub } from './dom-stub.mjs'
 
 // Execute the GENERATED bundle exactly like the DSH web loader would
 // (factory(require) -> apply(ctx)) and mount every registered page with a
@@ -11,32 +12,45 @@ import test from 'node:test'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 function loadBundle() {
-  const src = readFileSync(join(root, 'client.js'), 'utf8')
-  let loaded = null
-  const sandboxWindow = {
-    __ModuleLoader__: {
-      load(mod) { loaded = mod },
-    },
-  }
-  new Function('window', src)(sandboxWindow)
-  assert.ok(loaded, 'bundle never called __ModuleLoader__.load')
-  let ReactStub = null
-  const makeReact = () => {
-    const el = (type, props, ...children) => ({ type, props: props || {}, children })
-    const R = { createElement: el }
-    R.useState = (init) => [typeof init === 'function' ? init() : init, () => {}]
-    R.useRef = (init) => ({ current: init })
-    R.useEffect = () => {}
-    return R
-  }
-  const requireStub = (name) => {
-    if (name === 'react') {
-      if (!ReactStub) ReactStub = makeReact()
-      return ReactStub
+  const restore = installDomStub()
+  try {
+    const src = readFileSync(join(root, 'client.js'), 'utf8')
+    let loaded = null
+    const sandboxWindow = {
+      __ModuleLoader__: {
+        load(mod) { loaded = mod },
+      },
+      dispatchEvent: () => true,
+      addEventListener() {}, removeEventListener() {},
+      CustomEvent: class { constructor(type) { this.type = type } },
+      matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+      devicePixelRatio: 1,
+      ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
+      requestAnimationFrame: (cb) => setTimeout(cb, 0), cancelAnimationFrame: (id) => clearTimeout(id),
+      navigator: { userAgent: 'node' },
     }
-    throw new Error('unexpected require: ' + name)
+    new Function('window', src)(sandboxWindow)
+    assert.ok(loaded, 'bundle never called __ModuleLoader__.load')
+    let ReactStub = null
+    const makeReact = () => {
+      const el = (type, props, ...children) => ({ type, props: props || {}, children })
+      const R = { createElement: el }
+      R.useState = (init) => [typeof init === 'function' ? init() : init, () => {}]
+      R.useRef = (init) => ({ current: init })
+      R.useEffect = () => {}
+      return R
+    }
+    const requireStub = (name) => {
+      if (name === 'react') {
+        if (!ReactStub) ReactStub = makeReact()
+        return ReactStub
+      }
+      throw new Error('unexpected require: ' + name)
+    }
+    return loaded.factory(requireStub)
+  } finally {
+    restore()
   }
-  return loaded.factory(requireStub)
 }
 
 function makeCtx(pages) {

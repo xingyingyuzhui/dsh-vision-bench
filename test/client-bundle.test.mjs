@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import { installDomStub } from './dom-stub.mjs'
 
 const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'client.js'), 'utf8')
 
@@ -61,5 +62,26 @@ test('generated client keeps the factory contract', () => {
 })
 
 test('generated client is valid JavaScript', () => {
-  assert.doesNotThrow(() => new Function('window', src))
+  const restore = installDomStub()
+  try {
+    assert.doesNotThrow(() => new Function('window', src))
+  } finally { restore() }
+})
+
+test('generated client embeds real vendor runtime (uPlot + Virtualizer)', () => {
+  assert.match(src, /var DvbVendor = /)
+  assert.match(src, /DvbVendorCss/)
+  // no reliance on host globals for chart creation
+  assert.doesNotMatch(src, /(?:window|globalThis)\.uPlot/)
+  // uPlot official CSS present (not a hand-written substitute)
+  assert.match(src, /\.u-legend|\.uplot|\.u-axis|u-legend-name/)
+})
+
+test('generated client contains exactly one ModuleLoader registration and no second React', () => {
+  const loads = src.match(/__ModuleLoader__\.load\(/g) || []
+  assert.equal(loads.length, 1)
+  const reactImports = src.match(/@?react|require\(['"]react['"]\)/g) || []
+  // harness-provided react via require('react') is the single occurrence
+  const bare = reactImports.filter((x) => !x.startsWith('@'))
+  assert.ok(bare.length <= 1, 'should not bundle its own React copy: ' + reactImports.join(','))
 })

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import { installDomStub } from './dom-stub.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -35,17 +36,19 @@ test('Task8: build-client.mjs validates virtual-core compat', () => {
 
 test('Task8: generated client can load', () => {
   const src = readFileSync(join(root, 'client.js'), 'utf8')
-  assert.match(src, /Do not edit by hand/)
-  assert.match(src, /window\.__ModuleLoader__\.load/)
-  assert.doesNotThrow(() => new Function('window', src), 'client.js should be valid JS')
-  // no duplicate React: client should not bundle React itself; it uses require('react') at runtime via Harness
-  assert.doesNotMatch(src, /from\s+['"]react['"]/, 'client should not contain literal react import')
-  assert.doesNotMatch(src, /node_modules\/react/, 'client should not bundle React source')
-  assert.doesNotMatch(src, /ReactDOM/, 'client should not bundle ReactDOM')
-  // Harness provides React via require('react'); client factory uses slots, not a second React copy
-  // Ensure client does not contain duplicate React factory (e.g., second __ModuleLoader for react)
-  const loaderCount = (src.match(/__ModuleLoader__\.load/g) || []).length
-  assert.equal(loaderCount, 1, 'client should have single ModuleLoader entry, not duplicate React bundle')
+  const restore = installDomStub()
+  try {
+    assert.match(src, /Do not edit by hand/)
+    assert.match(src, /window\.__ModuleLoader__\.load/)
+    assert.doesNotThrow(() => new Function('window', src), 'client.js should be valid JS')
+    // no duplicate React: client should not bundle React itself; it uses require('react') at runtime via Harness
+    assert.doesNotMatch(src, /from\s+['"]react['"]/, 'client should not contain literal react import')
+    assert.doesNotMatch(src, /node_modules\/react/, 'client should not bundle React source')
+    assert.doesNotMatch(src, /ReactDOM/, 'client should not bundle ReactDOM')
+    // Ensure client does not contain duplicate React factory (e.g., second __ModuleLoader for react)
+    const loaderCount = (src.match(/__ModuleLoader__\.load/g) || []).length
+    assert.equal(loaderCount, 1, 'client should have single ModuleLoader entry, not duplicate React bundle')
+  } finally { restore() }
 })
 
 test('Task8: 500/1000/5000 条 DOM 与视口相关 (Virtualizer viewport limiting)', async () => {
