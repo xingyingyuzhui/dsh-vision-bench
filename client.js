@@ -6126,20 +6126,24 @@ function createTrendPage(React, t, post, hooks) {
     const [exportNote, setExportNote] = React.useState('')
     const [configVersion, setConfigVersion] = React.useState(0)
     const [cvReady, setCvReady] = React.useState(false)
+    const [evNote, setEvNote] = React.useState('')
 
-    // Task6: real configVersion from /state — never default to a hard-coded
-    // "modbus !== undefined" that collapses to 1.
+    // Task6/0.18.2: real configVersion — bootstrap via /state then KEEP
+    // subscribing to later config changes (drafts applied elsewhere bump it).
+    const applyCv = (data) => {
+      const mb = data && data.workspace && data.workspace.modbus
+      const v = Number(mb && mb.configVersion)
+      setConfigVersion(v > 0 ? v : 0)
+      setCvReady(true)
+    }
     React.useEffect(() => {
       if (!cwd || !post) { setCvReady(true); return }
       let stop = false
       post('/dsh-vision-bench/state', { cwd }).then((data) => {
-        if (stop) return
-        const mb = data && data.workspace && data.workspace.modbus
-        const v = Number(mb && mb.configVersion)
-        setConfigVersion(v > 0 ? v : 0)
-        setCvReady(true)
+        if (!stop) applyCv(data)
       }).catch(() => { if (!stop) setCvReady(true) })
-      return () => { stop = true }
+      const unsub = subscribeState(post, cwd, (data) => { if (data && !stop) applyCv(data) })
+      return () => { stop = true; if (typeof unsub === 'function') unsub() }
     }, [cwd, post])
 
     React.useEffect(() => {
@@ -6230,7 +6234,14 @@ function createTrendPage(React, t, post, hooks) {
       setTimeout(() => setCopied(''), 2000)
       if (post && cwd) {
         // Task4/0.18.2: typed evidence back-mount — failures surface CONFIG_DRIFT/TARGET_MISMATCH
-        try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setTickError(reason)) } catch {}
+        // Task6/0.18.2: on drift, re-pull current state so the reference uses the new version
+        try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => {
+          setEvNote(reason)
+          setTimeout(() => setEvNote(''), 5000)
+          if (/CONFIG_DRIFT/.test(reason)) {
+            post('/dsh-vision-bench/state', { cwd }).then(applyCv).catch(() => {})
+          }
+        }) } catch {}
       }
     }
     const focusTrend = (entry) => {
@@ -6269,6 +6280,7 @@ function createTrendPage(React, t, post, hooks) {
         }, '聚焦区间') : null),
       copied ? el('div', { className: 'dvb-hint' }, (copied === 'no-version' ? '配置版本未就绪，无法生成证据引用' : (copied.split(':')[1] || '')) + ' · ' + (copied === 'no-version' ? '' : copied.split(':')[0])) : null,
       exportNote ? el('div', { className: 'dvb-hint' }, exportNote) : null,
+      evNote ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, evNote) : null,
       entries.length
         ? el('div', { ref: wrapRef, className: 'dvb-uplot', style: { width: '100%', height: '190px' } })
         : el('div', { className: 'dvb-hint' }, t('chartEmpty')),
