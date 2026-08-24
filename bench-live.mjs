@@ -737,6 +737,7 @@ export function registerLive(ctx, React, t, LivePage, pages = {}) {
   const bs = ctx.betterSidebar
   const TrendPage = pages.trend || createSoonPage(React, t, 'liveChart', 'chartSoon')
   const AlarmPage = pages.alarm || createSoonPage(React, t, 'liveAlarm', 'alarmSoon')
+  const FramesPage = pages.frames || createSoonPage(React, t, 'framesTab', 'framesEmpty')
   const stops = [
     bs.registerTab({
       id: TAB_TABLE,
@@ -759,6 +760,13 @@ export function registerLive(ctx, React, t, LivePage, pages = {}) {
       order: 72,
       component: AlarmPage,
     }),
+    bs.registerTab({
+      id: TAB_FRAMES,
+      title() { return t('framesTab') },
+      single: true,
+      order: 73,
+      component: FramesPage,
+    }),
   ]
   return function () {
     for (const stop of stops) {
@@ -777,4 +785,4 @@ export function closeBetterTab(ctx, tabId) {
   if (bs && typeof bs.closeTab === 'function') bs.closeTab(tabId)
 }
 
-export const _internal = { TAB_TABLE, TAB_CHART, TAB_ALARM, getBetterSidebar }
+export const _internal = { TAB_TABLE, TAB_CHART, TAB_ALARM, TAB_FRAMES, getBetterSidebar }

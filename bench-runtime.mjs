@@ -5,6 +5,7 @@ import { createHmiView } from './bench-hmi.mjs'
 import { closeBetterTab, createAlarmPage, createLiveView, createTrendPage, openModbusTab, registerLive } from './bench-live.mjs'
 import { createMapView, openProjectTab, registerMap } from './bench-map.mjs'
 import { createDebugView, registerView } from './bench-view.mjs'
+import { createFramesPage } from './bench-frames-view.mjs'
 
 export function apply(ctx) {
   const React = require('react')
@@ -69,9 +70,11 @@ export function apply(ctx) {
       openLiveImpl = function () { openModbusTab(side) }
       openProjectImpl = function () { openProjectTab(side) }
       closeTabImpl = function (id) { closeBetterTab(side, id) }
+      const FramesPage = createFramesPage(React, t, post, { openLive, openHmi })
       const stopLive = registerLive(side, React, t, LivePage, {
         trend: createTrendPage(React, t, post, { openLive, openHmi }),
         alarm: createAlarmPage(React, t, post, { openLive, openHmi }),
+        frames: FramesPage,
       })
       const stopMap = registerMap(side, React, t, MapPage)
       side.effect(() => () => {

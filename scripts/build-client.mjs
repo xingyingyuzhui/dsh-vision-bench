@@ -158,6 +158,7 @@ const parts = [
   'bench-view.mjs',
   'bench-hmi.mjs',
   'bench-live.mjs',
+  'bench-frames-view.mjs',
   'bench-map.mjs',
   'bench-runtime.mjs',
 ].map((file) => {

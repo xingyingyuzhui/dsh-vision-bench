@@ -47,6 +47,7 @@
     "bench-alarm.mjs",
     "bench-patch.mjs",
     "bench-live.mjs",
+    "bench-frames-view.mjs",
     "bench-map.mjs",
     "bench-points.mjs",
     "bench-pollplan.mjs",

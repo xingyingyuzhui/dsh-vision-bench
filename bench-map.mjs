@@ -130,7 +130,7 @@ export function registerMap(ctx, React, t, MapPage) {
     id: TAB_MAP,
     title() { return t('projectMap') },
     single: true,
-    order: 69,
+    order: 74,
     component: MapPage,
   })
 }
