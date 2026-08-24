@@ -1745,7 +1745,6 @@ export function createHmiView(React, t, post, openLive) {
       writeStrip,
       pendingPanel,
       draftPanel,
-      serialPanel,
       journalPanel(el, t, journal))
   }
 }
