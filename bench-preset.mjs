@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { createRequire } from 'node:module'
 import * as yaml from 'yaml'
@@ -8,10 +8,34 @@ function _writeFileSync(...args) {
   const m = _require('node:fs')
   return m.writeFileSync(...args)
 }
+function _copySync(...args) {
+  const m = _require('node:fs')
+  return m.copyFileSync(...args)
+}
+function _renameSync(...args) {
+  const m = _require('node:fs')
+  return m.renameSync(...args)
+}
+function _unlinkSync(...args) {
+  const m = _require('node:fs')
+  return m.unlinkSync(...args)
+}
+function _mkdirSync(...args) {
+  const m = _require('node:fs')
+  return m.mkdirSync(...args)
+}
+function _existsSync(...args) {
+  const m = _require('node:fs')
+  return m.existsSync(...args)
+}
+export const PRESET_BACKUP_FAILED = 'PRESET_BACKUP_FAILED'
+export const PRESET_WRITE_FAILED = 'PRESET_WRITE_FAILED'
+export const PRESET_RESTORE_FAILED = 'PRESET_RESTORE_FAILED'
 
 export const PRESET_ID = 'vision-bench'
 export const PRESET_TITLE = 'Vision模式'
 const MARKER = '.dsh-vision-bench'
+const AFFECTED_FILES = ['agent.cordis.yml', 'preset.yml', MARKER]
 
 export const STANDARD_PERSONA =
   'You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.'
@@ -65,20 +89,45 @@ function writeOwnership(dir) {
   return payload
 }
 
+// Task9/0.18.1: every existing file must back up successfully; any failure aborts.
+// Returns a manifest { ok, backupDir, files }.
 function createBackup(dir) {
-  try {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const backupDir = join(dirname(dir), `.${PRESET_ID}.backup.${timestamp}`)
-    mkdirSync(backupDir, { recursive: true })
-    for (const name of ['agent.cordis.yml', 'preset.yml', MARKER]) {
-      const src = join(dir, name)
-      if (existsSync(src)) {
-        try { copyFileSync(src, join(backupDir, name)) } catch {}
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backupDir = join(dirname(dir), `.${PRESET_ID}.backup.${timestamp}`)
+  _mkdirSync(backupDir, { recursive: true })
+  const files = []
+  for (const name of AFFECTED_FILES) {
+    const src = join(dir, name)
+    if (_existsSync(src)) {
+      try {
+        _copySync(src, join(backupDir, name))
+        files.push(name)
+      } catch (e) {
+        throw new Error('复制备份失败 ' + name + ': ' + String((e && e.message) || e))
       }
     }
-    return backupDir
-  } catch {
-    return null
+  }
+  return { ok: true, backupDir, files }
+}
+
+// Atomic write: temp file in same dir + rename.
+function writeAtomic(file, text, writeImpl) {
+  const tmp = file + '.tmp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+  const writer = writeImpl || _writeFileSync
+  writer(tmp, text)
+  _renameSync(tmp, file)
+}
+
+// Restore every file from backup; files that did not exist before are deleted.
+function restoreAll(backupDir, dir, existedBefore) {
+  for (const name of AFFECTED_FILES) {
+    const target = join(dir, name)
+    const src = join(backupDir, name)
+    if (_existsSync(src)) {
+      _copySync(src, target)
+    } else if (!existedBefore[name] && _existsSync(target)) {
+      _unlinkSync(target)
+    }
   }
 }
 
@@ -189,26 +238,47 @@ export const ensurePresetOverlay = (dir) => {
   // For unknown persona, we still ensure tool row but do not overwrite persona text (kept above)
   // If needsReview, we keep nextText as-is (persona untouched) — still may have addedRow
 
-  // Backup before any write that would modify existing files
+  // Backup before any write that would modify existing files. Any backup
+  // failure aborts immediately with PRESET_BACKUP_FAILED.
   let backupDir = null
   const willWrite = changed || addedRow || personaRestored
   if (willWrite) {
-    backupDir = createBackup(dir)
+    try {
+      const bak = createBackup(dir)
+      backupDir = bak.backupDir
+    } catch (e) {
+      return { ok: false, error: '预设备份失败：' + String((e && e.message) || e), errorCode: PRESET_BACKUP_FAILED, needsReview: true, rebuildHelp: REBUILD_INSTRUCTIONS }
+    }
   }
+
+  // remember which affected files existed before the write (for rollback of
+  // newly-created copies)
+  const existedBefore = {}
+  for (const n of AFFECTED_FILES) existedBefore[n] = _existsSync(join(dir, n))
 
   try {
     if (changed) {
-      _writeFileSync(file, nextText)
+      writeAtomic(file, nextText)
     }
-    // only refresh metadata/ownership when we are not in needsReview with write failure? keep consistent:
-    // ownership is plugin-managed node, so we write it idempotently
-    _writeFileSync(join(dir, 'preset.yml'), PRESET_METADATA)
+    writeAtomic(join(dir, 'preset.yml'), PRESET_METADATA)
     writeOwnership(dir)
   } catch (e) {
-    if (backupDir && existsSync(join(backupDir, 'agent.cordis.yml'))) {
-      try { copyFileSync(join(backupDir, 'agent.cordis.yml'), file) } catch {}
+    // rollback ALL affected files; failure to roll back is a distinct error
+    let restoreErr = null
+    if (backupDir) {
+      try {
+        restoreAll(backupDir, dir, existedBefore)
+      } catch (re) {
+        restoreErr = String((re && re.message) || re)
+      }
     }
-    return { ok: false, error: '预设写入失败：' + String(e && e.message || e), backupDir, needsReview: true, rebuildHelp: REBUILD_INSTRUCTIONS }
+    if (restoreErr) {
+      return {
+        ok: false, error: '预设写入失败且回滚失败：' + String((e && e.message) || e) + ' / ' + restoreErr,
+        errorCode: PRESET_RESTORE_FAILED, backupDir, needsReview: true, rebuildHelp: REBUILD_INSTRUCTIONS,
+      }
+    }
+    return { ok: false, error: '预设写入失败：' + String((e && e.message) || e), errorCode: PRESET_WRITE_FAILED, backupDir, needsReview: true, rebuildHelp: REBUILD_INSTRUCTIONS }
   }
 
   if (needsReview) {

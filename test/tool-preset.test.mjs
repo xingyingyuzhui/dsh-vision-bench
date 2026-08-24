@@ -159,16 +159,84 @@ test('preset backup and write-failure recovery', async () => {
     assert.ok(out.backupDir)
     bak = out.backupDir
     assert.ok((await readdir(bak)).includes('agent.cordis.yml'))
+    assert.ok((await readdir(bak)).includes('preset.yml'))
+    assert.ok((await readdir(bak)).includes('.dsh-vision-bench'))
     assert.equal((await readFile(join(dir, 'agent.cordis.yml'), 'utf8')).match(/vision-bench-tools/g).length, 1)
+    const opreset = await readFile(join(dir, 'preset.yml'), 'utf8')
+    // drift it back to legacy so a second run needs a write (persona restore / row)
+    const legacy2 = 'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场以 vision_bench 工具为准。'
+    await writeFile(join(dir, 'agent.cordis.yml'), ['- id: persona', '  name: x', '  config:', '    text: >-', '      ' + legacy2, ''].join('\n'))
     const orig = await readFile(join(dir, 'agent.cordis.yml'), 'utf8')
     const { createRequire } = await import('node:module')
     const fs = createRequire(import.meta.url)('node:fs')
     const ow = fs.writeFileSync
     let once = true
-    fs.writeFileSync = (p, ...r) => { if (String(p).includes(dir) && String(p).endsWith('agent.cordis.yml') && once) { once = false; throw new Error('x') } return ow(p, ...r) }
+    // atomic write now writes a `.tmp<rand>` sibling then renames; match by basename prefix
+    fs.writeFileSync = (p, ...r) => {
+      if (String(p).includes(dir) && /agent\.cordis\.yml/.test(String(p)) && once) { once = false; throw new Error('x') }
+      return ow(p, ...r)
+    }
     let out2
     try { out2 = ensurePresetOverlay(dir) } finally { fs.writeFileSync = ow }
-    if (!out2.ok) assert.equal(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'), orig)
+    assert.equal(out2.ok, false, 'write failure must fail the overlay step')
+    assert.equal(out2.errorCode, 'PRESET_WRITE_FAILED', 'write failure must carry PRESET_WRITE_FAILED')
+    assert.equal(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'), orig, 'agent.cordis.yml restored from backup')
+    assert.equal(await readFile(join(dir, 'preset.yml'), 'utf8'), opreset, 'preset.yml restored from backup')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+    if (bak) await rm(bak, { recursive: true, force: true }).catch(() => {})
+  }
+})
+
+test('preset backup failure aborts before any write', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dvb-bakfail-'))
+  let bak = null
+  try {
+    const legacy = 'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场工程以 vision_bench 工具为准。'
+    const before = ['- id: persona', '  name: x', '  config:', '    text: >-', '      ' + legacy, ''].join('\n')
+    await writeFile(join(dir, 'agent.cordis.yml'), before)
+    await writeFile(join(dir, 'preset.yml'), 'name: old\n')
+    const { createRequire } = await import('node:module')
+    const fs = createRequire(import.meta.url)('node:fs')
+    const oc = fs.copyFileSync
+    fs.copyFileSync = (s) => { if (String(s).endsWith('agent.cordis.yml')) throw new Error('copy-fail') ; return oc(s) }
+    let out
+    try { out = ensurePresetOverlay(dir) } finally { fs.copyFileSync = oc }
+    assert.equal(out.ok, false)
+    assert.equal(out.errorCode, 'PRESET_BACKUP_FAILED', 'backup failure must be PRESET_BACKUP_FAILED')
+    // nothing written
+    assert.equal(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'), before, 'no write when backup failed')
+    bak = out.backupDir || null
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+    if (bak) await rm(bak, { recursive: true, force: true }).catch(() => {})
+  }
+})
+
+test('preset write-failure rollback deletes newly-created marker copy', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dvb-marker-'))
+  let bak = null
+  try {
+    const legacy = 'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场工程以 vision_bench 工具为准。'
+    await writeFile(join(dir, 'agent.cordis.yml'), ['- id: persona', '  name: x', '  config:', '    text: >-', '      ' + legacy, ''].join('\n'))
+    await writeFile(join(dir, 'preset.yml'), 'name: old\n')
+    // NO marker pre-existing: it will be created during write, then must be removed on rollback
+    const { createRequire } = await import('node:module')
+    const fs = createRequire(import.meta.url)('node:fs')
+    const ow = fs.writeFileSync
+    fs.writeFileSync = (p, ...r) => {
+      if (String(p).includes(dir) && /agent\.cordis\.yml/.test(String(p))) throw new Error('boom')
+      return ow(p, ...r)
+    }
+    let out
+    try { out = ensurePresetOverlay(dir) } finally { fs.writeFileSync = ow }
+    assert.equal(out.ok, false)
+    assert.equal(out.errorCode, 'PRESET_WRITE_FAILED')
+    // marker was created by intent but rollback should remove it (didn't exist before)
+    const markerPath = join(dir, '.dsh-vision-bench')
+    const { existsSync } = await import('node:fs')
+    assert.equal(existsSync(markerPath), false, 'newly-created marker must be removed on rollback')
+    bak = out.backupDir || null
   } finally {
     await rm(dir, { recursive: true, force: true })
     if (bak) await rm(bak, { recursive: true, force: true }).catch(() => {})
