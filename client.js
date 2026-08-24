@@ -2974,7 +2974,10 @@ function copyAgentRef(ref) {
 }
 
 function dispatchAgentRef(ref, props, opts){const t=JSON.stringify(ref,null,2);const tryDraft=(a)=>{if(!a||typeof a.setDraft!=='function')return null;try{let cur='';if(props&&typeof props.useInput==='function'){try{const v=props.useInput(s=>s&&s.draft);if(typeof v==='string')cur=v}catch{}}const n=cur?cur+'\n'+t:t;a.setDraft(n);if(opts&&opts.send&&typeof a.submit==='function'){try{a.submit();return{mode:'sent',ok:true,status:'已发送',text:t}}catch{}}return{mode:'draft',ok:true,status:'已加入输入框',text:t}}catch{return null}};let r=null;if(props&&props.inputActions)r=tryDraft(props.inputActions);if(!r&&props&&props.session&&props.session.inputActions)r=tryDraft(props.session.inputActions);if(r&&r.ok)return r;const ok=copyAgentRef(ref);return{mode:'copied',ok,status:'仅复制',text:t,fallback:true}}
-const hasHarnessInput=(p)=>!!(p&&((p.inputActions&&typeof p.inputActions.setDraft==='function')||(p.useInput&&typeof p.useInput==='function')||(p.session&&p.session.inputActions&&typeof p.session.inputActions.setDraft==='function')))
+const hasHarnessInput = (p) => !!(p && (
+  (p.inputActions && typeof p.inputActions.setDraft === 'function')
+  || (p.session && p.session.inputActions && typeof p.session.inputActions.setDraft === 'function')
+))
 // Badge vs抢焦点：后台任务仅角标，不自动切换 Tab
 function isForegroundTask(task) {
   if (!task || typeof task !== 'object') return false
