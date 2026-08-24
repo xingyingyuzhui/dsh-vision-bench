@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { TREND, TREND_CAP, TREND_WINDOW_MS, trendKey, sampleTrend, computeStats, exportRangeCsv, toUplotData, UPLOT_PROTO } from '../bench-trend.mjs'
 
@@ -119,4 +122,18 @@ test('trend supports 8 sequences sustained updates and uPlot proto preset', () =
   // ensure canvas colors still available via UPLOT_PROTO (no uPlot import)
   assert.ok(UPLOT_PROTO.scales.x.time === true)
   clean(cwd)
+})
+
+test('Task5/6 guards: no hard-coded configVersion collapse and no window.uPlot reliance', () => {
+  const live = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'bench-live.mjs'), 'utf8')
+  // anti-pattern from Task6 removed: typeof modbus !== 'undefined' → cv=1
+  assert.doesNotMatch(live, /typeof\s+modbus\s*!==\s*['\"]undefined['\"]/, 'must not gate configVersion off a never-defined modbus variable')
+  assert.doesNotMatch(live, /window\.uPlot|globalThis\.uPlot/, 'must not rely on host uPlot globals')
+  assert.match(live, /vendorUPlot/, 'should consume bundled uPlot constructor')
+  assert.match(live, /destroy/, 'should destroy uPlot on teardown')
+  assert.match(live, /\.setData\(/, 'should update via setData, not re-create chart')
+  assert.match(live, /setSize/, 'should resize via setSize')
+  // trend legend must not print literal null (guarded finite check; null → '—')
+  assert.match(live, /Number\.isFinite\(item\.last\.v\)/, 'legend guards null before stringify')
+  assert.doesNotMatch(live, /item\.last\.v\)\s*:\s*[^—]{0,2}null/, 'no unguarded null stringify')
 })

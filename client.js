@@ -5919,133 +5919,161 @@ function createSoonPage(React, t, titleKey, bodyKey) {
 }
 
 
-
-const drawTrend = (canvas, now = Date.now()) => {
-  if (!canvas) return
-  if (canvas.nodeType === 1 && canvas.tagName !== 'CANVAS') {
-    const UPlot = vendorUPlot
-    const { data, keys, meta } = toUplotData({ now, windowMs: TREND_WINDOW_MS })
-    if (UPlot) {
-      const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-      const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
-      const ks = keys.slice(0, 8), ms = meta.slice(0, 8)
-      const opts = { ...UPLOT_PROTO, width: canvas.clientWidth || 560, height: 190, pxRatio: dpr, spanGaps: false, cursor: { drag: { x: true, y: false, uni: 10 } }, select: { show: true }, scales: { x: { time: true }, y: { auto: true } }, axes: [{ stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } }, { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } }], series: [{ label: 'time' }].concat(ks.map((k, i) => ({ label: (ms[i] && ms[i].label) || k, stroke: TREND_COLORS[i % 8], width: 1.5, spanGaps: false, points: { show: false } }))), hooks: { setSelect: [(u) => { try { const s = u.select; canvas._uplotSel = !s || !s.width ? null : { start: Math.round(u.posToVal(s.left, 'x') * 1000), end: Math.round(u.posToVal(s.left + s.width, 'x') * 1000) } } catch { canvas._uplotSel = null } }] } }
-      try { return new UPlot(opts, data, canvas) } catch {}
-    } else if (canvas.nodeType === 1) return null
+// Task5: create one uPlot inside a container div. Returns instance or null.
+// Only a guarded minimal canvas renderer is kept for the (bundle-less) fallback.
+const drawTrend = (container, now = Date.now()) => {
+  if (!container) return null
+  const UPlot = vendorUPlot
+  if (!UPlot) return null
+  const { data, keys, meta } = toUplotData({ now, windowMs: TREND_WINDOW_MS })
+  const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
+  const ks = keys.slice(0, 8), ms = meta.slice(0, 8)
+  const opts = {
+    ...UPLOT_PROTO, width: container.clientWidth || 560, height: 190, pxRatio: dpr,
+    spanGaps: false,
+    cursor: { drag: { x: true, y: false, uni: 10 } },
+    select: { show: true },
+    scales: { x: { time: true }, y: { auto: true } },
+    axes: [
+      { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
+      { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
+    ],
+    series: [{ label: 'time' }].concat(ks.map((k, i) => ({
+      label: (ms[i] && ms[i].label) || k,
+      stroke: TREND_COLORS[i % 8],
+      width: 1.5,
+      spanGaps: false,
+      points: { show: false },
+    }))),
+    hooks: {
+      setSelect: [(u) => {
+        try {
+          const s = u.select
+          container._uplotSel = !s || !s.width ? null : { start: Math.round(u.posToVal(s.left, 'x') * 1000), end: Math.round(u.posToVal(s.left + s.width, 'x') * 1000) }
+        } catch { container._uplotSel = null }
+      }],
+    },
   }
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  const w = canvas.width
-  const h = canvas.height
-  ctx.clearRect(0, 0, w, h)
-  const cutoff = now - TREND_WINDOW_MS
-  const series = []
-  for (const [, list] of TREND.series) {
-    const pts = list.filter((item) => item.t >= cutoff)
-    if (pts.length >= 2) series.push(pts)
-  }
-  ctx.strokeStyle = 'rgba(128,128,128,.25)'
-  ctx.lineWidth = 1
-  for (let g = 1; g < 4; g++) {
-    const y = (h / 4) * g
-    ctx.beginPath()
-    ctx.moveTo(0, y)
-    ctx.lineTo(w, y)
-    ctx.stroke()
-  }
-  if (!series.length) return
-  let min = Infinity
-  let max = -Infinity
-  for (const pts of series) {
-    for (const item of pts) {
-      if (item.v < min) min = item.v
-      if (item.v > max) max = item.v
-    }
-  }
-  if (max === min) {
-    max += 1
-    min -= 1
-  }
-  const padY = (max - min) * 0.08
-  min -= padY
-  max += padY
-  series.forEach((pts, i) => {
-    ctx.strokeStyle = TREND_COLORS[i % TREND_COLORS.length]
-    ctx.lineWidth = 1.5
-    ctx.beginPath()
-    pts.forEach((item, j) => {
-      const x = ((item.t - cutoff) / TREND_WINDOW_MS) * w
-      const y = h - ((item.v - min) / (max - min)) * h
-      if (j === 0) ctx.moveTo(x, y)
-      else ctx.lineTo(x, y)
-    })
-    ctx.stroke()
-  })
+  try { return new UPlot(opts, data, container) } catch { return null }
 }
 
 function createTrendPage(React, t, post, hooks) {
   return function TrendPage(props) {
     const el = React.createElement
     const cwd = (props && props.scope && props.scope.cwd) || sessionCwd(props) || ''
-    const canvasRef = React.useRef(null)
     const wrapRef = React.useRef(null)
     const uplotRef = React.useRef(null)
+    const mountKeyRef = React.useRef('')
     const [paused, setPaused] = React.useState(false)
     const [, setTick] = React.useState(0)
     const [copied, setCopied] = React.useState('')
     const [exportNote, setExportNote] = React.useState('')
+    const [configVersion, setConfigVersion] = React.useState(0)
+    const [cvReady, setCvReady] = React.useState(false)
+
+    // Task6: real configVersion from /state — never default to a hard-coded
+    // "modbus !== undefined" that collapses to 1.
+    React.useEffect(() => {
+      if (!cwd || !post) { setCvReady(true); return }
+      let stop = false
+      post('/dsh-vision-bench/state', { cwd }).then((data) => {
+        if (stop) return
+        const mb = data && data.workspace && data.workspace.modbus
+        const v = Number(mb && mb.configVersion)
+        setConfigVersion(v > 0 ? v : 0)
+        setCvReady(true)
+      }).catch(() => { if (!stop) setCvReady(true) })
+      return () => { stop = true }
+    }, [cwd, post])
+
     React.useEffect(() => {
       if (paused) return
       const timer = setInterval(() => setTick((n) => n + 1), 500)
       return () => clearInterval(timer)
     }, [paused])
-    React.useEffect(() => {
-      drawTrend(canvasRef.current)
-    })
-    React.useEffect(() => {
-      const c = wrapRef.current; if (!c) return; const u = drawTrend(c); if (u) uplotRef.current = u
-      const onResize = () => { const uu = uplotRef.current, cc = wrapRef.current; if (!uu || !uu.setSize || !cc) return; uu.setSize({ width: cc.clientWidth || 560, height: 190 }) }
-      if (typeof window !== 'undefined') { window.addEventListener('resize', onResize); const mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)'); const onDark = () => { try { uplotRef.current && uplotRef.current.destroy && uplotRef.current.destroy() } catch {}; const n = drawTrend(wrapRef.current); if (n) uplotRef.current = n }; if (mq) { if (mq.addEventListener) mq.addEventListener('change', onDark); else if (mq.addListener) mq.addListener(onDark) } return () => { window.removeEventListener('resize', onResize); try { mq && mq.removeEventListener ? mq.removeEventListener('change', onDark) : mq && mq.removeListener && mq.removeListener(onDark) } catch {}; try { uplotRef.current && uplotRef.current.destroy && uplotRef.current.destroy() } catch {}; uplotRef.current = null } }
-      return () => { try { u && u.destroy && u.destroy() } catch {}; if (uplotRef.current === u) uplotRef.current = null }
-    }, [])
-    React.useEffect(() => { if (paused) return; const u = uplotRef.current; if (!u || !u.setData) return; try { const { data } = toUplotData(); u.setData(data) } catch {} })
+
     const entries = []
     let i = 0
     for (const [key, list] of TREND.series) {
       if (!list.length) continue
       const window = list.filter((item) => item.t >= Date.now() - TREND_WINDOW_MS)
       if (!window.length) continue
-      let min = window[0].v
-      let max = window[0].v
+      let min = Infinity, max = -Infinity, any = false
       for (const item of window) {
+        if (item == null || !Number.isFinite(item.v)) continue
+        any = true
         if (item.v < min) min = item.v
         if (item.v > max) max = item.v
       }
+      const last = list[list.length - 1]
       entries.push({
         key,
         label: (TREND.meta.get(key) && TREND.meta.get(key).label) || key,
         unit: (TREND.meta.get(key) && TREND.meta.get(key).unit) || '',
-        last: list[list.length - 1],
-        min,
-        max,
+        last,
+        lastValid: any,
+        min: any ? min : null,
+        max: any ? max : null,
         color: TREND_COLORS[i % TREND_COLORS.length],
       })
       i++
       if (entries.length >= 8) break
     }
+    const chartMountKey = entries.map((e) => e.key).join('|')
+
+    // Task5: build uPlot once; rebuild only when the series set changes.
+    React.useEffect(() => {
+      if (!entries.length || !vendorAvailable) return
+      const c = wrapRef.current
+      if (!c) return
+      if (mountKeyRef.current !== chartMountKey) {
+        if (uplotRef.current) { try { uplotRef.current.destroy() } catch {} uplotRef.current = null }
+        mountKeyRef.current = chartMountKey
+      }
+      if (!uplotRef.current) uplotRef.current = drawTrend(c)
+      const u = uplotRef.current
+      const onResize = () => { const cc = wrapRef.current; if (u && cc && u.setSize) u.setSize({ width: cc.clientWidth || 560, height: 190 }) }
+      if (typeof window !== 'undefined') window.addEventListener('resize', onResize)
+      return () => {
+        if (typeof window !== 'undefined') window.removeEventListener('resize', onResize)
+        if (uplotRef.current && mountKeyRef.current === chartMountKey) {
+          try { uplotRef.current.destroy() } catch {}
+          uplotRef.current = null
+        }
+      }
+    }, [cwd, chartMountKey, entries.length])
+
+    // live data update via setData; keep instance
+    React.useEffect(() => {
+      if (paused) return
+      const u = uplotRef.current
+      if (!u || !u.setData) return
+      try { const { data } = toUplotData(); u.setData(data) } catch {}
+    })
+
+    const agentAllowed = cvReady && configVersion > 0
     const sendTrend = (entry) => {
-      let cv = 1; try { const p = typeof modbus !== 'undefined' && modbus ? normalizeModbus(modbus) : null; if (p && p.configVersion) cv = p.configVersion } catch { cv = 1 }
+      if (!agentAllowed) {
+        setCopied('no-version'); setTimeout(() => setCopied(''), 2000)
+        return
+      }
+      const cv = configVersion
+      const start = Date.now() - TREND_WINDOW_MS
+      const end = Date.now()
+      const key = entry ? entry.key : (entries[0] && entries[0].key) || ''
       const ref = buildAgentRef('trend', {
-        trendKey: entry ? entry.key : (entries[0] && entries[0].key) || '',
-        start: Date.now() - TREND_WINDOW_MS,
-        end: Date.now(),
+        trendKey: key,
+        start,
+        end,
         label: entry ? entry.label : 'trend-interval',
-      }, { configVersion: cv, start: Date.now() - TREND_WINDOW_MS, end: Date.now() })
-      dispatchAgentRef(ref, props)
-      setCopied(entry ? entry.key : 'trend')
+      }, { configVersion: cv, start, end })
+      const res = dispatchAgentRef(ref, props) || { mode: 'copied' }
+      const labelByMode = { input: '已加入输入框', sent: '已发送', copied: '仅复制', failed: '处理失败' }
+      setCopied((entry ? entry.key : 'trend') + ':' + (labelByMode[res.mode] || '仅复制'))
       setTimeout(() => setCopied(''), 2000)
       if (post && cwd) {
-        try { post('/dsh-vision-bench/evidence', { cwd, evidence: [{ kind: 'trend', id: entry ? entry.key : 'trend-interval', at: Date.now(), version: cv }] }).catch(() => {}) } catch {}
+        try { post('/dsh-vision-bench/evidence', { cwd, evidence: [{ kind: 'trend', id: key, at: Date.now(), version: cv, timeRange: { start, end } }] }).catch(() => {}) } catch {}
       }
     }
     const focusTrend = (entry) => {
@@ -6053,8 +6081,18 @@ function createTrendPage(React, t, post, hooks) {
       const key = entry ? entry.key : (entries[0] && entries[0].key) || ''
       post('/dsh-vision-bench/focus', { cwd, target: { trendKey: key, kind: 'trend' } }).catch(() => {})
     }
-    const doExport = () => { const w = wrapRef.current, s = w && w._uplotSel, csv = s ? exportRangeCsv({ start: s.start, end: s.end }) : exportRangeCsv(); try { if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(csv) } catch {}; setExportNote(s ? '已导出区间 ' + new Date(s.start).toLocaleTimeString() + '→' + new Date(s.end).toLocaleTimeString() : '已导出最近 5 分钟'); setTimeout(() => setExportNote(''), 2000) }
-    const resetZoom = () => { const w = wrapRef.current; if (w) w._uplotSel = null; const u = uplotRef.current; if (u && u.setSelect) try { u.setSelect({ left: 0, width: 0, top: 0, height: 0 }, false) } catch {}; if (u && u.setData) try { const { data } = toUplotData(); u.setData(data) } catch {} }
+    const doExport = () => {
+      const w = wrapRef.current, s = w && w._uplotSel, csv = s ? exportRangeCsv({ start: s.start, end: s.end }) : exportRangeCsv()
+      try { if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(csv) } catch {}
+      setExportNote(s ? '已导出区间 ' + new Date(s.start).toLocaleTimeString() + '→' + new Date(s.end).toLocaleTimeString() : '已导出最近 5 分钟')
+      setTimeout(() => setExportNote(''), 2000)
+    }
+    const resetZoom = () => {
+      const w = wrapRef.current; if (w) w._uplotSel = null
+      const u = uplotRef.current
+      if (u && u.setSelect) try { u.setSelect({ left: 0, width: 0, top: 0, height: 0 }, false) } catch {}
+      if (u && u.setData) try { const { data } = toUplotData(); u.setData(data) } catch {}
+    }
     return el('div', { className: 'dvb-live' },
       el('div', { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('liveChart')),
@@ -6063,15 +6101,16 @@ function createTrendPage(React, t, post, hooks) {
         entries.length ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: doExport }, '导出CSV') : null,
         entries.length ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: resetZoom }, '重置缩放') : null,
         entries.length ? el('button', {
-          type: 'button', className: 'dvb-btn dvb-btn-sm',
-          title: '复制趋势区间结构化引用（稳定 ID+配置版本+时间范围）让 Agent 分析',
+          type: 'button', className: 'dvb-btn dvb-btn-sm' + (agentAllowed ? '' : ' is-on'),
+          title: agentAllowed ? '复制趋势区间结构化引用（稳定 ID+配置版本+时间范围）让 Agent 分析' : '配置版本未就绪，无法生成引用',
+          disabled: !agentAllowed,
           onClick() { sendTrend(null) },
-        }, copied === 'trend' ? '已复制' : '让 Agent 分析区间') : null,
+        }, copied.split(':')[1] === '已加入输入框' ? '已加入' : (copied.split(':')[1] === '已发送' ? '已发送' : '让 Agent 分析区间')) : null,
         entries.length ? el('button', {
           type: 'button', className: 'dvb-btn dvb-btn-sm',
           onClick() { focusTrend(null) },
         }, '聚焦区间') : null),
-      copied ? el('div', { className: 'dvb-hint' }, copied.split(':').pop() + ' · 趋势引用已处理') : null,
+      copied ? el('div', { className: 'dvb-hint' }, (copied === 'no-version' ? '配置版本未就绪，无法生成证据引用' : (copied.split(':')[1] || '')) + ' · ' + (copied === 'no-version' ? '' : copied.split(':')[0])) : null,
       exportNote ? el('div', { className: 'dvb-hint' }, exportNote) : null,
       entries.length
         ? el('div', { ref: wrapRef, className: 'dvb-uplot', style: { width: '100%', height: '190px' } })
@@ -6080,13 +6119,13 @@ function createTrendPage(React, t, post, hooks) {
         ? el('div', { className: 'dvb-trend-legend' }, entries.map((item) => el('div', { key: item.key, className: 'dvb-trend-row' },
           el('span', { className: 'dvb-trend-dot', style: { background: item.color } }),
           el('span', { className: 'dvb-trend-name', title: item.label }, item.label),
-          el('span', { className: 'dvb-val' }, String(item.last.v) + (item.unit ? ' ' + item.unit : '')),
-          el('span', { className: 'dvb-map-meta' }, 'min ' + item.min + ' · max ' + item.max),
+          el('span', { className: 'dvb-val' }, item.last != null && Number.isFinite(item.last.v) ? String(item.last.v) + (item.unit ? ' ' + item.unit : '') : '—'),
+          el('span', { className: 'dvb-map-meta' }, (item.lastValid ? ('min ' + item.min + ' · max ' + item.max) : '无有效数据')),
           el('button', {
-            type: 'button', className: 'dvb-btn dvb-btn-sm',
-            title: '让 Agent 分析此曲线区间',
+            type: 'button', className: 'dvb-btn dvb-btn-sm' + (agentAllowed ? '' : ' is-on'), disabled: !agentAllowed,
+            title: agentAllowed ? '让 Agent 分析此曲线区间' : '配置版本未就绪',
             onClick() { sendTrend(item) },
-          }, copied === item.key ? '已复制' : '让 Agent 分析'),
+          }, copied === item.key + ':已加入输入框' ? '已加入' : (copied === item.key + ':已发送' ? '已发送' : '让 Agent 分析')),
           el('button', {
             type: 'button', className: 'dvb-btn dvb-btn-sm',
             onClick() { focusTrend(item) },
