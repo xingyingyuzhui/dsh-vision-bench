@@ -46,6 +46,8 @@
     "bench-trend.mjs",
     "bench-alarm.mjs",
     "bench-patch.mjs",
+    "bench-frames-model.mjs",
+    "bench-frames-view.mjs",
     "bench-live.mjs",
     "bench-frames-view.mjs",
     "bench-map.mjs",

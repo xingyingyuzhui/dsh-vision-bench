@@ -80,8 +80,10 @@ test('generated client embeds real vendor runtime (uPlot + Virtualizer)', () => 
 test('generated client contains exactly one ModuleLoader registration and no second React', () => {
   const loads = src.match(/__ModuleLoader__\.load\(/g) || []
   assert.equal(loads.length, 1)
-  const reactImports = src.match(/@?react|require\(['"]react['"]\)/g) || []
-  // harness-provided react via require('react') is the single occurrence
-  const bare = reactImports.filter((x) => !x.startsWith('@'))
-  assert.ok(bare.length <= 1, 'should not bundle its own React copy: ' + reactImports.join(','))
+  // harness React comes from a single require('react'); no bundled React source
+  const reqReact = src.match(/require\(['"]react['"]\)/g) || []
+  assert.equal(reqReact.length, 1, 'should use harness react once via require, got ' + reqReact.length)
+  assert.doesNotMatch(src, /from\s+['"]react['"]/, 'should not contain a literal react import')
+  assert.doesNotMatch(src, /node_modules\/react/, 'should not bundle React source')
+  assert.doesNotMatch(src, /ReactDOM/, 'should not bundle ReactDOM')
 })

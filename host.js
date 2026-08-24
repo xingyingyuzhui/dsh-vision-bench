@@ -24,6 +24,7 @@ import {
 } from './bench-store.mjs'
 import { maybeNotifyResult, notifyBenchEvent, setAgentsRegistry } from './bench-notify.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
+import { normalizeModbus } from './bench-devices.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
 import { listSerialPorts } from './bench-serial.mjs'
 import { closeSerialMonitor, openSerialMonitor, serialFeed, serialState, stopAllSerialMonitors } from './bench-serial-monitor.mjs'
@@ -251,6 +252,25 @@ export function apply(ctx, config = {}) {
     route('/dsh-vision-bench/frames/list', async (req) => {
       const body = normalizeConnAlias(await readJsonBody(req))
       return listFrames(dshHome, body && body.cwd, body)
+    }),
+    route('/dsh-vision-bench/frames/clear', async (req) => {
+      const body = await readJsonBody(req)
+      const room = requireWorkspaceCwd(body && body.cwd)
+      if (room.error) return { ok: false, error: room.error }
+      const pack = normalizeModbus(loadWorkspace(dshHome, room.cwd).modbus)
+      const next = { ...(pack.framesByConnection || {}) }
+      const connId = typeof body.connectionId === 'string' ? body.connectionId.trim() : ''
+      const all = body && body.all === true
+      if (!all && !connId) return { ok: false, error: '缺少 connectionId 或 all' }
+      if (all) {
+        for (const k of Object.keys(next)) delete next[k]
+      } else {
+        if (!(connId in next)) return { ok: false, error: 'connectionId 不存在: ' + connId }
+        delete next[connId]
+      }
+      const saved = saveWorkspace(dshHome, room.cwd, { modbus: { framesByConnection: next, version: 3 } })
+      if (!saved.ok) return saved
+      return { ok: true, cleared: all ? 'all' : connId }
     }),
     route('/dsh-vision-bench/focus', async (req) => {
       const body = normalizeConnAlias(await readJsonBody(req))

@@ -1,21 +1,20 @@
-import { getFramesLog, pushFramesLog, clearFramesLog, buildAgentRef, copyAgentRef } from './bench-shared.mjs'
+import { getFramesLog, pushFramesLog, clearFramesLog, buildAgentRef, copyAgentRef, dispatchAgentRef, hasHarnessInput } from './bench-shared.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { NS } from './bench-i18n.mjs'
+import { buildFramePortOptions, parseFramePortSelection, selectProtocolFrames, mergeFramesDedup, framesShouldStickToBottom } from './bench-frames-model.mjs'
+import { vendorVirtualizer } from './bench-vendor.mjs'
 
-// 串口报文侧栏：协议报文使用插件自身 Modbus 事务缓存，不重复打开已占用 COM；仅原始数据模式可选打开 COM
+// 串口报文侧栏：协议报文使用插件自身 Modbus 事务缓存（持久化 framesByConnection 为权威来源），
+// 不重复打开已占用 COM；仅原始数据模式可选打开 COM。
 export const FRAMES_TAB_ID = 'dsh-vision-bench:frames'
 
-// Virtualizer viewport limiting for 500/1000/5000: overscan + measureElement + dark via CSS vars, autoFollow only at bottom
-function framesShouldStickToBottom(scrollTop, scrollHeight, clientHeight, threshold = 5) {
-  return scrollHeight - scrollTop - clientHeight <= threshold
-}
+const ESTIMATE_SIZE = 36
+const OVERS_CAN = 10
 
 export function createFramesPage(React, t, post, hooks) {
   const openHmi = hooks && hooks.openHmi
   return function FramesPage(props) {
     const el = React.createElement
-    const cwd = (props && props.scope && props.scope.cwd) || (props && props.sessionId ? '' : '')
-    // Try to get cwd from session props like bench-live does
     const realCwd = (() => {
       try {
         if (props && props.scope && props.scope.cwd) return props.scope.cwd
@@ -24,20 +23,32 @@ export function createFramesPage(React, t, post, hooks) {
           return props.useSessions((s) => (s.byId && sid && s.byId[sid] && s.byId[sid].cwd) || (s.byId && s.current && s.byId[s.current] && s.byId[s.current].cwd) || '')
         }
       } catch {}
-      return cwd
+      return ''
     })()
     const [health, setHealth] = React.useState({})
-    const [modbus, setModbus] = React.useState({ version: 3, connections: [], devices: [], points: [] })
+    const [modbus, setModbus] = React.useState({ version: 3, connections: [], devices: [], points: [], framesByConnection: {} })
     const [ports, setPorts] = React.useState([])
-    const [portFilter, setPortFilter] = React.useState('all') // 全部串口 | 具体COM | 未配置COM
-    const [mode, setMode] = React.useState('proto') // proto: 协议报文 (frames cache), raw: 原始数据 (serial monitor)
+    const [selection, setSelection] = React.useState('all') // all | conn:<id> | raw:<port>
+    const [mode, setMode] = React.useState('proto') // proto: 协议报文, raw: 原始数据
     const [filters, setFilters] = React.useState({ connectionId: '', deviceId: '', direction: '', functionCode: '', status: '' })
     const [search, setSearch] = React.useState('')
     const [paused, setPaused] = React.useState(false)
     const [serial, setSerial] = React.useState({ open: false, port: '', baudrate: 115200, lines: [], error: '', lastId: 0 })
     const [copied, setCopied] = React.useState('')
+    const [feed, setFeed] = React.useState(0) // realtime tick to refresh latest frames
+    const [staleNote, setStaleNote] = React.useState('')
     const listRef = React.useRef(null)
     const isAtBottomRef = React.useRef(true)
+    const vizerRef = React.useRef(null)
+    const [, forceRender] = React.useState(0)
+
+    function countScroll() {
+      const el = listRef.current
+      if (el) {
+        const atBottom = framesShouldStickToBottom(el.scrollTop, el.scrollHeight, el.clientHeight)
+        if (isAtBottomRef.current !== atBottom) isAtBottomRef.current = atBottom
+      }
+    }
 
     React.useEffect(() => {
       let stop = false
@@ -51,6 +62,7 @@ export function createFramesPage(React, t, post, hooks) {
       return () => { stop = true }
     }, [realCwd])
 
+    // authoritative persisted framesByConnection from /state + realtime memory
     React.useEffect(() => {
       if (!realCwd) return undefined
       let stop = false
@@ -60,17 +72,14 @@ export function createFramesPage(React, t, post, hooks) {
           if (stop) return
           if (data && data.health) setHealth(data.health)
           const mb = data && data.workspace && data.workspace.modbus
-          if (mb) setModbus(mb)
-          // 协议报文模式使用插件自身 Modbus 事务（framesByConnection），不重复打开已占用 COM
-          if (data && data.workspace && data.workspace.modbus && data.workspace.modbus.framesByConnection) {
-            // frames are already in shared cache via pushFramesLog from poll/read/write
-          }
+          if (mb) setModbus((prev) => ({ ...prev, ...mb }))
+          setFeed((n) => n + 1)
         } catch {}
-      }, 2000)
+      }, 1500)
       return () => { stop = true; clearInterval(timer) }
     }, [realCwd])
 
-    // 原始数据模式仅原始数据可选：当 mode===raw 时才允许打开 COM，占用时返回 PORT_IN_USE
+    // raw data mode feed
     React.useEffect(() => {
       if (mode !== 'raw' || !realCwd || !serial.open) return undefined
       let stop = false
@@ -95,138 +104,251 @@ export function createFramesPage(React, t, post, hooks) {
       return () => { stop = true; clearInterval(timer) }
     }, [realCwd, mode, serial.open, serial.lastId, paused])
 
-    const pack = (() => { try { return normalizeModbus(modbus) } catch { return { connections: [], devices: [], points: [] } } })()
+    const pack = (() => { try { return normalizeModbus(modbus) } catch { return { connections: [], devices: [], points: [], framesByConnection: {} } } })()
     const connections = Array.isArray(pack.connections) ? pack.connections : []
     const devices = Array.isArray(pack.devices) ? pack.devices : []
+    const framesByConnection = (pack && pack.framesByConnection) || {}
+    const sel = parseFramePortSelection(selection)
 
-    // 全部串口/具体COM/未配置COM 选项
-    const configuredPorts = connections.filter((c) => c.conn && c.conn.mode === 'rtu' && c.conn.port).map((c) => ({ port: c.conn.port, connectionId: c.id, name: c.name }))
-    const unconfiguredPorts = ports.filter((p) => !configuredPorts.some((cp) => String(cp.port).toLowerCase() === String(p).toLowerCase()))
-    const portOptions = [
-      { value: 'all', label: t('framesAll') || '全部串口' },
-      ...configuredPorts.map((cp) => ({ value: cp.port, label: cp.port + ' · ' + cp.name, connectionId: cp.connectionId })),
-      ...unconfiguredPorts.map((p) => ({ value: String(p), label: String(p) + ' · 未配置COM', unconfigured: true })),
-    ]
+    // Task2 identity: options use all/conn:<id>/raw:<port>; count excludes
+    // unconfigured ports in proto mode.
+    const portOptions = buildFramePortOptions(connections, ports, mode)
 
-    // 获取帧：协议报文模式使用插件自身 Modbus 事务缓存（getFramesLog），不重复打开 COM
-    const rawFrames = mode === 'proto'
-      ? (portFilter === 'all' ? getFramesLog(realCwd) : getFramesLog(realCwd, portFilter))
-      : serial.lines.map((l) => ({ t: l.t, at: l.t, request: l.line, response: '', label: l.line.slice(0, 20), direction: 'rx', status: 'ok', connectionId: portFilter === 'all' ? '' : portFilter, deviceId: '', functionCode: 0 }))
+    // proto data source: persisted authoritative frames + live memory merging by frameId
+    let rawFrames = []
+    if (mode === 'proto') {
+      const persistedArray = framesByConnection && sel.connectionId ? framesByConnection[sel.connectionId] : null
+      // merge by conn or all
+      if (sel.kind === 'conn') {
+        const mem = getFramesLog(realCwd, sel.connectionId)
+        rawFrames = mergeFramesDedup(persistedArray, mem, 500)
+      } else {
+        const persistedAll = selectProtocolFrames(framesByConnection, 'all')
+        const memAll = getFramesLog(realCwd)
+        rawFrames = mergeFramesDedup(persistedAll, memAll, 1000)
+      }
+    } else {
+      rawFrames = serial.lines.map((l) => ({ t: l.t, at: l.t, request: l.line, response: '', label: l.line.slice(0, 20), direction: 'rx', status: 'ok', connectionId: sel.connectionId || '', deviceId: '', functionCode: 0 }))
+    }
 
-    // 过滤：连接/设备/方向/功能码/状态 + 搜索
     let filtered = rawFrames
     if (filters.connectionId) filtered = filtered.filter((f) => f.connectionId === filters.connectionId)
     if (filters.deviceId) filtered = filtered.filter((f) => f.deviceId === filters.deviceId)
     if (filters.direction) filtered = filtered.filter((f) => f.direction === filters.direction)
     if (filters.functionCode) filtered = filtered.filter((f) => String(f.functionCode) === String(filters.functionCode))
     if (filters.status) filtered = filtered.filter((f) => f.status === filters.status)
-    if (search.trim()) {
-      const needle = search.trim().toLowerCase()
-      filtered = filtered.filter((f) => (f.request + ' ' + f.response + ' ' + f.label + ' ' + (f.connectionId||'')).toLowerCase().includes(needle))
+    const needle = search.trim().toLowerCase()
+    if (needle) {
+      filtered = filtered.filter((f) => (f.request + ' ' + f.response + ' ' + f.label + ' ' + (f.connectionId || '')).toLowerCase().includes(needle))
     }
 
-    // 虚拟列表：Virtualizer + overscan + measureElement + framesShouldStickToBottom 仅底部跟随
-    const viewportHeight = 320
-    const estimateSize = 36
-    const overscan = 5
-    // measureElement for dynamic row height
-    const measureElement = (el) => el ? el.offsetHeight : estimateSize
-    void measureElement
-    // 簡化虛擬：按視口與 overscan 切片，避免 500/1000/5000 全量 DOM
-    const scrollTop = listRef.current ? listRef.current.scrollTop : 0
-    const startIndex = Math.max(0, Math.floor(scrollTop / estimateSize) - overscan)
-    const visibleCount = Math.ceil(viewportHeight / estimateSize) + overscan * 2
-    const virtualItems = filtered.slice(startIndex, startIndex + visibleCount)
-    const totalHeight = filtered.length * estimateSize
-    const handleScroll = (e) => {
-      const el = e.target
-      const atBottom = framesShouldStickToBottom(el.scrollTop, el.scrollHeight, el.clientHeight)
-      isAtBottomRef.current = atBottom
+    // Task4: real TanStack Virtualizer (bundled) with onChange -> re-render
+    React.useEffect(() => { countScroll() })
+
+    React.useEffect(() => {
+      if (!vendorVirtualizer) {
+        vizerRef.current = null
+        return
+      }
+      const inst = new vendorVirtualizer({
+        count: filtered.length,
+        getScrollElement: () => listRef.current,
+        estimateSize: () => ESTIMATE_SIZE,
+        overscan: OVERS_CAN,
+        scrollToFn: (offset, _canSmooth, instance) => {
+          const el = instance.scrollElement
+          if (el) el.scrollTop = offset
+        },
+        observeElementRect: (instance, cb) => {
+          const el = instance.scrollElement
+          if (!el) return () => {}
+          const ro = new ResizeObserver(() => {
+            cb({ width: el.clientWidth || el.offsetWidth || 0, height: el.clientHeight || el.offsetHeight || 0 })
+          })
+          ro.observe(el)
+          cb({ width: el.clientWidth || el.offsetWidth || 0, height: el.clientHeight || el.offsetHeight || 0 })
+          return () => ro.disconnect()
+        },
+        observeElementOffset: (instance, cb) => {
+          const el = instance.scrollElement
+          if (!el) return () => {}
+          const onScroll = () => { cb(el.scrollTop, false) }
+          el.addEventListener('scroll', onScroll, { passive: true })
+          cb(el.scrollTop, false)
+          return () => el.removeEventListener('scroll', onScroll)
+        },
+        onChange: () => {
+          countScroll()
+          forceRender((n) => n + 1)
+        },
+      })
+      vizerRef.current = inst
+      inst.measure()
+      return () => { try { inst.destroy() } catch {} vizerRef.current = null }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [realCwd, mode, selection, filters.connectionId, filters.deviceId, filters.direction, filters.functionCode, filters.status, search, filtered.length])
+
+    // on mount / filter-change, ensure scroll position sane
+    React.useEffect(() => { countScroll() })
+
+    const virtualRows = vendorVirtualizer && vizerRef.current
+      ? vizerRef.current.getVirtualItems()
+      : filtered.slice(0, 30)
+    const totalHeight = vendorVirtualizer && vizerRef.current
+      ? vizerRef.current.getTotalSize()
+      : filtered.length * ESTIMATE_SIZE
+
+    function scrollToLatest() {
+      const inst = vizerRef.current
+      if (inst) inst.scrollToIndex(filtered.length - 1)
+      else if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight
+      isAtBottomRef.current = true
+      setStaleNote('')
     }
-    const shouldAutoFollow = () => isAtBottomRef.current
+
+    function togglePause() {
+      setPaused((v) => {
+        const next = !v
+        // restore to latest when unpausing from bottom
+        if (!next && isAtBottomRef.current) setTimeout(scrollToLatest, 30)
+        return next
+      })
+    }
+
+    function clearView() {
+      // task3: clear persisted server frames + local cache via dedicated route
+      const payload = sel.kind === 'conn' ? { connectionId: sel.connectionId } : { all: true }
+      setModbus((prev) => {
+        const fbc = { ...(prev.framesByConnection || {}) }
+        if (payload.connectionId) delete fbc[payload.connectionId]
+        else for (const k of Object.keys(fbc)) delete fbc[k]
+        return { ...prev, framesByConnection: fbc }
+      })
+      // optimistic local clear then server
+      if (sel.kind === 'conn') clearFramesLog(realCwd, sel.connectionId)
+      else clearFramesLog(realCwd)
+      post('/dsh-vision-bench/frames/clear', { cwd: realCwd, ...payload }).then(() => {
+        setFeed((n) => n + 1)
+      }).catch(() => {})
+    }
+
+    // Agent references / dispatch (Task7)
+    function sendToAgent(frame) {
+      const configVersion = Number(pack.configVersion) > 0 ? Number(pack.configVersion) : null
+      if (!configVersion) {
+        setCopied('no-version')
+        setTimeout(() => setCopied(''), 2000)
+        return
+      }
+      const ref = buildAgentRef('frame', {
+        frameId: frame.frameId || frame.id,
+        connectionId: frame.connectionId,
+        deviceId: frame.deviceId,
+        label: frame.label,
+      }, { configVersion, start: (frame.t || frame.at || Date.now()) - 5 * 60 * 1000, end: frame.t || frame.at || Date.now() })
+      const res = dispatchAgentRef(ref, props) || { mode: 'copied' }
+      const labelByMode = { input: '已加入输入框', sent: '已发送', copied: '仅复制', failed: '处理失败' }
+      setCopied(labelByMode[res.mode] || '仅复制')
+      setTimeout(() => setCopied(''), 2000)
+      try {
+        post('/dsh-vision-bench/evidence', {
+          cwd: realCwd,
+          evidence: [{ kind: 'frame', id: frame.frameId || frame.id, connectionId: frame.connectionId, deviceId: frame.deviceId, at: frame.t || frame.at || Date.now(), version: configVersion, timeRange: null }],
+        }).catch(() => {})
+      } catch {}
+    }
 
     function copyFrames() {
-      const text = filtered.map((f) => `[${new Date(f.t||f.at).toLocaleTimeString()}] ${f.direction||'tx'} ${f.request||''} ${f.response?'← '+f.response:''} ${f.connectionId||''}`).join('\n')
+      const text = filtered.map((f) => `[${new Date(f.t || f.at).toLocaleTimeString()}] ${f.direction || 'tx'} ${f.request || ''} ${f.response ? '← ' + f.response : ''} ${f.connectionId || ''}`).join('\n')
       if (!text) return
-      try { navigator.clipboard.writeText(text).then(() => { setCopied('copy'); setTimeout(()=>setCopied(''),1500) }) } catch {}
+      try { navigator.clipboard.writeText(text).then(() => { setCopied('copy'); setTimeout(() => setCopied(''), 1500) }) } catch {}
     }
     function exportFrames() {
       const blob = filtered.map((f) => JSON.stringify(f)).join('\n')
       if (!blob) return
-      try { navigator.clipboard.writeText(blob).then(()=>{ setCopied('export'); setTimeout(()=>setCopied(''),1500) }) } catch {}
+      try { navigator.clipboard.writeText(blob).then(() => { setCopied('export'); setTimeout(() => setCopied(''), 1500) }) } catch {}
     }
-    function sendToAgent(frame) {
-      const ref = buildAgentRef('frame', { frameId: frame.frameId||frame.id, connectionId: frame.connectionId, deviceId: frame.deviceId, label: frame.label }, { configVersion: pack.configVersion||1 })
-      copyAgentRef(ref)
-      setCopied(frame.frameId||frame.id)
-      setTimeout(()=>setCopied(''),2000)
-      try { post('/dsh-vision-bench/evidence', { cwd: realCwd, evidence: [{ kind: 'frame', id: frame.frameId||frame.id, connectionId: frame.connectionId, deviceId: frame.deviceId, at: frame.t||frame.at, version: pack.configVersion||1 }] }).catch(()=>{}) } catch {}
-    }
+
+    const newRowsHint = isAtBottomRef.current
+      ? ''
+      : (paused ? '已暂停' : (filtered.length ? '有 ' + filtered.length + ' 条报文' : ''))
 
     return el('div', { className: 'dvb-live dvb-frames-page', 'data-mode': mode },
       el('div', { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('framesTab') || '串口报文'),
-        el('span', { className: 'dvb-chip', 'data-kind': mode==='proto'?'ready':'warn' }, mode==='proto'? t('framesProto') : t('framesRaw')),
-        el('button', { type:'button', className:'dvb-btn'+(mode==='proto'?' is-on':''), onClick(){ setMode('proto') } }, t('framesProto')||'协议报文'),
-        el('button', { type:'button', className:'dvb-btn'+(mode==='raw'?' is-on':''), onClick(){ setMode('raw') } }, t('framesRaw')||'原始数据')),
-        el('button', { type:'button', className:'dvb-btn', onClick(){ setPaused((v)=>!v) } }, paused? t('serialResume') : t('serialPause')),
-        el('button', { type:'button', className:'dvb-btn', onClick: copyFrames }, copied==='copy'? t('serialCopied') : t('framesCopyHex')),
-        el('button', { type:'button', className:'dvb-btn', onClick: exportFrames }, t('framesExport')||'导出范围'),
-        mode==='raw' ? el('button', { type:'button', className:'dvb-btn', disabled: !portFilter || portFilter==='all', onClick(){
-          if (!realCwd || !portFilter || portFilter==='all') return
-          // 仅原始数据模式可选打开 COM，占用时由 host 返回 PORT_IN_USE
-          post('/dsh-vision-bench/serial/open', { cwd: realCwd, port: portFilter, baudrate: 115200 }, 15000).then((data)=>{
-            if (data && data.ok===false && /PORT_IN_USE|占用/.test(data.error||'')) { setSerial((p)=>({...p, error: data.error})) }
-            else setSerial((p)=>({...p, open:true, port:portFilter, error:''}))
-          }).catch((e)=> setSerial((p)=>({...p, error: String(e&&e.message||'fail')})))
-        } }, t('serialOpen')||'打开串口') : null,
-        mode==='raw' && serial.open ? el('button', { type:'button', className:'dvb-btn', onClick(){
-          post('/dsh-vision-bench/serial/close', { cwd: realCwd }).catch(()=>{})
-          setSerial((p)=>({...p, open:false}))
-        } }, t('serialClose')) : null,
-        mode==='proto' ? el('button', { type:'button', className:'dvb-btn', onClick(){ clearFramesLog(realCwd, portFilter); } }, t('framesClear')) : null
+        el('span', { className: 'dvb-chip', 'data-kind': mode === 'proto' ? 'ready' : 'warn' }, mode === 'proto' ? t('framesProto') : t('framesRaw')),
+        el('button', { type: 'button', className: 'dvb-btn' + (mode === 'proto' ? ' is-on' : ''), onClick() { setMode('proto'); setSerial((p) => ({ ...p, error: '' })) } }, t('framesProto') || '协议报文'),
+        el('button', { type: 'button', className: 'dvb-btn' + (mode === 'raw' ? ' is-on' : ''), onClick() { setMode('raw'); setSerial((p) => ({ ...p, error: '' })) } }, t('framesRaw') || '原始数据'),
+        el('button', { type: 'button', className: 'dvb-btn', onClick: togglePause }, paused ? (t('serialResume') || '恢复') : (t('serialPause') || '暂停')),
+        el('button', { type: 'button', className: 'dvb-btn', disabled: !filtered.length, onClick: copyFrames }, copied === 'copy' ? (t('serialCopied') || '已复制') : (t('framesCopyHex') || '复制')),
+        el('button', { type: 'button', className: 'dvb-btn', disabled: !filtered.length, onClick: exportFrames }, t('framesExport') || '导出'),
+        mode === 'raw' ? el('button', { type: 'button', className: 'dvb-btn', disabled: !sel || sel.kind === 'all', onClick() {
+          const p = sel && sel.kind === 'raw' ? sel.port : (sel && sel.kind === 'conn' ? '' : '')
+          if (!realCwd || !p) return
+          post('/dsh-vision-bench/serial/open', { cwd: realCwd, port: p, baudrate: 115200 }, 15000).then((data) => {
+            if (data && data.ok === false && /PORT_IN_USE|占用/.test(data.error || '')) setSerial((pp) => ({ ...pp, error: data.error }))
+            else setSerial((pp) => ({ ...pp, open: true, port: p, error: '' }))
+          }).catch((e) => setSerial((pp) => ({ ...pp, error: String(e && e.message || 'fail') })))
+        } }, t('serialOpen') || '打开串口') : null,
+        mode === 'raw' && serial.open ? el('button', { type: 'button', className: 'dvb-btn', onClick() {
+          post('/dsh-vision-bench/serial/close', { cwd: realCwd }).catch(() => {})
+          setSerial((pp) => ({ ...pp, open: false, lines: [] }))
+        } }, t('serialClose') || '关闭') : null,
+        mode === 'proto' ? el('button', { type: 'button', className: 'dvb-btn', onClick: clearView }, t('framesClear') || '清空') : null
       ),
       el('div', { className: 'dvb-toolbar' },
-        el('select', { className:'dvb-input', value: portFilter, onChange(e){ setPortFilter(e.target.value) } },
-          portOptions.map((o)=> el('option', { key:o.value, value:o.value }, o.label))
+        el('select', { className: 'dvb-input', value: selection, onChange: (e) => { setSelection(e.target.value); isAtBottomRef.current = true } },
+          portOptions.map((o) => el('option', { key: o.value, value: o.value }, o.label))
         ),
-        el('select', { className:'dvb-input', value: filters.connectionId, onChange(e){ setFilters((p)=>({...p, connectionId:e.target.value})) } },
-          el('option', { value:'' }, '全部连接'), connections.map((c)=> el('option', { key:c.id, value:c.id }, c.name))
+        el('select', { className: 'dvb-input', value: filters.connectionId, onChange: (e) => setFilters((p) => ({ ...p, connectionId: e.target.value })) },
+          el('option', { value: '' }, '全部连接'), connections.map((c) => el('option', { key: c.id, value: c.id }, c.name))
         ),
-        el('select', { className:'dvb-input', value: filters.deviceId, onChange(e){ setFilters((p)=>({...p, deviceId:e.target.value})) } },
-          el('option', { value:'' }, '全部设备'), devices.map((d)=> el('option', { key:d.id, value:d.id }, d.name+' · Unit '+d.unitId))
+        el('select', { className: 'dvb-input', value: filters.deviceId, onChange: (e) => setFilters((p) => ({ ...p, deviceId: e.target.value })) },
+          el('option', { value: '' }, '全部设备'), devices.map((d) => el('option', { key: d.id, value: d.id }, d.name + ' · Unit ' + d.unitId))
         ),
-        el('select', { className:'dvb-input', value: filters.direction, onChange(e){ setFilters((p)=>({...p, direction:e.target.value})) } },
-          el('option', { value:'' }, '全部方向'), el('option', { value:'tx' }, 'TX'), el('option', { value:'rx' }, 'RX')
+        el('select', { className: 'dvb-input', value: filters.direction, onChange: (e) => setFilters((p) => ({ ...p, direction: e.target.value })) },
+          el('option', { value: '' }, '全部方向'), el('option', { value: 'tx' }, 'TX'), el('option', { value: 'rx' }, 'RX')
         ),
-        el('select', { className:'dvb-input', value: filters.functionCode, onChange(e){ setFilters((p)=>({...p, functionCode:e.target.value})) } },
-          el('option', { value:'' }, '全部功能码'), [1,2,3,4,5,6,15,16].map((fc)=> el('option', { key:String(fc), value:String(fc) }, 'FC'+fc))
+        el('select', { className: 'dvb-input', value: filters.functionCode, onChange: (e) => setFilters((p) => ({ ...p, functionCode: e.target.value })) },
+          el('option', { value: '' }, '全部功能码'), [1, 2, 3, 4, 5, 6, 15, 16].map((fc) => el('option', { key: String(fc), value: String(fc) }, 'FC' + fc))
         ),
-        el('select', { className:'dvb-input', value: filters.status, onChange(e){ setFilters((p)=>({...p, status:e.target.value})) } },
-          el('option', { value:'' }, '全部状态'), el('option', { value:'ok' }, '成功'), el('option', { value:'err' }, '失败'), el('option', { value:'timeout' }, '超时')
+        el('select', { className: 'dvb-input', value: filters.status, onChange: (e) => setFilters((p) => ({ ...p, status: e.target.value })) },
+          el('option', { value: '' }, '全部状态'), el('option', { value: 'ok' }, '成功'), el('option', { value: 'err' }, '失败'), el('option', { value: 'timeout' }, '超时')
         )
       ),
-      el('div', { className:'dvb-live-search' },
-        el('input', { className:'dvb-input', value: search, placeholder: t('serialFilter')||'过滤关键字', onChange(e){ setSearch(e.target.value) } })
+      el('div', { className: 'dvb-live-search' },
+        el('input', { className: 'dvb-input', value: search, placeholder: t('serialFilter') || '过滤关键字', onChange: (e) => setSearch(e.target.value) })
       ),
-      serial.error ? el('div', { className:'dvb-msg', 'data-kind':'err' }, serial.error) : null,
-      copied ? el('div', { className:'dvb-hint' }, '已复制 '+copied) : null,
-      !filtered.length ? el('div', { className:'dvb-hint' }, t('framesEmpty')||'暂无报文') : null,
-      el('div', { className:'dvb-live-list dvb-frames-virtual', style:{ height: viewportHeight+'px', overflowY:'auto', position:'relative' }, ref: listRef, onScroll: handleScroll },
-        el('div', { style:{ height: totalHeight+'px', position:'relative' } },
-          virtualItems.map((f, idx) => {
-            const fid = f.frameId || f.id || String(f.t||f.at)+':'+idx
-            return el('div', { key: fid, className:'dvb-live-row', style:{ position:'absolute', top: (startIndex+idx)*estimateSize+'px', height: estimateSize+'px', left:0, right:0, display:'flex', gap:'6px', alignItems:'center' } },
-              el('span', { className:'dvb-map-meta' }, new Date(f.t||f.at||Date.now()).toLocaleTimeString()),
-              el('span', { className:'dvb-badge' }, f.direction||'tx'),
-              el('span', { className:'dvb-hint', title: f.connectionId||'' }, f.connectionId||''),
-              el('span', { className:'dvb-hint' }, f.label||f.request||''),
-              el('span', { className:'dvb-badge', 'data-kind': f.status==='ok'?'ready':'err' }, f.status||'ok'),
-              el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ if(typeof openHmi==='function') try{ openHmi({ connectionId:f.connectionId, deviceId:f.deviceId, frameId:fid }) }catch{} } }, t('openInHmi')||'在上位机打开'),
-              el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ sendToAgent(f) } }, copied===fid?'已复制':'让 Agent 分析')
+      serial.error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, serial.error) : null,
+      copied ? el('div', { className: 'dvb-hint' }, copied) : null,
+      !filtered.length ? el('div', { className: 'dvb-hint' }, t('framesEmpty') || '暂无报文') : null,
+      newRowsHint && !paused ? el('div', { className: 'dvb-hint', onClick: scrollToLatest, role: 'button' }, newRowsHint + ' · 点击回到底部') : null,
+      el('div', { className: 'dvb-live-list dvb-frames-virtual', style: { height: '320px', overflowY: 'auto', position: 'relative' }, ref: listRef, onScroll: () => countScroll() },
+        el('div', { style: { height: totalHeight + 'px', position: 'relative', width: '100%' } },
+          (virtualRows || []).map((item) => {
+            const f = filtered[item.index]
+            if (!f) return null
+            const fid = f.frameId || f.id
+            return el('div', {
+              key: fid !== undefined ? String(fid) : String(item.index),
+              className: 'dvb-live-row',
+              ref: vendorVirtualizer && vizerRef.current ? vizerRef.current.measureElement : undefined,
+              'data-index': item.index,
+              'data-frameid': fid !== undefined ? String(fid) : '',
+              style: { position: 'absolute', top: 0, left: 0, width: '100%', transform: 'translateY(' + item.start + 'px)' },
+            },
+              el('span', { className: 'dvb-map-meta' }, new Date(f.t || f.at || Date.now()).toLocaleTimeString()),
+              el('span', { className: 'dvb-badge' }, f.direction || 'tx'),
+              el('span', { className: 'dvb-hint', title: f.connectionId || '' }, f.connectionId || ''),
+              el('span', { className: 'dvb-hint' }, f.label || f.request || ''),
+              el('span', { className: 'dvb-badge', 'data-kind': f.status === 'ok' ? 'ready' : 'err' }, f.status || 'ok'),
+              el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { if (typeof openHmi === 'function') try { openHmi({ connectionId: f.connectionId, deviceId: f.deviceId, frameId: fid }) } catch {} } }, t('openInHmi') || '在上位机打开'),
+              el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { sendToAgent(f) } }, copied === '已加入输入框' ? '已加入' : (copied === '已发送' ? '已发送' : (hasHarnessInput(props) ? '让 Agent 分析' : '复制给 Agent')))
             )
           })
         )
-      )
+      ),
+      el('div', { className: 'dvb-hint' }, '本插件 TX/RX · 协议报文来自内部缓存，非总线嗅探')
+    )
   }
 }

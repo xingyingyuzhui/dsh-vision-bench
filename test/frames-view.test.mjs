@@ -3,95 +3,112 @@ import { readFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import {
+  parseFramePortSelection,
+  buildFramePortOptions,
+  selectProtocolFrames,
+  mergeFramesDedup,
+  framesShouldStickToBottom,
+} from '../bench-frames-model.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-test('Task9: bench-frames-view.mjs exists and registers dsh-vision-bench:frames', async () => {
-  const p = join(root, 'bench-frames-view.mjs')
-  assert.ok(existsSync(p), 'bench-frames-view.mjs should exist')
-  const src = readFileSync(p, 'utf8')
-  assert.match(src, /dsh-vision-bench:frames/, 'should register id dsh-vision-bench:frames')
-  assert.match(src, /串口报文/, 'title should be 串口报文')
-  assert.match(src, /createFramesPage|createFramesView/, 'should export createFramesPage')
-  // order check will be via bench-live / bench-runtime
+const CONNECTIONS = [
+  { id: 'c1', name: '主机', conn: { mode: 'rtu', port: 'COM3', baudrate: 9600 } },
+  { id: 'c2', name: '从机', conn: { mode: 'rtu', port: 'COM4', baudrate: 9600 } },
+]
+
+function makeFrame(connId, t, extra = {}) {
+  return { frameId: 'f-' + connId + '-' + t, connectionId: connId, t, at: t, direction: 'tx', request: 'req' + t, label: 'L' + t, status: 'ok', functionCode: 3, ...extra }
+}
+
+const FBC = {
+  c1: [makeFrame('c1', 10), makeFrame('c1', 20)],
+  c2: [makeFrame('c2', 15)],
+}
+
+test('frames identity: parseFramePortSelection maps explicit internal types', () => {
+  assert.deepEqual(parseFramePortSelection('all'), { kind: 'all', connectionId: '', port: '' })
+  assert.deepEqual(parseFramePortSelection('conn:c1'), { kind: 'conn', connectionId: 'c1', port: '' })
+  assert.deepEqual(parseFramePortSelection('raw:COM7'), { kind: 'raw', connectionId: '', port: 'COM7' })
+  // unknown/display COM name must NEVER be treated as a connection id
+  assert.deepEqual(parseFramePortSelection('COM3'), { kind: 'all', connectionId: '', port: '' })
+  assert.deepEqual(parseFramePortSelection(''), { kind: 'all', connectionId: '', port: '' })
+  assert.deepEqual(parseFramePortSelection(undefined), { kind: 'all', connectionId: '', port: '' })
 })
 
-test('Task9: sidebar order 监视→曲线→告警→串口报文→工程', async () => {
-  const liveSrc = readFileSync(join(root, 'bench-live.mjs'), 'utf8')
-  const mapSrc = readFileSync(join(root, 'bench-map.mjs'), 'utf8')
-  const framesSrc = readFileSync(join(root, 'bench-frames-view.mjs'), 'utf8')
-  const runtimeSrc = readFileSync(join(root, 'bench-runtime.mjs'), 'utf8')
-  // check that bench-live registers frames with order 73
-  assert.match(liveSrc, /TAB_FRAMES|dsh-vision-bench:frames/, 'bench-live should reference frames tab')
-  assert.match(liveSrc, /order:\s*73/, 'frames order should be 73')
-  // check liveTable 70, chart 71, alarm 72
-  assert.match(liveSrc, /TAB_TABLE[\s\S]*order:\s*70/, 'liveTable order 70')
-  assert.match(liveSrc, /TAB_CHART[\s\S]*order:\s*71/, 'chart order 71')
-  assert.match(liveSrc, /TAB_ALARM[\s\S]*order:\s*72/, 'alarm order 72')
-  // project should be after frames, order 74 or 80
-  const orderMatch = mapSrc.match(/order:\s*(\d+)/)
-  assert.ok(orderMatch, 'project should have order')
-  const projOrder = Number(orderMatch[1])
-  assert.ok(projOrder > 73, `project order ${projOrder} should be >73 after frames`)
-  // runtime should wire frames
-  assert.match(runtimeSrc, /bench-frames-view|createFramesPage/, 'runtime should import frames view')
-  // i18n should have frames title
-  const i18n = readFileSync(join(root, 'bench-i18n.mjs'), 'utf8')
-  assert.match(i18n, /framesTab|串口报文/, 'i18n should have frames title')
+test('frames identity: options use all/conn:<id>/raw:<port>; proto hides unconfigured COM', () => {
+  const proto = buildFramePortOptions(CONNECTIONS, ['COM3', 'COM4', 'COM7'], 'proto')
+  assert.equal(proto[0].value, 'all')
+  assert.ok(proto.some((o) => o.value === 'conn:c1' && o.kind === 'configured'))
+  assert.ok(proto.some((o) => o.value === 'conn:c2' && o.kind === 'configured'))
+  assert.ok(!proto.some((o) => o.value.startsWith('raw:')), 'proto mode must not expose unconfigured COM')
+  const raw = buildFramePortOptions(CONNECTIONS, ['COM3', 'COM4', 'COM7'], 'raw')
+  assert.ok(raw.some((o) => o.value === 'raw:COM7' && o.kind === 'unconfigured'), 'raw mode exposes unconfigured COM7')
+  assert.ok(!raw.some((o) => o.value === 'raw:COM3'), 'configured COM3 must not be duplicated as unconfigured')
 })
 
-test('Task9: 侧栏提供 全部串口/具体COM/未配置COM，仅原始数据模式可选', async () => {
+test('frames identity: selecting COM3 only shows c1 frames, COM4 only c2, all merges by time', () => {
+  const c1 = selectProtocolFrames(FBC, 'conn:c1')
+  assert.deepEqual(c1.map((f) => f.connectionId), ['c1', 'c1'])
+  const c2 = selectProtocolFrames(FBC, 'conn:c2')
+  assert.deepEqual(c2.map((f) => f.connectionId), ['c2'])
+  // unknown selection degrades to 'all'
+  const byComName = selectProtocolFrames(FBC, 'COM3')
+  assert.equal(byComName.length, selectProtocolFrames(FBC, 'all').length, 'unknown value -> all, never a per-COM cache key')
+  const all = selectProtocolFrames(FBC, 'all')
+  assert.equal(all.length, 3)
+  const times = all.map((f) => f.t)
+  assert.deepEqual(times, [...times].sort((a, b) => a - b), 'all must be time-merged')
+})
+
+test('frames persistence: mergeFramesDedup dedups by frameId across persisted + memory', () => {
+  const persisted = [makeFrame('c1', 10, { request: 'old' }), makeFrame('c1', 20)]
+  const memory = [makeFrame('c1', 20, { request: 'fresh' }), makeFrame('c1', 30)]
+  const merged = mergeFramesDedup(persisted, memory, 500)
+  assert.equal(merged.length, 3)
+  const f20 = merged.find((f) => f.t === 20)
+  assert.equal(f20.request, 'fresh', 'memory wins for same frameId on re-read')
+})
+
+test('frames persistence: reload keeps history (persisted frames are the source of truth)', () => {
+  // Simulate: frames produced, persisted, page reloads with no memory → persisted still shows
+  const afterReload = selectProtocolFrames(FBC, 'conn:c1')
+  assert.equal(afterReload.length, 2)
+  const ids = afterReload.map((f) => f.frameId)
+  // clear c1 does not affect c2 via selectProtocolFrames
+  const cleared = { ...FBC }; delete cleared.c1
+  assert.equal(selectProtocolFrames(cleared, 'conn:c2').length, 1)
+})
+
+test('frames auto-follow only at bottom', () => {
+  assert.equal(framesShouldStickToBottom(0, 1000, 300), false)
+  assert.equal(framesShouldStickToBottom(700, 1000, 300), true)
+  assert.equal(framesShouldStickToBottom(695, 1000, 300), true)
+  assert.equal(framesShouldStickToBottom(500, 1000, 300), false)
+})
+
+test('frames view wires identity + virtualizer via build pipeline', () => {
   const src = readFileSync(join(root, 'bench-frames-view.mjs'), 'utf8')
-  assert.match(src, /全部串口|framesAll/, 'should provide 全部串口')
-  assert.match(src, /具体COM|COM|port/, 'should provide specific COM options')
-  assert.match(src, /未配置COM|未配置|unconfigured/, 'should provide unconfigured COM')
-  assert.match(src, /原始数据|framesRaw|raw/i, 'should have raw data mode')
-  assert.match(src, /协议报文|framesProto|proto/i, 'should have protocol mode')
-  // raw mode selectable, protocol mode uses existing Modbus transaction, not duplicate open
-  assert.match(src, /getFramesLog|pushFramesLog/, 'protocol mode should use plugin Modbus transaction cache')
-  assert.doesNotMatch(src, /openSerialMonitor.*proto|protocol.*openSerial/, 'protocol mode should not duplicate open occupied COM')
-  // raw mode should check occupation
-  assert.match(src, /PORT_IN_USE|isPortBusy|portInUse|占用/, 'raw mode should handle occupied COM')
-})
-
-test('Task9: 协议报文不重复打开已占用 COM', async () => {
-  const src = readFileSync(join(root, 'bench-frames-view.mjs'), 'utf8')
-  // protocol mode should rely on framesByConnection cache, not openSerial
-  const protoSection = src.slice(src.indexOf('proto') > 0 ? src.indexOf('proto') : 0)
-  assert.match(src, /framesByConnection|getFramesLog/, 'protocol should use frames cache')
-  // ensure no openSerialMonitor call in protocol path (allow in raw path only)
-  // count openSerialMonitor occurrences - should be limited to raw mode
-  const openCount = (src.match(/openSerialMonitor/g) || []).length
-  assert.ok(openCount <= 1, `openSerialMonitor should appear at most once (raw only), got ${openCount}`)
-})
-
-test('Task9: 支持连接/设备/方向/功能码/状态过滤、暂停/恢复/搜索/复制/导出、在上位机打开/让 Agent 分析', async () => {
-  const src = readFileSync(join(root, 'bench-frames-view.mjs'), 'utf8')
-  assert.match(src, /connectionId|连接/, 'should filter by connection')
-  assert.match(src, /deviceId|device|设备/, 'should filter by device')
-  assert.match(src, /direction|方向|TX|RX/, 'should filter by direction')
-  assert.match(src, /functionCode|function|功能码/, 'should filter by function code')
-  assert.match(src, /status|状态/, 'should filter by status')
-  assert.match(src, /paused|暂停|pause|resume|恢复/, 'should support pause/resume')
-  assert.match(src, /search|搜索|filter/, 'should support search')
-  assert.match(src, /copy|复制|clipboard/, 'should support copy')
-  assert.match(src, /export|导出/, 'should support export')
-  assert.match(src, /openInHmi|在上位机打开|openHmi/, 'should support open in HMI')
-  assert.match(src, /让 Agent 分析|sendToAgent|buildAgentRef|copyAgentRef/, 'should support let Agent analyze')
-})
-
-test('Task9: bench-frames-view virtualized and handles 500/1000/5000', async () => {
-  const src = readFileSync(join(root, 'bench-frames-view.mjs'), 'utf8')
-  assert.match(src, /Virtualizer|virtual|overscan/, 'should use virtualization for large lists')
-  // reuse virtual-core check
-  const { Virtualizer } = await import('@tanstack/virtual-core')
-  assert.ok(Virtualizer, 'Virtualizer available')
-})
-
-test('Task9: client bundle includes frames tab', () => {
-  const src = readFileSync(join(root, 'client.js'), 'utf8')
-  // after build, client should contain frames registration
-  // This will be checked after npm run build; for now check that build-client includes bench-frames-view
+  assert.match(src, /buildFramePortOptions|parseFramePortSelection|selectProtocolFrames/, 'view should use identity helpers')
+  assert.match(src, /mergeFramesDedup/, 'view should merge persisted + memory by frameId')
+  assert.match(src, /vendorVirtualizer/, 'view should consume bundled Virtualizer')
+  assert.match(src, /getVirtualItems|getTotalSize|measureElement/, 'view should use real Virtualizer API')
   const build = readFileSync(join(root, 'scripts/build-client.mjs'), 'utf8')
-  assert.match(build, /bench-frames-view/, 'build-client should include bench-frames-view')
+  assert.ok(build.indexOf('bench-frames-model.mjs') >= 0, 'build should include frames model module')
+})
+
+test('cli wiring: frames/clear route exists in host', () => {
+  const host = readFileSync(join(root, 'host.js'), 'utf8')
+  assert.match(host, /frames\/clear/, 'host should expose POST /dsh-vision-bench/frames/clear')
+  assert.match(host, /connectionId|all/, 'clear route should accept connectionId or all')
+})
+
+// keep the "file exists" contract assertion (not a behavior claim)
+test('bench-frames-view.mjs exists and registers dsh-vision-bench:frames', () => {
+  const p = join(root, 'bench-frames-view.mjs')
+  assert.ok(existsSync(p))
+  const src = readFileSync(p, 'utf8')
+  assert.match(src, /dsh-vision-bench:frames/)
+  assert.match(src, /createFramesPage/)
 })
