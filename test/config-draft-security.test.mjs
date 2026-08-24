@@ -5,23 +5,34 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { mkdir } from 'node:fs/promises'
 
-test('Agent draftApply must be rejected via tool', async () => {
+test('Agent draftApply must be rejected via tool, config unchanged', async () => {
   const home = await mkdtemp(join(tmpdir(), 'sec-draft-apply-'))
   const cwd = join(home, 'board')
   await mkdir(cwd)
   try {
     const { runVisionBench } = await import('../bench-tool.mjs')
-    // create a draft as agent
-    const created = await runVisionBench(home, { action: 'draft', op: 'create', patch: [{ op: 'add', path: '/connections/0/name', value: 'hacked' }] }, cwd, { source: 'agent', sessionId: 's1' })
-    // Current baseline may not have draft action yet; if it does, ensure Agent cannot apply
-    if (created && created.draftId) {
-      const applied = await runVisionBench(home, { action: 'draftApply', draftId: created.draftId }, cwd, { source: 'agent', sessionId: 's1' })
-      assert.equal(applied.ok, false)
-      assert.match(String(applied.error || ''), /不支持|not supported|draftApply/i)
-    } else {
-      // If draft action not yet implemented, this test will be updated after Task 3
-      assert.ok(true)
-    }
+    const { loadWorkspace, saveWorkspace } = await import('../bench-store.mjs')
+    // seed a baseline config with a connection so a valid draft can target it
+    const c1 = { id: 'c1', name: 'C1', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM3', baudrate: 9600, sim: true } }
+    saveWorkspace(home, cwd, { modbus: { version: 3, connections: [c1], devices: [], points: [] } })
+    const baseVer = loadWorkspace(home, cwd).modbus.configVersion
+    // strict: create a valid draft as agent
+    const created = await runVisionBench(
+      home,
+      { action: 'draft', op: 'create', baseConfigVersion: baseVer, patch: [{ op: 'replace', path: '/connections/0/name', value: 'hacked' }] },
+      cwd, { source: 'agent', sessionId: 's1' })
+    assert.equal(created.ok, true, 'valid draft creation should succeed')
+    assert.ok(created.draft && created.draft.id, 'draft.id must exist')
+    // agent direct apply must fail and leave workspace untouched
+    const before = loadWorkspace(home, cwd)
+    const beforeSlice = JSON.stringify({ v: before.modbus && before.modbus.configVersion, connections: before.modbus && before.modbus.connections, points: before.modbus && before.modbus.points })
+    const applied = await runVisionBench(home, { action: 'draftApply', draftId: created.draft.id }, cwd, { source: 'agent', sessionId: 's1' })
+    assert.equal(applied.ok, false, 'Agent must not apply a config draft')
+    assert.match(String(applied.error || ''), /action 必须是|draftApply|不支持/i)
+    const after = loadWorkspace(home, cwd)
+    const afterSlice = JSON.stringify({ v: after.modbus && after.modbus.configVersion, connections: after.modbus && after.modbus.connections, points: after.modbus && after.modbus.points })
+    assert.equal(afterSlice, beforeSlice, 'config version and contents must be unchanged after rejected Agent apply')
+    assert.equal(after.modbus.connections[0].name, 'C1', 'draft was NOT applied')
   } finally { await rm(home, { recursive: true, force: true }) }
 })
 
