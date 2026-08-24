@@ -2,9 +2,9 @@ import { buildEvidenceRefs, connectOp, keilBuild, keilMap, listDir, listFrames, 
 import { requireKeilProject, requireWorkspaceCwd } from './bench-paths.mjs'
 import { decodeValue } from './bench-points.mjs'
 import { connLabel, normalizeModbus } from './bench-devices.mjs'
-import { createManualRequest, journalView, loadWorkspace, saveWorkspace } from './bench-store.mjs'
+import { applyConfigDraft, createConfigDraft, createManualRequest, discardConfigDraft, getConfigDraft, journalView, listConfigDrafts, loadWorkspace, saveWorkspace } from './bench-store.mjs'
 
-const ACTIONS = new Set(['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual', 'connect', 'points', 'frames', 'focus', 'trend', 'alarm', 'evidence'])
+const ACTIONS = new Set(['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual', 'connect', 'points', 'frames', 'focus', 'trend', 'alarm', 'evidence', 'draft', 'draftApply'])
 
 export const cwdOf = (agent) => {
   const session = agent && agent.session
@@ -77,7 +77,7 @@ const compactLog = (log) => {
 export async function runVisionBench(home, args, cwd, originInput, opts) {
   const action = args && args.action
   if (!ACTIONS.has(action)) {
-    return { ok: false, error: 'action 必须是 status | ls | select | build | read | write | map | manual | connect | points | frames | focus | trend | alarm | evidence' }
+    return { ok: false, error: 'action 必须是 status | ls | select | build | read | write | map | manual | connect | points | frames | focus | trend | alarm | evidence | draft | draftApply' }
   }
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, action, error: room.error }
@@ -101,6 +101,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
       keil: workspace.keil,
       modbus: {
         version: pack.version,
+        configVersion: pack.configVersion || 1,
         connections: pack.connections,
         devices: pack.devices,
         points: (pack.points || []).map((p) => {
@@ -147,7 +148,8 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
           sim: pack.conn.sim,
           label: connLabel(pack.conn),
         },
-        configVersion: pack.version || 3,
+        configVersion: pack.configVersion || 1,
+        drafts: (workspace.configDrafts || []).slice(0, 20),
       },
       focus: workspace.focus || { request: null, prev: null, tempWatchIds: [], badgeOnly: false, evidence: [] },
       evidence: buildEvidenceRefs(home, room.cwd),
@@ -340,6 +342,37 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
     return { ok: true, action, evidence, configVersion: pack.version || 3 }
   }
 
+  if (action === 'draft') {
+    const op = typeof args.op === 'string' ? args.op.trim() : ''
+    if (!op || op === 'list') {
+      const ran = listConfigDrafts(home, room.cwd)
+      return { action, ...ran }
+    }
+    if (op === 'get') {
+      const ran = getConfigDraft(home, room.cwd, args.draftId || args.id)
+      return { action, ...ran }
+    }
+    if (op === 'discard') {
+      const ran = discardConfigDraft(home, room.cwd, args.draftId || args.id)
+      return { action, ...ran }
+    }
+    // create: requires baseConfigVersion + patch (or target)
+    const ran = createConfigDraft(home, room.cwd, {
+      baseConfigVersion: args.baseConfigVersion ?? args.configVersion ?? args.version,
+      patch: args.patch || args.operations || args.ops,
+      target: args.target,
+      source: origin.source,
+      sessionId: origin.sessionId,
+    })
+    return { action, ...ran }
+  }
+
+  if (action === 'draftApply') {
+    const draftId = typeof args.draftId === 'string' ? args.draftId : (typeof args.id === 'string' ? args.id : '')
+    const ran = applyConfigDraft(home, room.cwd, draftId, { source: origin.source, sessionId: origin.sessionId })
+    return { action, ...ran }
+  }
+
   if (action === 'map') {
     const ran = await keilMap(home, room.cwd, args.path, args.target, { signal })
     if (!ran.ok) return { action, ...ran }
@@ -393,6 +426,8 @@ export function visionBenchTool(home) {
       + 'frames：查询某连接的报文流，必须携带 connectionId，可选 frameId/deviceId/limit/offset，错误码 TARGET_REQUIRED/CONNECTION_NOT_FOUND/DEVICE_DISABLED/STALE_VALUE；'
       + 'focus：Agent 请求 UI 聚焦到指定连接/设备/点位/报文/曲线区间/告警，必须携带显式 ID（connectionId/deviceId/pointId/frameId/trendKey/alarmId），支持临时监视组 tempWatchIds 与证据回挂 evidence（后台任务 badgeOnly 不抢焦点，并提供 prev 回退）；'
       + 'trend/alarm/evidence：分别返回趋势区间、告警状态与结论证据（关联编译/日志/点值/报文/趋势）；均要求显式 ID 与配置版本；'
+      + 'draft：配置草稿以 RFC6902 patch 表示，基于明确 baseConfigVersion，用户批准前不写入共享配置；op=list 查询、op=create 创建（patch 必填、基于 baseConfigVersion）、op=discard/get 丢弃或查询；返回新增/删除/修改、COM 冲突、Unit ID 冲突和影响点位数；'
+      + 'draftApply：批准草稿，需传入 draftId；批准时重新校验基线版本、端点指纹和对象存在性，漂移后返回 CONFIG_DRIFT 要求重新生成；'
       + '配置工作流：先 status 看现状 → connect 设连接 → points 建点位表 → read 验证。支持多连接，connectionId 与 connId 为别名。'
       + 'manual：请求用户完成现场人工操作（上电、接线、按复位等），text 必填，完成后会以通知回到本会话。'
       + '不要猜测工程路径或点表，一切以工具返回为准。错误码全量：PORT_IN_USE/TARGET_REQUIRED/DEVICE_DISABLED/ENDPOINT_DRIFT/STALE_VALUE/WRITE_READBACK_MISMATCH/CONNECTION_NOT_FOUND/POINT_NOT_FOUND。',
@@ -403,8 +438,8 @@ export function visionBenchTool(home) {
       properties: {
         action: {
           type: 'string',
-          enum: ['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual', 'connect', 'points', 'frames', 'focus', 'trend', 'alarm', 'evidence'],
-          description: 'status | ls | select | build | read | write | map | manual | connect | points | frames | focus | trend | alarm | evidence',
+          enum: ['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual', 'connect', 'points', 'frames', 'focus', 'trend', 'alarm', 'evidence', 'draft', 'draftApply'],
+          description: 'status | ls | select | build | read | write | map | manual | connect | points | frames | focus | trend | alarm | evidence | draft | draftApply',
         },
         path: { type: 'string', description: 'ls 的目录或 select/build/map 的工程绝对路径' },
         target: { type: 'string', description: 'Keil Target' },
@@ -534,6 +569,16 @@ export function visionBenchTool(home) {
         },
         badgeOnly: { type: 'boolean', description: 'focus 是否仅角标不抢焦点（后台任务）' },
         foreground: { type: 'boolean', description: 'focus 前台抢焦点（与 badgeOnly 相反）' },
+        baseConfigVersion: { type: 'number', description: 'draft 创建时的基线版本（RFC6902 要求明确）' },
+        configVersion: { type: 'number', description: 'draft 基线版本的别名' },
+        patch: {
+          type: 'array',
+          description: 'RFC6902 patch 数组（基于 baseConfigVersion 的差异）',
+          items: { type: 'object', properties: { op: { type: 'string', enum: ['add', 'remove', 'replace'] }, path: { type: 'string' } } },
+        },
+        operations: { type: 'array', description: 'patch 别名' },
+        ops: { type: 'array', description: 'patch 别名' },
+        draftId: { type: 'string', description: 'draft 的稳定 id（draft/apply 用）' },
       },
     },
     output: {

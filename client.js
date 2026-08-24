@@ -260,6 +260,27 @@ const COPY = {
     needOpenocd: '请先在设置 → 台架 绑定 OpenOCD',
     flashDone: '烧录完成',
     flashFail: '烧录失败',
+    draftTitle: '配置草稿（RFC 6902）',
+    draftSubtitle: 'Agent 建议的配置差异，需用户批准后写入',
+    draftEmpty: '暂无草稿',
+    draftBaseVersion: '基线版本',
+    draftCurrentVersion: '当前版本',
+    draftPatchCount: '补丁数',
+    draftAffectedPoints: '影响点位',
+    draftAdded: '新增',
+    draftRemoved: '删除',
+    draftModified: '修改',
+    draftComConflict: 'COM 冲突',
+    draftUnitConflict: 'Unit ID 冲突',
+    draftDetails: '差异详情',
+    draftApprove: '批准并应用',
+    draftDiscard: '丢弃',
+    draftApplying: '应用中…',
+    draftDrift: '基线漂移，需重新生成',
+    draftApplied: '已应用',
+    draftDiscarded: '已丢弃',
+    draftApproveHint: '批准时将校验基线版本、端点指纹和对象存在性',
+    configDrift: '配置已漂移（CONFIG_DRIFT）',
   },
   en: {
     nav: 'Bench',
@@ -509,6 +530,27 @@ const COPY = {
     needOpenocd: 'Bind OpenOCD in Settings → Bench first',
     flashDone: 'Flash done',
     flashFail: 'Flash failed',
+    draftTitle: 'Config draft (RFC 6902)',
+    draftSubtitle: 'Agent-proposed config diff, needs user approval',
+    draftEmpty: 'No drafts',
+    draftBaseVersion: 'Base version',
+    draftCurrentVersion: 'Current version',
+    draftPatchCount: 'Patches',
+    draftAffectedPoints: 'Affected points',
+    draftAdded: 'Added',
+    draftRemoved: 'Removed',
+    draftModified: 'Modified',
+    draftComConflict: 'COM conflict',
+    draftUnitConflict: 'Unit ID conflict',
+    draftDetails: 'Diff details',
+    draftApprove: 'Approve & Apply',
+    draftDiscard: 'Discard',
+    draftApplying: 'Applying…',
+    draftDrift: 'Base drifted — regenerate',
+    draftApplied: 'Applied',
+    draftDiscarded: 'Discarded',
+    draftApproveHint: 'Approval re-validates baseline, endpoint fingerprint and object existence',
+    configDrift: 'Config drift (CONFIG_DRIFT)',
   },
 }
 
@@ -2150,6 +2192,12 @@ function migrateV2ToV3(v2) {
   }
 }
 
+const normalizeConfigVersion = (input) => {
+  const n = Number(input)
+  if (!Number.isFinite(n) || n < 1) return 1
+  return Math.trunc(n)
+}
+
 function normalizeModbus(input) {
   const src = input && typeof input === 'object' ? input : {}
   // Detect v3
@@ -2200,9 +2248,11 @@ function normalizeModbus(input) {
       const devForConn = devices.find(d=>d.connectionId===activeConnectionId)
       activeDeviceId = devForConn ? devForConn.id : (devices[0]?.id || 'd1')
     }
+    const configVersion = normalizeConfigVersion(src.configVersion ?? src.rev ?? src.cfgVersion ?? 1)
     // also need to filter points/values that reference invalid connection/device? already fixed refs but keep check
     const ret = {
       version: 3,
+      configVersion,
       connections,
       devices,
       points,
@@ -2301,8 +2351,10 @@ function normalizeModbus(input) {
     }
   }
   const migrated = migrateV2ToV3(v2)
+  const configVersion = normalizeConfigVersion(src.configVersion ?? src.rev ?? 1)
   const ret = {
     version:3,
+    configVersion,
     connections: migrated.connections,
     devices: migrated.devices,
     points: migrated.points,
@@ -3605,6 +3657,8 @@ function createHmiView(React, t, post, openLive) {
     const [csvNote, setCsvNote] = React.useState('')
     const [logMode, setLogMode] = React.useState('serial')
     const [serial, setSerial] = React.useState({ open: false, port: '', baudrate: 115200, lines: [], filter: '', paused: false, error: '', lastId: 0 })
+    const [draftBusy, setDraftBusy] = React.useState('')
+    const [draftNote, setDraftNote] = React.useState('')
     const [copiedSerial, setCopiedSerial] = React.useState(false)
     const [connForm, setConnForm] = React.useState({ open: false, id: '', name: '', role: 'client', enabled: true, conn: { mode: 'rtu', port: '', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, host: '', tcpPort: 502, slave: 1, sim: false } })
     const [pendingDeleteId, setPendingDeleteId] = React.useState('')
@@ -3666,8 +3720,17 @@ function createHmiView(React, t, post, openLive) {
         try { setFocusState(cwd, data.workspace.focus) } catch {}
       }
       if (inflight.current > 0) return
-      if (data.workspace && data.workspace.modbus) {
-        setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus, focus: data.workspace.focus || prev.focus }))
+      if (data.workspace) {
+        setWorkspace((prev) => ({
+          ...prev,
+          modbus: data.workspace.modbus || prev.modbus,
+          focus: data.workspace.focus || prev.focus,
+          configDrafts: data.workspace.configDrafts || prev.configDrafts || [],
+        }))
+        if (data.workspace.configDrafts) {
+          // also keep workspaceRef in sync for cfgVersion
+          workspaceRef.current = { ...workspaceRef.current, configDrafts: data.workspace.configDrafts, modbus: data.workspace.modbus || workspaceRef.current.modbus }
+        }
       }
     }), [cwd])
 
@@ -4994,6 +5057,80 @@ function createHmiView(React, t, post, openLive) {
           }, t('rejectWrite')))))
       : null
 
+    // ── config drafts (RFC6902, N4.2) ──
+    function resolveDraft(id, action) {
+      if (!cwd) return
+      setDraftBusy(id + ':' + action)
+      setDraftNote('')
+      const url = action === 'apply' ? '/dsh-vision-bench/config/draft/apply' : '/dsh-vision-bench/config/draft'
+      const body = action === 'apply' ? { cwd, draftId: id } : { cwd, op: 'discard', draftId: id, id }
+      post(url, body, 20000).then((data) => {
+        if (data && data.ok === false) {
+          const code = data.errorCode || ''
+          setDraftNote((code === 'CONFIG_DRIFT' ? t('configDrift') + ': ' : '') + (data.error || t('fail')))
+          setError((code === 'CONFIG_DRIFT' ? t('configDrift') + ': ' : '') + (data.error || ''))
+        } else {
+          setDraftNote(action === 'apply' ? t('draftApplied') : t('draftDiscarded'))
+          setTimeout(() => setDraftNote(''), 1800)
+        }
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then((data) => {
+        if (!data) return
+        setJournal(pickJournal(data))
+        if (data.workspace) {
+          setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus, configDrafts: data.workspace.configDrafts || prev.configDrafts }))
+          workspaceRef.current = { ...workspaceRef.current, modbus: data.workspace.modbus || workspaceRef.current.modbus, configDrafts: data.workspace.configDrafts || workspaceRef.current.configDrafts }
+        }
+      }).catch((err) => {
+        setDraftNote(String(err && err.message || t('fail')))
+        setError(String(err && err.message || t('fail')))
+      }).finally(() => setDraftBusy(''))
+    }
+    const draftList = (workspace.configDrafts || []).filter((d) => d && d.id)
+    const pendingDrafts = draftList.filter((d) => d.status === 'pending')
+    const currentCfgVersion = normalizePack().configVersion || 1
+    const draftPanel = el('div', { className: 'dvb-panel' },
+      el('div', { className: 'dvb-panel-head' },
+        el('span', { className: 'dvb-panel-title' }, t('draftTitle')),
+        el('span', { className: 'dvb-tag' }, (pendingDrafts.length ? pendingDrafts.length + ' 待确认' : t('draftEmpty')) + ' · v' + currentCfgVersion),
+        pendingDrafts.length ? el('span', { className: 'dvb-hint' }, t('draftApproveHint')) : null),
+      draftList.length
+        ? el('div', { className: 'dvb-live-list' }, draftList.slice(0, 8).map((d) => {
+            const s = d.summary || {}
+            const isPending = d.status === 'pending'
+            const busyApply = draftBusy === d.id + ':apply'
+            const busyDiscard = draftBusy === d.id + ':discard'
+            const drift = !isPending && d.status !== 'applied' ? false : (currentCfgVersion !== d.baseConfigVersion)
+            return el('div', { key: d.id, className: 'dvb-task', 'data-status': d.status, style: drift ? { borderLeft: '3px solid #e0912f', paddingLeft: '6px' } : null },
+              el('span', { className: 'dvb-badge', 'data-kind': isPending ? 'warn' : (d.status === 'applied' ? 'ok' : 'idle') }, d.status === 'pending' ? '待确认' : (d.status === 'applied' ? t('draftApplied') : t('draftDiscarded'))),
+              el('span', { className: 'dvb-hint', title: d.id }, d.id.slice(0, 12) + '…'),
+              el('span', { className: 'dvb-tag' }, t('draftBaseVersion') + ' v' + d.baseConfigVersion),
+              el('span', { className: 'dvb-tag' }, (s.patchCount || d.patch.length) + ' ' + t('draftPatchCount')),
+              el('span', { className: 'dvb-tag' }, t('draftAffectedPoints') + ' ' + (s.affectedPoints || 0)),
+              el('span', { className: 'dvb-chip', 'data-kind': (s.added||0) ? 'ready' : 'idle' }, t('draftAdded') + ' ' + (s.added||0)),
+              el('span', { className: 'dvb-chip', 'data-kind': (s.removed||0) ? 'err' : 'idle' }, t('draftRemoved') + ' ' + (s.removed||0)),
+              el('span', { className: 'dvb-chip', 'data-kind': (s.modified||0) ? 'live' : 'idle' }, t('draftModified') + ' ' + (s.modified||0)),
+              s.comConflicts && s.comConflicts.length ? el('span', { className: 'dvb-need' }, t('draftComConflict') + ': ' + s.comConflicts.join('；')) : null,
+              s.unitIdConflicts && s.unitIdConflicts.length ? el('span', { className: 'dvb-need' }, t('draftUnitConflict') + ': ' + s.unitIdConflicts.join('；')) : null,
+              s.details && s.details.length ? el('div', { className: 'dvb-hint', title: s.details.map((x) => x.op + ' ' + x.path).join('\n'), style: { maxWidth: '360px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, t('draftDetails') + ': ' + s.details.slice(0, 3).map((x) => x.op + ' ' + x.path).join('；') + (s.details.length>3?' …':'')) : null,
+              drift && isPending ? el('span', { className: 'dvb-need' }, t('draftDrift')) : null,
+              isPending ? el('button', {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-primary dvb-btn-write',
+                disabled: busyApply || busyDiscard || !cwd,
+                onClick() { resolveDraft(d.id, 'apply') },
+                title: t('draftApproveHint'),
+              }, busyApply ? t('draftApplying') : t('draftApprove')) : null,
+              isPending ? el('button', {
+                type: 'button',
+                className: 'dvb-btn',
+                disabled: busyApply || busyDiscard,
+                onClick() { resolveDraft(d.id, 'discard') },
+              }, busyDiscard ? '...' : t('draftDiscard')) : null)
+          }))
+        : el('div', { className: 'dvb-empty' }, t('draftEmpty')),
+      draftNote ? el('div', { className: 'dvb-msg', 'data-kind': draftNote.indexOf('漂移')>=0 || draftNote.indexOf('CONFIG_DRIFT')>=0 ? 'err' : 'ok' }, draftNote) : null)
+
     function resolveWrite(id, approved) {
       post('/dsh-vision-bench/modbus/write/approve', { cwd, id, approved }, 120000).then((data) => {
         setPending((prev) => prev.filter((item) => item.id !== id))
@@ -5180,6 +5317,7 @@ function createHmiView(React, t, post, openLive) {
         focusBanner,
         connListPanel,
         connFormPanel,
+        draftPanel,
         journalPanel(el, t, journal))
     }
 
@@ -5196,6 +5334,7 @@ function createHmiView(React, t, post, openLive) {
       formPanel,
       writeStrip,
       pendingPanel,
+      draftPanel,
       serialPanel,
       journalPanel(el, t, journal))
   }
@@ -5262,6 +5401,9 @@ function createLiveView(React, t, post, hooks) {
     const [focusState, setFocusUi] = React.useState({ request: null, prev: null, tempWatchIds: [], badgeOnly: false, evidence: [] })
     const [agentCopied, setAgentCopied] = React.useState('')
     const [tempWatchNote, setTempWatchNote] = React.useState('')
+    const [drafts, setDrafts] = React.useState([])
+    const [draftBusy, setDraftBusy] = React.useState('')
+    const [draftNote, setDraftNote] = React.useState('')
 
     React.useEffect(() => {
       let stop = false
@@ -5287,6 +5429,9 @@ function createLiveView(React, t, post, hooks) {
             if (next) {
               setModbus(next)
               sampleTrend(cwd, next)
+            }
+            if (data && data.workspace && Array.isArray(data.workspace.configDrafts)) {
+              setDrafts(data.workspace.configDrafts)
             }
             const packTmp = next ? normalizeModbus(next) : null
             const activeCid = packTmp ? packTmp.activeConnectionId : null
@@ -5387,6 +5532,29 @@ function createLiveView(React, t, post, hooks) {
       requestFocusUi(focusState.request || {}, { tempWatchIds: list, badgeOnly: true })
     }
 
+    function resolveDraft(id, action) {
+      if (!cwd) return
+      setDraftBusy(id + ':' + action)
+      setDraftNote('')
+      const url = action === 'apply' ? '/dsh-vision-bench/config/draft/apply' : '/dsh-vision-bench/config/draft'
+      const body = action === 'apply' ? { cwd, draftId: id } : { cwd, op: 'discard', draftId: id, id }
+      post(url, body, 20000).then((data) => {
+        if (data && data.ok === false) {
+          const code = data.errorCode || ''
+          setDraftNote((code === 'CONFIG_DRIFT' ? t('configDrift') + ': ' : '') + (data.error || t('fail')))
+        } else {
+          setDraftNote(action === 'apply' ? t('draftApplied') : t('draftDiscarded'))
+          setTimeout(() => setDraftNote(''), 1800)
+        }
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then((data) => {
+        if (data && data.workspace && Array.isArray(data.workspace.configDrafts)) setDrafts(data.workspace.configDrafts)
+        if (data && data.workspace && data.workspace.modbus) setModbus(data.workspace.modbus)
+      }).catch((err) => {
+        setDraftNote(String(err && err.message || t('fail')))
+      }).finally(() => setDraftBusy(''))
+    }
+
     const pack = normalizeModbus(modbus)
     const scope = resolveSidebarScope(cwd, pack.activeConnectionId, pack.activeDeviceId)
     // keep pinnedTick to force re-render on pin change
@@ -5485,6 +5653,32 @@ function createLiveView(React, t, post, hooks) {
       return connName + ' · ' + connEp + ' / ' + devName
     }
 
+    const pendingDrafts = drafts.filter((d) => d && d.status === 'pending')
+    const currentCfgVersion = pack.configVersion || 1
+    const draftPanel = drafts.length
+      ? el('div', { className: 'dvb-panel', style: { margin: '8px 0', padding: '6px 8px', borderLeft: pendingDrafts.length ? '3px solid #e0912f' : '3px solid #4f8ef7' } },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, t('draftTitle') + (pendingDrafts.length ? ' · ' + pendingDrafts.length + ' 待确认' : '')),
+            el('span', { className: 'dvb-tag' }, 'v' + currentCfgVersion)),
+          drafts.slice(0, 3).map((d) => {
+            const s = d.summary || {}
+            const isPending = d.status === 'pending'
+            const drift = isPending && currentCfgVersion !== d.baseConfigVersion
+            const busyApply = draftBusy === d.id + ':apply'
+            const busyDiscard = draftBusy === d.id + ':discard'
+            return el('div', { key: d.id, className: 'dvb-task', 'data-status': d.status, style: drift ? { borderLeft: '2px solid #e0912f' } : null },
+              el('span', { className: 'dvb-badge', 'data-kind': isPending ? 'warn' : 'ok' }, d.status === 'pending' ? '待确认' : d.status),
+              el('span', { className: 'dvb-hint', title: d.id }, d.id.slice(0, 8)),
+              el('span', { className: 'dvb-tag' }, 'v' + d.baseConfigVersion + '→v' + currentCfgVersion),
+              el('span', { className: 'dvb-tag' }, t('draftAffectedPoints') + ' ' + (s.affectedPoints||0)),
+              s.comConflicts && s.comConflicts.length ? el('span', { className: 'dvb-need' }, t('draftComConflict')) : null,
+              s.unitIdConflicts && s.unitIdConflicts.length ? el('span', { className: 'dvb-need' }, t('draftUnitConflict')) : null,
+              drift && isPending ? el('span', { className: 'dvb-need' }, t('draftDrift')) : null,
+              isPending ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: busyApply || busyDiscard, onClick() { resolveDraft(d.id, 'apply') } }, busyApply ? t('draftApplying') : t('draftApprove')) : null,
+              isPending ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: busyApply || busyDiscard, onClick() { resolveDraft(d.id, 'discard') } }, busyDiscard ? '...' : t('draftDiscard')) : null)
+          }),
+          draftNote ? el('div', { className: 'dvb-msg', 'data-kind': draftNote.indexOf('漂移')>=0 ? 'err' : 'ok' }, draftNote) : null)
+      : null
     return el('div', { className: 'dvb-live', 'data-kind': kind },
       el('div', { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('liveTable')),
@@ -5499,6 +5693,7 @@ function createLiveView(React, t, post, hooks) {
         tabId && typeof closeTab === 'function'
           ? el('button', { type: 'button', className: 'dvb-btn dvb-live-close', title: t('liveClose'), onClick() { closeTab(tabId) } }, '×')
           : null),
+      draftPanel,
       // Agent 聚焦横幅 + 临时监视组 + 证据跳转（后台任务仅角标）
       focusState && focusState.request
         ? el('div', { className: 'dvb-panel dvb-focus-banner', 'data-badge': focusState.badgeOnly ? 'true' : 'false', style: { margin: '8px 0', padding: '6px 8px', borderLeft: focusState.badgeOnly ? '3px solid #e0912f' : '3px solid #4f8ef7', background: focusState.badgeOnly ? 'rgba(224,145,47,.08)' : 'rgba(79,142,247,.08)' } },

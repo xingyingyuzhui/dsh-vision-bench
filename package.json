@@ -45,6 +45,7 @@
     "bench-hmi.mjs",
     "bench-trend.mjs",
     "bench-alarm.mjs",
+    "bench-patch.mjs",
     "bench-live.mjs",
     "bench-map.mjs",
     "bench-points.mjs",

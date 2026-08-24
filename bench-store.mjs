@@ -3,8 +3,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync,
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { emptyLog, mergeLog, normalizeEvent } from './bench-prompt.mjs'
-import { normalizeConn, normalizeModbus, validateConnections, validateDevices } from './bench-devices.mjs'
+import { normalizeConn, normalizeModbus, validateConnections, validateDevices, normalizeConfigVersion } from './bench-devices.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
+import { applyPatch, compare as patchCompare, validatePatch } from './bench-patch.mjs'
 import {
   MAX_TASKS,
   capTasks,
@@ -146,6 +147,143 @@ export const normalizeFocusState = (input) => {
   return out
 }
 
+const MAX_DRAFTS = 20
+
+const DRAFT_STATUSES = new Set(['pending', 'applied', 'discarded'])
+
+const normalizeDraftPatch = (patch) => {
+  if (!Array.isArray(patch)) return []
+  // shallow clone, keep only op/path/value/from, enforce limits 200 ops
+  return patch.slice(0, 200).map((op) => {
+    if (!op || typeof op !== 'object') return null
+    const out = { op: String(op.op || '').slice(0, 16), path: String(op.path || '').slice(0, 256) }
+    if ('value' in op) out.value = op.value
+    if ('from' in op) out.from = String(op.from).slice(0, 256)
+    return out
+  }).filter(Boolean)
+}
+
+const normalizeDraftSummary = (input) => {
+  if (!input || typeof input !== 'object') return { added: 0, removed: 0, modified: 0, comConflicts: [], unitIdConflicts: [], affectedPoints: 0, details: [] }
+  return {
+    added: Number(input.added) > 0 ? Math.trunc(Number(input.added)) : 0,
+    removed: Number(input.removed) > 0 ? Math.trunc(Number(input.removed)) : 0,
+    modified: Number(input.modified) > 0 ? Math.trunc(Number(input.modified)) : 0,
+    comConflicts: Array.isArray(input.comConflicts) ? input.comConflicts.map((s) => String(s).slice(0, 240)).slice(0, 10) : [],
+    unitIdConflicts: Array.isArray(input.unitIdConflicts) ? input.unitIdConflicts.map((s) => String(s).slice(0, 240)).slice(0, 10) : [],
+    affectedPoints: Number(input.affectedPoints) > 0 ? Math.trunc(Number(input.affectedPoints)) : 0,
+    details: Array.isArray(input.details) ? input.details.slice(0, 40).map((d) => ({
+      op: String(d.op || '').slice(0, 16),
+      path: String(d.path || '').slice(0, 256),
+      kind: String(d.kind || '').slice(0, 24),
+    })) : [],
+  }
+}
+
+export const normalizeConfigDraft = (input) => {
+  if (!input || typeof input !== 'object') return null
+  const id = typeof input.id === 'string' ? input.id.trim() : ''
+  if (!id) return null
+  const baseConfigVersion = normalizeConfigVersion(input.baseConfigVersion)
+  const createdAt = Number(input.createdAt) > 0 ? Number(input.createdAt) : Date.now()
+  const source = input.source === 'agent' ? 'agent' : 'user'
+  const sessionId = typeof input.sessionId === 'string' ? input.sessionId.trim().slice(0, 64) : (typeof input.createdBy === 'string' ? input.createdBy.trim().slice(0, 64) : '')
+  const status = DRAFT_STATUSES.has(input.status) ? input.status : 'pending'
+  const endpointFingerprints = input.endpointFingerprints && typeof input.endpointFingerprints === 'object' && !Array.isArray(input.endpointFingerprints)
+    ? Object.fromEntries(Object.entries(input.endpointFingerprints).map(([k, v]) => [String(k).slice(0, 64), typeof v === 'string' ? v.slice(0, 256) : JSON.stringify(v).slice(0, 256)]))
+    : (input.baseFingerprint && typeof input.baseFingerprint === 'object' ? Object.fromEntries(Object.entries(input.baseFingerprint).map(([k, v]) => [String(k).slice(0, 64), typeof v === 'string' ? v.slice(0, 256) : JSON.stringify(v).slice(0, 256)])) : {})
+  const patch = normalizeDraftPatch(input.patch)
+  const summary = normalizeDraftSummary(input.summary)
+  return { id, baseConfigVersion, createdAt, source, sessionId, status, patch, summary, endpointFingerprints, baseSnapshot: input.baseSnapshot && typeof input.baseSnapshot === 'object' ? input.baseSnapshot : null }
+}
+
+export const normalizeConfigDrafts = (list) => {
+  if (!Array.isArray(list)) return []
+  const out = []
+  const seen = new Set()
+  for (const raw of list) {
+    const d = normalizeConfigDraft(raw)
+    if (!d || seen.has(d.id)) continue
+    seen.add(d.id)
+    out.push(d)
+    if (out.length >= MAX_DRAFTS) break
+  }
+  // newest first (createdAt desc)
+  out.sort((a, b) => b.createdAt - a.createdAt)
+  return out
+}
+
+// ── configDraft helpers (RFC6902, N4.2) ────────────────────────────────
+
+const endpointFingerprintOf = (conn) => {
+  if (!conn || typeof conn !== 'object') return ''
+  return [
+    conn.mode || 'rtu',
+    (conn.port || '').trim().toLowerCase(),
+    String(conn.baudrate || 0),
+    String(conn.bytesize || 8),
+    conn.parity || 'N',
+    String(conn.stopbits || 1),
+    (conn.host || '').trim().toLowerCase(),
+    String(conn.tcpPort || 502),
+    String(conn.slave ?? 1),
+  ].join('|')
+}
+
+const snapshotFingerprints = (connections) => {
+  const out = {}
+  for (const c of Array.isArray(connections) ? connections : []) {
+    if (c && c.id) out[c.id] = endpointFingerprintOf(c.conn || c)
+  }
+  return out
+}
+
+const stringifyConfigSlice = (modbus) => {
+  try {
+    const pack = modbus && typeof modbus === 'object' ? modbus : {}
+    const slice = {
+      connections: pack.connections || [],
+      devices: pack.devices || [],
+      points: pack.points || [],
+    }
+    return JSON.stringify(slice)
+  } catch { return '' }
+}
+
+const computeDraftSummary = (basePack, targetPack, patch) => {
+  let added = 0, removed = 0, modified = 0, affectedPoints = 0
+  const details = []
+  for (const op of Array.isArray(patch) ? patch : []) {
+    const path = String(op.path || '')
+    let kind = 'modify'
+    if (op.op === 'add') { added += 1; kind = 'add' }
+    else if (op.op === 'remove') { removed += 1; kind = 'remove' }
+    else if (op.op === 'replace') { modified += 1; kind = 'modify' }
+    const top = path.split('/')[1] || ''
+    if (top === 'points' || top === 'devices' || top === 'connections') {
+      // count distinct point impact later
+    }
+    details.push({ op: op.op, path, kind })
+    if (details.length >= 40) break
+  }
+  // affectedPoints: count points that differ between base and target
+  try {
+    const baseIds = new Set((basePack.points || []).map((p) => p.id))
+    const targetIds = new Set((targetPack.points || []).map((p) => p.id))
+    for (const id of targetIds) if (!baseIds.has(id)) affectedPoints += 1
+    for (const id of baseIds) if (!targetIds.has(id)) affectedPoints += 1
+    // modified points: same id but deep changed (excluding values)
+    const baseById = new Map((basePack.points || []).map((p) => [p.id, JSON.stringify(p)]))
+    for (const p of targetPack.points || []) {
+      const b = baseById.get(p.id)
+      if (b && b !== JSON.stringify(p)) affectedPoints += 1
+    }
+  } catch { /* ignore */ }
+  const comConflicts = validateConnections(targetPack.connections, targetPack.devices).filter((m) => /COM|监听地址/.test(m))
+  const unitIdConflicts = validateDevices(targetPack.devices, targetPack.connections)
+  return { added, removed, modified, comConflicts: comConflicts.slice(0, 10), unitIdConflicts: unitIdConflicts.slice(0, 10), affectedPoints, details }
+}
+
 export const emptyWorkspace = () => ({
   keil: { project: '', target: '', artifact: 'hex', download: '' },
   log: emptyLog(),
@@ -153,8 +291,9 @@ export const emptyWorkspace = () => ({
   timeline: [],
   session: { boundId: '' },
   manualRequests: [],
-  modbus: normalizeModbus({ version: 3 }),
+  modbus: normalizeModbus({ version: 3, configVersion: 1 }),
   focus: emptyFocusState(),
+  configDrafts: [],
 })
 
 const MANUAL_STATUSES = new Set(['pending', 'done', 'rejected'])
@@ -194,6 +333,7 @@ export const normalizeWorkspace = (input) => {
   out.manualRequests = normalizeManualRequests(input && input.manualRequests)
   out.modbus = normalizeModbus(modbus)
   out.focus = normalizeFocusState(input && input.focus)
+  out.configDrafts = normalizeConfigDrafts(input && input.configDrafts)
   return out
 }
 
@@ -227,6 +367,7 @@ const isV2Partial = (incoming, looksLegacy) => {
 export const saveWorkspace = (home, cwd, input) => {
   const prev = loadWorkspace(home, cwd)
   const incoming = (input && input.modbus) || {}
+  const incomingDrafts = input && input.configDrafts
   const looksLegacy = incoming.conn === undefined && (
     Array.isArray(incoming.devices) && incoming.devices.some(d=> d && (d.mode !== undefined || d.port !== undefined || Array.isArray(d.segments)))
     || incoming.mode !== undefined || incoming.segments !== undefined
@@ -337,6 +478,14 @@ export const saveWorkspace = (home, cwd, input) => {
   } else {
     mergedModbus = prev.modbus
   }
+  // configDrafts: preserve unless incoming provides explicit list
+  let nextDrafts = prev.configDrafts || []
+  if (incomingDrafts !== undefined) {
+    nextDrafts = normalizeConfigDrafts(incomingDrafts)
+  } else if (input && input._replaceConfigDrafts !== undefined) {
+    // internal helper for draft ops: input._replaceConfigDrafts bypasses saveWorkspace drafting loop
+    nextDrafts = normalizeConfigDrafts(input._replaceConfigDrafts)
+  }
   const merged = {
     keil: { ...prev.keil, ...(input && input.keil) },
     modbus: mergedModbus,
@@ -346,8 +495,31 @@ export const saveWorkspace = (home, cwd, input) => {
     session: { ...prev.session, ...(input && input.session) },
     manualRequests: input && input.manualRequests !== undefined ? input.manualRequests : prev.manualRequests,
     focus: input && input.focus !== undefined ? normalizeFocusState(input.focus) : prev.focus,
+    configDrafts: nextDrafts,
   }
   const workspace = normalizeWorkspace(merged)
+  // auto-bump configVersion when connections/devices/points changed vs prev
+  try {
+    const prevSlice = stringifyConfigSlice(prev.modbus)
+    const curSlice = stringifyConfigSlice(workspace.modbus)
+    if (prevSlice !== curSlice) {
+      const expected = normalizeConfigVersion((prev.modbus && prev.modbus.configVersion) ? prev.modbus.configVersion + 1 : 2)
+      // only bump if not already bumped (e.g., draft apply set explicit higher version)
+      const currentCv = workspace.modbus.configVersion || 1
+      if (currentCv <= (prev.modbus.configVersion || 1)) {
+        workspace.modbus.configVersion = expected
+      } else if (currentCv < expected) {
+        workspace.modbus.configVersion = expected
+      }
+      // also keep normalized copy consistent after bump
+      // re-normalize to apply status bar etc? just ensure version stays 3
+      workspace.modbus = normalizeModbus(workspace.modbus)
+      // ensure bumped value survives second normalize
+      if (workspace.modbus.configVersion !== expected && currentCv <= (prev.modbus.configVersion || 1)) {
+        workspace.modbus.configVersion = expected
+      }
+    }
+  } catch { /* bump is best-effort */ }
   // COM / TCP server + Unit ID uniqueness check before persist
   const connErrors = validateConnections(workspace.modbus.connections, workspace.modbus.devices)
   // also keep explicit device check for callers that only use validateDevices
@@ -644,4 +816,178 @@ export const pruneBuildLogs = (home, keep = 30) => {
     } catch { /* ignore */ }
   }
   return { ok: true, pruned }
+}
+
+// ── config draft (RFC6902, N4.2) ─────────────────────────────────────────
+
+export const listConfigDrafts = (home, cwd) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const ws = loadWorkspace(home, room.cwd)
+  return { ok: true, drafts: normalizeConfigDrafts(ws.configDrafts), configVersion: ws.modbus.configVersion || 1 }
+}
+
+export const getConfigDraft = (home, cwd, draftId) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const ws = loadWorkspace(home, room.cwd)
+  const draft = (ws.configDrafts || []).find((d) => d.id === String(draftId).trim())
+  if (!draft) return { ok: false, error: '草稿不存在: ' + draftId }
+  return { ok: true, draft, configVersion: ws.modbus.configVersion || 1 }
+}
+
+export const createConfigDraft = (home, cwd, spec) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const workspace = loadWorkspace(home, room.cwd)
+  const pack = normalizeModbus(workspace.modbus)
+  const baseConfigVersion = Number(spec && spec.baseConfigVersion)
+  if (!Number.isFinite(baseConfigVersion) || baseConfigVersion < 1) {
+    return { ok: false, error: '缺少 baseConfigVersion' }
+  }
+  if ((pack.configVersion || 1) !== baseConfigVersion) {
+    return { ok: false, error: '基线版本已漂移，当前 ' + (pack.configVersion || 1) + ' 期望 ' + baseConfigVersion, errorCode: 'CONFIG_DRIFT' }
+  }
+  let patch = spec && spec.patch
+  // allow target snapshot -> compute patch via bench-patch compare
+  if (!patch && spec && spec.target && typeof spec.target === 'object') {
+    try {
+      const targetSlice = spec.target.modbus ? spec.target.modbus : spec.target
+      const baseSlice = { connections: pack.connections, devices: pack.devices, points: pack.points }
+      const normalizedTarget = normalizeModbus({ ...pack, ...targetSlice, version: 3 })
+      const targetNormalizedSlice = { connections: normalizedTarget.connections, devices: normalizedTarget.devices, points: normalizedTarget.points }
+      patch = patchCompare(baseSlice, targetNormalizedSlice)
+    } catch (e) {
+      return { ok: false, error: '生成 patch 失败: ' + String(e && e.message || e) }
+    }
+  }
+  // alias: accept operations / ops / jsonPatch as patch
+  if (!patch && spec && Array.isArray(spec.operations)) patch = spec.operations
+  if (!patch && spec && Array.isArray(spec.ops)) patch = spec.ops
+  if (!patch && spec && Array.isArray(spec.jsonPatch)) patch = spec.jsonPatch
+  if (!Array.isArray(patch) || patch.length === 0) return { ok: false, error: '缺少 patch (RFC6902 数组)' }
+  const validation = validatePatch(patch)
+  if (validation) return { ok: false, error: 'patch 校验失败: ' + validation }
+  // enforce patch targets only allowed roots (/connections, /devices, /points, /activeConnectionId, /activeDeviceId) for safety
+  const allowedTop = new Set(['connections', 'devices', 'points', 'activeConnectionId', 'activeDeviceId', 'pollingByConnection', 'values'])
+  for (const op of patch) {
+    const top = String(op.path || '').split('/')[1] || ''
+    if (top && !allowedTop.has(top) && top !== '') {
+      return { ok: false, error: '不支持的 patch 路径: ' + op.path }
+    }
+  }
+  // Try applying to detect obvious shape errors before persisting
+  const baseForPatch = { connections: pack.connections, devices: pack.devices, points: pack.points, activeConnectionId: pack.activeConnectionId, activeDeviceId: pack.activeDeviceId, pollingByConnection: pack.pollingByConnection }
+  const applied = applyPatch(baseForPatch, patch)
+  if (!applied.ok) return { ok: false, error: 'patch 应用预检失败: ' + applied.error }
+  const summary = computeDraftSummary(pack, normalizeModbus({ ...pack, ...applied.result, version: 3 }), patch)
+  const draft = {
+    id: 'draft' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    baseConfigVersion: pack.configVersion || 1,
+    createdAt: Date.now(),
+    source: spec && spec.source === 'agent' ? 'agent' : 'user',
+    sessionId: typeof (spec && spec.sessionId) === 'string' ? spec.sessionId.trim().slice(0, 64) : '',
+    status: 'pending',
+    patch: normalizeDraftPatch(patch),
+    summary,
+    endpointFingerprints: snapshotFingerprints(pack.connections),
+    baseSnapshot: { connections: pack.connections, devices: pack.devices, points: pack.points },
+  }
+  const nextDrafts = [draft].concat(workspace.configDrafts || []).slice(0, MAX_DRAFTS)
+  const saved = saveWorkspace(home, room.cwd, { _replaceConfigDrafts: nextDrafts })
+  if (!saved.ok) return saved
+  // record timeline
+  try {
+    recordBenchEvent(home, room.cwd, { action: 'config-draft', ok: true, summary: '创建配置草稿 ' + draft.id + '（基于 v' + draft.baseConfigVersion + '，影响 ' + summary.affectedPoints + ' 点）' }, { source: draft.source, sessionId: draft.sessionId })
+  } catch {}
+  return { ok: true, draft, summary, baseConfigVersion: draft.baseConfigVersion }
+}
+
+export const discardConfigDraft = (home, cwd, draftId) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const ws = loadWorkspace(home, room.cwd)
+  const id = String(draftId || '').trim()
+  if (!id) return { ok: false, error: '缺少草稿 id' }
+  const drafts = Array.isArray(ws.configDrafts) ? ws.configDrafts : []
+  const found = drafts.find((d) => d.id === id)
+  if (!found) return { ok: false, error: '草稿不存在: ' + id }
+  if (found.status !== 'pending') return { ok: false, error: '草稿已处理: ' + id }
+  const nextDrafts = drafts.map((d) => d.id === id ? { ...d, status: 'discarded' } : d)
+  const saved = saveWorkspace(home, room.cwd, { _replaceConfigDrafts: nextDrafts })
+  if (!saved.ok) return saved
+  try {
+    recordBenchEvent(home, room.cwd, { action: 'config-discard', ok: true, summary: '丢弃配置草稿 ' + id }, { source: 'user' })
+  } catch {}
+  return { ok: true, draftId: id }
+}
+
+export const applyConfigDraft = (home, cwd, draftId, opts = {}) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const ws = loadWorkspace(home, room.cwd)
+  const pack = normalizeModbus(ws.modbus)
+  const id = String(draftId || '').trim()
+  if (!id) return { ok: false, error: '缺少草稿 id' }
+  const drafts = Array.isArray(ws.configDrafts) ? ws.configDrafts : []
+  const draft = drafts.find((d) => d.id === id)
+  if (!draft) return { ok: false, error: '草稿不存在: ' + id, errorCode: 'CONFIG_DRIFT' }
+  if (draft.status !== 'pending') return { ok: false, error: '草稿已处理: ' + id, errorCode: 'CONFIG_DRIFT' }
+  // 1) baseline version drift
+  if ((pack.configVersion || 1) !== draft.baseConfigVersion) {
+    return { ok: false, error: '基线版本漂移：当前 v' + (pack.configVersion || 1) + ' 草稿基于 v' + draft.baseConfigVersion, errorCode: 'CONFIG_DRIFT' }
+  }
+  // 2) endpoint fingerprint drift
+  const currentFingerprints = snapshotFingerprints(pack.connections)
+  const baseFingerprints = draft.endpointFingerprints || {}
+  for (const [cid, baseFp] of Object.entries(baseFingerprints)) {
+    const curFp = currentFingerprints[cid]
+    if (curFp === undefined) {
+      // connection deleted after draft -> object missing drift
+      return { ok: false, error: '对象不存在：连接 ' + cid + ' 已删除', errorCode: 'CONFIG_DRIFT' }
+    }
+    if (curFp !== baseFp) {
+      return { ok: false, error: '端点指纹漂移：连接 ' + cid + ' 已变更', errorCode: 'CONFIG_DRIFT' }
+    }
+  }
+  // also check that connections referenced in patch still exist? patch path itself will fail on apply if missing, which we map to drift below
+
+  // 3) object existence & patch apply
+  const baseForPatch = { connections: pack.connections, devices: pack.devices, points: pack.points, activeConnectionId: pack.activeConnectionId, activeDeviceId: pack.activeDeviceId, pollingByConnection: pack.pollingByConnection }
+  const applied = applyPatch(baseForPatch, draft.patch)
+  if (!applied.ok) {
+    return { ok: false, error: 'patch 应用失败（对象可能已删除）：' + applied.error, errorCode: 'CONFIG_DRIFT' }
+  }
+  const targetRaw = { ...pack, ...applied.result }
+  // validate target config before writing
+  const targetPack = normalizeModbus({ ...targetRaw, version: 3 })
+  const connErrs = validateConnections(targetPack.connections, targetPack.devices)
+  const devErrs = validateDevices(targetPack.devices, targetPack.connections)
+  const allErrs = [...connErrs]
+  for (const e of devErrs) if (!allErrs.includes(e)) allErrs.push(e)
+  // compute summary for response (even if validation fails, we still want to surface)
+  const summary = computeDraftSummary(pack, targetPack, draft.patch)
+  if (allErrs.length) {
+    return { ok: false, error: allErrs.join('；'), errorCode: 'CONFLICT', summary, targetPack }
+  }
+  // persist target config + mark draft applied
+  const nextDrafts = drafts.map((d) => d.id === id ? { ...d, status: 'applied' } : d)
+  // Use saveWorkspace to write modbus; it will auto-bump configVersion
+  const saved = saveWorkspace(home, room.cwd, {
+    modbus: {
+      connections: targetPack.connections,
+      devices: targetPack.devices,
+      points: targetPack.points,
+      activeConnectionId: targetPack.activeConnectionId,
+      activeDeviceId: targetPack.activeDeviceId,
+      pollingByConnection: targetPack.pollingByConnection,
+      version: 3,
+    },
+    _replaceConfigDrafts: nextDrafts,
+  })
+  if (!saved.ok) return { ok: false, error: saved.error, summary }
+  try {
+    recordBenchEvent(home, room.cwd, { action: 'config-apply', ok: true, summary: '应用配置草稿 ' + id + '（v' + draft.baseConfigVersion + ' → v' + (saved.workspace.modbus.configVersion || 1) + '）' }, { source: opts.source || 'user', sessionId: opts.sessionId || '' })
+  } catch {}
+  return { ok: true, draftId: id, prevVersion: draft.baseConfigVersion, nextVersion: saved.workspace.modbus.configVersion || 1, summary, workspace: saved.workspace }
 }

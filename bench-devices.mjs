@@ -504,6 +504,12 @@ function migrateV2ToV3(v2) {
   }
 }
 
+export const normalizeConfigVersion = (input) => {
+  const n = Number(input)
+  if (!Number.isFinite(n) || n < 1) return 1
+  return Math.trunc(n)
+}
+
 export function normalizeModbus(input) {
   const src = input && typeof input === 'object' ? input : {}
   // Detect v3
@@ -554,9 +560,11 @@ export function normalizeModbus(input) {
       const devForConn = devices.find(d=>d.connectionId===activeConnectionId)
       activeDeviceId = devForConn ? devForConn.id : (devices[0]?.id || 'd1')
     }
+    const configVersion = normalizeConfigVersion(src.configVersion ?? src.rev ?? src.cfgVersion ?? 1)
     // also need to filter points/values that reference invalid connection/device? already fixed refs but keep check
     const ret = {
       version: 3,
+      configVersion,
       connections,
       devices,
       points,
@@ -655,8 +663,10 @@ export function normalizeModbus(input) {
     }
   }
   const migrated = migrateV2ToV3(v2)
+  const configVersion = normalizeConfigVersion(src.configVersion ?? src.rev ?? 1)
   const ret = {
     version:3,
+    configVersion,
     connections: migrated.connections,
     devices: migrated.devices,
     points: migrated.points,

@@ -3,10 +3,15 @@ import { runSelfCheck } from './bench-check.mjs'
 import { artifactInfo, readBuildLog } from './bench-fs.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
 import {
+  applyConfigDraft,
   bindSession,
+  createConfigDraft,
   createManualRequest,
   defaultDshHome,
+  discardConfigDraft,
+  getConfigDraft,
   journalView,
+  listConfigDrafts,
   loadBindings,
   loadWorkspace,
   probeBindings,
@@ -297,6 +302,45 @@ export function apply(ctx, config = {}) {
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
       return serialFeed(room.cwd, body && body.since)
+    }),
+    route('/dsh-vision-bench/config/draft', async (req) => {
+      const body = await readJsonBody(req)
+      const room = requireWorkspaceCwd(body && body.cwd)
+      if (room.error) return { ok: false, error: room.error }
+      const op = typeof body.op === 'string' ? body.op.trim() : (body.patch || body.target ? 'create' : 'list')
+      if (op === 'list' || op === '') return listConfigDrafts(dshHome, room.cwd)
+      if (op === 'get') return getConfigDraft(dshHome, room.cwd, body.draftId || body.id)
+      if (op === 'discard') {
+        const ran = discardConfigDraft(dshHome, room.cwd, body.draftId || body.id)
+        if (ran.ok) {
+          void notifyBenchEvent(dshHome, room.cwd, '已丢弃配置草稿 ' + (body.draftId || body.id), '', { sessionId: body.sessionId || '' }).catch(() => {})
+        }
+        return ran
+      }
+      // create
+      const ran = createConfigDraft(dshHome, room.cwd, {
+        baseConfigVersion: body.baseConfigVersion ?? body.configVersion,
+        patch: body.patch || body.operations || body.ops,
+        target: body.target,
+        source: body.source || 'user',
+        sessionId: body.sessionId || '',
+      })
+      if (ran.ok) {
+        void notifyBenchEvent(dshHome, room.cwd, '创建配置草稿 ' + ran.draft.id + '（影响 ' + (ran.summary && ran.summary.affectedPoints || 0) + ' 点）', '', { sessionId: body.sessionId || '' }).catch(() => {})
+      }
+      return ran
+    }),
+    route('/dsh-vision-bench/config/draft/apply', async (req) => {
+      const body = await readJsonBody(req)
+      const room = requireWorkspaceCwd(body && body.cwd)
+      if (room.error) return { ok: false, error: room.error }
+      const ran = applyConfigDraft(dshHome, room.cwd, body.draftId || body.id, { source: body.source || 'user', sessionId: body.sessionId || '' })
+      if (ran.ok) {
+        void notifyBenchEvent(dshHome, room.cwd, '配置草稿已应用 ' + (body.draftId || body.id) + ' → v' + ran.nextVersion, '', { sessionId: body.sessionId || '' }).catch(() => {})
+      } else if (ran.errorCode === 'CONFIG_DRIFT') {
+        void notifyBenchEvent(dshHome, room.cwd, '配置草稿漂移 ' + (body.draftId || body.id) + ': ' + ran.error, '', { sessionId: body.sessionId || '' }).catch(() => {})
+      }
+      return ran
     }),
   ]
   const disposers = rows.map((entry) => ctx.webServer.register(entry))

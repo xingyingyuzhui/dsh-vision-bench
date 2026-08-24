@@ -71,6 +71,8 @@ export function createHmiView(React, t, post, openLive) {
     const [csvNote, setCsvNote] = React.useState('')
     const [logMode, setLogMode] = React.useState('serial')
     const [serial, setSerial] = React.useState({ open: false, port: '', baudrate: 115200, lines: [], filter: '', paused: false, error: '', lastId: 0 })
+    const [draftBusy, setDraftBusy] = React.useState('')
+    const [draftNote, setDraftNote] = React.useState('')
     const [copiedSerial, setCopiedSerial] = React.useState(false)
     const [connForm, setConnForm] = React.useState({ open: false, id: '', name: '', role: 'client', enabled: true, conn: { mode: 'rtu', port: '', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, host: '', tcpPort: 502, slave: 1, sim: false } })
     const [pendingDeleteId, setPendingDeleteId] = React.useState('')
@@ -132,8 +134,17 @@ export function createHmiView(React, t, post, openLive) {
         try { setFocusState(cwd, data.workspace.focus) } catch {}
       }
       if (inflight.current > 0) return
-      if (data.workspace && data.workspace.modbus) {
-        setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus, focus: data.workspace.focus || prev.focus }))
+      if (data.workspace) {
+        setWorkspace((prev) => ({
+          ...prev,
+          modbus: data.workspace.modbus || prev.modbus,
+          focus: data.workspace.focus || prev.focus,
+          configDrafts: data.workspace.configDrafts || prev.configDrafts || [],
+        }))
+        if (data.workspace.configDrafts) {
+          // also keep workspaceRef in sync for cfgVersion
+          workspaceRef.current = { ...workspaceRef.current, configDrafts: data.workspace.configDrafts, modbus: data.workspace.modbus || workspaceRef.current.modbus }
+        }
       }
     }), [cwd])
 
@@ -1460,6 +1471,80 @@ export function createHmiView(React, t, post, openLive) {
           }, t('rejectWrite')))))
       : null
 
+    // ── config drafts (RFC6902, N4.2) ──
+    function resolveDraft(id, action) {
+      if (!cwd) return
+      setDraftBusy(id + ':' + action)
+      setDraftNote('')
+      const url = action === 'apply' ? '/dsh-vision-bench/config/draft/apply' : '/dsh-vision-bench/config/draft'
+      const body = action === 'apply' ? { cwd, draftId: id } : { cwd, op: 'discard', draftId: id, id }
+      post(url, body, 20000).then((data) => {
+        if (data && data.ok === false) {
+          const code = data.errorCode || ''
+          setDraftNote((code === 'CONFIG_DRIFT' ? t('configDrift') + ': ' : '') + (data.error || t('fail')))
+          setError((code === 'CONFIG_DRIFT' ? t('configDrift') + ': ' : '') + (data.error || ''))
+        } else {
+          setDraftNote(action === 'apply' ? t('draftApplied') : t('draftDiscarded'))
+          setTimeout(() => setDraftNote(''), 1800)
+        }
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then((data) => {
+        if (!data) return
+        setJournal(pickJournal(data))
+        if (data.workspace) {
+          setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus, configDrafts: data.workspace.configDrafts || prev.configDrafts }))
+          workspaceRef.current = { ...workspaceRef.current, modbus: data.workspace.modbus || workspaceRef.current.modbus, configDrafts: data.workspace.configDrafts || workspaceRef.current.configDrafts }
+        }
+      }).catch((err) => {
+        setDraftNote(String(err && err.message || t('fail')))
+        setError(String(err && err.message || t('fail')))
+      }).finally(() => setDraftBusy(''))
+    }
+    const draftList = (workspace.configDrafts || []).filter((d) => d && d.id)
+    const pendingDrafts = draftList.filter((d) => d.status === 'pending')
+    const currentCfgVersion = normalizePack().configVersion || 1
+    const draftPanel = el('div', { className: 'dvb-panel' },
+      el('div', { className: 'dvb-panel-head' },
+        el('span', { className: 'dvb-panel-title' }, t('draftTitle')),
+        el('span', { className: 'dvb-tag' }, (pendingDrafts.length ? pendingDrafts.length + ' 待确认' : t('draftEmpty')) + ' · v' + currentCfgVersion),
+        pendingDrafts.length ? el('span', { className: 'dvb-hint' }, t('draftApproveHint')) : null),
+      draftList.length
+        ? el('div', { className: 'dvb-live-list' }, draftList.slice(0, 8).map((d) => {
+            const s = d.summary || {}
+            const isPending = d.status === 'pending'
+            const busyApply = draftBusy === d.id + ':apply'
+            const busyDiscard = draftBusy === d.id + ':discard'
+            const drift = !isPending && d.status !== 'applied' ? false : (currentCfgVersion !== d.baseConfigVersion)
+            return el('div', { key: d.id, className: 'dvb-task', 'data-status': d.status, style: drift ? { borderLeft: '3px solid #e0912f', paddingLeft: '6px' } : null },
+              el('span', { className: 'dvb-badge', 'data-kind': isPending ? 'warn' : (d.status === 'applied' ? 'ok' : 'idle') }, d.status === 'pending' ? '待确认' : (d.status === 'applied' ? t('draftApplied') : t('draftDiscarded'))),
+              el('span', { className: 'dvb-hint', title: d.id }, d.id.slice(0, 12) + '…'),
+              el('span', { className: 'dvb-tag' }, t('draftBaseVersion') + ' v' + d.baseConfigVersion),
+              el('span', { className: 'dvb-tag' }, (s.patchCount || d.patch.length) + ' ' + t('draftPatchCount')),
+              el('span', { className: 'dvb-tag' }, t('draftAffectedPoints') + ' ' + (s.affectedPoints || 0)),
+              el('span', { className: 'dvb-chip', 'data-kind': (s.added||0) ? 'ready' : 'idle' }, t('draftAdded') + ' ' + (s.added||0)),
+              el('span', { className: 'dvb-chip', 'data-kind': (s.removed||0) ? 'err' : 'idle' }, t('draftRemoved') + ' ' + (s.removed||0)),
+              el('span', { className: 'dvb-chip', 'data-kind': (s.modified||0) ? 'live' : 'idle' }, t('draftModified') + ' ' + (s.modified||0)),
+              s.comConflicts && s.comConflicts.length ? el('span', { className: 'dvb-need' }, t('draftComConflict') + ': ' + s.comConflicts.join('；')) : null,
+              s.unitIdConflicts && s.unitIdConflicts.length ? el('span', { className: 'dvb-need' }, t('draftUnitConflict') + ': ' + s.unitIdConflicts.join('；')) : null,
+              s.details && s.details.length ? el('div', { className: 'dvb-hint', title: s.details.map((x) => x.op + ' ' + x.path).join('\n'), style: { maxWidth: '360px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, t('draftDetails') + ': ' + s.details.slice(0, 3).map((x) => x.op + ' ' + x.path).join('；') + (s.details.length>3?' …':'')) : null,
+              drift && isPending ? el('span', { className: 'dvb-need' }, t('draftDrift')) : null,
+              isPending ? el('button', {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-primary dvb-btn-write',
+                disabled: busyApply || busyDiscard || !cwd,
+                onClick() { resolveDraft(d.id, 'apply') },
+                title: t('draftApproveHint'),
+              }, busyApply ? t('draftApplying') : t('draftApprove')) : null,
+              isPending ? el('button', {
+                type: 'button',
+                className: 'dvb-btn',
+                disabled: busyApply || busyDiscard,
+                onClick() { resolveDraft(d.id, 'discard') },
+              }, busyDiscard ? '...' : t('draftDiscard')) : null)
+          }))
+        : el('div', { className: 'dvb-empty' }, t('draftEmpty')),
+      draftNote ? el('div', { className: 'dvb-msg', 'data-kind': draftNote.indexOf('漂移')>=0 || draftNote.indexOf('CONFIG_DRIFT')>=0 ? 'err' : 'ok' }, draftNote) : null)
+
     function resolveWrite(id, approved) {
       post('/dsh-vision-bench/modbus/write/approve', { cwd, id, approved }, 120000).then((data) => {
         setPending((prev) => prev.filter((item) => item.id !== id))
@@ -1646,6 +1731,7 @@ export function createHmiView(React, t, post, openLive) {
         focusBanner,
         connListPanel,
         connFormPanel,
+        draftPanel,
         journalPanel(el, t, journal))
     }
 
@@ -1662,6 +1748,7 @@ export function createHmiView(React, t, post, openLive) {
       formPanel,
       writeStrip,
       pendingPanel,
+      draftPanel,
       serialPanel,
       journalPanel(el, t, journal))
   }

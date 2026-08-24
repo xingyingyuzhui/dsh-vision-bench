@@ -66,6 +66,9 @@ export function createLiveView(React, t, post, hooks) {
     const [focusState, setFocusUi] = React.useState({ request: null, prev: null, tempWatchIds: [], badgeOnly: false, evidence: [] })
     const [agentCopied, setAgentCopied] = React.useState('')
     const [tempWatchNote, setTempWatchNote] = React.useState('')
+    const [drafts, setDrafts] = React.useState([])
+    const [draftBusy, setDraftBusy] = React.useState('')
+    const [draftNote, setDraftNote] = React.useState('')
 
     React.useEffect(() => {
       let stop = false
@@ -91,6 +94,9 @@ export function createLiveView(React, t, post, hooks) {
             if (next) {
               setModbus(next)
               sampleTrend(cwd, next)
+            }
+            if (data && data.workspace && Array.isArray(data.workspace.configDrafts)) {
+              setDrafts(data.workspace.configDrafts)
             }
             const packTmp = next ? normalizeModbus(next) : null
             const activeCid = packTmp ? packTmp.activeConnectionId : null
@@ -191,6 +197,29 @@ export function createLiveView(React, t, post, hooks) {
       requestFocusUi(focusState.request || {}, { tempWatchIds: list, badgeOnly: true })
     }
 
+    function resolveDraft(id, action) {
+      if (!cwd) return
+      setDraftBusy(id + ':' + action)
+      setDraftNote('')
+      const url = action === 'apply' ? '/dsh-vision-bench/config/draft/apply' : '/dsh-vision-bench/config/draft'
+      const body = action === 'apply' ? { cwd, draftId: id } : { cwd, op: 'discard', draftId: id, id }
+      post(url, body, 20000).then((data) => {
+        if (data && data.ok === false) {
+          const code = data.errorCode || ''
+          setDraftNote((code === 'CONFIG_DRIFT' ? t('configDrift') + ': ' : '') + (data.error || t('fail')))
+        } else {
+          setDraftNote(action === 'apply' ? t('draftApplied') : t('draftDiscarded'))
+          setTimeout(() => setDraftNote(''), 1800)
+        }
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then((data) => {
+        if (data && data.workspace && Array.isArray(data.workspace.configDrafts)) setDrafts(data.workspace.configDrafts)
+        if (data && data.workspace && data.workspace.modbus) setModbus(data.workspace.modbus)
+      }).catch((err) => {
+        setDraftNote(String(err && err.message || t('fail')))
+      }).finally(() => setDraftBusy(''))
+    }
+
     const pack = normalizeModbus(modbus)
     const scope = resolveSidebarScope(cwd, pack.activeConnectionId, pack.activeDeviceId)
     // keep pinnedTick to force re-render on pin change
@@ -289,6 +318,32 @@ export function createLiveView(React, t, post, hooks) {
       return connName + ' · ' + connEp + ' / ' + devName
     }
 
+    const pendingDrafts = drafts.filter((d) => d && d.status === 'pending')
+    const currentCfgVersion = pack.configVersion || 1
+    const draftPanel = drafts.length
+      ? el('div', { className: 'dvb-panel', style: { margin: '8px 0', padding: '6px 8px', borderLeft: pendingDrafts.length ? '3px solid #e0912f' : '3px solid #4f8ef7' } },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, t('draftTitle') + (pendingDrafts.length ? ' · ' + pendingDrafts.length + ' 待确认' : '')),
+            el('span', { className: 'dvb-tag' }, 'v' + currentCfgVersion)),
+          drafts.slice(0, 3).map((d) => {
+            const s = d.summary || {}
+            const isPending = d.status === 'pending'
+            const drift = isPending && currentCfgVersion !== d.baseConfigVersion
+            const busyApply = draftBusy === d.id + ':apply'
+            const busyDiscard = draftBusy === d.id + ':discard'
+            return el('div', { key: d.id, className: 'dvb-task', 'data-status': d.status, style: drift ? { borderLeft: '2px solid #e0912f' } : null },
+              el('span', { className: 'dvb-badge', 'data-kind': isPending ? 'warn' : 'ok' }, d.status === 'pending' ? '待确认' : d.status),
+              el('span', { className: 'dvb-hint', title: d.id }, d.id.slice(0, 8)),
+              el('span', { className: 'dvb-tag' }, 'v' + d.baseConfigVersion + '→v' + currentCfgVersion),
+              el('span', { className: 'dvb-tag' }, t('draftAffectedPoints') + ' ' + (s.affectedPoints||0)),
+              s.comConflicts && s.comConflicts.length ? el('span', { className: 'dvb-need' }, t('draftComConflict')) : null,
+              s.unitIdConflicts && s.unitIdConflicts.length ? el('span', { className: 'dvb-need' }, t('draftUnitConflict')) : null,
+              drift && isPending ? el('span', { className: 'dvb-need' }, t('draftDrift')) : null,
+              isPending ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: busyApply || busyDiscard, onClick() { resolveDraft(d.id, 'apply') } }, busyApply ? t('draftApplying') : t('draftApprove')) : null,
+              isPending ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: busyApply || busyDiscard, onClick() { resolveDraft(d.id, 'discard') } }, busyDiscard ? '...' : t('draftDiscard')) : null)
+          }),
+          draftNote ? el('div', { className: 'dvb-msg', 'data-kind': draftNote.indexOf('漂移')>=0 ? 'err' : 'ok' }, draftNote) : null)
+      : null
     return el('div', { className: 'dvb-live', 'data-kind': kind },
       el('div', { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('liveTable')),
@@ -303,6 +358,7 @@ export function createLiveView(React, t, post, hooks) {
         tabId && typeof closeTab === 'function'
           ? el('button', { type: 'button', className: 'dvb-btn dvb-live-close', title: t('liveClose'), onClick() { closeTab(tabId) } }, '×')
           : null),
+      draftPanel,
       // Agent 聚焦横幅 + 临时监视组 + 证据跳转（后台任务仅角标）
       focusState && focusState.request
         ? el('div', { className: 'dvb-panel dvb-focus-banner', 'data-badge': focusState.badgeOnly ? 'true' : 'false', style: { margin: '8px 0', padding: '6px 8px', borderLeft: focusState.badgeOnly ? '3px solid #e0912f' : '3px solid #4f8ef7', background: focusState.badgeOnly ? 'rgba(224,145,47,.08)' : 'rgba(79,142,247,.08)' } },
