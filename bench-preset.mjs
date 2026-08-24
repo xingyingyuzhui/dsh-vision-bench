@@ -1,33 +1,18 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { createRequire } from 'node:module'
 import * as yaml from 'yaml'
 
+// Every fs access goes through the same require cache as the test harness, so
+// failures can be injected by patching node:fs (see test/tool-preset.test.mjs).
 const _require = createRequire(import.meta.url)
-function _writeFileSync(...args) {
-  const m = _require('node:fs')
-  return m.writeFileSync(...args)
-}
-function _copySync(...args) {
-  const m = _require('node:fs')
-  return m.copyFileSync(...args)
-}
-function _renameSync(...args) {
-  const m = _require('node:fs')
-  return m.renameSync(...args)
-}
-function _unlinkSync(...args) {
-  const m = _require('node:fs')
-  return m.unlinkSync(...args)
-}
-function _mkdirSync(...args) {
-  const m = _require('node:fs')
-  return m.mkdirSync(...args)
-}
-function _existsSync(...args) {
-  const m = _require('node:fs')
-  return m.existsSync(...args)
-}
+const _readFileSync = (...a) => _require('node:fs').readFileSync(...a)
+const _writeFileSync = (...a) => _require('node:fs').writeFileSync(...a)
+const _copySync = (...a) => _require('node:fs').copyFileSync(...a)
+const _renameSync = (...a) => _require('node:fs').renameSync(...a)
+const _unlinkSync = (...a) => _require('node:fs').unlinkSync(...a)
+const _mkdirSync = (...a) => _require('node:fs').mkdirSync(...a)
+const _existsSync = (...a) => _require('node:fs').existsSync(...a)
+
 export const PRESET_BACKUP_FAILED = 'PRESET_BACKUP_FAILED'
 export const PRESET_WRITE_FAILED = 'PRESET_WRITE_FAILED'
 export const PRESET_RESTORE_FAILED = 'PRESET_RESTORE_FAILED'
@@ -79,16 +64,43 @@ const OWNERSHIP_TEMPLATE = {
 
 export const REBUILD_INSTRUCTIONS = '安全重建：备份 $DSH_HOME/.agent-presets/vision-bench 到带时间戳目录(.vision-bench.backup.<ISO>含 agent.cordis.yml/preset.yml/.dsh-vision-bench)，删除旧目录后 agentPresets.copy("standard","vision-bench","Vision模式")并重启'
 
-function writeOwnership(dir) {
+// --- ownership marker -------------------------------------------------------
+// Strict ownership check: an unreadable, empty, invalid-JSON or foreign marker
+// fails closed — the caller must NOT proceed and overwrite it.
+function checkOwnership(dir) {
   const markerPath = join(dir, MARKER)
-  const payload = {
-    ...OWNERSHIP_TEMPLATE,
-    lastManagedAt: new Date().toISOString(),
+  if (!_existsSync(markerPath)) return { exists: false }
+  let raw
+  try {
+    raw = _readFileSync(markerPath, 'utf8').trim()
+  } catch {
+    return { exists: true, error: 'Vision预设 id 已被其他预设占用', reason: 'marker-unreadable' }
   }
-  _writeFileSync(markerPath, JSON.stringify(payload, null, 2) + '\n')
-  return payload
+  if (!raw) return { exists: true, error: 'Vision预设 id 已被其他预设占用', reason: 'marker-empty' }
+  if (raw === 'dsh-vision-bench') return { exists: true, owned: true, legacy: true }
+  let obj = null
+  try { obj = JSON.parse(raw) } catch { /* invalid JSON fails closed below */ }
+  if (!obj || typeof obj !== 'object' || obj.owner !== 'dsh-vision-bench') {
+    return { exists: true, error: 'Vision预设 id 已被其他预设占用', reason: 'marker-invalid-or-foreign' }
+  }
+  return { exists: true, owned: true, legacy: false, payload: obj }
 }
 
+// lastManagedAt is intentionally excluded: a fully consistent preset must not
+// be rewritten just to refresh the timestamp.
+function templateFieldsMatch(payload) {
+  return !!payload
+    && payload.owner === OWNERSHIP_TEMPLATE.owner
+    && payload.presetSchemaVersion === OWNERSHIP_TEMPLATE.presetSchemaVersion
+    && payload.basePresetId === OWNERSHIP_TEMPLATE.basePresetId
+    && payload.pluginRowId === OWNERSHIP_TEMPLATE.pluginRowId
+}
+
+function ownershipText(nowIso) {
+  return JSON.stringify({ ...OWNERSHIP_TEMPLATE, lastManagedAt: nowIso }, null, 2) + '\n'
+}
+
+// --- backup / atomic write / restore ---------------------------------------
 // Task9/0.18.1: every existing file must back up successfully; any failure aborts.
 // Returns a manifest { ok, backupDir, files }.
 function createBackup(dir) {
@@ -103,19 +115,27 @@ function createBackup(dir) {
         _copySync(src, join(backupDir, name))
         files.push(name)
       } catch (e) {
-        throw new Error('复制备份失败 ' + name + ': ' + String((e && e.message) || e))
+        const err = new Error('复制备份失败 ' + name + ': ' + String((e && e.message) || e))
+        err.backupDir = backupDir
+        throw err
       }
     }
   }
   return { ok: true, backupDir, files }
 }
 
-// Atomic write: temp file in same dir + rename.
+// Atomic write: temp file in same dir + rename. On any failure the temp file
+// is removed before the error propagates, so no partial file is left behind.
 function writeAtomic(file, text, writeImpl) {
   const tmp = file + '.tmp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
   const writer = writeImpl || _writeFileSync
-  writer(tmp, text)
-  _renameSync(tmp, file)
+  try {
+    writer(tmp, text)
+    _renameSync(tmp, file)
+  } catch (e) {
+    try { _unlinkSync(tmp) } catch {}
+    throw e
+  }
 }
 
 // Restore every file from backup; files that did not exist before are deleted.
@@ -133,8 +153,8 @@ function restoreAll(backupDir, dir, existedBefore) {
 
 export const ensurePresetOverlay = (dir) => {
   const file = join(dir, 'agent.cordis.yml')
-  if (!existsSync(file)) return { ok: false, error: 'missing composition' }
-  const raw = readFileSync(file, 'utf8')
+  if (!_existsSync(file)) return { ok: false, error: 'missing composition' }
+  const raw = _readFileSync(file, 'utf8')
   let doc
   try {
     doc = yaml.parseDocument(raw)
@@ -152,17 +172,10 @@ export const ensurePresetOverlay = (dir) => {
     return { ok: false, error: 'invalid composition: expected sequence', rebuildHelp: REBUILD_INSTRUCTIONS }
   }
 
-  // only manage ownership-declared nodes
-  const markerPath = join(dir, MARKER)
-  if (existsSync(markerPath)) {
-    try {
-      const raw = readFileSync(markerPath, 'utf8').trim()
-      if (raw && raw !== 'dsh-vision-bench') {
-        const obj = JSON.parse(raw)
-        if (!obj || obj.owner !== 'dsh-vision-bench') return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir, rebuildHelp: REBUILD_INSTRUCTIONS }
-      }
-      if (!raw) return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir, rebuildHelp: REBUILD_INSTRUCTIONS }
-    } catch {}
+  // only manage ownership-declared nodes; invalid/foreign markers fail closed
+  const ownership = checkOwnership(dir)
+  if (ownership.error) {
+    return { ok: false, error: ownership.error, dir, rebuildHelp: REBUILD_INSTRUCTIONS }
   }
 
   // Locate tool row via YAML Document API (id: vision-bench-tools)
@@ -230,25 +243,45 @@ export const ensurePresetOverlay = (dir) => {
     addedRow = true
   }
 
-  let nextText = String(doc.toString())
-  if (!nextText.endsWith('\n')) nextText += '\n'
+  // Desired contents for all three files, computed up-front and compared with
+  // the current content — a file is only written when its content would change.
+  const desiredComposition = (() => {
+    let t = String(doc.toString())
+    if (!t.endsWith('\n')) t += '\n'
+    return t
+  })()
+  const desiredPresetMetadata = PRESET_METADATA
+  const compositionChanged = desiredComposition !== raw
+  let metadataChanged = true
+  try {
+    metadataChanged = _readFileSync(join(dir, 'preset.yml'), 'utf8') !== desiredPresetMetadata
+  } catch { /* missing/unreadable preset.yml needs a write */ }
 
-  const changed = nextText !== raw
-  // metadata/marker always refreshed when we own the preset; but avoid overwriting unknown persona
-  // For unknown persona, we still ensure tool row but do not overwrite persona text (kept above)
-  // If needsReview, we keep nextText as-is (persona untouched) — still may have addedRow
+  // The marker only gains a fresh lastManagedAt when an actual migration or
+  // version change happens; a fully consistent preset is left byte-identical
+  // (no backup, no writes) so repeated startups stay quiet.
+  const markerChanged = !ownership.exists
+    || ownership.legacy
+    || !templateFieldsMatch(ownership.payload)
+    || compositionChanged
+    || metadataChanged
+  const willWrite = compositionChanged || metadataChanged || markerChanged
+
+  if (!willWrite) {
+    if (needsReview) {
+      return { ok: false, error: '预设需要人工检查', needsReview: true, dir, personaNeedsReview: true, unchanged: true, rebuildHelp: REBUILD_INSTRUCTIONS }
+    }
+    return { ok: true, dir, unchanged: true }
+  }
 
   // Backup before any write that would modify existing files. Any backup
   // failure aborts immediately with PRESET_BACKUP_FAILED.
   let backupDir = null
-  const willWrite = changed || addedRow || personaRestored
-  if (willWrite) {
-    try {
-      const bak = createBackup(dir)
-      backupDir = bak.backupDir
-    } catch (e) {
-      return { ok: false, error: '预设备份失败：' + String((e && e.message) || e), errorCode: PRESET_BACKUP_FAILED, needsReview: true, rebuildHelp: REBUILD_INSTRUCTIONS }
-    }
+  try {
+    const bak = createBackup(dir)
+    backupDir = bak.backupDir
+  } catch (e) {
+    return { ok: false, error: '预设备份失败：' + String((e && e.message) || e), errorCode: PRESET_BACKUP_FAILED, needsReview: true, backupDir: (e && e.backupDir) || null, rebuildHelp: REBUILD_INSTRUCTIONS }
   }
 
   // remember which affected files existed before the write (for rollback of
@@ -257,20 +290,16 @@ export const ensurePresetOverlay = (dir) => {
   for (const n of AFFECTED_FILES) existedBefore[n] = _existsSync(join(dir, n))
 
   try {
-    if (changed) {
-      writeAtomic(file, nextText)
-    }
-    writeAtomic(join(dir, 'preset.yml'), PRESET_METADATA)
-    writeOwnership(dir)
+    if (compositionChanged) writeAtomic(file, desiredComposition)
+    if (metadataChanged) writeAtomic(join(dir, 'preset.yml'), desiredPresetMetadata)
+    if (markerChanged) writeAtomic(join(dir, MARKER), ownershipText(new Date().toISOString()))
   } catch (e) {
     // rollback ALL affected files; failure to roll back is a distinct error
     let restoreErr = null
-    if (backupDir) {
-      try {
-        restoreAll(backupDir, dir, existedBefore)
-      } catch (re) {
-        restoreErr = String((re && re.message) || re)
-      }
+    try {
+      restoreAll(backupDir, dir, existedBefore)
+    } catch (re) {
+      restoreErr = String((re && re.message) || re)
     }
     if (restoreErr) {
       return {
@@ -293,27 +322,16 @@ export async function seedVisionBenchPreset(agentPresets, home) {
   const dir = userPresetDir(home)
   const composition = join(dir, 'agent.cordis.yml')
   const marker = join(dir, MARKER)
-  const hasComposition = existsSync(composition)
-  const hasMarker = existsSync(marker)
+  const hasComposition = _existsSync(composition)
+  const hasMarker = _existsSync(marker)
   if (hasComposition && !hasMarker) {
     return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir, rebuildHelp: REBUILD_INSTRUCTIONS }
   }
   if (hasComposition && hasMarker) {
-    try {
-      const raw = readFileSync(marker, 'utf8').trim()
-      if (raw && raw !== 'dsh-vision-bench') {
-        try {
-          const obj = JSON.parse(raw)
-          if (!obj || obj.owner !== 'dsh-vision-bench') {
-            return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir, rebuildHelp: REBUILD_INSTRUCTIONS }
-          }
-        } catch {
-          if (raw !== 'dsh-vision-bench') {
-            return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir, rebuildHelp: REBUILD_INSTRUCTIONS }
-          }
-        }
-      }
-    } catch {}
+    const ownership = checkOwnership(dir)
+    if (ownership.error) {
+      return { ok: false, error: ownership.error, dir, rebuildHelp: REBUILD_INSTRUCTIONS }
+    }
   }
   if (!hasComposition && agentPresets && typeof agentPresets.copy === 'function') {
     try {
@@ -322,7 +340,7 @@ export async function seedVisionBenchPreset(agentPresets, home) {
       /* already exists, unknown source, or no writable root */
     }
   }
-  if (!existsSync(composition)) {
+  if (!_existsSync(composition)) {
     return { ok: false, error: '未能创建Vision预设（需要可从 standard 复制）', rebuildHelp: REBUILD_INSTRUCTIONS }
   }
   return ensurePresetOverlay(dir)
@@ -335,4 +353,7 @@ export const _internal = {
   OWNERSHIP_TEMPLATE,
   MARKER,
   REBUILD_INSTRUCTIONS,
+  checkOwnership,
+  templateFieldsMatch,
+  writeAtomic,
 }
