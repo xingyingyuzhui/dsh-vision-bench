@@ -2954,12 +2954,22 @@ function isForegroundTask(task) {
   // Agent 的轮询/读点等背景任务 badgeOnly
   if (task.source === 'agent' && (task.type === 'read' || task.type === 'poll')) return false
   // 已标记 badgeOnly 的 focus 请求也不抢焦点
+  if (task && task.badgeOnly === true) return false
+  if (task && task.foreground === false) return false
   return true
 }
 
 function shouldStealFocus(task, focusState) {
   if (focusState && focusState.badgeOnly) return false
+  if (task && task.foreground === false) return false
+  if (task && task.badgeOnly) return false
   return isForegroundTask(task)
+}
+
+function shouldHighlightFocus(focusState) {
+  if (!focusState || !focusState.request) return false
+  if (focusState.badgeOnly) return false
+  return true
 }
 
 function lineKind(line) {
@@ -3776,6 +3786,26 @@ function createHmiView(React, t, post, openLive) {
       }
     }), [cwd])
 
+    // Task14: 显式 focus 且 foreground 显式时才切换连接/设备/高亮；badgeOnly 仅角标
+    React.useEffect(() => {
+      if (!cwd || !focusState.request || focusState.badgeOnly) return
+      const r = focusState.request
+      const pack = normalizePack()
+      if (r.connectionId && r.connectionId !== pack.activeConnectionId) {
+        // 无效组合已在服务端拦截，这里仅对有效目标做半完成防护
+        if (pack.connections.some((c) => c.id === r.connectionId)) {
+          selectConnection(r.connectionId)
+        }
+      } else if (r.deviceId && r.deviceId !== pack.activeDeviceId) {
+        if (pack.devices.some((d) => d.id === r.deviceId && d.connectionId === (r.connectionId || pack.activeConnectionId))) {
+          persist({ activeDeviceId: r.deviceId, version: 3 })
+        }
+      }
+      if (r.pointId || r.frameId) {
+        setFrameFilter(r.connectionId || pack.activeConnectionId || 'all')
+      }
+    }, [cwd, focusState.request && focusState.request.connectionId, focusState.request && focusState.request.deviceId, focusState.request && focusState.request.pointId, focusState.request && focusState.request.frameId, focusState.badgeOnly])
+
     function normalizePack() {
       const mb = (workspaceRef.current.modbus) || emptyWorkspace().modbus
       // 兼容 v2 与 v3：v3 含 connections/devices，v2 为单 conn
@@ -4374,7 +4404,7 @@ function createHmiView(React, t, post, openLive) {
           },
         }, frameRowsFiltered.map((item, idx) => {
           const fid = item.id || item.frameId || (String(item.connectionId || 'c') + ':' + String(item.t) + ':' + idx)
-          const isFocused = focusState && focusState.request && focusState.request.frameId === fid
+          const isFocused = shouldHighlightFocus(focusState) && focusState.request.frameId === fid
           return el('div', {
             key: fid + ':' + idx,
             className: 'dvb-serial-line' + focusHighlightClass(isFocused),
@@ -4505,7 +4535,7 @@ function createHmiView(React, t, post, openLive) {
       : null
 
     // ── 顶部连接列表 ──
-    const connListPanel = el('div', { className: 'dvb-panel' + (focusState && focusState.request && focusState.request.connectionId ? ' dvb-has-focus' : '') },
+    const connListPanel = el('div', { className: 'dvb-panel' + (shouldHighlightFocus(focusState) && focusState.request.connectionId ? ' dvb-has-focus' : '') },
       el('div', { className: 'dvb-panel-head' },
         el('span', { className: 'dvb-panel-title' }, t('connBar') || '连接'),
         el('span', { className: 'dvb-tag' }, connections.length + ' 个连接'),
@@ -4582,9 +4612,9 @@ function createHmiView(React, t, post, openLive) {
                         onClick() { sendToAgent('connection', { connectionId: c.id, name: c.name }) },
                       }, agentCopied === 'connection:' + c.id ? '已复制' : '让 Agent 分析'),
                       el('button', {
-                        type: 'button', className: 'dvb-btn dvb-btn-sm' + (focusState.request && focusState.request.connectionId === c.id && !focusState.request.pointId ? ' is-on' : ''),
+                        type: 'button', className: 'dvb-btn dvb-btn-sm' + (shouldHighlightFocus(focusState) && focusState.request.connectionId === c.id && !focusState.request.pointId ? ' is-on' : ''),
                         title: '聚焦此连接标签，高亮并支持返回原焦点',
-                        onClick() { requestFocusUi({ connectionId: c.id, kind: 'connection' }) },
+                        onClick() { requestFocusUi({ connectionId: c.id, kind: 'connection' }, { badgeOnly: false }) },
                       }, '聚焦'),
                       pendingDeleteId === c.id
                         ? el('span', { style: { display: 'flex', gap: '4px', alignItems: 'center' } },
@@ -5786,7 +5816,7 @@ function createLiveView(React, t, post, hooks) {
       tempWatchNote ? el('div', { className: 'dvb-hint' }, tempWatchNote) : null,
       rows.length
         ? el('div', { className: 'dvb-live-list' }, rows.map((row) => {
-          const isFocused = focusState && focusState.request && focusState.request.pointId === row.key
+          const isFocused = shouldHighlightFocus(focusState) && focusState.request.pointId === row.key
           const tempWatchIds = getTempWatch(cwd)
           const inTemp = tempWatchIds.includes(row.key)
           return el('div', {
@@ -6640,6 +6670,21 @@ function apply(ctx) {
         frames: FramesPage,
       })
       const stopMap = registerMap(side, React, t, MapPage)
+      // Task14: 仅当显式 foreground 才自动切页；badgeOnly 仅角标
+      let lastFocusKey = ''
+      const applyFocus = (fs) => {
+        if (!fs || !fs.request || fs.badgeOnly || !shouldHighlightFocus(fs)) return
+        const key = fs.request.connectionId + '|' + fs.request.deviceId + '|' + fs.request.pointId + '|' + fs.request.frameId + '|' + fs.request.trendKey + '|' + fs.request.alarmId
+        if (key === lastFocusKey) return
+        lastFocusKey = key
+        const kind = fs.request.kind || (fs.request.pointId ? 'point' : fs.request.frameId ? 'frame' : fs.request.trendKey ? 'trend' : fs.request.alarmId ? 'alarm' : 'connection')
+        if (kind === 'trend') { try { side.openTab({ type: 'dsh-vision-bench:charts' }) } catch {} }
+        else if (kind === 'alarm') { try { side.openTab({ type: 'dsh-vision-bench:alarms' }) } catch {} }
+        else if (kind === 'frame') { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} }
+        else { try { openModbusTab(side) } catch { try { openLiveImpl() } catch {} } }
+      }
+      const focusUnsub = subscribeFocus('', (fs) => applyFocus(fs))
+      side.effect(() => () => { try { focusUnsub() } catch {} })
       side.effect(() => () => {
         if (typeof stopLive === 'function') stopLive()
         if (typeof stopMap === 'function') stopMap()

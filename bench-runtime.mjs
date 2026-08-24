@@ -6,6 +6,7 @@ import { closeBetterTab, createAlarmPage, createLiveView, createTrendPage, openM
 import { createMapView, openProjectTab, registerMap } from './bench-map.mjs'
 import { createDebugView, registerView } from './bench-view.mjs'
 import { createFramesPage } from './bench-frames-view.mjs'
+import { getFocusState, shouldHighlightFocus, subscribeFocus } from './bench-shared.mjs'
 
 export function apply(ctx) {
   const React = require('react')
@@ -77,6 +78,21 @@ export function apply(ctx) {
         frames: FramesPage,
       })
       const stopMap = registerMap(side, React, t, MapPage)
+      // Task14: 仅当显式 foreground 才自动切页；badgeOnly 仅角标
+      let lastFocusKey = ''
+      const applyFocus = (fs) => {
+        if (!fs || !fs.request || fs.badgeOnly || !shouldHighlightFocus(fs)) return
+        const key = fs.request.connectionId + '|' + fs.request.deviceId + '|' + fs.request.pointId + '|' + fs.request.frameId + '|' + fs.request.trendKey + '|' + fs.request.alarmId
+        if (key === lastFocusKey) return
+        lastFocusKey = key
+        const kind = fs.request.kind || (fs.request.pointId ? 'point' : fs.request.frameId ? 'frame' : fs.request.trendKey ? 'trend' : fs.request.alarmId ? 'alarm' : 'connection')
+        if (kind === 'trend') { try { side.openTab({ type: 'dsh-vision-bench:charts' }) } catch {} }
+        else if (kind === 'alarm') { try { side.openTab({ type: 'dsh-vision-bench:alarms' }) } catch {} }
+        else if (kind === 'frame') { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} }
+        else { try { openModbusTab(side) } catch { try { openLiveImpl() } catch {} } }
+      }
+      const focusUnsub = subscribeFocus('', (fs) => applyFocus(fs))
+      side.effect(() => () => { try { focusUnsub() } catch {} })
       side.effect(() => () => {
         if (typeof stopLive === 'function') stopLive()
         if (typeof stopMap === 'function') stopMap()

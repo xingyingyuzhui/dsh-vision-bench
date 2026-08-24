@@ -1,4 +1,4 @@
-import { pushFramesLog, subscribeState, getFramesLog, clearFramesLog, resolveSidebarScope, getSidebarPin, setSidebarPin, buildAgentRef, copyAgentRef, agentRefToText, getFocusState, setFocusState, isFocusTarget, focusHighlightClass, getTempWatch, setTempWatch, clearTempWatch, shouldStealFocus } from './bench-shared.mjs'
+import { pushFramesLog, subscribeState, getFramesLog, clearFramesLog, resolveSidebarScope, getSidebarPin, setSidebarPin, buildAgentRef, copyAgentRef, agentRefToText, getFocusState, setFocusState, isFocusTarget, focusHighlightClass, getTempWatch, setTempWatch, clearTempWatch, shouldStealFocus, shouldHighlightFocus } from './bench-shared.mjs'
 import { clockOf, decodeValue, functionTag } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
@@ -414,7 +414,7 @@ export function createLiveView(React, t, post, hooks) {
       tempWatchNote ? el('div', { className: 'dvb-hint' }, tempWatchNote) : null,
       rows.length
         ? el('div', { className: 'dvb-live-list' }, rows.map((row) => {
-          const isFocused = focusState && focusState.request && focusState.request.pointId === row.key
+          const isFocused = shouldHighlightFocus(focusState) && focusState.request.pointId === row.key
           const tempWatchIds = getTempWatch(cwd)
           const inTemp = tempWatchIds.includes(row.key)
           return el('div', {

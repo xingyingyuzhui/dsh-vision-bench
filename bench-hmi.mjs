@@ -15,6 +15,7 @@ import {
   pushFramesLog,
   setFocusState,
   shouldStealFocus,
+  shouldHighlightFocus,
 } from './bench-shared.mjs'
 import {
   emptyJournal,
@@ -147,6 +148,26 @@ export function createHmiView(React, t, post, openLive) {
         }
       }
     }), [cwd])
+
+    // Task14: 显式 focus 且 foreground 显式时才切换连接/设备/高亮；badgeOnly 仅角标
+    React.useEffect(() => {
+      if (!cwd || !focusState.request || focusState.badgeOnly) return
+      const r = focusState.request
+      const pack = normalizePack()
+      if (r.connectionId && r.connectionId !== pack.activeConnectionId) {
+        // 无效组合已在服务端拦截，这里仅对有效目标做半完成防护
+        if (pack.connections.some((c) => c.id === r.connectionId)) {
+          selectConnection(r.connectionId)
+        }
+      } else if (r.deviceId && r.deviceId !== pack.activeDeviceId) {
+        if (pack.devices.some((d) => d.id === r.deviceId && d.connectionId === (r.connectionId || pack.activeConnectionId))) {
+          persist({ activeDeviceId: r.deviceId, version: 3 })
+        }
+      }
+      if (r.pointId || r.frameId) {
+        setFrameFilter(r.connectionId || pack.activeConnectionId || 'all')
+      }
+    }, [cwd, focusState.request && focusState.request.connectionId, focusState.request && focusState.request.deviceId, focusState.request && focusState.request.pointId, focusState.request && focusState.request.frameId, focusState.badgeOnly])
 
     function normalizePack() {
       const mb = (workspaceRef.current.modbus) || emptyWorkspace().modbus
@@ -746,7 +767,7 @@ export function createHmiView(React, t, post, openLive) {
           },
         }, frameRowsFiltered.map((item, idx) => {
           const fid = item.id || item.frameId || (String(item.connectionId || 'c') + ':' + String(item.t) + ':' + idx)
-          const isFocused = focusState && focusState.request && focusState.request.frameId === fid
+          const isFocused = shouldHighlightFocus(focusState) && focusState.request.frameId === fid
           return el('div', {
             key: fid + ':' + idx,
             className: 'dvb-serial-line' + focusHighlightClass(isFocused),
@@ -877,7 +898,7 @@ export function createHmiView(React, t, post, openLive) {
       : null
 
     // ── 顶部连接列表 ──
-    const connListPanel = el('div', { className: 'dvb-panel' + (focusState && focusState.request && focusState.request.connectionId ? ' dvb-has-focus' : '') },
+    const connListPanel = el('div', { className: 'dvb-panel' + (shouldHighlightFocus(focusState) && focusState.request.connectionId ? ' dvb-has-focus' : '') },
       el('div', { className: 'dvb-panel-head' },
         el('span', { className: 'dvb-panel-title' }, t('connBar') || '连接'),
         el('span', { className: 'dvb-tag' }, connections.length + ' 个连接'),
@@ -954,9 +975,9 @@ export function createHmiView(React, t, post, openLive) {
                         onClick() { sendToAgent('connection', { connectionId: c.id, name: c.name }) },
                       }, agentCopied === 'connection:' + c.id ? '已复制' : '让 Agent 分析'),
                       el('button', {
-                        type: 'button', className: 'dvb-btn dvb-btn-sm' + (focusState.request && focusState.request.connectionId === c.id && !focusState.request.pointId ? ' is-on' : ''),
+                        type: 'button', className: 'dvb-btn dvb-btn-sm' + (shouldHighlightFocus(focusState) && focusState.request.connectionId === c.id && !focusState.request.pointId ? ' is-on' : ''),
                         title: '聚焦此连接标签，高亮并支持返回原焦点',
-                        onClick() { requestFocusUi({ connectionId: c.id, kind: 'connection' }) },
+                        onClick() { requestFocusUi({ connectionId: c.id, kind: 'connection' }, { badgeOnly: false }) },
                       }, '聚焦'),
                       pendingDeleteId === c.id
                         ? el('span', { style: { display: 'flex', gap: '4px', alignItems: 'center' } },

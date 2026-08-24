@@ -1272,7 +1272,8 @@ export const requestFocus = (home, cwd, body) => {
   const tempWatchIds = Array.isArray(body.tempWatchIds) ? body.tempWatchIds.map((x) => String(x).trim()).filter(Boolean).slice(0, 32)
     : (Array.isArray(body.tempWatch) ? body.tempWatch.map((x) => String(x).trim()).filter(Boolean).slice(0, 32) : [])
   const evidence = Array.isArray(body.evidence) ? body.evidence.slice(0, 20) : []
-  const badgeOnly = !!(body.badgeOnly === true || (origin.source === 'agent' && body.foreground === false))
+  const wantForeground = body.foreground === true
+  const badgeOnly = !!(body.badgeOnly === true || (origin.source === 'agent' && !wantForeground))
   const saved = saveWorkspace(home, room.cwd, {
     focus: {
       request: nextReq,

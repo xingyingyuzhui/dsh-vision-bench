@@ -481,12 +481,22 @@ export function isForegroundTask(task) {
   // Agent 的轮询/读点等背景任务 badgeOnly
   if (task.source === 'agent' && (task.type === 'read' || task.type === 'poll')) return false
   // 已标记 badgeOnly 的 focus 请求也不抢焦点
+  if (task && task.badgeOnly === true) return false
+  if (task && task.foreground === false) return false
   return true
 }
 
 export function shouldStealFocus(task, focusState) {
   if (focusState && focusState.badgeOnly) return false
+  if (task && task.foreground === false) return false
+  if (task && task.badgeOnly) return false
   return isForegroundTask(task)
+}
+
+export function shouldHighlightFocus(focusState) {
+  if (!focusState || !focusState.request) return false
+  if (focusState.badgeOnly) return false
+  return true
 }
 
 export function lineKind(line) {
