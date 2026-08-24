@@ -51,6 +51,7 @@
     "bench-points.mjs",
     "bench-pollplan.mjs",
     "bench-devices.mjs",
+    "bench-targets.mjs",
     "bench-slave.mjs",
     "bench-serial.mjs",
     "bench-journal.mjs",

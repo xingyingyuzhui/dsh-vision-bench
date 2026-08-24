@@ -230,16 +230,32 @@ export const normalizeFramesByConnection = (input, connections) => {
   if (!input || typeof input !== 'object') return out
   for (const [k, v] of Object.entries(input)) {
     const arr = Array.isArray(v) ? v.slice(0, MAX_FRAMES_PER_CONN) : []
-    // sanitize each frame: keep t,label,request,response,trace
-    out[k] = arr.map(f => ({
-      t: Number(f && f.t) || Date.now(),
-      label: typeof (f && f.label) === 'string' ? String(f.label).slice(0, 200) : '',
-      request: typeof (f && f.request) === 'string' ? String(f.request).slice(0, 200) : '',
-      response: typeof (f && f.response) === 'string' ? String(f.response).slice(0, 200) : '',
-      trace: Array.isArray(f && f.trace) ? f.trace.map(s => String(s).slice(0, 200)).slice(0, 8) : [],
-      deviceId: typeof (f && f.deviceId) === 'string' ? f.deviceId : '',
-      connectionId: typeof (f && f.connectionId) === 'string' ? f.connectionId : k,
-    })).slice(-MAX_FRAMES_PER_CONN)
+    out[k] = arr.map(f => {
+      const rec = {
+        t: Number(f && (f.t ?? f.at)) || Date.now(),
+        label: typeof (f && f.label) === 'string' ? String(f.label).slice(0, 200) : '',
+        request: typeof (f && f.request) === 'string' ? String(f.request).slice(0, 200) : '',
+        response: typeof (f && f.response) === 'string' ? String(f.response).slice(0, 200) : '',
+        trace: Array.isArray(f && f.trace) ? f.trace.map(s => String(s).slice(0, 200)).slice(0, 8) : [],
+        deviceId: typeof (f && f.deviceId) === 'string' ? f.deviceId : '',
+        connectionId: typeof (f && f.connectionId) === 'string' ? f.connectionId : k,
+      }
+      const rawId = f && (f.id || f.frameId) ? String(f.id || f.frameId).slice(0, 64) : ''
+      if (rawId) { rec.id = rawId; rec.frameId = String(f.frameId || rawId).slice(0, 64) }
+      else if (f && typeof f.frameId === 'string') { rec.frameId = f.frameId.slice(0,64); rec.id = rec.frameId }
+      if (f && typeof f.transactionId === 'string') rec.transactionId = f.transactionId.slice(0, 64)
+      if (f && typeof f.taskId === 'string') rec.taskId = f.taskId.slice(0, 64)
+      if (f && typeof f.source === 'string') rec.source = f.source.slice(0, 16)
+      if (f && typeof f.direction === 'string') rec.direction = f.direction.slice(0, 16)
+      if (f && Number.isFinite(Number(f.unitId))) rec.unitId = Math.trunc(Number(f.unitId))
+      if (f && Number.isFinite(Number(f.functionCode))) rec.functionCode = Math.trunc(Number(f.functionCode))
+      if (f && Number.isFinite(Number(f.durationMs))) rec.durationMs = Math.trunc(Number(f.durationMs))
+      if (f && typeof f.status === 'string') rec.status = f.status.slice(0, 16)
+      if (f && typeof f.error === 'string') rec.error = f.error.slice(0, 200)
+      if (f && typeof f.requestHex === 'string') rec.requestHex = f.requestHex.slice(0, 400)
+      if (f && typeof f.responseHex === 'string') rec.responseHex = f.responseHex.slice(0, 400)
+      return rec
+    }).slice(-MAX_FRAMES_PER_CONN)
   }
   return out
 }

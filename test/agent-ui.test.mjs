@@ -71,10 +71,10 @@ test('Agent focus creates highlight with stable IDs, temp watch and badgeOnly', 
     const second = await runVisionBench(home, { action: 'focus', connectionId: 'c1', pointId: 'p2' }, cwd, { source: 'agent', sessionId: 's1' })
     assert.equal(second.ok, true)
     assert.equal(second.prev.pointId, 'p1')
-    // frames focus with frameId should require existing frame
+    // frames focus with frameId should require existing frame (unified target -> TARGET_MISMATCH)
     const frameMiss = requestFocus(home, cwd, { source: 'agent', target: { connectionId: 'c1', frameId: 'nonexistent' } })
     assert.equal(frameMiss.ok, false)
-    assert.equal(frameMiss.errorCode, ERROR_CODES.POINT_NOT_FOUND)
+    assert.equal(frameMiss.errorCode, ERROR_CODES.TARGET_MISMATCH)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

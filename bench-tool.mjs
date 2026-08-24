@@ -3,6 +3,7 @@ import { requireKeilProject, requireWorkspaceCwd } from './bench-paths.mjs'
 import { decodeValue } from './bench-points.mjs'
 import { connLabel, normalizeModbus } from './bench-devices.mjs'
 import { applyConfigDraft, createConfigDraft, createManualRequest, discardConfigDraft, getConfigDraft, journalView, listConfigDrafts, loadWorkspace, saveWorkspace } from './bench-store.mjs'
+import { resolveTarget } from './bench-targets.mjs'
 
 const ACTIONS = new Set(['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual', 'connect', 'points', 'frames', 'focus', 'trend', 'alarm', 'evidence', 'draft'])
 
@@ -294,8 +295,21 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
     const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
     const connectionId = typeof args.connectionId === 'string' ? args.connectionId : (typeof args.connId === 'string' ? args.connId : '')
     const pointIds = Array.isArray(args.pointIds) ? args.pointIds : (typeof args.pointId === 'string' ? [args.pointId] : [])
-    if (!connectionId && pack.connections.length > 1) {
+    const trendKey = typeof args.trendKey === 'string' ? args.trendKey : ''
+    if (!connectionId && !trendKey && pack.connections.length > 1) {
       return { ok: false, action, error: '缺少 connectionId', errorCode: 'TARGET_REQUIRED' }
+    }
+    if (trendKey) {
+      const rt = resolveTarget(pack, { connectionId, deviceId: args.deviceId, pointId: pointIds[0], trendKey })
+      if (!rt.ok) return { ok: false, action, error: rt.error, errorCode: rt.errorCode }
+    } else if (pointIds.length) {
+      for (const pid of pointIds) {
+        const rt = resolveTarget(pack, { connectionId: connectionId || pack.activeConnectionId, deviceId: args.deviceId, pointId: pid })
+        if (!rt.ok) return { ok: false, action, error: rt.error, errorCode: rt.errorCode }
+      }
+    } else if (connectionId) {
+      const rt = resolveTarget(pack, { connectionId })
+      if (!rt.ok) return { ok: false, action, error: rt.error, errorCode: rt.errorCode }
     }
     // Return minimal trend evidence handle: configVersion + timeRange
     const start = Number(args.start) || (Date.now() - 5 * 60 * 1000)
@@ -316,8 +330,13 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
   if (action === 'alarm') {
     const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
     const connectionId = typeof args.connectionId === 'string' ? args.connectionId : (typeof args.connId === 'string' ? args.connId : '')
+    const deviceId = typeof args.deviceId === 'string' ? args.deviceId : ''
+    const pointId = typeof args.pointId === 'string' ? args.pointId : ''
     const alarmId = typeof args.alarmId === 'string' ? args.alarmId : ''
-    if (alarmId && !pack.alarmState[alarmId]) {
+    if (alarmId || connectionId || deviceId || pointId) {
+      const rt = resolveTarget(pack, { connectionId: connectionId || (alarmId ? undefined : pack.activeConnectionId), deviceId, pointId, alarmId })
+      if (!rt.ok) return { ok: false, action, error: rt.error, errorCode: rt.errorCode }
+    } else if (alarmId && !pack.alarmState[alarmId]) {
       return { ok: false, action, error: '告警不存在: ' + alarmId, errorCode: 'POINT_NOT_FOUND' }
     }
     return {
@@ -335,6 +354,20 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
     const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
     // Optionally also persist provided evidence refs
     if (Array.isArray(args.evidence) && args.evidence.length) {
+      for (const ev of args.evidence) {
+        if (!ev || typeof ev !== 'object') continue
+        const rt = resolveTarget(pack, {
+          connectionId: ev.connectionId || ev.connId,
+          deviceId: ev.deviceId,
+          pointId: ev.pointId || ev.id,
+          frameId: ev.frameId,
+          alarmId: ev.alarmId,
+          trendKey: ev.trendKey,
+        })
+        // Only validate if target has at least one ID; empty evidence item is allowed? skip
+        const hasId = ev.connectionId || ev.connId || ev.deviceId || ev.pointId || ev.id || ev.frameId || ev.alarmId || ev.trendKey
+        if (hasId && !rt.ok) return { ok: false, action, error: rt.error, errorCode: rt.errorCode }
+      }
       const ws = loadWorkspace(home, room.cwd)
       const mergedEvidence = (ws.focus && ws.focus.evidence ? ws.focus.evidence : []).concat(args.evidence.slice(0, 20))
       saveWorkspace(home, room.cwd, { focus: { ...ws.focus, evidence: mergedEvidence.slice(0, 20) } })

@@ -35,10 +35,12 @@ import { serialDevicePath } from './bench-serial.mjs'
 import { withPortLock } from './bench-portlock.mjs'
 import { findMonitoredPort } from './bench-serial-monitor.mjs'
 import { notifyBenchEvent } from './bench-notify.mjs'
+import { resolveTarget as resolveUnifiedTarget, TARGET_CODES } from './bench-targets.mjs'
 
 export const ERROR_CODES = {
   PORT_IN_USE: 'PORT_IN_USE',
   TARGET_REQUIRED: 'TARGET_REQUIRED',
+  TARGET_MISMATCH: 'TARGET_MISMATCH',
   DEVICE_DISABLED: 'DEVICE_DISABLED',
   ENDPOINT_DRIFT: 'ENDPOINT_DRIFT',
   STALE_VALUE: 'STALE_VALUE',
@@ -541,8 +543,10 @@ export const modbusRead = async (home, cwd, body, opts) => {
   } else if (body && body.pointId) {
     const point = pack.points.find((item) => item.id === body.pointId)
     if (!point) return { ok: false, error: '点位不存在: ' + body.pointId, errorCode: ERROR_CODES.POINT_NOT_FOUND }
-    if (cidArg && (point.connectionId || point.connId) !== cidArg) return { ok: false, error: '点位不在指定连接: ' + body.pointId, errorCode: ERROR_CODES.TARGET_REQUIRED }
-    if (didArg && point.deviceId !== didArg) return { ok: false, error: '点位不在指定设备: ' + body.pointId, errorCode: ERROR_CODES.TARGET_REQUIRED }
+    {
+      const rt = resolveUnifiedTarget(pack, { connectionId: cidArg || point.connectionId || targetCid, deviceId: didArg || point.deviceId || targetDid, pointId: body.pointId })
+      if (!rt.ok) return { ok: false, error: rt.error, errorCode: rt.errorCode === TARGET_CODES.TARGET_MISMATCH ? ERROR_CODES.TARGET_MISMATCH : rt.errorCode }
+    }
     batches = [{ fc: point.function, address: point.address, count: 1 }]
     labels = ['读 ' + pointLabel(point)]
     batchConnIds = [point.connectionId || targetCid]
@@ -717,11 +721,9 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     if (!hit) {
       return { ok: false, error: '不在点表：' + functionTag(fn) + addr, errorCode: ERROR_CODES.POINT_NOT_FOUND }
     }
-    if (cidArg && (hit.connectionId || hit.connId) !== cidArg) {
-      return { ok: false, error: '不在点表：' + functionTag(fn) + addr, errorCode: ERROR_CODES.TARGET_REQUIRED }
-    }
-    if (didArg && hit.deviceId !== didArg) {
-      return { ok: false, error: '不在点表：' + functionTag(fn) + addr, errorCode: ERROR_CODES.TARGET_REQUIRED }
+    {
+      const rt = resolveUnifiedTarget(pack, { connectionId: cidArg || hit.connectionId || targetCid, deviceId: didArg || hit.deviceId || targetDid, pointId: hit.id })
+      if (!rt.ok) return { ok: false, error: rt.error, errorCode: rt.errorCode === TARGET_CODES.TARGET_MISMATCH ? ERROR_CODES.TARGET_MISMATCH : rt.errorCode }
     }
     targetPointIds.push(hit.id)
   }
@@ -1095,10 +1097,22 @@ export const listFrames = (home, cwd, body) => {
   const cidArg = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
   const didArg = body && body.deviceId ? String(body.deviceId).trim() : ''
   const frameId = body && (body.frameId || body.id) ? String(body.frameId || body.id).trim() : ''
-  // Agent requires explicit connectionId when multiple connections
+  // Agent requires explicit connectionId when multiple connections (frames: device is optional)
   {
-    const need = targetRequired(origin, pack, cidArg, didArg)
-    if (need) return { ok: false, error: need.error, errorCode: need.errorCode }
+    const enabledConns = (pack.connections || []).filter((c) => c.enabled !== false)
+    if (origin && origin.source === 'agent' && !cidArg && enabledConns.length > 1) {
+      return { ok: false, error: '缺少 connectionId', errorCode: ERROR_CODES.TARGET_REQUIRED }
+    }
+  }
+  // Unified target validation for frames
+  if (cidArg || didArg || frameId) {
+    const effCid = cidArg || pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || ''
+    const rt = resolveUnifiedTarget(pack, { connectionId: effCid, deviceId: didArg || undefined, frameId: frameId || undefined })
+    if (!rt.ok) {
+      // Map missing -> TARGET_REQUIRED, mismatch -> TARGET_MISMATCH
+      if (rt.errorCode === TARGET_CODES.TARGET_REQUIRED) return { ok: false, error: rt.error, errorCode: ERROR_CODES.TARGET_REQUIRED }
+      return { ok: false, error: rt.error, errorCode: rt.errorCode === TARGET_CODES.TARGET_MISMATCH ? ERROR_CODES.TARGET_MISMATCH : ERROR_CODES.TARGET_REQUIRED }
+    }
   }
   if (cidArg && !pack.connections.some((c) => c.id === cidArg)) {
     return { ok: false, error: '连接不存在: ' + cidArg, errorCode: ERROR_CODES.CONNECTION_NOT_FOUND }
@@ -1125,7 +1139,7 @@ export const listFrames = (home, cwd, body) => {
   })
   if (frameId) {
     const hit = enriched.find((f) => f.id === frameId || f.frameId === frameId)
-    if (!hit) return { ok: false, error: '报文不存在: ' + frameId, errorCode: ERROR_CODES.POINT_NOT_FOUND }
+    if (!hit) return { ok: false, error: '报文不存在: ' + frameId, errorCode: ERROR_CODES.TARGET_MISMATCH }
     // Include stale check: if frame too old? mark stale
     const stale = hit.t && Date.now() - hit.t > 5 * 60 * 1000
     return { ok: true, frame: hit, stale: !!stale, connectionId: targetCid, configVersion: pack.version || 3, errorCode: stale ? ERROR_CODES.STALE_VALUE : undefined }
@@ -1165,26 +1179,17 @@ export const requestFocus = (home, cwd, body) => {
     by: origin.source === 'agent' ? 'agent' : 'user',
   })
   if (!target) return { ok: false, error: '缺少聚焦目标 connectionId/deviceId/pointId/frameId', errorCode: ERROR_CODES.TARGET_REQUIRED }
-  if (target.connectionId && !pack.connections.some((c) => c.id === target.connectionId)) {
-    return { ok: false, error: '连接不存在: ' + target.connectionId, errorCode: ERROR_CODES.CONNECTION_NOT_FOUND }
-  }
-  if (target.connectionId && target.deviceId && !pack.devices.some((d) => d.id === target.deviceId && d.connectionId === target.connectionId)) {
-    // allow deviceId belonging to any connection? strict check
-    if (!pack.devices.some((d) => d.id === target.deviceId)) {
-      return { ok: false, error: '设备不存在: ' + target.deviceId, errorCode: ERROR_CODES.TARGET_REQUIRED }
+  {
+    const rt = resolveUnifiedTarget(pack, target)
+    if (!rt.ok) {
+      const code = rt.errorCode === TARGET_CODES.TARGET_REQUIRED ? ERROR_CODES.TARGET_REQUIRED : (rt.errorCode === TARGET_CODES.TARGET_MISMATCH ? ERROR_CODES.TARGET_MISMATCH : ERROR_CODES.TARGET_REQUIRED)
+      // map not-found variants to MISMATCH for unified view
+      if (/不存在/.test(rt.error) && code === ERROR_CODES.TARGET_REQUIRED) return { ok: false, error: rt.error, errorCode: ERROR_CODES.TARGET_MISMATCH }
+      return { ok: false, error: rt.error, errorCode: code }
     }
   }
   if (target.connectionId && target.deviceId && deviceDisabledOf(pack, target.connectionId, target.deviceId)) {
     return { ok: false, error: '设备已禁用', errorCode: ERROR_CODES.DEVICE_DISABLED }
-  }
-  if (target.pointId && !pack.points.some((p) => p.id === target.pointId)) {
-    return { ok: false, error: '点位不存在: ' + target.pointId, errorCode: ERROR_CODES.POINT_NOT_FOUND }
-  }
-  if (target.frameId) {
-    const cidForFrame = target.connectionId || pack.activeConnectionId
-    const arr = (pack.framesByConnection && pack.framesByConnection[cidForFrame]) || []
-    const exists = arr.some((f) => f.id === target.frameId || f.frameId === target.frameId)
-    if (!exists) return { ok: false, error: '报文不存在: ' + target.frameId, errorCode: ERROR_CODES.POINT_NOT_FOUND }
   }
   // Temporal check: ENDPOINT_DRIFT if target's endpoint fingerprint changed?
   // For focus, we treat endpoint drift as warning but not error.
