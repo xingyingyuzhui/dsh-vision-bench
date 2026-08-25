@@ -290,6 +290,12 @@ const COPY = {
     framesSrcPoll: '自动刷新',
     framesSrcAgent: 'Agent',
     connLink: '连接',
+    connConnecting: '连接中',
+    connDisconnecting: '断开中',
+    connRetry: '重试连接',
+    connErr: '连接异常',
+    connOff: '未连接',
+    connEditLocked: '连接中不可修改端点参数，请先断开',
     connUnlink: '断开',
     connLive: '已连接',
     connDown: '未连接',
@@ -596,6 +602,12 @@ const COPY = {
     framesSrcPoll: 'Polling',
     framesSrcAgent: 'Agent',
     connLink: 'Connect',
+    connConnecting: 'Connecting',
+    connDisconnecting: 'Disconnecting',
+    connRetry: 'Retry',
+    connErr: 'Error',
+    connOff: 'Not connected',
+    connEditLocked: 'Disconnect before editing endpoint parameters',
     connUnlink: 'Disconnect',
     connLive: 'Connected',
     connDown: 'Disconnected',
@@ -4146,6 +4158,7 @@ function createHmiView(React, t, post, openLive, openFrames) {
     const [csvText, setCsvText] = React.useState('')
     const [csvNote, setCsvNote] = React.useState('')
     const [serialSources, setSerialSources] = React.useState([])
+    const [connectionStates, setConnectionStates] = React.useState([])
     const [linkBusy, setLinkBusy] = React.useState('')
     const [draftBusy, setDraftBusy] = React.useState('')
     const [draftNote, setDraftNote] = React.useState('')
@@ -4183,6 +4196,7 @@ function createHmiView(React, t, post, openLive, openFrames) {
       if (data.health) setHealth(data.health)
       if (data.ioRuntime) setIoRuntime(data.ioRuntime)
       if (Array.isArray(data.serialSources)) setSerialSources(data.serialSources)
+      if (Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
       if (Array.isArray(data.pendingWrites)) setPending(data.pendingWrites)
       setJournal(pickJournal(data))
       if (data.workspace && data.workspace.focus) {
@@ -4729,6 +4743,7 @@ function createHmiView(React, t, post, openLive, openFrames) {
         return post('/dsh-vision-bench/state', { cwd })
       }).then((data) => {
         if (data && Array.isArray(data.serialSources)) setSerialSources(data.serialSources)
+        if (data && Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
       }).catch((err) => setError(String((err && err.message) || t('fail')))).finally(() => setLinkBusy(''))
     }
     function unlinkConnection(id) {
@@ -4736,6 +4751,7 @@ function createHmiView(React, t, post, openLive, openFrames) {
       setLinkBusy(id)
       post('/dsh-vision-bench/connection/close', { cwd, connectionId: id }, 15000).then(() => post('/dsh-vision-bench/state', { cwd })).then((data) => {
         if (data && Array.isArray(data.serialSources)) setSerialSources(data.serialSources)
+        if (data && Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
       }).catch(() => {}).finally(() => setLinkBusy(''))
     }
 
@@ -4835,6 +4851,8 @@ function createHmiView(React, t, post, openLive, openFrames) {
               el('tbody', null, connections.map((c)=> {
                 const isActive = c.id === activeConnId
                 const roleLabel = (c.role === 'server' || c.role === 'slave') ? ((t('roleSlave')||'从机') + '(未启用)') : (t('roleMaster')||'主机')
+                const cm = connectionStates.find((x) => x.connectionId === c.id)
+                const st = cm ? (cm.status || 'disconnected') : 'disconnected'
                 const enabled = c.enabled !== false
                 const occupiedPort = c.conn && c.conn.mode==='rtu' && c.conn.port ? findRtuOccupier(c.conn.port, c.id) : null
                 return el('tr', { key: c.id, 'data-active': isActive ? 'true' : 'false', style: isActive ? { background: 'var(--dsw-alias-bg-layer-2,rgba(128,128,128,.1))' } : null },
@@ -4867,19 +4885,26 @@ function createHmiView(React, t, post, openLive, openFrames) {
                         onChange() { toggleConnEnabled(c.id) },
                       }),
                       enabled ? (t('connParticipate') || '参与运行') : (t('connIdle') || '不参与'))),
-                  el('td', { title: occupiedPort ? '已被 ' + occupiedPort + ' 占用' : '' }, connLabel(c.conn||{}) + (occupiedPort ? ' · 已被 ' + occupiedPort + ' 占用' : '')),
+                  el('td', { title: occupiedPort ? '已被 ' + occupiedPort + ' 占用' : '' },
+                    el('span', null, connLabel(c.conn||{}) + (occupiedPort ? ' · 已被 ' + occupiedPort + ' 占用' : '')),
+                    st !== 'disconnected'
+                      ? el('span', { className: 'dvb-badge', 'data-kind': st === 'connected' ? 'live' : (st === 'error' ? 'err' : 'warn') },
+                          st === 'connected' ? (t('connLive')||'已连接') : st === 'connecting' ? (t('connConnecting')||'连接中') : st === 'disconnecting' ? (t('connDisconnecting')||'断开中') : st === 'error' ? (t('connErr')||'连接异常') : '')
+                      : null),
                   el('td', null,
                     el('div', { className: 'dvb-actions' },
                       el('button', {
                         type: 'button', className: 'dvb-btn dvb-btn-primary',
-                        disabled: !cwd || !!linkBusy || !!(c.conn && c.conn.sim) || serialSources.some((s) => s.connectionId === c.id),
+                        disabled: !cwd || !!linkBusy || !!(c.conn && c.conn.sim) || st === 'connecting' || st === 'disconnecting' || st === 'connected',
                         onClick() { linkConnection(c.id) },
-                      }, serialSources.some((s) => s.connectionId === c.id) ? (t('connLive') || '已连接') : (t('connLink') || '连接')),
-                      el('button', {
-                        type: 'button', className: 'dvb-btn',
-                        disabled: !cwd || !!linkBusy || !serialSources.some((s) => s.connectionId === c.id),
-                        onClick() { unlinkConnection(c.id) },
-                      }, t('connUnlink') || '断开'),
+                      }, st === 'connected' ? (t('connLive') || '已连接') : st === 'connecting' ? (t('connConnecting') || '连接中') : st === 'disconnecting' ? (t('connDisconnecting') || '断开中') : st === 'error' ? (t('connRetry') || '重试连接') : (t('connLink') || '连接')),
+                      st === 'connected'
+                        ? el('button', {
+                          type: 'button', className: 'dvb-btn',
+                          disabled: !cwd || !!linkBusy,
+                          onClick() { unlinkConnection(c.id) },
+                        }, t('connUnlink') || '断开')
+                        : null,
                       el('button', {
                         type: 'button', className: 'dvb-btn',
                         onClick() { openConnEdit(c) },
@@ -4909,10 +4934,12 @@ function createHmiView(React, t, post, openLive, openFrames) {
               }))))
         : el('div', { className: 'dvb-empty' }, '暂无连接，点击「＋连接」创建'))
 
+    const formLocked = !!connForm.open && connectionStates.some((x) => x.connectionId === connForm.id && x.status === 'connected')
     const connFormPanel = connForm.open
       ? el('div', { className: 'dvb-panel dvb-write-panel' },
           el('div', { className: 'dvb-panel-head' },
             el('span', { className: 'dvb-panel-title' }, '编辑连接 · ' + connForm.id),
+            formLocked ? el('span', { className: 'dvb-hint dvb-need' }, t('connEditLocked') || '连接中不可修改端点参数，请先断开') : null,
             el('button', { type: 'button', className: 'dvb-btn', onClick(){ setConnForm((prev)=>({...prev, open:false})) } }, t('csvCancel'))),
           el('div', { className: 'dvb-toolbar' },
             field('名称', el('input', {
@@ -4933,6 +4960,7 @@ function createHmiView(React, t, post, openLive, openFrames) {
             field(t('mode'), el('select', {
               className: 'dvb-input',
               value: connForm.conn.mode || 'rtu',
+              disabled: formLocked,
               onChange: (event)=>{ setConnForm((prev)=> ({ ...prev, conn: { ...prev.conn, mode: event.target.value } })) },
             },
               el('option', { value: 'rtu' }, 'RTU'),
@@ -4942,7 +4970,7 @@ function createHmiView(React, t, post, openLive, openFrames) {
                   el('select', {
                     className: 'dvb-input dvb-input-mono',
                     value: connForm.conn.port || '',
-                    disabled: scanning,
+                    disabled: scanning || formLocked,
                     onChange: (event)=>{ setConnForm((prev)=> ({ ...prev, conn: { ...prev.conn, port: event.target.value } })) },
                   },
                     el('option', { value: '' }, scanning ? t('serialScanning') : (ports.length ? t('serialPick') : t('serialNone'))),
@@ -4961,6 +4989,7 @@ function createHmiView(React, t, post, openLive, openFrames) {
                     placeholder: t('hostPh')||'192.168.1.10',
                     spellCheck: false,
                     autoComplete: 'off',
+                    disabled: formLocked,
                     onChange: (event)=>{
                       const host = event.target.value
                       setConnForm((prev)=> ({ ...prev, conn: { ...prev.conn, host } }))
@@ -4971,15 +5000,16 @@ function createHmiView(React, t, post, openLive, openFrames) {
                     value: connForm.conn.tcpPort || 502,
                     type: 'number',
                     style: { width: '80px', flex: 'none' },
+                    disabled: formLocked,
                     onChange: (event)=>{ setConnForm((prev)=> ({ ...prev, conn: { ...prev.conn, tcpPort: Number(event.target.value) } })) },
                   }),
                   (()=>{ const occupier = findTcpOccupier(connForm.conn.host, connForm.conn.tcpPort, connForm.id); return occupier ? el('span', { className:'dvb-need', title:'已被 ' + occupier + ' 占用' }, '已被 ' + occupier + ' 占用') : null })()
                   )),
-            field(t('baudrate'), el('input', { className:'dvb-input dvb-input-mono', type:'number', value: connForm.conn.baudrate||9600, onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, baudrate: Number(event.target.value)}})) } })),
+            field(t('baudrate'), el('input', { className:'dvb-input dvb-input-mono', type:'number', value: connForm.conn.baudrate||9600, disabled: formLocked, onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, baudrate: Number(event.target.value)}})) } })),
             field(t('slave')||'站号/单元', el('input', { className:'dvb-input dvb-input-mono', type:'number', value: connForm.conn.slave, min:0, max:247, onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, slave: Number(event.target.value)}})) } })),
-            field(t('databits'), el('select', { className:'dvb-input', value: String(connForm.conn.bytesize||8), onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, bytesize: Number(event.target.value)}})) } }, el('option',{value:'8'},'8'), el('option',{value:'7'},'7'))),
-            field(t('parityBit'), el('select', { className:'dvb-input', value: connForm.conn.parity||'N', onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, parity: event.target.value}})) } }, el('option',{value:'N'},'N'), el('option',{value:'E'},'E'), el('option',{value:'O'},'O'))),
-            field(t('stopbit'), el('select', { className:'dvb-input', value: String(connForm.conn.stopbits||1), onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, stopbits: Number(event.target.value)}})) } }, el('option',{value:'1'},'1'), el('option',{value:'2'},'2'))),
+            field(t('databits'), el('select', { className:'dvb-input', value: String(connForm.conn.bytesize||8), disabled: formLocked, onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, bytesize: Number(event.target.value)}})) } }, el('option',{value:'8'},'8'), el('option',{value:'7'},'7'))),
+            field(t('parityBit'), el('select', { className:'dvb-input', value: connForm.conn.parity||'N', disabled: formLocked, onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, parity: event.target.value}})) } }, el('option',{value:'N'},'N'), el('option',{value:'E'},'E'), el('option',{value:'O'},'O'))),
+            field(t('stopbit'), el('select', { className:'dvb-input', value: String(connForm.conn.stopbits||1), disabled: formLocked, onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, stopbits: Number(event.target.value)}})) } }, el('option',{value:'1'},'1'), el('option',{value:'2'},'2'))),
             field(t('sim'), el('label', { style:{display:'flex',gap:'4px',alignItems:'center'} },
               el('input', { type:'checkbox', checked: !!connForm.conn.sim, onChange: (event)=>{ setConnForm((prev)=>({...prev, conn:{...prev.conn, sim: event.target.checked}})) } }),
               t('simHint')||'仿真'))),
@@ -5051,17 +5081,20 @@ function createHmiView(React, t, post, openLive, openFrames) {
 
 
     // ── 当前连接详情（旧 connBar 兼容，展示 active 连接可编辑字段，COM 去重）──
+    const activeLocked = !!activeConnId && connectionStates.some((x) => x.connectionId === activeConnId && x.status === 'connected')
     const activeConnDetail = activeConnId
       ? el('div', { className: 'dvb-panel' },
           el('div', { className: 'dvb-panel-head' },
             el('span', { className: 'dvb-panel-title' }, '当前连接 · ' + (activeConnObj.name||activeConnId)),
             el('span', { className: 'dvb-tag' }, connLabel(conn)),
             sim ? el('span', { className: 'dvb-tag' }, t('sim')) : null,
+            activeLocked ? el('span', { className: 'dvb-need' }, t('connEditLocked') || '连接中不可修改端点参数，请先断开') : null,
             !canDevice ? el('span', { className: 'dvb-need' }, t('needBindingsRead')) : null),
           el('div', { className: 'dvb-toolbar' },
             field(t('mode'), el('select', {
               className: 'dvb-input',
               value: conn.mode || 'rtu',
+              disabled: activeLocked,
               onChange: (event)=>{ setActiveConnPatch({ mode: event.target.value }) },
             },
               el('option', { value: 'rtu' }, 'RTU'),
@@ -5090,6 +5123,7 @@ function createHmiView(React, t, post, openLive, openFrames) {
                     placeholder: t('hostPh')||'192.168.1.10',
                     spellCheck:false,
                     autoComplete:'off',
+                    disabled: activeLocked,
                     onChange: (event)=>{
                       const host = event.target.value
                       const occupier = findTcpOccupier(host, conn.tcpPort, activeConnId)
@@ -5103,20 +5137,21 @@ function createHmiView(React, t, post, openLive, openFrames) {
                     value: conn.tcpPort||502,
                     type:'number',
                     style:{width:'90px', flex:'none'},
+                    disabled: activeLocked,
                     onChange: (event)=>{ setActiveConnPatch({ tcpPort: Number(event.target.value) }) },
                   }),
                   (()=>{ const occupier = findTcpOccupier(conn.host, conn.tcpPort, activeConnId); return occupier ? el('span', {className:'dvb-need', title:'已被 ' + occupier + ' 占用'}, '已被 ' + occupier + ' 占用') : null })()
                   )),
-            field(t('baudrate'), el('input', { className:'dvb-input dvb-input-mono', type:'number', value: conn.baudrate||9600, onChange: (event)=>{ setActiveConnPatch({ baudrate: Number(event.target.value) }) } })),
-            field(t('slave')||'站号', el('input', { className:'dvb-input dvb-input-mono', type:'number', value: (activeDevices.find((d)=>d.id===activeDeviceId) && activeDevices.find((d)=>d.id===activeDeviceId).unitId) || conn.slave || 1, min:0, max:247, onChange: (event)=>{ setActiveConnPatch({ slave: Number(event.target.value) }) } })),
-            field(t('databits'), el('select', { className:'dvb-input', value: String(conn.bytesize||8), onChange: (event)=>{ setActiveConnPatch({ bytesize: Number(event.target.value) }) } }, el('option',{value:'8'},'8'), el('option',{value:'7'},'7'))),
-            field(t('parityBit'), el('select', { className:'dvb-input', value: conn.parity||'N', onChange: (event)=>{ setActiveConnPatch({ parity: event.target.value }) } }, el('option',{value:'N'},'N'), el('option',{value:'E'},'E'), el('option',{value:'O'},'O'))),
-            field(t('stopbit'), el('select', { className:'dvb-input', value: String(conn.stopbits||1), onChange: (event)=>{ setActiveConnPatch({ stopbits: Number(event.target.value) }) } }, el('option',{value:'1'},'1'), el('option',{value:'2'},'2'))),
+            field(t('baudrate'), el('input', { className:'dvb-input dvb-input-mono', type:'number', value: conn.baudrate||9600, disabled: activeLocked, onChange: (event)=>{ setActiveConnPatch({ baudrate: Number(event.target.value) }) } })),
+            field(t('slave')||'站号', el('input', { className:'dvb-input dvb-input-mono', type:'number', value: (activeDevices.find((d)=>d.id===activeDeviceId) && activeDevices.find((d)=>d.id===activeDeviceId).unitId) || conn.slave || 1, min:0, max:247, disabled: activeLocked, onChange: (event)=>{ setActiveConnPatch({ slave: Number(event.target.value) }) } })),
+            field(t('databits'), el('select', { className:'dvb-input', value: String(conn.bytesize||8), disabled: activeLocked, onChange: (event)=>{ setActiveConnPatch({ bytesize: Number(event.target.value) }) } }, el('option',{value:'8'},'8'), el('option',{value:'7'},'7'))),
+            field(t('parityBit'), el('select', { className:'dvb-input', value: conn.parity||'N', disabled: activeLocked, onChange: (event)=>{ setActiveConnPatch({ parity: event.target.value }) } }, el('option',{value:'N'},'N'), el('option',{value:'E'},'E'), el('option',{value:'O'},'O'))),
+            field(t('stopbit'), el('select', { className:'dvb-input', value: String(conn.stopbits||1), disabled: activeLocked, onChange: (event)=>{ setActiveConnPatch({ stopbits: Number(event.target.value) }) } }, el('option',{value:'1'},'1'), el('option',{value:'2'},'2'))),
             field('角色', el('select', {
               className:'dvb-input',
               value: activeConnObj.role === 'server' || activeConnObj.role==='slave' ? 'server' : 'client',
               onChange: (event)=>{ updateActiveConnMeta({ role: event.target.value }) },
-            }, el('option',{value:'client'}, '主机(master)'), el('option',{value:'server'}, '从机(slave)'))),
+            }, el('option',{value:'client'}, '主机(master)'), el('option',{value:'server', disabled:true, title:'从机模式暂未启用'}, '从机(未启用)'))),
             field(t('connParticipate') || '参与运行', el('label', { style:{display:'flex',gap:'4px',alignItems:'center'} },
               el('input', { type:'checkbox', checked: activeConnObj.enabled!==false, onChange(){ toggleConnEnabled(activeConnId) } }),
               activeConnObj.enabled!==false ? (t('connParticipate') || '参与运行') : (t('connIdle') || '不参与')))))

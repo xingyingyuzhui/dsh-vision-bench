@@ -1,0 +1,104 @@
+// Task7+8+9+10/0.19.2: UI contract — bind UI gone, focus banner gone, timeline
+// moved to sidebar, single shared value store drives table/monitor/trend/alarm.
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { mkdirSync } from 'node:fs'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import test from 'node:test'
+import { runVisionBench } from '../bench-tool.mjs'
+import { modbusPoll } from '../bench-modbus.mjs'
+import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
+
+const src = (name) => readFile(new URL('../' + name, import.meta.url), 'utf8')
+
+test('页面契约：无绑定 UI、无大块聚焦面板、无完整时间线、无“打开串口”按钮', async () => {
+  const [hmi, view, shared, live, frames, styles] = await Promise.all([
+    src('bench-hmi.mjs'), src('bench-view.mjs'), src('bench-shared.mjs'), src('bench-live.mjs'), src('bench-frames-view.mjs'), src('bench-styles.mjs'),
+  ])
+  // Task7: bind UI gone
+  for (const f of [hmi, view, shared]) {
+    assert.ok(!/session\/bind/.test(f), 'no bind route call in UI source')
+    assert.ok(!/t\('bindOn'\)|t\('bindOff'\)/.test(f), 'no bind button labels')
+  }
+  // Task8: focus banner gone (no large panel, no per-row 聚焦 buttons)
+  assert.ok(!/dvb-focus-banner/.test(hmi), 'no focus banner in hmi')
+  assert.ok(!/dvb-focus-banner/.test(live), 'no focus banner in live')
+  assert.ok(!/requestFocusUi\([^)]*kind: 'connection'/.test(hmi), 'no per-connection 聚焦 button')
+  // toast kept as the lightweight notice
+  assert.ok(/dvb-focus-toast/.test(hmi) && /dvb-focus-toast/.test(live), 'transient focus toast present')
+  assert.ok(/dvb-focus-toast/.test(styles), 'toast styles present')
+  // Task9: full journal timeline removed from debug/hmi pages
+  assert.ok(!/journalPanel\(el, t, journal\)/.test(hmi), 'hmi has no full timeline panel')
+  assert.ok(!/journalPanel\(el, t, journal\)/.test(view), 'debug has no full timeline panel')
+  assert.ok(/createLogPage/.test(live), 'sidebar operation log page exists')
+  // Task4.3: frames page never opens a port
+  assert.ok(!/\/connection\/open/.test(frames), 'frames page has no open-port call')
+  assert.ok(!/打开串口/.test(frames), 'frames page has no 打开串口 button text')
+  // Task4.2: 参与运行 wording present
+  assert.ok(/connParticipate/.test(hmi), '启用 renamed to 参与运行')
+})
+
+test('Task10: 一次读取同步进入 点表值/监视/曲线/告警（单一实时值来源）', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'uc-'))
+  const cwd = join(home, 'board')
+  mkdirSync(cwd)
+  saveWorkspace(home, cwd, {
+    modbus: {
+      version: 3,
+      connections: [{ id: 'c1', name: 'C1', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM3', baudrate: 9600, slave: 1, sim: true } }],
+      devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
+      points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, count: 1, active: true, watched: true, alarmMin: 60, alarmMax: 80 }],
+      values: [], alarmState: {},
+      pollPlan: { auto: true, connections: {} },
+    },
+  })
+  // a single agent read lands in the shared values store
+  const ran = await runVisionBench(home, { action: 'read', connectionId: 'c1', deviceId: 'd1', function: 3, address: 0 }, cwd, { source: 'agent', sessionId: 's1' })
+  assert.equal(ran.ok, true)
+  const ws = loadWorkspace(home, cwd).modbus
+  // 点表当前值（点表/监视/曲线全部读同一 values 快照）
+  const rec = (ws.values || []).find((v) => v.key === 'p1' || v.pointId === 'p1')
+  assert.ok(rec && rec.value != null, 'point table current value updated: ' + JSON.stringify(rec && rec.value))
+  // 监视/曲线消费同一 values 快照（points 动作返回的点行即同一时刻的同一存储记录）
+  const list = await runVisionBench(home, { action: 'points', op: 'list' }, cwd, { source: 'agent', sessionId: 's1' })
+  const prow = (list && list.points || []).find((p) => p.id === 'p1')
+  assert.ok(prow && prow.value != null, 'agent points view carries the shared current value')
+  const wsAfter = loadWorkspace(home, cwd).modbus
+  const recAfter = (wsAfter.values || []).find((v) => v.key === 'p1' || v.pointId === 'p1')
+  assert.equal(prow.value, recAfter && recAfter.value, 'points view and value store agree at the same moment')
+  // 告警由同一 values 驱动：越限触发 → 回到带内恢复
+  let alarm = loadWorkspace(home, cwd).modbus.alarmActive || {}
+  assert.ok(Object.keys(alarm).length > 0, 'over-limit value triggered alarm from shared flow: ' + JSON.stringify(alarm))
+  await runVisionBench(home, { action: 'write', connectionId: 'c1', deviceId: 'd1', function: 3, address: 0, values: [70] }, cwd, { source: 'manual', sessionId: '' })
+  alarm = loadWorkspace(home, cwd).modbus.alarmActive || {}
+  const rec2 = alarm.p1 || alarm['p1']
+  assert.ok(!rec2 || rec2.status === 'recovered', 'back-in-band value recovered the alarm: ' + JSON.stringify(alarm))
+  await rm(home, { recursive: true, force: true })
+})
+
+test('Task10: 轮询环路每 cwd 只有一条（并发触发返回 skipped busy，不叠加）', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'uc2-'))
+  const cwd = join(home, 'board')
+  mkdirSync(cwd)
+  saveWorkspace(home, cwd, {
+    modbus: {
+      version: 3,
+      connections: [{ id: 'c1', name: 'C1', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM3', baudrate: 9600, slave: 1, sim: true } }],
+      devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
+      points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, count: 1, active: true, watched: true }],
+      values: [], alarmState: {},
+      pollPlan: { auto: true, connections: {} },
+    },
+  })
+  // fire two polling loops at once: the second must be skipped as busy —
+  // 点表/监视/曲线/告警 不会因为多页面各开一条轮询
+  const [a1, busy] = await Promise.all([
+    modbusPoll(home, cwd, { budgetMs: 120 }),
+    modbusPoll(home, cwd, { budgetMs: 120 }),
+  ])
+  assert.equal(a1.ok, true)
+  assert.ok(busy.skipped === true || busy.busy === true || busy.error === '无可用连接', 'duplicate loop must not stack: ' + JSON.stringify(busy && { skipped: busy.skipped, busy: busy.busy }))
+  await rm(home, { recursive: true, force: true })
+})

@@ -26,7 +26,7 @@ import { normalizeModbus } from './bench-devices.mjs'
 import { clearFramesByConnection } from './bench-store.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
 import { listSerialPorts } from './bench-serial.mjs'
-import { clearSerialMonitorState, closeConnectionLink, feedConnectionFrames, listConnectedSerialSources, openConnectionLink } from './bench-serial-monitor.mjs'
+import { clearSerialMonitorState, closeConnectionLink, feedConnectionFrames, listConnectedSerialSources, listConnectionStates, openConnectionLink } from './bench-serial-monitor.mjs'
 import { getVisionIoBroker, stopVisionIoBroker } from './bench-io-broker.mjs'
 import { changedConnectionIds, notifyConnectionRelease } from './bench-modbus-transport.mjs'
 import { toEndpoint } from './bench-io-contract.mjs'
@@ -103,6 +103,8 @@ const snapshot = async (cwd) => {
     body.pendingWrites = listPendingWrites(room.cwd)
     const sources = await listConnectedSerialSources(dshHome, room.cwd)
     body.serialSources = sources.sources || []
+    const states = await listConnectionStates(dshHome, room.cwd)
+    body.connectionStates = states.connectionStates || []
   }
   return body
 }

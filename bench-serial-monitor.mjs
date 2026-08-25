@@ -32,6 +32,34 @@ export const listConnectedSerialSources = async (home, cwd, extra = {}) => {
   return { ok: true, sources }
 }
 
+// Task4/0.19.2: ALL configured RTU/TCP connections with their real live state
+// (disconnected/connecting/connected/disconnecting/error). TCP is included here
+// but never in serialSources.
+export const listConnectionStates = async (home, cwd, extra = {}) => {
+  const transport = transportOf(extra)
+  const live = await transport.listConnections({ cwd })
+  const data = live && live.data ? live.data : live
+  const rows = Array.isArray(data && data.connections) ? data.connections : (data && data.connectionId ? [data] : [])
+  const pack = home && cwd ? normalizeModbus(loadWorkspace(home, cwd).modbus) : { connections: [] }
+  const liveById = new Map(rows.map((r) => [r.connectionId, r]))
+  const connectionStates = []
+  for (const c of (pack.connections || [])) {
+    if (!c || !c.conn || c.conn.sim === true) continue
+    const lv = liveById.get(c.id)
+    const conn = c.conn
+    connectionStates.push({
+      connectionId: c.id,
+      mode: conn.mode || 'rtu',
+      endpoint: conn.mode === 'tcp' ? String(conn.host || '') + ':' + String(conn.tcpPort || 502) : conn.port || '',
+      status: lv ? (lv.state || 'connected') : 'disconnected',
+      error: (lv && lv.error) || '',
+      connectedAt: (lv && lv.connectedAt) || 0,
+      connectionEpoch: (lv && lv.epoch) || '',
+    })
+  }
+  return { ok: true, connectionStates }
+}
+
 export const feedConnectionFrames = async (cwd, opts = {}, extra = {}) => {
   const transport = transportOf(extra)
   const ran = await transport.captureFeed({
