@@ -26,8 +26,8 @@ test('页面契约：无绑定 UI、无大块聚焦面板、无完整时间线�
   assert.ok(!/dvb-focus-banner/.test(hmi), 'no focus banner in hmi')
   assert.ok(!/dvb-focus-banner/.test(live), 'no focus banner in live')
   assert.ok(!/requestFocusUi\([^)]*kind: 'connection'/.test(hmi), 'no per-connection 聚焦 button')
-  // toast kept as the lightweight notice
-  assert.ok(/dvb-focus-toast/.test(hmi) && /dvb-focus-toast/.test(live), 'transient focus toast present')
+  // toast kept as the lightweight notice（侧栏监视已删，toast 只在上位机）
+  assert.ok(/dvb-focus-toast/.test(hmi), 'transient focus toast present in HMI')
   assert.ok(/dvb-focus-toast/.test(styles), 'toast styles present')
   // Task9: full journal timeline removed from debug/hmi pages
   assert.ok(!/journalPanel\(el, t, journal\)/.test(hmi), 'hmi has no full timeline panel')
@@ -36,8 +36,17 @@ test('页面契约：无绑定 UI、无大块聚焦面板、无完整时间线�
   // Task4.3: frames page never opens a port
   assert.ok(!/\/connection\/open/.test(frames), 'frames page has no open-port call')
   assert.ok(!/打开串口/.test(frames), 'frames page has no 打开串口 button text')
-  // Task4.2: 参与运行 wording present
-  assert.ok(/connParticipate/.test(hmi), '启用 renamed to 参与运行')
+  // Task1/0.19.3: “参与运行”不再是公开概念（旧 enabled 仅读取兼容）
+  assert.ok(!/connParticipate/.test(hmi), 'no 参与运行 in HMI source')
+  // Task1/0.19.3: 设备卡片层级（点位表挂在设备卡片内部）
+  assert.ok(/dvb-dev-card/.test(hmi), 'device cards exist')
+  assert.ok(/openAddPoint\(d\.id\)/.test(hmi), 'add-point opens per device')
+  assert.ok(/pointsOfDevice/.test(hmi), 'point tables are device-scoped')
+  // 阶段四：上位机不再嵌入串口报文卡片
+  assert.ok(!/查看全部报文/.test(hmi), 'no frames card in HMI')
+  assert.ok(!/serialPanel/.test(hmi), 'no serialPanel in HMI')
+  // Task2: 采集按钮（开始采集/停止采集）而不使用“监视”措辞
+  assert.ok(/collectStart/.test(hmi) && /collectStop/.test(hmi), 'collection buttons present')
 })
 
 test('Task10: 一次读取同步进入 点表值/监视/曲线/告警（单一实时值来源）', async () => {

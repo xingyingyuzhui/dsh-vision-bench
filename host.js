@@ -27,6 +27,8 @@ import { clearFramesByConnection } from './bench-store.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
 import { listSerialPorts } from './bench-serial.mjs'
 import { clearSerialMonitorState, closeConnectionLink, feedConnectionFrames, listConnectedSerialSources, listConnectionStates, openConnectionLink } from './bench-serial-monitor.mjs'
+import { ensurePolling, pollingStatus, startPolling, stopAllPolling, stopPolling } from './bench-polling-service.mjs'
+import { migrateLegacyDisabled } from './bench-modbus.mjs'
 import { getVisionIoBroker, stopVisionIoBroker } from './bench-io-broker.mjs'
 import { changedConnectionIds, notifyConnectionRelease } from './bench-modbus-transport.mjs'
 import { toEndpoint } from './bench-io-contract.mjs'
@@ -97,6 +99,10 @@ const snapshot = async (cwd) => {
   }
   const room = cwd ? requireWorkspaceCwd(cwd) : { error: 'no-cwd' }
   if (!room.error) {
+    // Task1/0.19.3: 旧版 enabled 禁用态 → 停止该连接自动采集并清理字段（一次性迁移）
+    try { migrateLegacyDisabled(dshHome, room.cwd) } catch { /* 迁移尽力而为 */ }
+    // Task2/0.19.3: Host 后台采集协调器按需续跑
+    try { ensurePolling(dshHome, room.cwd) } catch { /* 采集尽力而为 */ }
     const workspace = loadWorkspace(dshHome, room.cwd)
     body.workspace = workspace
     body.journal = journalView(body.workspace)
@@ -305,6 +311,24 @@ export function apply(ctx, config = {}) {
       const body = normalizeConnAlias(await readJsonBody(req))
       return modbusPoll(dshHome, body && body.cwd, body)
     }),
+    route('/dsh-vision-bench/polling/start', async (req) => {
+      const body = await readJsonBody(req)
+      const room = body && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
+      if (room.error) return { ok: false, error: room.error }
+      return startPolling(dshHome, room.cwd, body)
+    }),
+    route('/dsh-vision-bench/polling/stop', async (req) => {
+      const body = await readJsonBody(req)
+      const room = body && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
+      if (room.error) return { ok: false, error: room.error }
+      return stopPolling(dshHome, room.cwd, body)
+    }),
+    route('/dsh-vision-bench/polling/status', async (req) => {
+      const body = await readJsonBody(req)
+      const room = body && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
+      if (room.error) return { ok: false, error: room.error }
+      return pollingStatus(dshHome, room.cwd)
+    }),
     route('/dsh-vision-bench/connection/open', async (req) => {
       const body = await readJsonBody(req)
       const room = requireWorkspaceCwd(body && body.cwd)
@@ -383,6 +407,7 @@ export function apply(ctx, config = {}) {
   ctx.effect(() => () => {
     for (const dispose of disposers) dispose()
     clearSerialMonitorState()
+    stopAllPolling()
     void stopVisionIoBroker('plugin-dispose')
   })
 }

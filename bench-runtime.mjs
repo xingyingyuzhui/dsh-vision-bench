@@ -2,7 +2,7 @@ import { COPY, NS, interpolate, tWith } from './bench-i18n.mjs'
 import { ATTR, CSS } from './bench-styles.mjs'
 import { createSettingsPage, registerSettings } from './bench-settings.mjs'
 import { createHmiView } from './bench-hmi.mjs'
-import { closeBetterTab, createAlarmPage, createLiveView, createLogPage, createTrendPage, openModbusTab, registerLive } from './bench-live.mjs'
+import { closeBetterTab, createAlarmPage, createLogPage, createTrendPage, registerLive } from './bench-live.mjs'
 import { createMapView, openProjectTab, registerMap } from './bench-map.mjs'
 import { createDebugView, registerView } from './bench-view.mjs'
 import { createFramesPage } from './bench-frames-view.mjs'
@@ -76,40 +76,39 @@ export function apply(ctx) {
     }))
   }
 
-  let openLiveImpl = function () {}
   let openProjectImpl = function () {}
   let openHmiImpl = function () {}
   let openFramesImpl = function () {}
   let closeTabImpl = function () {}
-  function openLive() { openLiveImpl() }
   function openProject() { openProjectImpl() }
   function openHmi(target) { try { openHmiImpl(target) } catch {} }
   function openFrames() { try { openFramesImpl() } catch {} }
   const SettingsPage = createSettingsPage(React, t, post)
   const DebugView = createDebugView(React, t, post, openProject)
-  const HmiView = createHmiView(React, t, post, openLive, openFrames)
-  const LivePage = createLiveView(React, t, post, {
-    openLive,
-    openHmi,
-    closeTab(id) { closeTabImpl(id) },
-  })
+  const HmiView = createHmiView(React, t, post)
   const MapPage = createMapView(React, t, post)
   const stopSettings = registerSettings(ctx, React, t, SettingsPage)
   const stopView = registerView(ctx, React, t, DebugView, HmiView)
 
   if (typeof ctx.inject === 'function') {
     ctx.inject(['betterSidebar'], (side) => {
-      openLiveImpl = function () { openModbusTab(side) }
-      openHmiImpl = function (target) { openModbusTab(side, target) }
+      // Task2/0.19.3: 上位机是会话区页面（conversation.view），尽力切换；失败静默
+      openHmiImpl = function () {
+        try {
+          const slotsApi = ctx.get ? ctx.get('slots') : null
+          if (slotsApi && typeof slotsApi.select === 'function') slotsApi.select('conversation.view', 'vision-bench-hmi')
+          else if (side && typeof side.openTab === 'function') side.openTab({ type: 'dsh-vision-bench:charts' })
+        } catch {}
+      }
       openProjectImpl = function () { openProjectTab(side) }
       openFramesImpl = function () { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} }
       closeTabImpl = function (id) { closeBetterTab(side, id) }
-      const FramesPage = createFramesPage(React, t, post, { openLive, openHmi })
-      const stopLive = registerLive(side, React, t, scopedSidebarPage(React, LivePage, 'live'), {
-        trend: scopedSidebarPage(React, createTrendPage(React, t, post, { openLive, openHmi }), 'trend'),
-        alarm: scopedSidebarPage(React, createAlarmPage(React, t, post, { openLive, openHmi }), 'alarm'),
+      const FramesPage = createFramesPage(React, t, post, { openHmi })
+      const stopLive = registerLive(side, React, t, null, {
+        trend: scopedSidebarPage(React, createTrendPage(React, t, post, { openHmi }), 'trend'),
+        alarm: scopedSidebarPage(React, createAlarmPage(React, t, post, { openHmi }), 'alarm'),
         frames: scopedSidebarPage(React, FramesPage, 'frames'),
-        log: scopedSidebarPage(React, createLogPage(React, t, post, { openLive, openHmi, openFrames: () => { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} } }), 'log'),
+        log: scopedSidebarPage(React, createLogPage(React, t, post, { openHmi, openFrames: () => { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} } }), 'log'),
       })
       const stopMap = registerMap(side, React, t, scopedSidebarPage(React, MapPage, 'map'))
       // Task1+2/0.18.4: only the ACTIVE session's foreground focus may drive the
@@ -127,7 +126,7 @@ export function apply(ctx) {
         if (decision.tab === 'trend') { try { side.openTab({ type: 'dsh-vision-bench:charts' }) } catch {} }
         else if (decision.tab === 'alarm') { try { side.openTab({ type: 'dsh-vision-bench:alarms' }) } catch {} }
         else if (decision.tab === 'frames') { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} }
-        else { try { openModbusTab(side) } catch { try { openLiveImpl() } catch {} } }
+        else { openHmi() }
       }
       const focusUnsub = subscribeFocus('', (fs, cwd) => applyFocus(fs, cwd))
       side.effect(() => () => { try { focusUnsub() } catch {} })

@@ -56,7 +56,7 @@ function hmiGenId(prefix) {
   return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
 
-export function createHmiView(React, t, post, openLive, openFrames) {
+export function createHmiView(React, t, post) {
   return function HmiView(props) {
     const el = React.createElement
     const cwd = useSessionCwd(React, props)
@@ -73,13 +73,15 @@ export function createHmiView(React, t, post, openLive, openFrames) {
     const [ports, setPorts] = React.useState([])
     const [scanning, setScanning] = React.useState(false)
     const [pending, setPending] = React.useState([])
-    const [form, setForm] = React.useState({ mode: 'hidden', id: '', name: '', function: 3, address: 0, scale: 1, offset: 0, unit: '', alarmMin: '', alarmMax: '' })
-    const [batch, setBatch] = React.useState({ open: false, prefix: '', fc: 3, start: 0, count: 5 })
+    // Task1/0.19.3: 点位表单打开时固定 connectionId/deviceId，不依赖全局激活状态
+    const [form, setForm] = React.useState({ mode: 'hidden', id: '', connectionId: '', deviceId: '', name: '', function: 3, address: 0, scale: 1, offset: 0, unit: '', trendEnabled: false, alarmOn: false, alarmMin: '', alarmMax: '' })
+    const [batch, setBatch] = React.useState({ open: false, deviceId: '', prefix: '', fc: 3, start: 0, count: 5 })
+    const [devForm, setDevForm] = React.useState({ open: false, id: '', name: '', unitId: 1 })
+    const [devDeleteId, setDevDeleteId] = React.useState('')
     const [writeRow, setWriteRow] = React.useState(null)
-    const [csvOpen, setCsvOpen] = React.useState(false)
     const [csvText, setCsvText] = React.useState('')
+    const [csvTarget, setCsvTarget] = React.useState({ deviceId: '', open: false, mode: 'merge' })
     const [csvNote, setCsvNote] = React.useState('')
-    const [serialSources, setSerialSources] = React.useState([])
     const [connectionStates, setConnectionStates] = React.useState([])
     const [linkBusy, setLinkBusy] = React.useState('')
     const [draftBusy, setDraftBusy] = React.useState('')
@@ -117,7 +119,6 @@ export function createHmiView(React, t, post, openLive, openFrames) {
       if (!data) return
       if (data.health) setHealth(data.health)
       if (data.ioRuntime) setIoRuntime(data.ioRuntime)
-      if (Array.isArray(data.serialSources)) setSerialSources(data.serialSources)
       if (Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
       if (Array.isArray(data.pendingWrites)) setPending(data.pendingWrites)
       setJournal(pickJournal(data))
@@ -284,21 +285,65 @@ export function createHmiView(React, t, post, openLive, openFrames) {
       requestFocusUi(focusState.request || {}, { tempWatchIds: list, badgeOnly: true })
     }
 
-    // ── connection list operations ──
+    // ── connection list operations（Task1/0.19.3：只建连接，不自动生成设备）──
     function addConnection() {
       const pack = normalizePack()
       const nid = hmiGenId('c')
-      const did = hmiGenId('d')
       const newConn = { id: nid, name: '连接' + (pack.connections.length + 1), role: 'client', enabled: true, conn: { mode: 'rtu', port: '', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, host: '', tcpPort: 502, slave: 1, sim: false } }
-      const newDev = { id: did, connectionId: nid, name: '设备1', unitId: 1, enabled: true }
       const nextConns = (pack.connections || []).concat([newConn])
-      const nextDevs = (pack.devices || []).concat([newDev])
       const nextPolling = { ...(pack.pollingByConnection||{}), [nid]: { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' } }
       const nextFrames = { ...(pack.framesByConnection||{}), [nid]: [] }
-      persist({ connections: nextConns, devices: nextDevs, pollingByConnection: nextPolling, framesByConnection: nextFrames, activeConnectionId: nid, activeDeviceId: did, version: 3 })
+      persist({ connections: nextConns, devices: pack.devices || [], pollingByConnection: nextPolling, framesByConnection: nextFrames, activeConnectionId: nid, activeDeviceId: '', version: 3 })
       setHmiTab(nid)
-      lastDeviceByConn.current[nid] = did
+      lastDeviceByConn.current[nid] = ''
       setFrameFilter(nid)
+      setDevForm({ open: true, id: '', name: '', unitId: 1 })
+    }
+
+    // ── Task1/0.19.3: 设备表单 — 名称 + Unit ID（连接内唯一），禁止直接生成 Unit 1 ──
+    function openAddDevice() {
+      setError('')
+      setDevForm({ open: true, id: '', name: '', unitId: activeDevices.length ? Math.max(...activeDevices.map((d) => d.unitId || 1)) + 1 : 1 })
+    }
+    function openEditDevice(dev) {
+      setError('')
+      setDevForm({ open: true, id: dev.id, name: dev.name, unitId: dev.unitId })
+    }
+    function saveDeviceForm() {
+      const pack = normalizePack()
+      const name = String(devForm.name || '').trim().slice(0, 40)
+      if (!name) { setError('请填写设备名称'); return }
+      const unitId = Math.trunc(Number(devForm.unitId))
+      if (!Number.isFinite(unitId) || unitId < 0 || unitId > 247) { setError('Unit ID 0–247'); return }
+      const dupUnit = (pack.devices || []).some((d) => d.connectionId === activeConnId && d.id !== devForm.id && d.unitId === unitId)
+      if (dupUnit) { setError('该连接内 Unit ' + unitId + ' 已存在'); return }
+      if (devForm.id) {
+        persist({ devices: (pack.devices || []).map((d) => d.id === devForm.id ? { ...d, name, unitId } : d), version: 3 })
+      } else {
+        const nid = hmiGenId('d')
+        persist({ devices: (pack.devices || []).concat([{ id: nid, connectionId: activeConnId, name, unitId, enabled: true }]), activeDeviceId: nid, version: 3 })
+        lastDeviceByConn.current[activeConnId] = nid
+      }
+      setDevForm((prev) => ({ ...prev, open: false }))
+    }
+    function requestDeleteDevice(dev) {
+      const pack = normalizePack()
+      const n = (pack.points || []).filter((p) => (p.deviceId || '') === dev.id && (p.connectionId || p.connId) === activeConnId).length
+      const vn = (pack.values || []).filter((v) => (v.pointId || v.key) && pack.points.some((p) => p.id === (v.pointId || v.key) && (p.deviceId || '') === dev.id)).length
+      setDevDeleteId(dev.id + '|' + n + '|' + vn)
+    }
+    function confirmDeleteDevice(dev) {
+      const pack = normalizePack()
+      const gone = new Set((pack.points || []).filter((p) => (p.deviceId || '') === dev.id && (p.connectionId || p.connId) === activeConnId).map((p) => p.id))
+      const nextDevices = (pack.devices || []).filter((d) => d.id !== dev.id)
+      persist({
+        devices: nextDevices,
+        points: (pack.points || []).filter((p) => !gone.has(p.id)),
+        values: (pack.values || []).filter((v) => !gone.has(v.pointId || v.key)),
+        activeDeviceId: nextDevices.some((d) => d.id === pack.activeDeviceId) ? pack.activeDeviceId : (nextDevices[0] ? nextDevices[0].id : ''),
+        version: 3,
+      })
+      setDevDeleteId('')
     }
 
     function selectConnection(connId) {
@@ -314,12 +359,6 @@ export function createHmiView(React, t, post, openLive, openFrames) {
       setHmiTab(connId)
       setMoreOpen(false)
       setFrameFilter(connId)
-    }
-
-    function toggleConnEnabled(connId) {
-      const pack = normalizePack()
-      const nextConns = (pack.connections||[]).map((c) => c.id === connId ? { ...c, enabled: !c.enabled } : c)
-      persist({ connections: nextConns, version: 3 })
     }
 
     function requestDeleteConnection(connId) {
@@ -368,7 +407,7 @@ export function createHmiView(React, t, post, openLive, openFrames) {
     function saveConnEdit() {
       const pack = normalizePack()
       const targetId = connForm.id
-      const nextConns = (pack.connections||[]).map((c) => c.id === targetId ? { ...c, name: connForm.name.slice(0,40), role: connForm.role === 'server' || connForm.role === 'slave' ? 'server' : 'client', enabled: !!connForm.enabled, conn: { ...(c.conn||{}), mode: connForm.conn.mode === 'tcp' ? 'tcp' : 'rtu', port: String(connForm.conn.port||'').trim(), baudrate: Number(connForm.conn.baudrate)||9600, bytesize: Number(connForm.conn.bytesize)===7?7:8, parity: ['N','E','O'].includes(connForm.conn.parity)?connForm.conn.parity:'N', stopbits: Number(connForm.conn.stopbits)===2?2:1, host: String(connForm.conn.host||'').trim(), tcpPort: Math.max(1, Math.min(65535, Number(connForm.conn.tcpPort)||502)), slave: Math.max(0, Math.min(247, Number(connForm.conn.slave)||1)), sim: !!connForm.conn.sim } } : c)
+      const nextConns = (pack.connections||[]).map((c) => c.id === targetId ? { ...c, name: connForm.name.slice(0,40), role: connForm.role === 'server' || connForm.role === 'slave' ? 'server' : 'client', enabled: true, conn: { ...(c.conn||{}), mode: connForm.conn.mode === 'tcp' ? 'tcp' : 'rtu', port: String(connForm.conn.port||'').trim(), baudrate: Number(connForm.conn.baudrate)||9600, bytesize: Number(connForm.conn.bytesize)===7?7:8, parity: ['N','E','O'].includes(connForm.conn.parity)?connForm.conn.parity:'N', stopbits: Number(connForm.conn.stopbits)===2?2:1, host: String(connForm.conn.host||'').trim(), tcpPort: Math.max(1, Math.min(65535, Number(connForm.conn.tcpPort)||502)), slave: Math.max(0, Math.min(247, Number(connForm.conn.slave)||1)), sim: !!connForm.conn.sim } } : c)
       let nextDevs = pack.devices
       const editedConn = nextConns.find((c)=>c.id===targetId)
       if (editedConn && editedConn.conn && editedConn.conn.slave !== undefined) {
@@ -403,12 +442,13 @@ export function createHmiView(React, t, post, openLive, openFrames) {
       persist({ connections: nextConns, version: 3 })
     }
 
-    // ── point form ──
-    function openAddPoint() {
+    // ── point form（Task1/0.19.3：打开表单时固定 connectionId/deviceId）──
+    function openAddPoint(deviceId) {
       setError('')
       setBatch((prev) => ({ ...prev, open: false }))
+      setCsvTarget((prev) => ({ ...prev, open: false }))
       setWriteRow(null)
-      setForm({ mode: 'add', id: '', name: '', function: 3, address: 0, scale: 1, offset: 0, unit: '', alarmMin: '', alarmMax: '' })
+      setForm({ mode: 'add', id: '', connectionId: activeConnId, deviceId, name: '', function: 3, address: 0, scale: 1, offset: 0, unit: '', trendEnabled: false, alarmOn: false, alarmMin: '', alarmMax: '' })
     }
 
     function openEditPoint(point) {
@@ -417,12 +457,16 @@ export function createHmiView(React, t, post, openLive, openFrames) {
       setForm({
         mode: 'edit',
         id: point.id,
+        connectionId: point.connectionId || activeConnId,
+        deviceId: point.deviceId,
         name: point.name,
         function: point.function,
         address: point.address,
         scale: point.scale,
         offset: point.offset,
         unit: point.unit,
+        trendEnabled: point.trendEnabled === true,
+        alarmOn: point.alarmMin != null || point.alarmMax != null,
         alarmMin: point.alarmMin === null ? '' : String(point.alarmMin),
         alarmMax: point.alarmMax === null ? '' : String(point.alarmMax),
       })
@@ -434,33 +478,41 @@ export function createHmiView(React, t, post, openLive, openFrames) {
 
     function submitPoint() {
       const pack = normalizePack()
-      const activeConnId = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
-      const activeDevId = pack.activeDeviceId || ((pack.devices||[]).find((d)=>d.connectionId===activeConnId) && (pack.devices||[]).find((d)=>d.connectionId===activeConnId).id) || (pack.devices[0] && pack.devices[0].id) || 'd1'
+      // Task1/0.19.3 (P1 修复): 保存目标 = 打开表单时固定的 connectionId/deviceId，
+      // 绝不回落到全局 activeConnectionId/activeDeviceId — 编辑别设备点位不会被移动
+      const fixedCid = form.connectionId
+      const fixedDid = form.deviceId
+      if (!fixedCid || !fixedDid) {
+        setError('请先选择设备再添加点位')
+        return
+      }
       const fnNum = Number(form.function)
       const addrNum = Number(form.address)
       if (!Number.isFinite(addrNum) || addrNum < 0 || addrNum > 65535) {
         setError(t('ptAddr') + ' 0–65535')
         return
       }
-      // 去重仅在同一连接内校验，已按 activeConnId 过滤
-      const dup = (pack.points||[]).some((p) => (p.connectionId||p.connId) === activeConnId && p.function === fnNum && p.address === addrNum && p.id !== form.id)
+      // 唯一键 = connectionId + deviceId + function + address（不同设备允许同地址）
+      const dup = (pack.points||[]).some((p) => (p.connectionId||p.connId) === fixedCid && (p.deviceId||'') === fixedDid && p.function === fnNum && p.address === addrNum && p.id !== form.id)
       if (dup) {
-        setError('已存在相同功能码和地址的点位')
+        setError('该设备下已存在相同功能码和地址的点位')
         return
       }
+      const alarmOn = !!form.alarmOn
       const base = {
         id: form.mode === 'edit' ? form.id : hmiGenId('p'),
-        connectionId: activeConnId,
-        connId: activeConnId,
-        deviceId: activeDevId,
-        name: form.name,
+        connectionId: fixedCid,
+        connId: fixedCid,
+        deviceId: fixedDid,
+        name: String(form.name || '').slice(0, 40),
         function: fnNum,
         address: addrNum,
         scale: Number(form.scale) || 1,
         offset: Number(form.offset) || 0,
         unit: form.unit,
-        alarmMin: form.alarmMin === '' ? null : Number(form.alarmMin),
-        alarmMax: form.alarmMax === '' ? null : Number(form.alarmMax),
+        trendEnabled: form.trendEnabled === true,
+        alarmMin: !alarmOn ? null : (form.alarmMin === '' ? null : Number(form.alarmMin)),
+        alarmMax: !alarmOn ? null : (form.alarmMax === '' ? null : Number(form.alarmMax)),
         area: fnNum===1?'coil': fnNum===2?'discreteInput': fnNum===4?'inputRegister':'holdingRegister',
       }
       if (form.mode !== 'edit' && (pack.points||[]).some((p)=> p.id===base.id)) {
@@ -468,7 +520,8 @@ export function createHmiView(React, t, post, openLive, openFrames) {
       }
       let points
       if (form.mode === 'edit') {
-        points = (pack.points||[]).map((p) => (p.id === form.id ? { ...p, ...base, id: form.id } : p))
+        // 编辑只更新内容，归属设备保持不变（移动点位另行设计）
+        points = (pack.points||[]).map((p) => (p.id === form.id ? { ...p, ...base, id: form.id, connectionId: p.connectionId || fixedCid, deviceId: p.deviceId || fixedDid } : p))
       } else {
         points = (pack.points||[]).concat([base])
       }
@@ -478,18 +531,19 @@ export function createHmiView(React, t, post, openLive, openFrames) {
 
     function generateBatch() {
       const pack = normalizePack()
-      const activeConnId = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
-      const activeDevId = pack.activeDeviceId || ((pack.devices||[]).find((d)=>d.connectionId===activeConnId) && (pack.devices||[]).find((d)=>d.connectionId===activeConnId).id) || (pack.devices[0] && pack.devices[0].id) || 'd1'
+      const fixedCid = batch.connectionId || pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || ''
+      const fixedDid = batch.deviceId
+      if (!fixedDid) { setError('请先选择设备'); return }
       const count = Math.max(1, Math.min(Number(batch.count) || 1, 64))
-      const existingIds = new Set((pack.points||[]).filter((p)=> (p.connectionId||p.connId)===activeConnId).map((p)=> p.id))
-      const existingAddr = new Set((pack.points||[]).filter((p)=> (p.connectionId||p.connId)===activeConnId && p.function===Number(batch.fc)).map((p)=> p.address))
+      const existingIds = new Set((pack.points||[]).filter((p)=> (p.connectionId||p.connId)===fixedCid && (p.deviceId||'')===fixedDid).map((p)=> p.id))
+      const existingAddr = new Set((pack.points||[]).filter((p)=> (p.connectionId||p.connId)===fixedCid && (p.deviceId||'')===fixedDid && p.function===Number(batch.fc)).map((p)=> p.address))
       const additions = []
       for (let i = 0; i < count; i++) {
         const address = Number(batch.start) + i
         if (existingAddr.has(address)) continue
         const id = hmiGenId('p')
         if (existingIds.has(id)) continue
-        additions.push({ id, connectionId: activeConnId, connId: activeConnId, deviceId: activeDevId, name: (batch.prefix || '') + i, function: Number(batch.fc), address, area: Number(batch.fc)===1?'coil':'holdingRegister', scale: 1, offset: 0, unit: '', alarmMin: null, alarmMax: null })
+        additions.push({ id, connectionId: fixedCid, connId: fixedCid, deviceId: fixedDid, name: (batch.prefix || '') + i, function: Number(batch.fc), address, area: Number(batch.fc)===1?'coil':'holdingRegister', scale: 1, offset: 0, unit: '', trendEnabled: false, alarmMin: null, alarmMax: null })
       }
       if (!additions.length) {
         setError('批量点位的地址全部与现有点位重复')
@@ -510,18 +564,18 @@ export function createHmiView(React, t, post, openLive, openFrames) {
     }
 
     // ── reads ──
-    function readAll() {
-      readOne(null)
+    function readAll(deviceId) {
+      readOne(null, deviceId || undefined)
     }
 
-    function readOne(pointId) {
+    function readOne(pointId, deviceId) {
       if (!cwd) {
         setError(t('needWorkspace'))
         return
       }
       const pack = normalizePack()
       const activeConnId = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
-      setBusy(pointId || 'read')
+      setBusy(pointId || deviceId || 'read')
       setError('')
       post('/dsh-vision-bench/modbus/read', {
         cwd,
@@ -529,6 +583,7 @@ export function createHmiView(React, t, post, openLive, openFrames) {
         sessionId,
         all: !pointId,
         pointId: pointId || undefined,
+        deviceId: deviceId || undefined,
       }, 120000).then((data) => {
         if (!data) return
         // 报文分轨：按 activeConnId 切轨
@@ -600,11 +655,10 @@ export function createHmiView(React, t, post, openLive, openFrames) {
     }
 
     // ── csv ──
-    function exportCsv() {
+    function exportCsv(deviceId) {
       const pack = normalizePack()
-      // 导出按 activeConnId 过滤的点表
-      const activeConnId = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
-      const filtered = (pack.points||[]).filter((p)=> (p.connectionId||p.connId)===activeConnId)
+      const did = deviceId || ''
+      const filtered = (pack.points||[]).filter((p)=> (p.deviceId||'')===did)
       navigator.clipboard.writeText(pointsToCsv(filtered)).then(() => {
         setCsvNote(t('csvDone'))
         setTimeout(() => setCsvNote(''), 1500)
@@ -618,16 +672,31 @@ export function createHmiView(React, t, post, openLive, openFrames) {
         return
       }
       const pack = normalizePack()
-      const activeConnId = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
-      const activeDevId = pack.activeDeviceId || ((pack.devices||[]).find((d)=>d.connectionId===activeConnId) && (pack.devices||[]).find((d)=>d.connectionId===activeConnId).id) || (pack.devices[0] && pack.devices[0].id) || 'd1'
-      // form/batch/csv 均带 connId：为导入点附上 activeConnId/deviceId
-      const withConn = parsed.points.map((p)=> ({ ...p, id: p.id || hmiGenId('p'), connectionId: activeConnId, connId: activeConnId, deviceId: activeDevId, area: p.function===1?'coil': p.function===2?'discreteInput': p.function===4?'inputRegister':'holdingRegister' }))
+      const fixedCid = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || ''
+      const fixedDid = csvTarget.deviceId
+      if (!fixedDid) { setError('请先选择设备再导入 CSV'); return }
+      // Task1/0.19.3: CSV 只作用于当前设备；替换模式清空该设备点位与值
+      const withConn = parsed.points.map((p)=> ({ ...p, id: p.id || hmiGenId('p'), connectionId: fixedCid, connId: fixedCid, deviceId: fixedDid, trendEnabled: p.trendEnabled === true, area: p.function===1?'coil': p.function===2?'discreteInput': p.function===4?'inputRegister':'holdingRegister' }))
       setError('')
-      setCsvOpen(false)
+      setCsvTarget((prev) => ({ ...prev, open: false }))
       setCsvText('')
-      // 导入替换当前连接下的点表，其余连接保留
-      const kept = (pack.points||[]).filter((p)=> (p.connectionId||p.connId)!==activeConnId)
-      persist({ points: kept.concat(withConn), values: [], version: 3 })
+      const mode = csvTarget.mode === 'replace' ? 'replace' : 'merge'
+      if (mode === 'replace') {
+        // 替换：清空该设备点位与当前值，其余设备/连接保留
+        const kept = (pack.points||[]).filter((p)=> !((p.connectionId||p.connId)===fixedCid && (p.deviceId||'')===fixedDid))
+        const gone = new Set((pack.points||[]).filter((p)=> (p.connectionId||p.connId)===fixedCid && (p.deviceId||'')===fixedDid).map((p)=> p.id))
+        const keptValues = (pack.values||[]).filter((v)=> !gone.has(v.pointId || v.key))
+        persist({ points: kept.concat(withConn), values: keptValues, version: 3 })
+      } else {
+        // 合并：仅追加/覆盖同设备同功能码同地址的点位
+        let points = (pack.points||[]).slice()
+        for (const np of withConn) {
+          const idx = points.findIndex((p)=> (p.connectionId||p.connId)===fixedCid && (p.deviceId||'')===fixedDid && p.function===np.function && p.address===np.address)
+          if (idx >= 0) points[idx] = { ...points[idx], ...np, id: points[idx].id }
+          else points.push(np)
+        }
+        persist({ points, version: 3 })
+      }
     }
 
     // ── derived ──
@@ -664,7 +733,6 @@ export function createHmiView(React, t, post, openLive, openFrames) {
         if (data && data.ok === false) setError(data.error || t('fail'))
         return post('/dsh-vision-bench/state', { cwd })
       }).then((data) => {
-        if (data && Array.isArray(data.serialSources)) setSerialSources(data.serialSources)
         if (data && Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
       }).catch((err) => setError(String((err && err.message) || t('fail')))).finally(() => setLinkBusy(''))
     }
@@ -672,7 +740,6 @@ export function createHmiView(React, t, post, openLive, openFrames) {
       if (!cwd || !id) return
       setLinkBusy(id)
       post('/dsh-vision-bench/connection/close', { cwd, connectionId: id }, 15000).then(() => post('/dsh-vision-bench/state', { cwd })).then((data) => {
-        if (data && Array.isArray(data.serialSources)) setSerialSources(data.serialSources)
         if (data && Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
       }).catch(() => {}).finally(() => setLinkBusy(''))
     }
@@ -681,18 +748,28 @@ export function createHmiView(React, t, post, openLive, openFrames) {
       const next = !sim
       // persist 按 connId 定向，toggleSim 按 activeConnId
       setActiveConnPatch({ sim: next })
-      if (next && typeof openLive === 'function') openLive()
     }
 
-    function toggleWatch() {
-      const nextPolling = { ...(pollingByConnection||{}), [activeConnId]: { ...polling, enabled: !watchEnabled, intervalMs: polling.intervalMs || 1000 } }
-      persist({ pollingByConnection: nextPolling, version: 3 })
-      if (!watchEnabled && typeof openLive === 'function') openLive()
+    // Task2/0.19.3: 采集由 Host 后台服务运行；UI 只负责 开始/停止
+    function toggleCollection() {
+      if (!cwd || !activeConnId) return
+      setLinkBusy('poll')
+      const url = watchEnabled ? '/dsh-vision-bench/polling/stop' : '/dsh-vision-bench/polling/start'
+      post(url, { cwd, connectionId: activeConnId }, 15000)
+        .then(() => post('/dsh-vision-bench/state', { cwd }))
+        .then((data) => {
+          if (data && data.workspace && data.workspace.modbus) {
+            setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus }))
+          }
+        })
+        .catch((err) => setError(String((err && err.message) || t('fail'))))
+        .finally(() => setLinkBusy(''))
     }
 
     function setPollingInterval(ms) {
       const nextPolling = { ...(pollingByConnection||{}), [activeConnId]: { ...polling, enabled: true, intervalMs: Number(ms)||1000 } }
       persist({ pollingByConnection: nextPolling, version: 3 })
+      post('/dsh-vision-bench/polling/start', { cwd, connectionId: activeConnId, intervalMs: Number(ms)||1000 }).catch(() => {})
     }
 
     // ── COM 去重：rtu port 全局置灰、tcp host:port 同理，sim 仍占位 ──
@@ -714,21 +791,6 @@ export function createHmiView(React, t, post, openLive, openFrames) {
       return hit ? hit.name : null
     }
 
-    const recentFrames = (getFramesLog(cwd) || []).slice(-8)
-    const serialPanel = el('div', { className: 'dvb-panel' },
-      el('div', { className: 'dvb-panel-head' },
-        el('span', { className: 'dvb-panel-title' }, t('framesTab') || '串口报文'),
-        el('button', {
-          type: 'button',
-          className: 'dvb-btn',
-          onClick() { if (typeof openFrames === 'function') try { openFrames() } catch { if (typeof openLive === 'function') try { openLive() } catch {} } },
-        }, t('framesViewAll') || '查看全部报文')),
-      recentFrames.length
-        ? el('div', { className: 'dvb-live-list' }, recentFrames.map((item, idx) => el('div', { key: String(item.frameId || item.id || idx), className: 'dvb-live-row' },
-          el('span', { className: 'dvb-map-meta' }, clockOf(item.t || item.at)),
-          el('span', { className: 'dvb-hint' }, item.connectionId || ''),
-          el('span', null, item.label || item.request || ''))))
-        : el('div', { className: 'dvb-hint' }, t('framesEmpty') || '暂无报文'))
 
     // ── Agent 聚焦（内部能力）：目标短时高亮 + 右下角轻提示，不再展示大面板 ──
     const focusToast = focusState && focusState.request && !focusState.badgeOnly
@@ -760,14 +822,28 @@ export function createHmiView(React, t, post, openLive, openFrames) {
           title: t('simHint'),
           onClick: toggleSim,
         }, t('sim')),
+        // Task2/0.19.3: 采集由 Host 后台服务运行
+        el('button', {
+          type: 'button',
+          className: 'dvb-btn dvb-btn-primary' + (watchEnabled ? ' is-on' : ''),
+          disabled: !cwd || !activeConnId || linkBusy === 'poll' || !points.length,
+          title: t('collectHint'),
+          onClick: toggleCollection,
+        }, linkBusy === 'poll' ? '…' : (watchEnabled ? (t('collectStop')||'停止采集') : (t('collectStart')||'开始采集'))),
+        watchEnabled
+          ? el('select', {
+            className: 'dvb-input dvb-live-interval',
+            value: String(polling.intervalMs || 1000),
+            title: t('pollInterval'),
+            onChange: (event)=>{ setPollingInterval(event.target.value) },
+          }, POLL_INTERVALS.map((ms) => el('option', { key: String(ms), value: String(ms) }, (ms / 1000) + 's')))
+          : null,
         !canDevice ? el('span', { className: 'dvb-need' }, t('needBindingsRead')) : null),
       connections.length
         ? el('div', { className: 'dvb-table-wrap' },
             el('table', { className: 'dvb-table' },
               el('thead', null, el('tr', null,
                 el('th', null, '名称'),
-                el('th', null, t('role') || '角色'),
-                el('th', null, t('connParticipate') || '参与运行'),
                 el('th', null, t('connBar')),
                 el('th', null, '操作'))),
               el('tbody', null, connections.map((c)=> {
@@ -786,27 +862,7 @@ export function createHmiView(React, t, post, openLive, openFrames) {
                       onClick() { selectConnection(c.id) },
                     }, c.name + (isActive ? ' ●' : ''))),
                   el('td', null,
-                    el('select', {
-                      className: 'dvb-input',
-                      value: c.role === 'server' || c.role === 'slave' ? 'server' : 'client',
-                      disabled: !cwd,
-                      onChange: (event)=>{
-                        const nextRole = event.target.value
-                        const nextConns = connections.map((x)=> x.id===c.id ? { ...x, role: nextRole } : x)
-                        persist({ connections: nextConns, version: 3 })
-                      },
-                    },
-                      el('option', { value: 'client' }, t('roleMaster')||'主机(master)'),
-                      el('option', { value: 'server', disabled: true, title: '从机模式暂未启用' }, t('roleSlave')||'从机(未启用)'))),
-                  el('td', null,
-                    el('label', { style: { display: 'flex', alignItems: 'center', gap: '4px' } },
-                      el('input', {
-                        type: 'checkbox',
-                        checked: enabled,
-                        disabled: !cwd,
-                        onChange() { toggleConnEnabled(c.id) },
-                      }),
-                      enabled ? (t('connParticipate') || '参与运行') : (t('connIdle') || '不参与'))),
+                    el('span', { className: 'dvb-hint', title: roleLabel }, roleLabel)),
                   el('td', { title: occupiedPort ? '已被 ' + occupiedPort + ' 占用' : '' },
                     el('span', null, connLabel(c.conn||{}) + (occupiedPort ? ' · 已被 ' + occupiedPort + ' 占用' : '')),
                     st !== 'disconnected'
@@ -876,9 +932,6 @@ export function createHmiView(React, t, post, openLive, openFrames) {
             },
               el('option', { value: 'client' }, '主机(master)'),
               el('option', { value: 'server', disabled: true, title: '从机模式暂未启用' }, '从机(未启用)'))),
-            field(t('connParticipate') || '参与运行', el('label', { style:{display:'flex',gap:'4px',alignItems:'center'} },
-              el('input', { type:'checkbox', checked: !!connForm.enabled, onChange: (event)=>{ setConnForm((prev)=>({...prev, enabled: event.target.checked})) } }),
-              connForm.enabled ? (t('connParticipate') || '参与运行') : (t('connIdle') || '不参与'))),
             field(t('mode'), el('select', {
               className: 'dvb-input',
               value: connForm.conn.mode || 'rtu',
@@ -941,144 +994,127 @@ export function createHmiView(React, t, post, openLive, openFrames) {
       : null
 
     // ── 设备树 ──
-    const devicePanel = el('div', { className: 'dvb-panel' },
-      el('div', { className: 'dvb-panel-head' },
-        el('span', { className: 'dvb-panel-title' }, '设备 · ' + (activeConnObj ? activeConnObj.name : '')),
-        el('span', { className: 'dvb-tag' }, activeDevices.length + ' 设备'),
-        el('button', {
-          type: 'button', className: 'dvb-btn',
-          disabled: !cwd || !activeConnId,
-          onClick(){
-            const pack = normalizePack()
-            const nid = hmiGenId('d')
-            const newDev = { id: nid, connectionId: activeConnId, name: '设备' + (activeDevices.length+1), unitId: 1, enabled: true }
-            persist({ devices: (pack.devices||[]).concat([newDev]), activeDeviceId: nid, version:3 })
-            lastDeviceByConn.current[activeConnId] = nid
-          },
-        }, '＋设备')),
-      activeDevices.length
-        ? el('div', { className: 'dvb-table-wrap' },
-            el('table', { className:'dvb-table' },
-              el('thead', null, el('tr', null, el('th', null, '名称'), el('th', null, '站号'), el('th', null, '启用'), el('th', null, '点位数'), el('th', null, ''))),
-              el('tbody', null, activeDevices.map((d)=>{
-                const isActiveDev = d.id===activeDeviceId
-                const ptCount = (allPoints||[]).filter((p)=> (p.deviceId||'d1')===d.id && (p.connectionId||p.connId)===activeConnId).length
-                return el('tr', { key: d.id, 'data-active': isActiveDev?'true':'false', style: isActiveDev?{background:'var(--dsw-alias-bg-layer-2,rgba(128,128,128,.1))'}:null },
-                  el('td', null,
-                    el('button', {
-                      type:'button',
-                      className:'dvb-btn' + (isActiveDev ? ' is-on dvb-btn-primary' : ''),
-                      onClick(){ persist({ activeDeviceId: d.id, version:3 }); lastDeviceByConn.current[activeConnId] = d.id },
-                    }, d.name + (isActiveDev ? ' ●' : ''))),
-                  el('td', null, String(d.unitId)),
-                  el('td', null, d.enabled!==false ? '启用' : '禁用'),
-                  el('td', null, String(ptCount)),
-                  el('td', null,
-                    el('div', { className:'dvb-actions' },
-                      el('button', {
-                        type:'button', className:'dvb-btn',
-                        onClick(){
-                          const name = typeof prompt==='function' ? prompt('设备名称', d.name) : null
-                          if (name===null) return
-                          const nextDevs = devices.map((x)=> x.id===d.id ? { ...x, name: String(name).slice(0,40)||x.name } : x)
-                          persist({ devices: nextDevs, version:3 })
-                        },
-                      }, '重命名'),
-                      el('button', {
-                        type:'button', className:'dvb-btn dvb-btn-sm',
-                        title: '复制设备结构化引用并让 Agent 分析',
-                        onClick(){ sendToAgent('device', { deviceId: d.id, connectionId: d.connectionId, name: d.name }) },
-                      }, agentBtnLabel('device', { deviceId: d.id })),
-                      el('button', {
-                        type:'button', className:'dvb-btn',
-                        disabled: activeDevices.length<=1,
-                        onClick(){
-                          const nextDevs = devices.filter((x)=> x.id!==d.id)
-                          const nextPoints = allPoints.filter((p)=> p.deviceId!==d.id)
-                          persist({ devices: nextDevs, points: nextPoints, version:3 })
-                        },
-                      }, '删除'))) )
-              }))))
-        : el('div', { className:'dvb-empty' }, '该连接暂无设备'))
-
-
-    // ── 当前连接详情（旧 connBar 兼容，展示 active 连接可编辑字段，COM 去重）──
-    const activeLocked = !!activeConnId && connectionStates.some((x) => x.connectionId === activeConnId && x.status === 'connected')
-    const activeConnDetail = activeConnId
-      ? el('div', { className: 'dvb-panel' },
+    // ── 设备表单（Task1/0.19.3：添加设备必须填写名称与唯一 Unit ID）──
+    const devFormPanel = devForm.open && activeConnId
+      ? el('div', { className: 'dvb-panel dvb-write-panel' },
           el('div', { className: 'dvb-panel-head' },
-            el('span', { className: 'dvb-panel-title' }, '当前连接 · ' + (activeConnObj.name||activeConnId)),
-            el('span', { className: 'dvb-tag' }, connLabel(conn)),
-            sim ? el('span', { className: 'dvb-tag' }, t('sim')) : null,
-            activeLocked ? el('span', { className: 'dvb-need' }, t('connEditLocked') || '连接中不可修改端点参数，请先断开') : null,
-            !canDevice ? el('span', { className: 'dvb-need' }, t('needBindingsRead')) : null),
+            el('span', { className: 'dvb-panel-title' }, (devForm.id ? (t('devEdit')||'编辑设备') : (t('devAdd')||'添加设备')) + ' · ' + (activeConnObj ? activeConnObj.name : '')),
+            el('button', { type: 'button', className: 'dvb-btn', onClick() { setDevForm((p) => ({ ...p, open: false })) } }, t('csvCancel'))),
           el('div', { className: 'dvb-toolbar' },
-            field(t('mode'), el('select', {
-              className: 'dvb-input',
-              value: conn.mode || 'rtu',
-              disabled: activeLocked,
-              onChange: (event)=>{ setActiveConnPatch({ mode: event.target.value }) },
-            },
-              el('option', { value: 'rtu' }, 'RTU'),
-              el('option', { value: 'tcp' }, 'TCP'))),
-            conn.mode === 'rtu'
-              ? field(t('serial'), el('div', { className: 'dvb-combo' },
-                  el('select', {
-                    className: 'dvb-input dvb-input-mono',
-                    value: conn.port || '',
-                    disabled: scanning,
-                    onChange: (event)=>{ setActiveConnPatch({ port: event.target.value }) },
-                  },
-                    el('option', { value: '' }, scanning ? t('serialScanning') : (ports.length ? t('serialPick') : t('serialNone'))),
-                    conn.port && !ports.some((item)=> item.path===conn.port)
-                      ? el('option', { value: conn.port }, conn.port + ' · ' + t('serialGone'))
-                      : null,
-                    ports.map((item)=>{
-                      const occupier = findRtuOccupier(item.path, activeConnId)
-                      return el('option', { key: item.path, value: item.path, disabled: !!occupier, title: occupier ? '已被 ' + occupier + ' 占用' : '' }, (item.label||item.path) + (occupier ? ' · 已被 ' + occupier + ' 占用' : ''))
-                    })),
-                  el('button', { type:'button', className:'dvb-btn', disabled: scanning, title: t('serialScan'), onClick: scanPorts }, t('serialScan'))))
-              : field(t('host'), el('div', { className:'dvb-combo' },
-                  el('input', {
-                    className:'dvb-input dvb-input-mono',
-                    value: conn.host||'',
-                    placeholder: t('hostPh')||'192.168.1.10',
-                    spellCheck:false,
-                    autoComplete:'off',
-                    disabled: activeLocked,
-                    onChange: (event)=>{
-                      const host = event.target.value
-                      const occupier = findTcpOccupier(host, conn.tcpPort, activeConnId)
-                      if (occupier) setError('已被 ' + occupier + ' 占用: ' + host + ':' + (conn.tcpPort||502))
-                      else setError('')
-                      setActiveConnPatch({ host })
-                    },
-                  }),
-                  el('input', {
-                    className:'dvb-input dvb-input-mono',
-                    value: conn.tcpPort||502,
-                    type:'number',
-                    style:{width:'90px', flex:'none'},
-                    disabled: activeLocked,
-                    onChange: (event)=>{ setActiveConnPatch({ tcpPort: Number(event.target.value) }) },
-                  }),
-                  (()=>{ const occupier = findTcpOccupier(conn.host, conn.tcpPort, activeConnId); return occupier ? el('span', {className:'dvb-need', title:'已被 ' + occupier + ' 占用'}, '已被 ' + occupier + ' 占用') : null })()
-                  )),
-            field(t('baudrate'), el('input', { className:'dvb-input dvb-input-mono', type:'number', value: conn.baudrate||9600, disabled: activeLocked, onChange: (event)=>{ setActiveConnPatch({ baudrate: Number(event.target.value) }) } })),
-            field(t('slave')||'站号', el('input', { className:'dvb-input dvb-input-mono', type:'number', value: (activeDevices.find((d)=>d.id===activeDeviceId) && activeDevices.find((d)=>d.id===activeDeviceId).unitId) || conn.slave || 1, min:0, max:247, disabled: activeLocked, onChange: (event)=>{ setActiveConnPatch({ slave: Number(event.target.value) }) } })),
-            field(t('databits'), el('select', { className:'dvb-input', value: String(conn.bytesize||8), disabled: activeLocked, onChange: (event)=>{ setActiveConnPatch({ bytesize: Number(event.target.value) }) } }, el('option',{value:'8'},'8'), el('option',{value:'7'},'7'))),
-            field(t('parityBit'), el('select', { className:'dvb-input', value: conn.parity||'N', disabled: activeLocked, onChange: (event)=>{ setActiveConnPatch({ parity: event.target.value }) } }, el('option',{value:'N'},'N'), el('option',{value:'E'},'E'), el('option',{value:'O'},'O'))),
-            field(t('stopbit'), el('select', { className:'dvb-input', value: String(conn.stopbits||1), disabled: activeLocked, onChange: (event)=>{ setActiveConnPatch({ stopbits: Number(event.target.value) }) } }, el('option',{value:'1'},'1'), el('option',{value:'2'},'2'))),
-            field('角色', el('select', {
-              className:'dvb-input',
-              value: activeConnObj.role === 'server' || activeConnObj.role==='slave' ? 'server' : 'client',
-              onChange: (event)=>{ updateActiveConnMeta({ role: event.target.value }) },
-            }, el('option',{value:'client'}, '主机(master)'), el('option',{value:'server', disabled:true, title:'从机模式暂未启用'}, '从机(未启用)'))),
-            field(t('connParticipate') || '参与运行', el('label', { style:{display:'flex',gap:'4px',alignItems:'center'} },
-              el('input', { type:'checkbox', checked: activeConnObj.enabled!==false, onChange(){ toggleConnEnabled(activeConnId) } }),
-              activeConnObj.enabled!==false ? (t('connParticipate') || '参与运行') : (t('connIdle') || '不参与')))))
+            field('设备名称', el('input', { className: 'dvb-input', value: devForm.name, placeholder: '如 温度传感器', onChange: (e) => { setDevForm((p) => ({ ...p, name: e.target.value })) } })),
+            field(t('unitId') || 'Unit ID', el('input', { className: 'dvb-input dvb-input-mono', type: 'number', min: 0, max: 247, value: String(devForm.unitId), onChange: (e) => { setDevForm((p) => ({ ...p, unitId: Number(e.target.value) })) } })),
+            el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick: saveDeviceForm }, t('savePoint')||'保存')))
       : null
 
+    // ── 设备卡片：点位表直接挂在所属设备内部 ──
+    const pointsOfDevice = (devId) => allPoints.filter((p) => (p.connectionId || p.connId) === activeConnId && (p.deviceId || '') === devId)
+    const readRunning = runningOf(journal, 'read')
+    const writeRunning = runningOf(journal, 'write')
+
+    const pointRow = (point) => {
+      const rec = valueMap[point.id]
+      const shown = rec && rec.ok && rec.raw !== null && rec.raw !== undefined
+        ? decodeValue(point, typeof rec.raw === 'boolean' ? (rec.raw ? 1 : 0) : rec.raw)
+        : (rec && rec.ok === false ? rec.error : '—')
+      const writable = isWritableFunction(point.function)
+      const isFocused = shouldHighlightFocus(focusState) && focusState.request.pointId === point.id
+      return el('tr', { key: point.id, 'data-kind': 'pt', className: 'dvb-row' + focusHighlightClass(isFocused), 'data-focused': isFocused ? 'true' : 'false' },
+        el('td', null, point.name || functionTag(point.function) + point.address),
+        el('td', null, functionTag(point.function)),
+        el('td', { className: 'dvb-val' }, String(point.address)),
+        el('td', { className: 'dvb-val' }, (point.scale === 1 ? '' : '×' + point.scale) + (point.offset ? (point.offset > 0 ? '+' : '') + point.offset : '') || '—'),
+        el('td', null, point.unit || '—'),
+        el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' }, String(shown)),
+        el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' }, rec && rec.at ? clockOf(rec.at) : '—'),
+        writable
+          ? el('td', null, el('button', { type: 'button', className: 'dvb-btn dvb-btn-write', disabled: !cwd || !canDevice || connMissing || !!busy || writeRunning, onClick() { openWriteRow(point) } }, t('quickWrite')))
+          : el('td', null, '—'),
+        el('td', null, el('button', { type: 'button', className: 'dvb-btn', disabled: !cwd || !!busy, onClick() { readOne(point.id) } }, busy === point.id ? t('reading') : t('readSegment'))),
+        el('td', null, el('button', { type: 'button', className: 'dvb-btn', onClick() { openEditPoint(point) } }, t('editing').slice(0, 2))),
+        el('td', null, el('button', { type: 'button', className: 'dvb-btn', disabled: !!busy, onClick() { removePointRow(point) } }, t('deleteSegment'))),
+        el('td', null, el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '复制结构化引用（稳定 ID+配置版本+时间范围），编辑不会改变所属设备', onClick() { sendToAgent('point', { pointId: point.id, connectionId: point.connectionId, deviceId: point.deviceId, name: point.name }) } }, agentBtnLabel('point', { pointId: point.id }))),
+        el('td', null, point.trendEnabled ? el('span', { className: 'dvb-badge', 'data-kind': 'live' }, '曲线') : null))
+    }
+
+    const pointThead = el('thead', null, el('tr', null,
+      el('th', null, t('colName')),
+      el('th', null, t('colFn')),
+      el('th', null, t('colAddr')),
+      el('th', null, '×/+'),
+      el('th', null, t('ptUnit')),
+      el('th', null, '值'),
+      el('th', null, t('time')),
+      el('th', null, '写入'),
+      el('th', null, '读取'),
+      el('th', null, '编辑'),
+      el('th', null, '删除'),
+      el('th', null, '让 Agent 分析'),
+      el('th', null, '曲线')))
+
+    const batchPanelFor = (d) => el('div', { className: 'dvb-write-panel' },
+      el('div', { className: 'dvb-hint' }, t('batchAdd') + ' · ' + d.name + ' · Unit ' + d.unitId),
+      el('div', { className: 'dvb-toolbar' },
+        field(t('batchPrefix'), el('input', { className: 'dvb-input', value: batch.prefix, placeholder: 'HR', onChange: (event)=>{ setBatch((prev) => ({ ...prev, prefix: event.target.value })) } })),
+        field(t('ptFc'), el('select', { className: 'dvb-input', value: String(batch.fc), onChange: (event)=>{ setBatch((prev) => ({ ...prev, fc: Number(event.target.value) })) } },
+          el('option', { value: '1' }, fnOptionLabel(t, 1)),
+          el('option', { value: '3' }, fnOptionLabel(t, 3)))),
+        field(t('batchStart'), el('input', { className: 'dvb-input dvb-input-mono', type: 'number', value: batch.start, min: 0, max: 65535, onChange: (event)=>{ setBatch((prev) => ({ ...prev, start: Number(event.target.value) })) } })),
+        field(t('batchCount'), el('input', { className: 'dvb-input dvb-input-mono', type: 'number', value: batch.count, min: 1, max: 64, onChange: (event)=>{ setBatch((prev) => ({ ...prev, count: Number(event.target.value) })) } })),
+        el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick: generateBatch }, t('batchGenerate'))))
+
+    const csvPanelFor = (d) => el('div', { className: 'dvb-write-panel' },
+      el('div', { className: 'dvb-hint' }, 'CSV 只作用于设备 ' + d.name + ' · Unit ' + d.unitId + '：' + (csvTarget.mode === 'replace' ? '替换该设备点位' : '合并导入')),
+      el('div', { className: 'dvb-actions' },
+        el('button', { type: 'button', className: 'dvb-btn' + (csvTarget.mode !== 'replace' ? ' dvb-btn-primary' : ''), onClick() { setCsvTarget((p) => ({ ...p, mode: 'merge' })) } }, '合并导入'),
+        el('button', { type: 'button', className: 'dvb-btn' + (csvTarget.mode === 'replace' ? ' dvb-btn-primary' : ''), onClick() { setCsvTarget((p) => ({ ...p, mode: 'replace' })) } }, '替换当前设备点位')),
+      el('textarea', { className: 'dvb-input dvb-csv-area', value: csvText, rows: 5, spellCheck: false, placeholder: 'name,function,address,scale,offset,unit,alarmMin,alarmMax,trendEnabled', onChange: (event)=>{ setCsvText(event.target.value) } }),
+      el('div', { className: 'dvb-actions' },
+        el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !csvText.trim(), onClick: importCsv }, t('csvApply')),
+        el('button', { type: 'button', className: 'dvb-btn', onClick() { setCsvTarget((p) => ({ ...p, open: false })) } }, t('csvCancel'))))
+
+    const deviceCardsPanel = el('div', { className: 'dvb-panel' },
+      el('div', { className: 'dvb-panel-head' },
+        el('span', { className: 'dvb-panel-title' }, '设备 · ' + (activeConnObj ? activeConnObj.name : '')),
+        el('span', { className: 'dvb-tag' }, activeDevices.length + ' 个设备 · ' + points.length + ' 个点位'),
+        el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd || !activeConnId, onClick: openAddDevice }, '＋添加设备')),
+      activeDevices.length
+        ? el('div', { className: 'dvb-dev-cards' }, activeDevices.map((d) => {
+            const devPts = pointsOfDevice(d.id)
+            const devBusy = busy === d.id
+            const pDel = devDeleteId && devDeleteId.split('|')
+            const confirmDel = pDel && pDel[0] === d.id
+            return el('div', { key: d.id, className: 'dvb-panel dvb-dev-card' + (shouldHighlightFocus(focusState) && focusState.request.deviceId === d.id ? ' dvb-has-focus' : '') },
+              el('div', { className: 'dvb-dev-head' },
+                el('span', { className: 'dvb-dev-title' }, d.name),
+                el('span', { className: 'dvb-tag' }, 'Unit ' + d.unitId),
+                el('span', { className: 'dvb-tag' }, devPts.length + ' 个点位'),
+                el('div', { className: 'dvb-actions' },
+                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !cwd || !canDevice || connMissing || !devPts.length || !!busy || readRunning, onClick() { readAll(d.id) } }, devBusy ? t('reading') : t('readAll')),
+                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '复制设备结构化引用并让 Agent 分析', onClick() { sendToAgent('device', { deviceId: d.id, connectionId: d.connectionId, name: d.name }) } }, agentBtnLabel('device', { deviceId: d.id })),
+                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openEditDevice(d) } }, t('editing').slice(0, 2)),
+                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !!devDeleteId, onClick() { requestDeleteDevice(d) } }, t('deleteSegment')))),
+              confirmDel
+                ? el('div', { className: 'dvb-write-panel', style: { marginBottom: '6px' } },
+                    el('div', { className: 'dvb-hint dvb-need' }, '将同时删除该设备的 ' + pDel[1] + ' 个点位和 ' + pDel[2] + ' 个当前值'),
+                    el('div', { className: 'dvb-actions' },
+                      el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', onClick() { confirmDeleteDevice(d) } }, '确认删除'),
+                      el('button', { type: 'button', className: 'dvb-btn', onClick() { setDevDeleteId('') } }, t('csvCancel'))))
+                : null,
+              el('div', { className: 'dvb-toolbar', style: { flexWrap: 'wrap' } },
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: !cwd, onClick() { openAddPoint(d.id) } }, t('addPoint')),
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { setBatch((prev) => ({ ...prev, open: !prev.open, deviceId: d.id, connectionId: activeConnId })) } }, t('batchAdd')),
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { setCsvTarget((prev) => ({ ...prev, open: !prev.open, deviceId: d.id })) } }, csvNote || t('csvImport')),
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !devPts.length, onClick() { exportCsv(d.id) } }, t('csvExport'))),
+              batch.open && batch.deviceId === d.id ? batchPanelFor(d) : null,
+              csvTarget.open && csvTarget.deviceId === d.id ? csvPanelFor(d) : null,
+              devPts.length
+                ? el('div', { className: 'dvb-table-wrap' }, el('table', { className: 'dvb-table' }, pointThead, el('tbody', null, devPts.map(pointRow))))
+                : el('div', { className: 'dvb-empty' }, t('noPoints')))
+          }))
+        : el('div', { className: 'dvb-empty dvb-dev-empty' },
+            el('div', { className: 'dvb-dev-empty-title' }, '连接已创建'),
+            el('div', { className: 'dvb-hint' }, '下一步：添加设备'),
+            el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick: openAddDevice }, '＋添加设备')))
     // ── point form ──
     const formPanel = form.mode !== 'hidden'
       ? el('div', { className: 'dvb-panel dvb-write-panel' },
@@ -1110,11 +1146,9 @@ export function createHmiView(React, t, post, openLive, openFrames) {
             min: 0, max: 65535,
             onChange: (event)=>{ setForm((prev) => ({ ...prev, address: Number(event.target.value) })) },
           })),
-          field('所属设备', el('select', {
-            className: 'dvb-input',
-            value: (form.deviceId || activeDeviceId || (activeDevices[0] && activeDevices[0].id) || ''),
-            onChange: (event)=>{ setForm((prev)=> ({ ...prev, deviceId: event.target.value })) },
-          }, activeDevices.map((d)=> el('option', { key:d.id, value:d.id }, d.name + ' · 站号 ' + d.unitId)))),
+          field(t('devOwner')||'所属设备', el('span', { className: 'dvb-hint' },
+            (activeDevices.find((d)=> d.id===form.deviceId) && activeDevices.find((d)=> d.id===form.deviceId).name) || form.deviceId || '—'
+            + ' · Unit ' + ((activeDevices.find((d)=> d.id===form.deviceId) || {}).unitId ?? ''))),
           field(t('ptScale'), el('input', {
             className: 'dvb-input dvb-input-mono', type: 'number', step: 'any',
             value: form.scale,
@@ -1130,16 +1164,26 @@ export function createHmiView(React, t, post, openLive, openFrames) {
             value: form.unit,
             onChange: (event)=>{ setForm((prev) => ({ ...prev, unit: event.target.value })) },
           })),
-          field(t('ptAlarmMin'), el('input', {
-            className: 'dvb-input dvb-input-mono', type: 'number', step: 'any',
-            value: form.alarmMin,
-            onChange: (event)=>{ setForm((prev) => ({ ...prev, alarmMin: event.target.value })) },
-          })),
-          field(t('ptAlarmMax'), el('input', {
-            className: 'dvb-input dvb-input-mono', type: 'number', step: 'any',
-            value: form.alarmMax,
-            onChange: (event)=>{ setForm((prev) => ({ ...prev, alarmMax: event.target.value })) },
-          }))),
+          field(t('trendOn')||'加入曲线', el('label', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
+            el('input', { type: 'checkbox', checked: form.trendEnabled === true, onChange: (event)=>{ setForm((prev) => ({ ...prev, trendEnabled: event.target.checked })) } }),
+            el('span', { className: 'dvb-hint' }, t('trendHint')||'勾选后该点位进入曲线缓存'))),
+          field(t('alarmOn')||'启用告警', el('label', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
+            el('input', { type: 'checkbox', checked: form.alarmOn === true, onChange: (event)=>{ setForm((prev) => ({ ...prev, alarmOn: event.target.checked, alarmMin: '', alarmMax: '' })) } }),
+            el('span', { className: 'dvb-hint' }, t('alarmOnHint')||'按上下限告警'))),
+          form.alarmOn
+            ? field(t('ptAlarmMin'), el('input', {
+              className: 'dvb-input dvb-input-mono', type: 'number', step: 'any',
+              value: form.alarmMin,
+              onChange: (event)=>{ setForm((prev) => ({ ...prev, alarmMin: event.target.value })) },
+            }))
+            : null,
+          form.alarmOn
+            ? field(t('ptAlarmMax'), el('input', {
+              className: 'dvb-input dvb-input-mono', type: 'number', step: 'any',
+              value: form.alarmMax,
+              onChange: (event)=>{ setForm((prev) => ({ ...prev, alarmMax: event.target.value })) },
+            }))
+            : null),
         el('div', { className: 'dvb-actions' },
           el('button', {
             type: 'button', className: 'dvb-btn dvb-btn-primary',
@@ -1147,183 +1191,6 @@ export function createHmiView(React, t, post, openLive, openFrames) {
             onClick: submitPoint,
           }, t('savePoint'))))
       : null
-
-    const batchPanel = batch.open
-      ? el('div', { className: 'dvb-panel dvb-write-panel' },
-        el('div', { className: 'dvb-hint' }, t('batchAdd') + ' · ' + (activeConnObj ? activeConnObj.name : '')),
-        el('div', { className: 'dvb-toolbar' },
-          field(t('batchPrefix'), el('input', {
-            className: 'dvb-input',
-            value: batch.prefix,
-            placeholder: 'HR',
-            onChange: (event)=>{ setBatch((prev) => ({ ...prev, prefix: event.target.value })) },
-          })),
-          field(t('ptFc'), el('select', {
-            className: 'dvb-input',
-            value: String(batch.fc),
-            onChange: (event)=>{ setBatch((prev) => ({ ...prev, fc: Number(event.target.value) })) },
-          },
-            el('option', { value: '1' }, fnOptionLabel(t, 1)),
-            el('option', { value: '3' }, fnOptionLabel(t, 3)))),
-          field(t('batchStart'), el('input', {
-            className: 'dvb-input dvb-input-mono', type: 'number',
-            value: batch.start,
-            min: 0, max: 65535,
-            onChange: (event)=>{ setBatch((prev) => ({ ...prev, start: Number(event.target.value) })) },
-          })),
-          field(t('batchCount'), el('input', {
-            className: 'dvb-input dvb-input-mono', type: 'number',
-            value: batch.count, min: 1, max: 64,
-            onChange: (event)=>{ setBatch((prev) => ({ ...prev, count: Number(event.target.value) })) },
-          })),
-          field('设备', el('select', {
-            className:'dvb-input',
-            value: batch.deviceId || activeDeviceId || (activeDevices[0]&&activeDevices[0].id)||'',
-            onChange: (event)=>{ setBatch((prev)=> ({...prev, deviceId: event.target.value})) },
-          }, activeDevices.map((d)=> el('option', {key:d.id, value:d.id}, d.name)))),
-          field('\u00a0', el('button', {
-            type: 'button', className: 'dvb-btn dvb-btn-primary', onClick: generateBatch,
-          }, t('batchGenerate')))))
-      : null
-
-    // ── points table ──
-    const readRunning = runningOf(journal, 'read')
-    const writeRunning = runningOf(journal, 'write')
-    const tableRows = points.map((point) => {
-      const rec = valueMap[point.id]
-      const shown = rec && rec.ok && rec.raw !== null && rec.raw !== undefined
-        ? decodeValue(point, typeof rec.raw === 'boolean' ? (rec.raw ? 1 : 0) : rec.raw)
-        : (rec && rec.ok === false ? rec.error : '—')
-      const writable = isWritableFunction(point.function)
-      const devName = (devices.find((d)=>d.id===(point.deviceId||point.deviceId)) && devices.find((d)=>d.id===(point.deviceId)).name) || point.deviceId || '—'
-      const isFocused = shouldHighlightFocus(focusState) && focusState.request.pointId === point.id
-      return el('tr', { key: point.id, 'data-kind': 'pt', className: 'dvb-row' + focusHighlightClass(isFocused), 'data-focused': isFocused ? 'true' : 'false' },
-        el('td', null, point.name || functionTag(point.function) + point.address),
-        el('td', null, devName),
-        el('td', null, functionTag(point.function)),
-        el('td', { className: 'dvb-val' }, String(point.address)),
-        el('td', { className: 'dvb-val' }, (point.scale === 1 ? '' : '×' + point.scale) + (point.offset ? (point.offset > 0 ? '+' : '') + point.offset : '') || '—'),
-        el('td', null, point.unit || '—'),
-        el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' }, String(shown)),
-        el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' },
-          rec && rec.at ? clockOf(rec.at) : '—'),
-        writable
-          ? el('td', null, el('button', {
-            type: 'button',
-            className: 'dvb-btn dvb-btn-write',
-            disabled: !cwd || !canDevice || connMissing || !!busy || writeRunning,
-            onClick() { openWriteRow(point) },
-          }, t('quickWrite')))
-          : el('td', null, '—'),
-        el('td', null, el('button', {
-          type: 'button', className: 'dvb-btn',
-          disabled: !cwd || !!busy,
-          onClick() { readOne(point.id) },
-        }, busy === point.id ? t('reading') : t('readSegment'))),
-        el('td', null, el('button', {
-          type: 'button', className: 'dvb-btn',
-          onClick() { openEditPoint(point) },
-        }, t('editing').slice(0, 2))),
-        el('td', null, el('button', {
-          type: 'button', className: 'dvb-btn', disabled: !!busy,
-          onClick() { removePointRow(point) },
-        }, t('deleteSegment'))),
-        el('td', null, el('button', {
-          type: 'button', className: 'dvb-btn dvb-btn-sm',
-          title: '复制结构化引用（稳定 ID+配置版本+时间范围）',
-          onClick() { sendToAgent('point', { pointId: point.id, connectionId: point.connectionId, deviceId: point.deviceId, name: point.name }) },
-        }, agentBtnLabel('point', { pointId: point.id }))),
-        el('td', null, null))
-    })
-
-    const pointsPanel = el('div', { className: 'dvb-panel' },
-      el('div', { className: 'dvb-panel-head' },
-        el('span', { className: 'dvb-panel-title' }, t('pointTable') + ' · ' + (activeConnObj ? activeConnObj.name : '') + ' (' + points.length + ')'),
-        el('button', {
-          type: 'button', className: 'dvb-btn dvb-btn-primary',
-          disabled: !cwd || !activeConnId,
-          onClick: openAddPoint,
-        }, t('addPoint')),
-        el('button', {
-          type: 'button', className: 'dvb-btn',
-          onClick() { setBatch((prev) => ({ ...prev, open: !prev.open })) },
-        }, t('batchAdd')),
-        el('button', {
-          type: 'button', className: 'dvb-btn',
-          onClick() { setCsvOpen((prev) => !prev) },
-        }, t('csvImport')),
-        el('button', {
-          type: 'button', className: 'dvb-btn',
-          disabled: !points.length,
-          onClick: exportCsv,
-        }, csvNote || t('csvExport')),
-        el('button', {
-          type: 'button',
-          className: 'dvb-btn',
-          disabled: !cwd || !canDevice || connMissing || !points.length || !!busy || readRunning,
-          onClick() { readAll() },
-        }, busy === 'read' || (readRunning && busy !== 'read')
-          ? (readRunning && runningSource(journal, 'read') === 'agent' ? t('agentReading') : t('reading'))
-          : t('readAll')),
-        el('button', {
-          type: 'button',
-          className: 'dvb-btn dvb-btn-primary' + (watchEnabled ? ' is-on' : ''),
-          disabled: !cwd || !canDevice || connMissing || !points.length,
-          onClick: toggleWatch,
-        }, watchEnabled ? t('liveStop') : t('liveStart')),
-        watchEnabled
-          ? el('select', {
-            className: 'dvb-input dvb-live-interval',
-            value: String(polling.intervalMs || 1000),
-            onChange: (event)=>{ setPollingInterval(event.target.value) },
-          }, POLL_INTERVALS.map((ms) => el('option', { key: String(ms), value: String(ms) }, (ms / 1000) + 's')))
-          : null,
-        !canDevice || connMissing
-          ? el('span', { className: 'dvb-need' }, connMissing ? (conn.mode === 'tcp' ? t('needHost') : t('needSerial')) : t('needBindingsRead'))
-          : null),
-      batchPanel,
-      csvOpen
-        ? el('div', { className: 'dvb-write-panel' },
-          el('div', { className: 'dvb-hint' }, t('csvReplaceHint')),
-          el('textarea', {
-            className: 'dvb-input dvb-csv-area',
-            value: csvText,
-            rows: 5,
-            spellCheck: false,
-            placeholder: 'name,function,address,scale,offset,unit,alarmMin,alarmMax',
-            onChange: (event)=>{ setCsvText(event.target.value) },
-          }),
-          el('div', { className: 'dvb-actions' },
-            el('button', {
-              type: 'button', className: 'dvb-btn dvb-btn-primary',
-              disabled: !csvText.trim(),
-              onClick: importCsv,
-            }, t('csvApply')),
-            el('button', {
-              type: 'button', className: 'dvb-btn',
-              onClick() { setCsvOpen(false) },
-            }, t('csvCancel'))))
-        : null,
-      points.length
-        ? el('div', { className: 'dvb-table-wrap' },
-          el('table', { className: 'dvb-table' },
-            el('thead', null, el('tr', null,
-              el('th', null, t('colName')),
-              el('th', null, '设备'),
-              el('th', null, t('colFn')),
-              el('th', null, t('colAddr')),
-              el('th', null, '×/+'),
-              el('th', null, t('ptUnit')),
-              el('th', null, '值'),
-              el('th', null, t('time')),
-              el('th', null, '写入'),
-              el('th', null, '读取'),
-              el('th', null, '编辑'),
-              el('th', null, '删除'),
-              el('th', null, '让 Agent 分析'),
-              el('th', null, '聚焦'))),
-            el('tbody', null, tableRows)))
-        : el('div', { className: 'dvb-empty' }, t('noPoints')))
 
     // ── pending agent approvals ──
     const pendingPanel = pending.length
@@ -1616,12 +1483,11 @@ export function createHmiView(React, t, post, openLive, openFrames) {
       agentCopied ? el('div', { className: 'dvb-msg', 'data-kind': 'ok' }, agentCopied.split(':').pop() + ' · ' + agentCopied.split(':').slice(0,2).join(':')) : null,
       tabBar,
       focusToast,
-      activeConnDetail,
-      devicePanel,
-      pointsPanel,
+      connListPanel,
+      devFormPanel,
+      deviceCardsPanel,
       formPanel,
       writeStrip,
-      serialPanel,
       pendingPanel,
       draftPanel)
   }

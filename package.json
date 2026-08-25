@@ -75,7 +75,8 @@
     "runtime/openocd_flash.py",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "bench-polling-service.mjs"
   ],
   "repository": {
     "type": "git",

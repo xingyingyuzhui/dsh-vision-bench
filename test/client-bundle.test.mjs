@@ -39,7 +39,9 @@ test('generated client keeps the factory contract', () => {
   assert.match(src, /recipePair/)
   assert.match(src, /roleSlave/)
   assert.doesNotMatch(src, /priority: -10/)
-  assert.match(src, /modbus\/poll/)
+  // Task2/0.19.3: 客户端不再自持轮询循环；采集走 Host 服务路由
+  assert.match(src, /polling\/start/)
+  assert.match(src, /polling\/stop/)
   assert.match(src, /liveStart/)
   assert.match(src, /modbus\/read/)
   assert.match(src, /setInterval/)

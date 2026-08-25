@@ -177,6 +177,8 @@ export const normalizePointV3 = (input) => {
     unit,
     alarmMin: finiteOrNull(raw.alarmMin),
     alarmMax: finiteOrNull(raw.alarmMax),
+    // Task3/0.19.3: 点位级入曲线开关 — 只有勾选的点位进入曲线缓存
+    trendEnabled: raw.trendEnabled === true,
   }
 }
 

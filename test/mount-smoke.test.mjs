@@ -39,8 +39,16 @@ test('hmi view mounts — the former blind spot of the bundle', async () => {
   assert.ok(tree, 'hmi tree rendered')
 })
 
-test('live/overview views mount', async () => {
-  const { createLiveView } = await import('../bench-live.mjs')
-  const Live = createLiveView(makeReact(), () => 'k', post, {})
-  assert.ok(Live({ tab: {} }))
+test('sidebar pages mount: 操作记录/曲线/告警 (监视已删除，采集由 Host 服务运行)', async () => {
+  const { createLogPage, createTrendPage, createAlarmPage } = await import('../bench-live.mjs')
+  const postMock = async () => ({ ok: true })
+  const Log = createLogPage(makeReact(), () => 'k', postMock, {})
+  assert.ok(Log({ tab: {}, scope: { cwd: '/ws' } }))
+  const Trend = createTrendPage(makeReact(), () => 'k', postMock, {})
+  assert.ok(Trend({ tab: {}, scope: { cwd: '/ws' } }))
+  const Alarm = createAlarmPage(makeReact(), () => 'k', postMock, {})
+  assert.ok(Alarm({ tab: {}, scope: { cwd: '/ws' } }))
+  const lib = await import('../bench-live.mjs')
+  assert.equal(typeof lib.createLiveView, 'undefined', '监视视图已移除')
+  assert.equal(typeof lib.openModbusTab, 'undefined', '监视 Tab 入口已移除')
 })

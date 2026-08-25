@@ -1055,6 +1055,32 @@ const alarmSummary = (items, kind) => items.slice(0, 5).map((item) => {
     : pointLabel(item.point)
 }).join('；')
 
+// Task1/0.19.3: 旧 `enabled=false`（参与运行开关）一次性迁移 — 停止该连接自动采集，
+// 然后清理旧禁用字段，使 enabled 不再是公开概念（只保留读取兼容）。
+export const migrateLegacyDisabled = (home, cwd) => {
+  const workspace = loadWorkspace(home, cwd)
+  const pack = normalizeModbus(workspace.modbus || {})
+  const disabledConnIds = (pack.connections || []).filter((c) => c.enabled === false).map((c) => c.id)
+  const hasDisabledDevice = (pack.devices || []).some((d) => d.enabled === false)
+  if (!disabledConnIds.length && !hasDisabledDevice) return { ok: true, migrated: false }
+  const nextPolling = { ...(pack.pollingByConnection || {}) }
+  for (const cid of disabledConnIds) {
+    const cur = nextPolling[cid] || { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' }
+    nextPolling[cid] = { ...cur, enabled: false } // 停止自动采集
+  }
+  const connections = (pack.connections || []).map((c) => disabledConnIds.includes(c.id) ? { ...c, enabled: true } : c)
+  const devices = (pack.devices || []).map((d) => d.enabled === false ? { ...d, enabled: true } : d)
+  saveWorkspace(home, cwd, {
+    modbus: {
+      connections,
+      devices,
+      pollingByConnection: nextPolling,
+      version: 3,
+    },
+  })
+  return { ok: true, migrated: true, stopped: disabledConnIds }
+}
+
 export const modbusPoll = async (home, cwd, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
