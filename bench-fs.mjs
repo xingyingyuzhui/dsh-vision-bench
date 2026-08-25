@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { closeSync, openSync, readFileSync, readSync, readdirSync, realpathSync, statSync } from 'node:fs'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import { pathInside, realPath, requireWorkspaceCwd } from './bench-paths.mjs'
 
 const SKIP = new Set(['.git', '.svn', '.hg', 'node_modules', '.venv', 'venv', '__pycache__', '.dsh'])
@@ -82,6 +82,34 @@ export const listWorkspaceDir = (cwd, requested) => {
 }
 
 export const LOG_TAIL_BYTES = 256 * 1024
+
+// Task5/0.19.3: 只读源码预览 — 工作区内、拒绝符号链接逃逸、扩展名白名单、256KB 上限
+export const PROJECT_READ_EXT = new Set(['.c', '.h', '.hpp', '.cpp', '.cc', '.cxx', '.s', '.asm', '.S', '.ld', '.icf', '.sct', '.txt', '.md', '.inc'])
+export const PROJECT_READ_MAX = 256 * 1024
+
+export const readProjectFile = (cwd, file) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  if (!file || typeof file !== 'string' || !file.trim()) return { ok: false, error: '缺少文件路径' }
+  const abs = resolve(room.cwd, file)
+  if (!pathInside(room.cwd, abs)) return { ok: false, error: '文件必须位于当前工作区内', code: 'OUTSIDE_WORKSPACE' }
+  const resolved = realPath(abs)
+  if (!pathInside(room.cwd, resolved)) return { ok: false, error: '符号链接逃逸被拒绝', code: 'SYMLINK_ESCAPE' }
+  const ext = (basename(resolved).match(/\.([^.]+)$/) || [])[1] || ''
+  if (!PROJECT_READ_EXT.has('.' + ext.toLowerCase()) && !PROJECT_READ_EXT.has('.' + ext)) {
+    return { ok: false, error: '只允许源码/头文件/汇编/链接脚本', code: 'EXT_NOT_ALLOWED' }
+  }
+  let text
+  try {
+    text = readFileSync(resolved, 'utf8')
+  } catch (error) {
+    return { ok: false, error: '无法读取文件: ' + ((error && error.message) || error), code: 'READ_FAILED' }
+  }
+  const truncated = Buffer.byteLength(text, 'utf8') > PROJECT_READ_MAX
+  if (truncated) text = text.slice(0, PROJECT_READ_MAX)
+  const lines = text.split('\n').length
+  return { ok: true, rel: relative(room.cwd, resolved), file: resolved, text, lines, truncated }
+}
 
 export const readBuildLog = (home, logFile, tailBytes = LOG_TAIL_BYTES) => {
   const raw = String(logFile || '').trim()

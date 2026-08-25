@@ -103,6 +103,7 @@ export function createDebugView(React, t, post, openProject) {
     const [busy, setBusy] = React.useState('')
     const [error, setError] = React.useState('')
     const [buildOut, setBuildOut] = React.useState('')
+    const [logView, setLogView] = React.useState({ open: false, text: '', filter: 'all', search: '', busy: false })
     const [lastResult, setLastResult] = React.useState(null)
     const [copied, setCopied] = React.useState(false)
     const [picker, setPicker] = React.useState(null)
@@ -320,6 +321,31 @@ export function createDebugView(React, t, post, openProject) {
       })
     }
 
+    // Task5/0.19.3: 编译错误 → 文件/行定位（打开工程结构并高亮）
+    const buildErrors = (() => {
+      const text = String(buildOut || '')
+      const out = []
+      const re = /^\s*(.+?)\((\d+)\)\s*:\s*(error|fatal error|warning)\s*:\s*(.*)$/gm
+      let m = null
+      while ((m = re.exec(text))) {
+        out.push({ file: m[1].trim(), line: Math.max(1, Number(m[2]) || 1), kind: m[3], text: m[4].trim().slice(0, 200) })
+      }
+      return out.slice(0, 60)
+    })()
+    function jumpToError(err) {
+      if (!cwd) return
+      post('/dsh-vision-bench/workspace', { cwd, jumpProject: { file: err.file, line: err.line } }).catch(() => {})
+      if (typeof openProject === 'function') openProject()
+    }
+    function openFullLog() {
+      if (!lastResult || !cwd) return
+      setLogView((prev) => ({ ...prev, open: true, busy: true, text: '' }))
+      const logFile = lastResult && lastResult.details && (lastResult.details.log_file || lastResult.details.logFile) || ''
+      post('/dsh-vision-bench/keil/log', { cwd, logFile }).then((data) => {
+        setLogView((prev) => ({ ...prev, busy: false, text: (data && data.text) || '', error: data && data.ok === false ? data.error : '' }))
+      }).catch((err) => setLogView((prev) => ({ ...prev, busy: false, text: '', error: String((err && err.message) || '读取失败') })))
+    }
+
     function copyForAgent() {
       const text = agentNote(cwd, workspace, lastResult)
       if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
@@ -480,7 +506,24 @@ export function createDebugView(React, t, post, openProject) {
             !buildBusy && buildBlock ? el('span', { className: 'dvb-need' }, buildBlock) : null)),
         el('div', { className: 'dvb-panel dvb-panel-fill' },
           el('div', { className: 'dvb-panel-head' },
-            el('span', { className: 'dvb-panel-title' }, t('outputLog'))),
+            el('span', { className: 'dvb-panel-title' }, t('outputLog')),
+            buildErrors.length
+              ? el('span', { className: 'dvb-badge', 'data-kind': 'err' }, buildErrors.length + ' 错误/警告')
+              : null,
+            lastResult && lastResult.details && (lastResult.details.log_file || lastResult.details.logFile)
+              ? el('button', {
+                type: 'button', className: 'dvb-btn',
+                onClick: openFullLog,
+              }, '查看完整日志')
+              : null),
+          buildErrors.length
+            ? el('div', { className: 'dvb-map-funcs' },
+              buildErrors.slice(0, 30).map((err, idx) => el('div', { key: 'e' + idx, className: 'dvb-map-func', 'data-kind': err.kind === 'error' || err.kind === 'fatal error' ? 'err' : 'warn' },
+                el('span', { className: 'dvb-map-func-name' }, err.file),
+                el('span', { className: 'dvb-map-meta' }, ':' + err.line + ' ' + err.kind),
+                el('span', { className: 'dvb-hint', title: err.text }, err.text.slice(0, 120)),
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '打开工程结构并定位到该文件/行', onClick() { jumpToError(err) } }, '定位'))))
+            : null,
           buildOut
             ? el('pre', { className: 'dvb-log' }, buildOut)
             : el('div', { className: 'dvb-empty' }, t('outputEmpty')))),
@@ -489,6 +532,45 @@ export function createDebugView(React, t, post, openProject) {
       // Task9/0.19.2: 完整时间线已迁入侧边栏"操作记录"；这里只保留轻量运行摘要
       journal && journal.running && journal.running.length
         ? el('div', { className: 'dvb-hint' }, t('tasks') + ' · 运行中 ' + journal.running.map((r) => r.summary || r.type || r.id).filter(Boolean).join(' / '))
+        : null,
+      logView && logView.open
+        ? el('div', { className: 'dvb-panel dvb-write-panel' },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, '完整日志'),
+            el('input', {
+              className: 'dvb-input dvb-map-search',
+              placeholder: '搜索…',
+              value: logView.search,
+              onChange: (event) => { setLogView((prev) => ({ ...prev, search: event.target.value })) },
+            }),
+            el('select', {
+              className: 'dvb-input',
+              value: logView.filter,
+              onChange: (event) => { setLogView((prev) => ({ ...prev, filter: event.target.value })) },
+            },
+              el('option', { value: 'all' }, '全部'),
+              el('option', { value: 'error' }, '仅错误'),
+              el('option', { value: 'warning' }, '仅警告')),
+            el('button', {
+              type: 'button', className: 'dvb-btn',
+              onClick() {
+                if (logView.text && typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(logView.text)
+              },
+            }, '复制'),
+            el('button', { type: 'button', className: 'dvb-btn', onClick() { setLogView((prev) => ({ ...prev, open: false })) } }, t('csvCancel'))),
+          logView.busy
+            ? el('div', { className: 'dvb-hint' }, t('opening'))
+            : (logView.error
+              ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, logView.error)
+              : el('pre', { className: 'dvb-log' },
+                (logView.text || '').split('\n').filter((line) => {
+                  if (logView.filter === 'error') return /error/i.test(line)
+                  if (logView.filter === 'warning') return /warning/i.test(line)
+                  return true
+                }).filter((line) => {
+                  const s = logView.search.trim().toLowerCase()
+                  return !s || line.toLowerCase().includes(s)
+                }).join('\n'))))
         : null,
       pickerEl)
   }

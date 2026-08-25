@@ -8,8 +8,8 @@ test('zh and en tables share keys', () => {
 
 test('translate falls back and interpolates', () => {
   assert.equal(translate('zh', 'tabDebug'), '调试')
-  assert.equal(translate('zh', 'projectMap'), '工程')
-  assert.equal(translate('zh', 'mapOpen'), '结构')
+  assert.equal(translate('zh', 'projectMap'), '工程结构')
+  assert.equal(translate('zh', 'mapOpen'), '打开工程结构')
   assert.equal(translate('zh', 'mapFunctions'), '函数')
   assert.equal(translate('zh', 'mapTruncated').includes('截断'), true)
   assert.match(translate('zh', 'pickerEmpty'), /\.uvprojx/)

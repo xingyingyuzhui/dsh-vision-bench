@@ -6,7 +6,7 @@ import test from 'node:test'
 
 test('package.json: version 0.19.2 and no legacy python modbus files', async () => {
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
-  assert.equal(pkg.version, '0.19.2')
+  assert.equal(pkg.version, '0.19.3')
   const files = Array.isArray(pkg.files) ? pkg.files : []
   for (const bad of ['modbus_read.py', 'modbus_write.py', 'serial_monitor.py']) {
     assert.ok(!files.some((f) => String(f).indexOf(bad) >= 0), bad + ' must not be packaged')

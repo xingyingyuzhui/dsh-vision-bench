@@ -22,6 +22,7 @@ test('generated client keeps the factory contract', () => {
   assert.match(src, /fs\/list/)
   assert.match(src, /keil\/build/)
   assert.match(src, /modbus\/read/)
+  assert.match(src, /project\/file/)
   assert.match(src, /agentBuilding/)
   assert.match(src, /needBindingsBuild/)
   assert.match(src, /serial\/ports/)

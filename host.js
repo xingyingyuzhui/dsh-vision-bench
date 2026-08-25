@@ -1,6 +1,6 @@
 import { listPendingWrites, keilBuild, keilMap, keilScan, keilTargets, listDir, listFrames, modbusPoll, modbusRead, modbusWrite, openocdDownload, requestFocus, resolvePendingWrite } from './bench-actions.mjs'
 import { runSelfCheck } from './bench-check.mjs'
-import { artifactInfo, readBuildLog } from './bench-fs.mjs'
+import { artifactInfo, readBuildLog, readProjectFile } from './bench-fs.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
 import {
   appendEvidence,
@@ -209,6 +209,12 @@ export function apply(ctx, config = {}) {
     route('/dsh-vision-bench/fs/list', async (req) => {
       const body = await readJsonBody(req)
       return listDir(body && body.cwd, body && body.path)
+    }),
+    route('/dsh-vision-bench/project/file', async (req) => {
+      const body = await readJsonBody(req)
+      const room = body && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
+      if (room.error) return { ok: false, error: room.error }
+      return readProjectFile(room.cwd, body && (body.path || body.file))
     }),
     route('/dsh-vision-bench/keil/log', async (req) => {
       const body = await readJsonBody(req)

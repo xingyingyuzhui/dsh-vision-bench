@@ -198,14 +198,14 @@ const COPY = {
     framesCopyTx: '复制事务',
     framesExport: '导出范围',
     portInUse: '串口被占用',
-    projectMap: '工程',
+    projectMap: '工程结构',
     projectMapEmpty: '先在调试页选择 Keil 工程。',
     mapIncludes: '包含路径',
     mapDefines: '宏',
     mapMissing: '缺失',
     mapUnreadable: '不可读',
     mapOutside: '工作区外',
-    mapOpen: '结构',
+    mapOpen: '打开工程结构',
     mapIncludesOf: '包含',
     mapFunctions: '函数',
     mapTruncated: '工程较大，结果已截断，并非完整文件树。',
@@ -523,14 +523,14 @@ const COPY = {
     framesCopyTx: 'Copy transaction',
     framesExport: 'Export range',
     portInUse: 'Port in use',
-    projectMap: 'Project',
+    projectMap: 'Project Tree',
     projectMapEmpty: 'Choose a Keil project on the Debug tab.',
     mapIncludes: 'Include paths',
     mapDefines: 'Defines',
     mapMissing: 'Missing',
     mapUnreadable: 'Unreadable',
     mapOutside: 'Outside workspace',
-    mapOpen: 'Map',
+    mapOpen: 'Open Project Tree',
     mapIncludesOf: 'Includes',
     mapFunctions: 'Functions',
     mapTruncated: 'Project is large; this map is truncated and not the full tree.',
@@ -902,6 +902,23 @@ const CSS = [
   'body[' + ATTR + '] .dvb-vision-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
   'body[' + ATTR + '] .dvb-vision-meta{display:flex;gap:10px;align-items:center}',
   'body[' + ATTR + '] .dvb-focus-toast{position:fixed;right:14px;bottom:14px;z-index:60;display:flex;gap:8px;align-items:center;max-width:420px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.4));border-radius:8px;background:var(--dsw-alias-bg-layer-1,#1e1e1e);box-shadow:0 4px 16px rgba(0,0,0,.2);font-size:12px}',
+  'body[' + ATTR + '] .dvb-map-search{min-width:150px;flex:1 1 180px}',
+  'body[' + ATTR + '] .dvb-map-filter{width:auto}',
+  'body[' + ATTR + '] .dvb-map-group-name{display:flex;gap:6px;align-items:center;font-weight:600;padding:4px 0;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.14))}',
+  'body[' + ATTR + '] .dvb-map-file-row{padding:2px 0 2px 14px}',
+  'body[' + ATTR + '] .dvb-map-file{display:flex;gap:6px;align-items:center;flex-wrap:wrap}',
+  'body[' + ATTR + '] .dvb-map-file[data-kind="missing"]{opacity:.75}',
+  'body[' + ATTR + '] .dvb-map-file[data-kind="unread"]{opacity:.85}',
+  'body[' + ATTR + '] .dvb-map-file[data-kind="out"]{opacity:.6}',
+  'body[' + ATTR + '] .dvb-map-file-name{font-family:ui-monospace,Menlo,monospace;font-size:12px}',
+  'body[' + ATTR + '] .dvb-map-file.dvb-map-jump .dvb-map-file-name{outline:2px solid #e0912f;outline-offset:1px;border-radius:4px}',
+  'body[' + ATTR + '] .dvb-map-funcs{display:flex;flex-direction:column;gap:2px;padding:2px 0 2px 26px}',
+  'body[' + ATTR + '] .dvb-map-func{display:flex;gap:8px;align-items:center;font-family:ui-monospace,Menlo,monospace;font-size:11px}',
+  'body[' + ATTR + '] .dvb-map-func[data-jump="true"]{background:rgba(224,145,47,.14);border-radius:4px;padding:0 4px}',
+  'body[' + ATTR + '] .dvb-map-toggle{min-width:18px;padding:0 2px;font-size:10px}',
+  'body[' + ATTR + '] .dvb-map-toggle-void{opacity:.35}',
+  'body[' + ATTR + '] .dvb-map-cfg-toggle{margin:4px 0;width:100%;text-align:left;font-size:12px}',
+  'body[' + ATTR + '] .dvb-map-preview{max-height:320px;overflow:auto;white-space:pre;font-size:11px;line-height:1.5}',
   'body[' + ATTR + '] .dvb-dev-cards{display:flex;flex-direction:column;gap:8px}',
   'body[' + ATTR + '] .dvb-dev-card{border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.28));border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}',
   'body[' + ATTR + '] .dvb-dev-card.dvb-has-focus{outline:2px solid #4f8ef7;outline-offset:-2px}',
@@ -3765,6 +3782,7 @@ function createDebugView(React, t, post, openProject) {
     const [busy, setBusy] = React.useState('')
     const [error, setError] = React.useState('')
     const [buildOut, setBuildOut] = React.useState('')
+    const [logView, setLogView] = React.useState({ open: false, text: '', filter: 'all', search: '', busy: false })
     const [lastResult, setLastResult] = React.useState(null)
     const [copied, setCopied] = React.useState(false)
     const [picker, setPicker] = React.useState(null)
@@ -3982,6 +4000,31 @@ function createDebugView(React, t, post, openProject) {
       })
     }
 
+    // Task5/0.19.3: 编译错误 → 文件/行定位（打开工程结构并高亮）
+    const buildErrors = (() => {
+      const text = String(buildOut || '')
+      const out = []
+      const re = /^\s*(.+?)\((\d+)\)\s*:\s*(error|fatal error|warning)\s*:\s*(.*)$/gm
+      let m = null
+      while ((m = re.exec(text))) {
+        out.push({ file: m[1].trim(), line: Math.max(1, Number(m[2]) || 1), kind: m[3], text: m[4].trim().slice(0, 200) })
+      }
+      return out.slice(0, 60)
+    })()
+    function jumpToError(err) {
+      if (!cwd) return
+      post('/dsh-vision-bench/workspace', { cwd, jumpProject: { file: err.file, line: err.line } }).catch(() => {})
+      if (typeof openProject === 'function') openProject()
+    }
+    function openFullLog() {
+      if (!lastResult || !cwd) return
+      setLogView((prev) => ({ ...prev, open: true, busy: true, text: '' }))
+      const logFile = lastResult && lastResult.details && (lastResult.details.log_file || lastResult.details.logFile) || ''
+      post('/dsh-vision-bench/keil/log', { cwd, logFile }).then((data) => {
+        setLogView((prev) => ({ ...prev, busy: false, text: (data && data.text) || '', error: data && data.ok === false ? data.error : '' }))
+      }).catch((err) => setLogView((prev) => ({ ...prev, busy: false, text: '', error: String((err && err.message) || '读取失败') })))
+    }
+
     function copyForAgent() {
       const text = agentNote(cwd, workspace, lastResult)
       if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
@@ -4142,7 +4185,24 @@ function createDebugView(React, t, post, openProject) {
             !buildBusy && buildBlock ? el('span', { className: 'dvb-need' }, buildBlock) : null)),
         el('div', { className: 'dvb-panel dvb-panel-fill' },
           el('div', { className: 'dvb-panel-head' },
-            el('span', { className: 'dvb-panel-title' }, t('outputLog'))),
+            el('span', { className: 'dvb-panel-title' }, t('outputLog')),
+            buildErrors.length
+              ? el('span', { className: 'dvb-badge', 'data-kind': 'err' }, buildErrors.length + ' 错误/警告')
+              : null,
+            lastResult && lastResult.details && (lastResult.details.log_file || lastResult.details.logFile)
+              ? el('button', {
+                type: 'button', className: 'dvb-btn',
+                onClick: openFullLog,
+              }, '查看完整日志')
+              : null),
+          buildErrors.length
+            ? el('div', { className: 'dvb-map-funcs' },
+              buildErrors.slice(0, 30).map((err, idx) => el('div', { key: 'e' + idx, className: 'dvb-map-func', 'data-kind': err.kind === 'error' || err.kind === 'fatal error' ? 'err' : 'warn' },
+                el('span', { className: 'dvb-map-func-name' }, err.file),
+                el('span', { className: 'dvb-map-meta' }, ':' + err.line + ' ' + err.kind),
+                el('span', { className: 'dvb-hint', title: err.text }, err.text.slice(0, 120)),
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '打开工程结构并定位到该文件/行', onClick() { jumpToError(err) } }, '定位'))))
+            : null,
           buildOut
             ? el('pre', { className: 'dvb-log' }, buildOut)
             : el('div', { className: 'dvb-empty' }, t('outputEmpty')))),
@@ -4151,6 +4211,45 @@ function createDebugView(React, t, post, openProject) {
       // Task9/0.19.2: 完整时间线已迁入侧边栏"操作记录"；这里只保留轻量运行摘要
       journal && journal.running && journal.running.length
         ? el('div', { className: 'dvb-hint' }, t('tasks') + ' · 运行中 ' + journal.running.map((r) => r.summary || r.type || r.id).filter(Boolean).join(' / '))
+        : null,
+      logView && logView.open
+        ? el('div', { className: 'dvb-panel dvb-write-panel' },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, '完整日志'),
+            el('input', {
+              className: 'dvb-input dvb-map-search',
+              placeholder: '搜索…',
+              value: logView.search,
+              onChange: (event) => { setLogView((prev) => ({ ...prev, search: event.target.value })) },
+            }),
+            el('select', {
+              className: 'dvb-input',
+              value: logView.filter,
+              onChange: (event) => { setLogView((prev) => ({ ...prev, filter: event.target.value })) },
+            },
+              el('option', { value: 'all' }, '全部'),
+              el('option', { value: 'error' }, '仅错误'),
+              el('option', { value: 'warning' }, '仅警告')),
+            el('button', {
+              type: 'button', className: 'dvb-btn',
+              onClick() {
+                if (logView.text && typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(logView.text)
+              },
+            }, '复制'),
+            el('button', { type: 'button', className: 'dvb-btn', onClick() { setLogView((prev) => ({ ...prev, open: false })) } }, t('csvCancel'))),
+          logView.busy
+            ? el('div', { className: 'dvb-hint' }, t('opening'))
+            : (logView.error
+              ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, logView.error)
+              : el('pre', { className: 'dvb-log' },
+                (logView.text || '').split('\n').filter((line) => {
+                  if (logView.filter === 'error') return /error/i.test(line)
+                  if (logView.filter === 'warning') return /warning/i.test(line)
+                  return true
+                }).filter((line) => {
+                  const s = logView.search.trim().toLowerCase()
+                  return !s || line.toLowerCase().includes(s)
+                }).join('\n'))))
         : null,
       pickerEl)
   }
@@ -6748,19 +6847,10 @@ function createFramesPage(React, t, post, hooks) {
     )
   }
 }
+// Task5/0.19.3: 工程结构 — 组/文件/函数三级展开折叠 + 搜索 + 筛选
+// (缺失/不可读/工作区外) + 文件操作（预览源码/复制路径/让Agent分析/Include 关系）+
+// 可折叠的 编译配置（Include 路径、宏、依赖边）。侧栏「工程」→「工程结构」。
 const TAB_MAP = 'dsh-vision-bench:project'
-
-function fileMark(t, file) {
-  if (!file.inside) return t('mapOutside')
-  if (!file.exists) return t('mapMissing')
-  if (!file.readable) return t('mapUnreadable')
-  return ''
-}
-
-function truncated(mapped) {
-  const flags = mapped && mapped.truncated && typeof mapped.truncated === 'object' ? mapped.truncated : {}
-  return !!(flags.files || flags.includes || flags.defines || flags.include_edges || flags.functions)
-}
 
 function createMapView(React, t, post) {
   return function MapView(props) {
@@ -6770,6 +6860,14 @@ function createMapView(React, t, post) {
     const [mapped, setMapped] = React.useState(null)
     const [error, setError] = React.useState('')
     const [busy, setBusy] = React.useState(false)
+    const [search, setSearch] = React.useState('')
+    const [filter, setFilter] = React.useState('all') // all | missing | unread | outside
+    const [openGroups, setOpenGroups] = React.useState({})
+    const [openFiles, setOpenFiles] = React.useState({})
+    const [cfgOpen, setCfgOpen] = React.useState(false)
+    const [preview, setPreview] = React.useState(null) // {rel, text, lines, truncated, error}
+    const [copied, setCopied] = React.useState('')
+    const [jumpLine, setJumpLine] = React.useState(0)
 
     React.useEffect(() => {
       if (!cwd) {
@@ -6782,6 +6880,13 @@ function createMapView(React, t, post) {
         const next = data.workspace && data.workspace.keil ? data.workspace.keil : {}
         const project = next.project || ''
         const target = next.target || ''
+        // Task5/0.19.3: 编译错误定位 — 调试页点击错误后写入 jump 目标
+        const jump = data.workspace && data.workspace.jumpProject
+        if (jump && jump.file) {
+          setJumpLine(Number(jump.line) || 0)
+          setOpenFiles((prev) => ({ ...prev, [jump.file]: true }))
+          try { setTargetJump(jump) } catch {}
+        }
         setKeil((prev) => (prev.project === project && prev.target === target ? prev : { project, target }))
       })
     }, [cwd, post])
@@ -6803,6 +6908,13 @@ function createMapView(React, t, post) {
         }
         setError('')
         setMapped(data && data.result && data.result.details ? data.result.details : null)
+        if (data && data.result && data.result.details) {
+          // 默认展开全部组
+          const groups = data.result.details.groups || []
+          const next = {}
+          for (const g of groups) next[g.name] = true
+          setOpenGroups(next)
+        }
       }).catch((err) => {
         if (!stop) {
           setMapped(null)
@@ -6814,61 +6926,168 @@ function createMapView(React, t, post) {
 
     const counts = mapped && mapped.counts ? mapped.counts : {}
     const groups = mapped && Array.isArray(mapped.groups) ? mapped.groups : []
+    const truncated = mapped && mapped.truncated && typeof mapped.truncated === 'object' ? mapped.truncated : {}
+
+    const fileKind = (file) => !file.inside ? 'outside' : (!file.exists ? 'missing' : (!file.readable ? 'unread' : 'ok'))
+
+    const passesFilter = (file) => {
+      if (filter === 'all') return true
+      if (filter === 'missing') return !file.exists
+      if (filter === 'unread') return file.exists && !file.readable
+      if (filter === 'outside') return !file.inside
+      return true
+    }
+
+    const openPreview = (file) => {
+      setPreview({ loading: true, rel: file.rel || file.path || file.name, text: '', lines: 0, truncated: false, error: '' })
+      post('/dsh-vision-bench/project/file', { cwd, path: file.rel || file.path || file.name }).then((data) => {
+        setPreview(data && data.ok ? { rel: data.rel, text: data.text, lines: data.lines, truncated: !!data.truncated, error: '' }
+          : { loading: false, rel: file.name, text: '', lines: 0, truncated: false, error: (data && data.error) || '读取失败' })
+      }).catch((err) => setPreview({ loading: false, rel: file.name, text: '', lines: 0, truncated: false, error: String((err && err.message) || '读取失败') }))
+    }
+
+    const copyRel = (file) => {
+      const line = file.rel || file.path || file.name
+      try { if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(line) } catch {}
+      setCopied(line)
+      setTimeout(() => setCopied(''), 2000)
+    }
+
+    const copyToAgent = (file) => {
+      const ref = buildAgentRef('file', { file: file.rel || file.path || file.name, group: (file._group || ''), functions: (file.functions || []).slice(0, 20).map((fn) => fn.name) })
+      copyAgentRef(ref, () => setCopied('已复制文件引用'))
+    }
+
+    const fileRow = (file, groupName) => {
+      const kind = fileKind(file)
+      const isOpen = !!openFiles[file.rel || file.path || file.name]
+      const jumpHere = jumpLine > 0
+      return el('div', { key: 'f' + (file.rel || file.path || file.name), className: 'dvb-map-file-row', 'data-kind': kind },
+        el('div', { className: 'dvb-map-file', 'data-kind': kind, title: file.rel || file.name },
+          file.functions && file.functions.length
+            ? el('button', {
+              type: 'button',
+              className: 'dvb-btn dvb-btn-sm dvb-map-toggle',
+              onClick() {
+                const key = file.rel || file.path || file.name
+                setOpenFiles((prev) => ({ ...prev, [key]: !prev[key] }))
+              },
+            }, isOpen ? '▾' : '▸')
+            : el('span', { className: 'dvb-map-toggle dvb-map-toggle-void' }, '·'),
+          el('button', {
+            type: 'button',
+            className: 'dvb-btn dvb-btn-sm dvb-map-file-name' + (jumpHere ? ' dvb-map-jump' : ''),
+            title: '预览源码',
+            onClick() { openPreview(file) },
+          }, file.name),
+          el('span', { className: 'dvb-map-meta' }, file.rel || ''),
+          el('span', { className: 'dvb-map-file-mark' },
+            kind === 'outside' ? '工作区外' : kind === 'missing' ? '缺失' : kind === 'unread' ? '不可读' : '')),
+        el('div', { className: 'dvb-actions dvb-map-file-actions' },
+          el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openPreview(file) } }, '预览'),
+          el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { copyRel(file) } }, '复制路径'),
+          hasHarnessInput ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { copyToAgent(file) } }, '让 Agent 分析') : null,
+          file._includes && file._includes.length ? el('span', { className: 'dvb-hint' }, 'Include ' + file._includes.length) : null),
+        isOpen && file.functions && file.functions.length
+          ? el('div', { className: 'dvb-map-funcs' },
+            file.functions.map((fn) => el('div', { key: fn.name + ':' + fn.line, className: 'dvb-map-func', 'data-jump': jumpHere && fn.line === jumpLine ? 'true' : '' },
+              el('span', { className: 'dvb-map-func-name' }, fn.name),
+              el('span', { className: 'dvb-map-meta' }, 'line ' + (fn.line || '?')),
+              el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '打开文件并定位到函数行', onClick() { openPreview(file); setJumpLine(fn.line || 0) } }, '定位'))))
+          : null)
+    }
 
     return el('div', { className: 'dvb-live dvb-map' },
       el('div', { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('projectMap')),
         mapped ? el('span', { className: 'dvb-map-meta' },
-          (mapped.target || '') + ' · ' + String(counts.files || 0)) : null),
+          (mapped.target || '') + ' · ' + String(counts.files || 0) + ' 文件') : null,
+        el('input', {
+          className: 'dvb-input dvb-map-search',
+          placeholder: '搜索文件或函数…',
+          value: search,
+          onChange: (event) => { setSearch(event.target.value) },
+        }),
+        el('select', {
+          className: 'dvb-input dvb-map-filter',
+          value: filter,
+          onChange: (event) => { setFilter(event.target.value) },
+        },
+          el('option', { value: 'all' }, '全部'),
+          el('option', { value: 'missing' }, '缺失'),
+          el('option', { value: 'unread' }, '不可读'),
+          el('option', { value: 'outside' }, '工作区外')),
+        el('button', {
+          type: 'button', className: 'dvb-btn dvb-btn-sm',
+          disabled: !keil.project,
+          onClick() {
+            setBusy(true)
+            post('/dsh-vision-bench/keil/map', { cwd, project: keil.project, target: keil.target }).then((data) => {
+              setMapped(data && data.result && data.result.details ? data.result.details : mapped)
+            }).catch(() => {}).finally(() => setBusy(false))
+          },
+        }, '重新加载')),
       !cwd
         ? el('div', { className: 'dvb-hint' }, t('needWorkspace'))
         : (!keil.project
           ? el('div', { className: 'dvb-hint' }, t('projectMapEmpty'))
           : null),
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
-      mapped && truncated(mapped) ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('mapTruncated')) : null,
+      mapped && (truncated.files || truncated.includes || truncated.defines || truncated.include_edges || truncated.functions)
+        ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('mapTruncated')) : null,
       busy ? el('div', { className: 'dvb-hint' }, t('opening')) : null,
-      mapped && Array.isArray(mapped.includes) && mapped.includes.length
+      copied ? el('div', { className: 'dvb-hint' }, copied) : null,
+      // ── 编译配置（可折叠）──
+      mapped && mapped.includes && mapped.includes.length
         ? el('div', { className: 'dvb-map-block' },
-          el('div', { className: 'dvb-map-label' }, t('mapIncludes')),
-          mapped.includes.map((item, index) => el('div', {
-            key: 'i' + index,
-            className: 'dvb-map-path',
-            'data-kind': item.exists ? (item.inside ? 'ok' : 'out') : 'missing',
-          }, item.path)))
+          el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-map-cfg-toggle', onClick() { setCfgOpen((v) => !v) } },
+            (cfgOpen ? '▾ ' : '▸ ') + t('mapIncludes') + ' · ' + String(counts.includes || mapped.includes.length) + ' · ' + (mapped.defines || []).length + ' 宏 · ' + String(counts.include_edges || (mapped.include_edges || []).length) + ' 依赖'),
+          cfgOpen
+            ? el('div', null,
+              el('div', { className: 'dvb-map-label' }, t('mapIncludes')),
+              mapped.includes.map((item, index) => el('div', { key: 'i' + index, className: 'dvb-map-path', 'data-kind': item.exists ? (item.inside ? 'ok' : 'out') : 'missing' }, item.path)),
+              mapped.defines && mapped.defines.length
+                ? el('div', { className: 'dvb-map-label' }, t('mapDefines'))
+                : null,
+              mapped.defines ? el('div', { className: 'dvb-map-defs' }, mapped.defines.join(', ')) : null,
+              mapped.include_edges && mapped.include_edges.length
+                ? el('div', { className: 'dvb-map-label' }, t('mapIncludesOf'))
+                : null,
+              mapped.include_edges ? mapped.include_edges.slice(0, 120).map((edge, index) => el('div', { key: 'e' + index, className: 'dvb-map-path', 'data-kind': edge.resolved ? 'ok' : 'missing' }, (edge.from || '') + ' → ' + (edge.to || edge.name || ''))) : null)
+            : null)
         : null,
-      mapped && Array.isArray(mapped.defines) && mapped.defines.length
-        ? el('div', { className: 'dvb-map-block' },
-          el('div', { className: 'dvb-map-label' }, t('mapDefines')),
-          el('div', { className: 'dvb-map-defs' }, mapped.defines.join(', ')))
-        : null,
-      mapped && Array.isArray(mapped.include_edges) && mapped.include_edges.length
-        ? el('div', { className: 'dvb-map-block' },
-          el('div', { className: 'dvb-map-label' }, t('mapIncludesOf') + ' · ' + String(counts.include_edges || mapped.include_edges.length)),
-          mapped.include_edges.slice(0, 80).map((edge, index) => el('div', {
-            key: 'e' + index,
-            className: 'dvb-map-path',
-            'data-kind': edge.resolved ? 'ok' : 'missing',
-          }, (edge.from || '') + ' → ' + (edge.to || edge.name || ''))))
-        : null,
-      groups.map((group, gi) => el('div', { key: 'g' + gi, className: 'dvb-map-group' },
-        el('div', { className: 'dvb-map-group-name' },
-          (group.name || '') + ' · ' + String((group.files || []).length)),
-        (group.files || []).map((file, fi) => {
-          const mark = fileMark(t, file)
-          return el('div', { key: 'f' + fi },
-            el('div', {
-              className: 'dvb-map-file',
-              'data-kind': !file.inside ? 'out' : (!file.exists ? 'missing' : (!file.readable ? 'unread' : 'ok')),
-              title: file.rel || file.name,
-            },
-              el('span', { className: 'dvb-map-file-name' }, file.name),
-              mark ? el('span', { className: 'dvb-map-file-mark' }, mark) : null),
-            file.functions && file.functions.length
-              ? el('div', { className: 'dvb-map-funcs' },
-                t('mapFunctions') + ': ' + file.functions.map((fn) => fn.name).join(', '))
-              : null)
-        }))))
+      // ── 组 → 文件 → 函数 树 ──
+      groups.map((group, gi) => {
+        const gKey = group.name
+        const gOpen = openGroups[gKey] !== false
+        const groupFiles = (group.files || []).filter((file) => passesFilter(file))
+        const needle = search.trim().toLowerCase()
+        const shown = needle
+          ? groupFiles.filter((f) => (f.name + ' ' + (f.rel || '') + ' ' + (f.functions || []).map((fn) => fn.name).join(' ')).toLowerCase().includes(needle))
+          : groupFiles
+        return el('div', { key: 'g' + gi, className: 'dvb-map-group' },
+          el('div', { className: 'dvb-map-group-name' },
+            el('button', {
+              type: 'button', className: 'dvb-btn dvb-btn-sm dvb-map-toggle',
+              onClick() { setOpenGroups((prev) => ({ ...prev, [gKey]: !(prev[gKey] !== false) })) },
+            }, gOpen ? '▾' : '▸'),
+            el('span', null, (group.name || '') + ' · ' + String(groupFiles.length) + ' 文件' + (needle ? ' · 匹配 ' + shown.length : '')),
+            el('span', { className: 'dvb-hint' }, (group.files || []).filter((f) => !f.inside).length + ' 工作区外 · ' + (group.files || []).filter((f) => !f.exists).length + ' 缺失')),
+          gOpen ? shown.map((file) => fileRow({ ...file, _group: group.name }, group.name)) : null)
+      }),
+      // ── 源码预览 ──
+      preview
+        ? el('div', { className: 'dvb-panel dvb-write-panel' },
+          el('div', { className: 'dvb-panel-head' },
+            el('span', { className: 'dvb-panel-title' }, '源码预览 · ' + (preview.rel || '')),
+            preview.truncated ? el('span', { className: 'dvb-hint dvb-need' }, '超过 256KB，已截断') : null,
+            el('button', { type: 'button', className: 'dvb-btn', onClick() { setPreview(null) } }, t('csvCancel'))),
+          preview.loading
+            ? el('div', { className: 'dvb-hint' }, t('opening'))
+            : preview.error
+              ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, preview.error)
+              : el('pre', { className: 'dvb-log dvb-map-preview', style: { maxHeight: '320px', overflow: 'auto', whiteSpace: 'pre' } }, preview.text))
+        : null)
   }
 }
 
@@ -6883,11 +7102,14 @@ function registerMap(ctx, React, t, MapPage) {
   })
 }
 
-function openProjectTab(ctx) {
-  const bs = getBetterSidebar(ctx)
-  if (bs && typeof bs.openTab === 'function') bs.openTab({ type: TAB_MAP })
+function openProjectTab(side) {
+  if (side && typeof side.openTab === 'function') side.openTab({ type: TAB_MAP })
 }
 
+// 工程结构定位（编译错误跳转）：调试页写入，map 页消费
+let targetJump = null
+const setTargetJump = (jump) => { targetJump = jump }
+const getTargetJump = () => targetJump
 // Task15: Harness inputActions dispatch in bench-shared, runtime respects focus badgeOnly
 // Task2/0.18.4: a unified sidebar page wrapper that keeps the ACTIVE session
 // cwd authoritative (token-guarded so an unmounting stale session page never
