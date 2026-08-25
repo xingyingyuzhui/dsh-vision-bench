@@ -2,7 +2,7 @@ import { getFramesLog, pushFramesLog, clearFramesLog, buildAgentRef, copyAgentRe
 import { postEvidence, evidenceFromRef, readInputDraft, buildInputBridge } from './bench-shared.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { NS } from './bench-i18n.mjs'
-import { buildFramePortOptions, parseFramePortSelection, resolveFrameSelection, selectProtocolFrames, mergeFramesDedup, framesShouldStickToBottom } from './bench-frames-model.mjs'
+import { buildFramePortOptions, parseFramePortSelection, resolveFrameSelection, selectProtocolFrames, mergeFramesDedup, framesShouldStickToBottom, countAddedFrameIds, frameStreamKey, rawLineId } from './bench-frames-model.mjs'
 import { vendorAvailable, vendorUseVirtualizer, vendorVirtualizer } from './bench-vendor.mjs'
 
 // 串口报文侧栏：协议报文使用插件自身 Modbus 事务缓存（持久化 framesByConnection 为权威来源），
@@ -19,6 +19,9 @@ const useViz = vendorUseVirtualizer() || (() => null)
 
 export function createFramesPage(React, t, post, hooks) {
   const openHmi = hooks && hooks.openHmi
+  // Task8/0.18.3: the virtualizer hook is injected ONCE per page factory —
+  // tests pass the official adapter explicitly, production uses DvbVendor's.
+  const useVizForPage = (hooks && typeof hooks.useVirtualizer === 'function' && hooks.useVirtualizer) || useViz
   return function FramesPage(props) {
     const el = React.createElement
     // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
@@ -49,8 +52,8 @@ export function createFramesPage(React, t, post, hooks) {
     const [pausedSnapshot, setPausedSnapshot] = React.useState(null) // {proto: [], raw: []}
     const listRef = React.useRef(null)
     const wasAtBottomRef = React.useRef(true)
-    const prevVisibleIdsRef = React.useRef([])
-    const lastCountRef = React.useRef(0)
+    const cursorRef = React.useRef(new Map())
+    const openedByFramesRef = React.useRef(false)
     const lastAtBottomRef = React.useRef(true)
 
     // state polling → persisted framesByConnection + memory merge (Task3 live collection)
@@ -100,14 +103,20 @@ export function createFramesPage(React, t, post, hooks) {
 
     // Task3: close raw monitor when switching away from raw or unmounting
     const closeRawMonitor = React.useCallback(() => {
-      if (!realCwd) return
-      post('/dsh-vision-bench/serial/close', { cwd: realCwd }).catch(() => {})
-      setSerial((p) => ({ ...p, open: false, lines: [], error: '' }))
+      // Task7/0.18.3: only close a serial monitor this page successfully opened
+      if (openedByFramesRef.current) {
+        if (realCwd) post('/dsh-vision-bench/serial/close', { cwd: realCwd }).catch(() => {})
+        openedByFramesRef.current = false
+      }
+      setSerial((pp) => ({ ...pp, open: false, lines: [], error: '' }))
       setPausedSnapshot(null)
     }, [realCwd, post])
     React.useEffect(() => () => {
-      // unmount cleanup: close raw monitor + clear timers
-      if (realCwd) post('/dsh-vision-bench/serial/close', { cwd: realCwd }).catch(() => {})
+      // Task7/0.18.3: unmount cleanup closes ONLY what this page opened
+      if (openedByFramesRef.current && realCwd) {
+        post('/dsh-vision-bench/serial/close', { cwd: realCwd }).catch(() => {})
+        openedByFramesRef.current = false
+      }
     }, [realCwd, post])
 
     const pack = (() => { try { return normalizeModbus(modbus) } catch { return { connections: [], devices: [], points: [], framesByConnection: {} } } })()
@@ -128,18 +137,20 @@ export function createFramesPage(React, t, post, hooks) {
         liveFrames = mergeFramesDedup(selectProtocolFrames(framesByConnection, 'all'), getFramesLog(realCwd), 1000)
       }
     } else {
-      liveFrames = serial.lines.map((l) => ({ t: l.t, at: l.t, request: l.line, response: '', label: l.line.slice(0, 20), direction: 'rx', status: 'ok', connectionId: sel.connectionId || '', deviceId: '', functionCode: 0 }))
+      // Task5/0.18.3: raw lines keep stable ids (never array index)
+      liveFrames = serial.lines.map((l, idx) => ({
+        t: l.t, at: l.t, request: l.line, response: '',
+        id: rawLineId(sel.port || 'raw', l, idx),
+        frameId: rawLineId(sel.port || 'raw', l, idx),
+        label: l.line.slice(0, 20), direction: 'rx', status: 'ok',
+        connectionId: sel.connectionId || '', deviceId: '', functionCode: 0,
+      }))
     }
 
+    // Task6/0.18.3: display snapshot ONLY from state — no setState during render
     let displayedFrames = paused && pausedSnapshot
       ? (pausedSnapshot[mode] || [])
       : liveFrames
-    if (paused && !pausedSnapshot) {
-      pauseSnap()
-    }
-    function pauseSnap() {
-      setPausedSnapshot((prev) => ({ ...(prev || {}), [mode]: displayedFrames }))
-    }
 
     // filters + search run on the DISPLAYED layer
     let filtered = displayedFrames
@@ -151,37 +162,46 @@ export function createFramesPage(React, t, post, hooks) {
     const needle = search.trim().toLowerCase()
     if (needle) filtered = filtered.filter((f) => (f.request + ' ' + f.response + ' ' + f.label + ' ' + (f.connectionId || '')).toLowerCase().includes(needle))
 
-    // Task3: pending-new accounting + auto-follow after collection
+    // Task5+6/0.18.3: per-stream idle/added accounting with FULL previous-id sets.
+    // Cursors are keyed by mode|selection so COM/connection/mode never pollute
+    // each other; the first observation of a stream is a pure baseline.
+    const streamKey = frameStreamKey(mode, selection)
+    const liveIds = liveFrames.map((f) => String(f.frameId || f.id || ''))
     React.useEffect(() => {
-      if (paused) {
-        // count growth while paused against the snapshot
-        const base = pausedSnapshot ? (pausedSnapshot[mode] || []) : liveFrames
-        if (liveFrames.length > base.length) setPendingNew(liveFrames.length - base.length)
+      const cursors = cursorRef.current
+      let cur = cursors.get(streamKey)
+      if (!cur) {
+        // first entry of this stream → baseline only, never "new"
+        cursors.set(streamKey, { anchor: new Set(liveIds), pausedAnchor: null })
+        setPendingNew(0)
         return
       }
-      const visibleNow = displayedFrames.map((f) => f.frameId || f.id)
-      const prevSet = new Set(prevVisibleIdsRef.current)
-      let added = displayedFrames.length - lastCountRef.current
-      if (added < 0) added = 0
-      // count genuinely-new ids even if count stayed same (wrap)
-      if (displayedFrames.length === lastCountRef.current) {
-        added = 0
-        for (const id of visibleNow) if (!prevSet.has(id)) added++
-        if (added > 0 && !wasAtBottomRef.current) setPendingNew((n) => n + added)
-        else setPendingNew(0)
-      } else if (!wasAtBottomRef.current && added > 0) {
+      if (paused) {
+        // freeze anchor at pause; kept growing while live keeps collecting
+        if (!cur.pausedAnchor) cur.pausedAnchor = cur.anchor
+        const addedPaused = countAddedFrameIds(cur.pausedAnchor, liveIds)
+        setPendingNew(addedPaused)
+        return
+      }
+      const added = countAddedFrameIds(cur.anchor, liveIds)
+      cur.anchor = new Set(liveIds)
+      cur.pausedAnchor = null
+      if (added > 0 && !wasAtBottomRef.current) {
         setPendingNew((n) => n + added)
-      } else if (wasAtBottomRef.current && added > 0) {
+      } else {
         setPendingNew(0)
       }
-      prevVisibleIdsRef.current = visibleNow.slice(-40)
-      lastCountRef.current = displayedFrames.length
-      // auto-follow when at bottom
-      if (wasAtBottomRef.current && added > 0) {
+      // auto-follow only when the user is already at the bottom
+      if (added > 0 && wasAtBottomRef.current) {
         requestAnimationFrame(() => scrollToLatest(false))
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [liveEpoch, displayedFrames.length])
+    }, [liveEpoch, streamKey, paused])
+
+    function resetCursors() {
+      cursorRef.current.clear()
+      setPendingNew(0)
+    }
 
     function scrollToLatest(updateRef = true) {
       const inst = vizer
@@ -192,24 +212,30 @@ export function createFramesPage(React, t, post, hooks) {
     }
 
     function togglePause() {
-      setPaused((v) => {
-        const next = !v
-        if (next) {
-          // freeze current display snapshot for BOTH modes
-          setPausedSnapshot({ proto: mode === 'proto' ? (displayedFrames) : liveFrames, raw: mode === 'raw' ? (displayedFrames) : serial.lines })
-          setPendingNew((pn) => (liveFrames.length > displayedFrames.length ? liveFrames.length - displayedFrames.length : pn))
-        } else {
-          // resume: if we were at bottom before pause, follow latest
-          setPausedSnapshot(null)
-          setPendingNew(0)
-          if (wasAtBottomRef.current || lastAtBottomRef.current) setTimeout(() => scrollToLatest(false), 40)
-        }
-        return next
-      })
+      const next = !paused
+      if (next) {
+        // Task6/0.18.3: atomic snapshot on the pause CLICK (never in render)
+        const snap = displayedFrames.map((f) => ({ ...f }))
+        setPausedSnapshot({ [mode]: snap })
+        // freeze the stream anchor at the snapshot so paused growth is counted
+        const cursors = cursorRef.current
+        const cur = cursors.get(streamKey)
+        if (cur) cur.pausedAnchor = new Set(liveIds)
+      } else {
+        // resume shows the live state; follow latest only if paused-at-bottom
+        setPausedSnapshot(null)
+        const wasBottom = wasAtBottomRef.current || lastAtBottomRef.current
+        const cursors = cursorRef.current
+        const cur = cursors.get(streamKey)
+        if (cur) { cur.pausedAnchor = null; cur.anchor = new Set(liveIds) }
+        setPendingNew(0)
+        if (wasBottom) setTimeout(() => scrollToLatest(false), 40)
+      }
+      setPaused(next)
     }
 
     // ── Task2: official React virtualizer adapter ──
-    const vizer = useViz({
+    const vizer = useVizForPage({
       count: filtered.length,
       getScrollElement: () => listRef.current,
       estimateSize: () => ESTIMATE_SIZE,
@@ -244,7 +270,7 @@ export function createFramesPage(React, t, post, hooks) {
       if (nextMode === 'proto') {
         const p = parseFramePortSelection(selection)
         if (p.kind === 'raw') setSelection('all')
-        if (serial.open) closeRawMonitor()
+        if (openedByFramesRef.current && serial.open) closeRawMonitor()
         setSerial((s) => ({ ...s, error: '' }))
         setPausedSnapshot(null)
         setPendingNew(0)
@@ -256,15 +282,25 @@ export function createFramesPage(React, t, post, hooks) {
       }
       setMode(nextMode)
       setPaused(false)
+      resetCursors()
     }
 
     function openRawPort() {
       const port = sel && sel.port
       if (!realCwd || !port) return
       post('/dsh-vision-bench/serial/open', { cwd: realCwd, port, baudrate: 115200 }, 15000).then((data) => {
-        if (data && data.ok === false && /PORT_IN_USE|占用/.test(data.error || '')) setSerial((pp) => ({ ...pp, error: data.error }))
-        else setSerial((pp) => ({ ...pp, open: true, port, error: '' }))
-      }).catch((e) => setSerial((pp) => ({ ...pp, error: String(e && e.message || 'fail') })))
+        // Task7/0.18.3: ONLY data.ok===true opens; every failure surfaces as error
+        if (data && data.ok === true) {
+          openedByFramesRef.current = true
+          setSerial((pp) => ({ ...pp, open: true, port, error: '' }))
+        } else {
+          openedByFramesRef.current = false
+          setSerial((pp) => ({ ...pp, open: false, error: (data && data.error) || '打开串口失败' }))
+        }
+      }).catch((e) => {
+        openedByFramesRef.current = false
+        setSerial((pp) => ({ ...pp, open: false, error: String(e && e.message || '打开串口失败') }))
+      })
     }
 
     function clearView() {
@@ -279,6 +315,7 @@ export function createFramesPage(React, t, post, hooks) {
       })
       if (sel.kind === 'conn') clearFramesLog(realCwd, sel.connectionId)
       else clearFramesLog(realCwd)
+      resetCursors()
       setPausedSnapshot(null)
       post('/dsh-vision-bench/frames/clear', { cwd: realCwd, ...payload }).then((data) => {
         if (!data || data.ok === false) {

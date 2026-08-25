@@ -120,3 +120,40 @@ export function resolveFrameSelection(selection, connections, options) {
   }
   return { kind: 'all', connectionId: '', port: '' }
 }
+
+// Task5/0.18.3: exactly how many NEW frame ids arrived since the previous set.
+// Untouched data → 0 (never shows "460 条新增" for 500 identical frames); a ring
+// shift f0..f499 → f1..f500 reports exactly 1.
+export function countAddedFrameIds(previousIds, currentIds) {
+  const prev = previousIds instanceof Set
+    ? previousIds
+    : new Set(Array.isArray(previousIds) ? previousIds : [])
+  let added = 0
+  for (const id of Array.isArray(currentIds) ? currentIds : []) {
+    if (id != null && !prev.has(id)) added++
+  }
+  return added
+}
+
+// Task5/0.18.3: a data-stream identity strictly separates proto/raw and each
+// selection so cursors never leak between COM/connections/modes.
+export function frameStreamKey(mode, selection) {
+  const sel = typeof selection === 'object' && selection !== null
+    ? parseFramePortSelection(selection.value)
+    : parseFramePortSelection(selection)
+  const kind = sel.kind || 'all'
+  if (mode === 'raw') {
+    if (kind === 'conn') return 'raw|conn|' + sel.connectionId
+    return 'raw|' + (sel.port || 'all')
+  }
+  if (kind === 'conn') return 'proto|conn|' + sel.connectionId
+  if (kind === 'all') return 'proto|all'
+  return 'proto|' + kind
+}
+
+// Task5/0.18.3: stable id for a raw serial line (never array index).
+export function rawLineId(port, line, index) {
+  const base = line && (line.id || line.lineId)
+  if (base != null) return 'raw:' + String(port) + ':' + String(base)
+  return 'raw:' + String(port) + ':' + String(line && (line.t || line.at) || 0) + ':' + String(index || 0)
+}
