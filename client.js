@@ -3239,19 +3239,32 @@ function lineKind(line) {
 const TREND_CAP = 600
 const TREND_WINDOW_MS = 5 * 60 * 1000
 
+// Task3/0.18.3: trend buffers are per-cwd. Sampling workspace B must never wipe
+// or leak into workspace A, and reads always carry an explicit cwd.
+const TREND_BY_CWD = new Map() // cwd -> { series: Map, meta: Map }
+
+function getTrendState(cwd) {
+  let s = TREND_BY_CWD.get(cwd)
+  if (!s) {
+    s = { series: new Map(), meta: new Map(), cwd }
+    TREND_BY_CWD.set(cwd, s)
+  }
+  return s
+}
+
+function clearTrendState(cwd) {
+  TREND_BY_CWD.delete(cwd)
+}
+
+// Back-compat accessor used by old callers; returns the DEFAULT (empty) scope.
+// New code must use getTrendState(cwd) / the cwd-explicit helpers below.
 const TREND = { cwd: '', series: new Map(), meta: new Map() }
 
 const trendKey = (connectionId, deviceId, pointId) => String(connectionId) + ':' + String(deviceId) + ':' + String(pointId)
 
 const sampleTrend = (cwd, pack) => {
-  if (!cwd || TREND.cwd !== cwd) {
-    if (TREND.cwd !== cwd) {
-      TREND.cwd = cwd
-      TREND.series.clear()
-      TREND.meta.clear()
-    }
-    if (!cwd) return
-  }
+  if (!cwd) return
+  const state = getTrendState(cwd)
   const now = Date.now()
   const pointsById = {}
   for (const p of Array.isArray(pack.points) ? pack.points : []) pointsById[p.id] = p
@@ -3261,15 +3274,15 @@ const sampleTrend = (cwd, pack) => {
     if (!pid || !pointsById[pid]) continue
     const pt = pointsById[pid]
     const key = trendKey(pt.connectionId || '', pt.deviceId || '', pid)
-    TREND.meta.set(key, {
+    state.meta.set(key, {
       label: (pt.name || pid),
       unit: pt.unit || '',
       connectionId: pt.connectionId,
       deviceId: pt.deviceId,
       pointId: pid,
     })
-    let list = TREND.series.get(key)
-    if (!list) { list = []; TREND.series.set(key, list) }
+    let list = state.series.get(key)
+    if (!list) { list = []; state.series.set(key, list) }
     // quality breakpoint: bad quality writes explicit null gap for uPlot spanGaps:false
     if (rec.ok !== true) {
       list.push({ t: now, v: null })
@@ -3287,11 +3300,11 @@ const sampleTrend = (cwd, pack) => {
   }
 }
 
-// stats for a single series window — null gaps ignored
-function computeStats(keyOrList, opts = {}) {
+// stats for a single series window — null gaps ignored. Explicit cwd.
+function computeStats(cwd, keyOrList, opts = {}) {
   let list
   if (typeof keyOrList === 'string') {
-    list = TREND.series.get(keyOrList) || []
+    list = getTrendState(cwd).series.get(keyOrList) || []
   } else if (Array.isArray(keyOrList)) {
     list = keyOrList
   } else if (keyOrList && Array.isArray(keyOrList.list)) {
@@ -3327,13 +3340,14 @@ function computeStats(keyOrList, opts = {}) {
   }
 }
 
-function exportRangeCsv(opts = {}) {
+function exportRangeCsv(cwd, opts = {}) {
+  const state = getTrendState(cwd)
   const now = opts.now != null ? Number(opts.now) : Date.now()
   const windowMs = opts.windowMs != null ? Number(opts.windowMs) : TREND_WINDOW_MS
   const cutoff = now - windowMs
   const start = opts.start != null ? Number(opts.start) : cutoff
   const end = opts.end != null ? Number(opts.end) : now
-  const keys = Array.isArray(opts.keys) ? opts.keys.filter((k) => TREND.series.has(k)) : Array.from(TREND.series.keys()).slice(0, 8)
+  const keys = Array.isArray(opts.keys) ? opts.keys.filter((k) => state.series.has(k)) : Array.from(state.series.keys()).slice(0, 8)
   const header = ['time', 'connectionId', 'deviceId', 'pointId', 'label', 'unit', 'value']
   const rows = [header.join(',')]
   const esc = (s) => {
@@ -3342,8 +3356,8 @@ function exportRangeCsv(opts = {}) {
     return str
   }
   for (const key of keys) {
-    const list = TREND.series.get(key) || []
-    const meta = TREND.meta.get(key) || {}
+    const list = state.series.get(key) || []
+    const meta = state.meta.get(key) || {}
     for (const item of list) {
       if (item.t < start || item.t > end) continue
       const iso = new Date(item.t).toISOString()
@@ -3354,18 +3368,19 @@ function exportRangeCsv(opts = {}) {
   return rows.join('\n')
 }
 
-function toUplotData(opts = {}) {
+function toUplotData(cwd, opts = {}) {
+  const state = getTrendState(cwd)
   const now = opts.now != null ? Number(opts.now) : Date.now()
   const windowMs = opts.windowMs != null ? Number(opts.windowMs) : TREND_WINDOW_MS
   const cutoff = now - windowMs
   const keys = opts.keys
-    ? opts.keys.filter((k) => TREND.series.has(k)).slice(0, 8)
-    : Array.from(TREND.series.keys()).slice(0, 8)
-  const seriesLists = keys.map((k) => (TREND.series.get(k) || []).filter((item) => item.t >= cutoff))
+    ? opts.keys.filter((k) => state.series.has(k)).slice(0, 8)
+    : Array.from(state.series.keys()).slice(0, 8)
+  const seriesLists = keys.map((k) => (state.series.get(k) || []).filter((item) => item.t >= cutoff))
   const timeSet = new Set()
   for (const list of seriesLists) for (const item of list) timeSet.add(item.t)
   const times = Array.from(timeSet).sort((a, b) => a - b)
-  // uPlot expects x in seconds when scale x.time=true; we keep seconds for interop but raw ms also works — use seconds to match typical uPlot examples
+  // uPlot expects x in seconds when scale x.time=true; seconds match typical uPlot examples
   const xs = times.map((t) => t / 1000)
   const data = [xs]
   for (let si = 0; si < seriesLists.length; si++) {
@@ -3378,10 +3393,10 @@ function toUplotData(opts = {}) {
     })
     data.push(aligned)
   }
-  return { data, keys, meta: keys.map((k) => TREND.meta.get(k) || {}) }
+  return { data, keys, meta: keys.map((k) => state.meta.get(k) || {}) }
 }
 
-// data-layer proto for future uPlot view — no runtime dependency, spanGaps:false keeps null gaps as breaks
+// data-layer proto for uPlot view — no runtime dependency, spanGaps:false keeps null gaps as breaks
 const UPLOT_PROTO = {
   width: 560,
   height: 190,
@@ -3391,7 +3406,6 @@ const UPLOT_PROTO = {
   spanGaps: false,
   hooks: {},
 }
-
 function formatResult(result) {
   if (!result) return ''
   const details = result.details || {}
@@ -6157,11 +6171,11 @@ function createSoonPage(React, t, titleKey, bodyKey) {
 
 // Task5: create one uPlot inside a container div. Returns instance or null.
 // Only a guarded minimal canvas renderer is kept for the (bundle-less) fallback.
-const drawTrend = (container, now = Date.now()) => {
+const drawTrend = (container, cwd = '', now = Date.now()) => {
   if (!container) return null
   const UPlot = vendorUPlot()
   if (!UPlot) return null
-  const { data, keys, meta } = toUplotData({ now, windowMs: TREND_WINDOW_MS })
+  const { data, keys, meta } = toUplotData(cwd, { now, windowMs: TREND_WINDOW_MS })
   const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
   const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
   const ks = keys.slice(0, 8), ms = meta.slice(0, 8)
@@ -6233,9 +6247,10 @@ function createTrendPage(React, t, post, hooks) {
       return () => clearInterval(timer)
     }, [paused])
 
+    const trendState = getTrendState(cwd)
     const entries = []
     let i = 0
-    for (const [key, list] of TREND.series) {
+    for (const [key, list] of trendState.series) {
       if (!list.length) continue
       const window = list.filter((item) => item.t >= Date.now() - TREND_WINDOW_MS)
       if (!window.length) continue
@@ -6249,8 +6264,8 @@ function createTrendPage(React, t, post, hooks) {
       const last = list[list.length - 1]
       entries.push({
         key,
-        label: (TREND.meta.get(key) && TREND.meta.get(key).label) || key,
-        unit: (TREND.meta.get(key) && TREND.meta.get(key).unit) || '',
+        label: (trendState.meta.get(key) && trendState.meta.get(key).label) || key,
+        unit: (trendState.meta.get(key) && trendState.meta.get(key).unit) || '',
         last,
         lastValid: any,
         min: any ? min : null,
@@ -6271,7 +6286,7 @@ function createTrendPage(React, t, post, hooks) {
         if (uplotRef.current) { try { uplotRef.current.destroy() } catch {} uplotRef.current = null }
         mountKeyRef.current = chartMountKey
       }
-      if (!uplotRef.current) uplotRef.current = drawTrend(c)
+      if (!uplotRef.current) uplotRef.current = drawTrend(c, cwd)
       const u = uplotRef.current
       const onResize = () => { const cc = wrapRef.current; if (u && cc && u.setSize) u.setSize({ width: cc.clientWidth || 560, height: 190 }) }
       if (typeof window !== 'undefined') window.addEventListener('resize', onResize)
@@ -6289,7 +6304,7 @@ function createTrendPage(React, t, post, hooks) {
       if (paused) return
       const u = uplotRef.current
       if (!u || !u.setData) return
-      try { const { data } = toUplotData(); u.setData(data) } catch {}
+      try { const { data } = toUplotData(cwd); u.setData(data) } catch {}
     })
 
     const agentAllowed = cvReady && configVersion > 0
@@ -6331,7 +6346,7 @@ function createTrendPage(React, t, post, hooks) {
       post('/dsh-vision-bench/focus', { cwd, target: { trendKey: key, kind: 'trend' } }).catch(() => {})
     }
     const doExport = () => {
-      const w = wrapRef.current, s = w && w._uplotSel, csv = s ? exportRangeCsv({ start: s.start, end: s.end }) : exportRangeCsv()
+      const w = wrapRef.current, s = w && w._uplotSel, csv = s ? exportRangeCsv(cwd, { start: s.start, end: s.end }) : exportRangeCsv(cwd)
       try { if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(csv) } catch {}
       setExportNote(s ? '已导出区间 ' + new Date(s.start).toLocaleTimeString() + '→' + new Date(s.end).toLocaleTimeString() : '已导出最近 5 分钟')
       setTimeout(() => setExportNote(''), 2000)
@@ -6340,7 +6355,7 @@ function createTrendPage(React, t, post, hooks) {
       const w = wrapRef.current; if (w) w._uplotSel = null
       const u = uplotRef.current
       if (u && u.setSelect) try { u.setSelect({ left: 0, width: 0, top: 0, height: 0 }, false) } catch {}
-      if (u && u.setData) try { const { data } = toUplotData(); u.setData(data) } catch {}
+      if (u && u.setData) try { const { data } = toUplotData(cwd); u.setData(data) } catch {}
     }
     return el('div', { className: 'dvb-live' },
       el('div', { className: 'dvb-live-head' },

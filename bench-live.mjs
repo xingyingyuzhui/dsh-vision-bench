@@ -3,7 +3,7 @@ import { postEvidence, evidenceFromRef, readInputDraft, buildInputBridge } from 
 import { clockOf, decodeValue, functionTag } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
-import { TREND, TREND_CAP, TREND_WINDOW_MS, trendKey, sampleTrend, toUplotData, UPLOT_PROTO, exportRangeCsv } from './bench-trend.mjs'
+import { getTrendState, clearTrendState, TREND_CAP, TREND_WINDOW_MS, trendKey, sampleTrend, computeStats, toUplotData, UPLOT_PROTO, exportRangeCsv } from './bench-trend.mjs'
 import { normalizeAlarmState, groupAlarms, acknowledgeAlarm, ACTIVE, RECOVERED, ACKED, PROCESS, COMM, COND_ACTIVE, COND_RECOVERED } from './bench-alarm.mjs'
 import { vendorUPlot, vendorVirtualizer, vendorAvailable } from './bench-vendor.mjs'
 
@@ -493,11 +493,11 @@ function createSoonPage(React, t, titleKey, bodyKey) {
 
 // Task5: create one uPlot inside a container div. Returns instance or null.
 // Only a guarded minimal canvas renderer is kept for the (bundle-less) fallback.
-export const drawTrend = (container, now = Date.now()) => {
+export const drawTrend = (container, cwd = '', now = Date.now()) => {
   if (!container) return null
   const UPlot = vendorUPlot()
   if (!UPlot) return null
-  const { data, keys, meta } = toUplotData({ now, windowMs: TREND_WINDOW_MS })
+  const { data, keys, meta } = toUplotData(cwd, { now, windowMs: TREND_WINDOW_MS })
   const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
   const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
   const ks = keys.slice(0, 8), ms = meta.slice(0, 8)
@@ -569,9 +569,10 @@ export function createTrendPage(React, t, post, hooks) {
       return () => clearInterval(timer)
     }, [paused])
 
+    const trendState = getTrendState(cwd)
     const entries = []
     let i = 0
-    for (const [key, list] of TREND.series) {
+    for (const [key, list] of trendState.series) {
       if (!list.length) continue
       const window = list.filter((item) => item.t >= Date.now() - TREND_WINDOW_MS)
       if (!window.length) continue
@@ -585,8 +586,8 @@ export function createTrendPage(React, t, post, hooks) {
       const last = list[list.length - 1]
       entries.push({
         key,
-        label: (TREND.meta.get(key) && TREND.meta.get(key).label) || key,
-        unit: (TREND.meta.get(key) && TREND.meta.get(key).unit) || '',
+        label: (trendState.meta.get(key) && trendState.meta.get(key).label) || key,
+        unit: (trendState.meta.get(key) && trendState.meta.get(key).unit) || '',
         last,
         lastValid: any,
         min: any ? min : null,
@@ -607,7 +608,7 @@ export function createTrendPage(React, t, post, hooks) {
         if (uplotRef.current) { try { uplotRef.current.destroy() } catch {} uplotRef.current = null }
         mountKeyRef.current = chartMountKey
       }
-      if (!uplotRef.current) uplotRef.current = drawTrend(c)
+      if (!uplotRef.current) uplotRef.current = drawTrend(c, cwd)
       const u = uplotRef.current
       const onResize = () => { const cc = wrapRef.current; if (u && cc && u.setSize) u.setSize({ width: cc.clientWidth || 560, height: 190 }) }
       if (typeof window !== 'undefined') window.addEventListener('resize', onResize)
@@ -625,7 +626,7 @@ export function createTrendPage(React, t, post, hooks) {
       if (paused) return
       const u = uplotRef.current
       if (!u || !u.setData) return
-      try { const { data } = toUplotData(); u.setData(data) } catch {}
+      try { const { data } = toUplotData(cwd); u.setData(data) } catch {}
     })
 
     const agentAllowed = cvReady && configVersion > 0
@@ -667,7 +668,7 @@ export function createTrendPage(React, t, post, hooks) {
       post('/dsh-vision-bench/focus', { cwd, target: { trendKey: key, kind: 'trend' } }).catch(() => {})
     }
     const doExport = () => {
-      const w = wrapRef.current, s = w && w._uplotSel, csv = s ? exportRangeCsv({ start: s.start, end: s.end }) : exportRangeCsv()
+      const w = wrapRef.current, s = w && w._uplotSel, csv = s ? exportRangeCsv(cwd, { start: s.start, end: s.end }) : exportRangeCsv(cwd)
       try { if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(csv) } catch {}
       setExportNote(s ? '已导出区间 ' + new Date(s.start).toLocaleTimeString() + '→' + new Date(s.end).toLocaleTimeString() : '已导出最近 5 分钟')
       setTimeout(() => setExportNote(''), 2000)
@@ -676,7 +677,7 @@ export function createTrendPage(React, t, post, hooks) {
       const w = wrapRef.current; if (w) w._uplotSel = null
       const u = uplotRef.current
       if (u && u.setSelect) try { u.setSelect({ left: 0, width: 0, top: 0, height: 0 }, false) } catch {}
-      if (u && u.setData) try { const { data } = toUplotData(); u.setData(data) } catch {}
+      if (u && u.setData) try { const { data } = toUplotData(cwd); u.setData(data) } catch {}
     }
     return el('div', { className: 'dvb-live' },
       el('div', { className: 'dvb-live-head' },

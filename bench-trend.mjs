@@ -1,19 +1,32 @@
 export const TREND_CAP = 600
 export const TREND_WINDOW_MS = 5 * 60 * 1000
 
+// Task3/0.18.3: trend buffers are per-cwd. Sampling workspace B must never wipe
+// or leak into workspace A, and reads always carry an explicit cwd.
+const TREND_BY_CWD = new Map() // cwd -> { series: Map, meta: Map }
+
+export function getTrendState(cwd) {
+  let s = TREND_BY_CWD.get(cwd)
+  if (!s) {
+    s = { series: new Map(), meta: new Map(), cwd }
+    TREND_BY_CWD.set(cwd, s)
+  }
+  return s
+}
+
+export function clearTrendState(cwd) {
+  TREND_BY_CWD.delete(cwd)
+}
+
+// Back-compat accessor used by old callers; returns the DEFAULT (empty) scope.
+// New code must use getTrendState(cwd) / the cwd-explicit helpers below.
 export const TREND = { cwd: '', series: new Map(), meta: new Map() }
 
 export const trendKey = (connectionId, deviceId, pointId) => String(connectionId) + ':' + String(deviceId) + ':' + String(pointId)
 
 export const sampleTrend = (cwd, pack) => {
-  if (!cwd || TREND.cwd !== cwd) {
-    if (TREND.cwd !== cwd) {
-      TREND.cwd = cwd
-      TREND.series.clear()
-      TREND.meta.clear()
-    }
-    if (!cwd) return
-  }
+  if (!cwd) return
+  const state = getTrendState(cwd)
   const now = Date.now()
   const pointsById = {}
   for (const p of Array.isArray(pack.points) ? pack.points : []) pointsById[p.id] = p
@@ -23,15 +36,15 @@ export const sampleTrend = (cwd, pack) => {
     if (!pid || !pointsById[pid]) continue
     const pt = pointsById[pid]
     const key = trendKey(pt.connectionId || '', pt.deviceId || '', pid)
-    TREND.meta.set(key, {
+    state.meta.set(key, {
       label: (pt.name || pid),
       unit: pt.unit || '',
       connectionId: pt.connectionId,
       deviceId: pt.deviceId,
       pointId: pid,
     })
-    let list = TREND.series.get(key)
-    if (!list) { list = []; TREND.series.set(key, list) }
+    let list = state.series.get(key)
+    if (!list) { list = []; state.series.set(key, list) }
     // quality breakpoint: bad quality writes explicit null gap for uPlot spanGaps:false
     if (rec.ok !== true) {
       list.push({ t: now, v: null })
@@ -49,11 +62,11 @@ export const sampleTrend = (cwd, pack) => {
   }
 }
 
-// stats for a single series window — null gaps ignored
-export function computeStats(keyOrList, opts = {}) {
+// stats for a single series window — null gaps ignored. Explicit cwd.
+export function computeStats(cwd, keyOrList, opts = {}) {
   let list
   if (typeof keyOrList === 'string') {
-    list = TREND.series.get(keyOrList) || []
+    list = getTrendState(cwd).series.get(keyOrList) || []
   } else if (Array.isArray(keyOrList)) {
     list = keyOrList
   } else if (keyOrList && Array.isArray(keyOrList.list)) {
@@ -89,13 +102,14 @@ export function computeStats(keyOrList, opts = {}) {
   }
 }
 
-export function exportRangeCsv(opts = {}) {
+export function exportRangeCsv(cwd, opts = {}) {
+  const state = getTrendState(cwd)
   const now = opts.now != null ? Number(opts.now) : Date.now()
   const windowMs = opts.windowMs != null ? Number(opts.windowMs) : TREND_WINDOW_MS
   const cutoff = now - windowMs
   const start = opts.start != null ? Number(opts.start) : cutoff
   const end = opts.end != null ? Number(opts.end) : now
-  const keys = Array.isArray(opts.keys) ? opts.keys.filter((k) => TREND.series.has(k)) : Array.from(TREND.series.keys()).slice(0, 8)
+  const keys = Array.isArray(opts.keys) ? opts.keys.filter((k) => state.series.has(k)) : Array.from(state.series.keys()).slice(0, 8)
   const header = ['time', 'connectionId', 'deviceId', 'pointId', 'label', 'unit', 'value']
   const rows = [header.join(',')]
   const esc = (s) => {
@@ -104,8 +118,8 @@ export function exportRangeCsv(opts = {}) {
     return str
   }
   for (const key of keys) {
-    const list = TREND.series.get(key) || []
-    const meta = TREND.meta.get(key) || {}
+    const list = state.series.get(key) || []
+    const meta = state.meta.get(key) || {}
     for (const item of list) {
       if (item.t < start || item.t > end) continue
       const iso = new Date(item.t).toISOString()
@@ -116,18 +130,19 @@ export function exportRangeCsv(opts = {}) {
   return rows.join('\n')
 }
 
-export function toUplotData(opts = {}) {
+export function toUplotData(cwd, opts = {}) {
+  const state = getTrendState(cwd)
   const now = opts.now != null ? Number(opts.now) : Date.now()
   const windowMs = opts.windowMs != null ? Number(opts.windowMs) : TREND_WINDOW_MS
   const cutoff = now - windowMs
   const keys = opts.keys
-    ? opts.keys.filter((k) => TREND.series.has(k)).slice(0, 8)
-    : Array.from(TREND.series.keys()).slice(0, 8)
-  const seriesLists = keys.map((k) => (TREND.series.get(k) || []).filter((item) => item.t >= cutoff))
+    ? opts.keys.filter((k) => state.series.has(k)).slice(0, 8)
+    : Array.from(state.series.keys()).slice(0, 8)
+  const seriesLists = keys.map((k) => (state.series.get(k) || []).filter((item) => item.t >= cutoff))
   const timeSet = new Set()
   for (const list of seriesLists) for (const item of list) timeSet.add(item.t)
   const times = Array.from(timeSet).sort((a, b) => a - b)
-  // uPlot expects x in seconds when scale x.time=true; we keep seconds for interop but raw ms also works — use seconds to match typical uPlot examples
+  // uPlot expects x in seconds when scale x.time=true; seconds match typical uPlot examples
   const xs = times.map((t) => t / 1000)
   const data = [xs]
   for (let si = 0; si < seriesLists.length; si++) {
@@ -140,10 +155,10 @@ export function toUplotData(opts = {}) {
     })
     data.push(aligned)
   }
-  return { data, keys, meta: keys.map((k) => TREND.meta.get(k) || {}) }
+  return { data, keys, meta: keys.map((k) => state.meta.get(k) || {}) }
 }
 
-// data-layer proto for future uPlot view — no runtime dependency, spanGaps:false keeps null gaps as breaks
+// data-layer proto for uPlot view — no runtime dependency, spanGaps:false keeps null gaps as breaks
 export const UPLOT_PROTO = {
   width: 560,
   height: 190,
