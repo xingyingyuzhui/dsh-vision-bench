@@ -112,7 +112,16 @@ test('pushFramesLog keeps a per-cwd ring buffer with a hard cap', async () => {
   assert.equal(items.length, 500)
   assert.equal(items[0].label, 'L300')
   assert.equal(items[499].label, 'L799')
-  // switching cwd resets the buffer
-  shared.pushFramesLog('/tmp/other-cwd', [])
+  // Task2/0.18.3: another cwd must NOT wipe this cwd's ring buffer
+  shared.pushFramesLog('/tmp/other-cwd', [{ t: 1, label: 'X' }])
+  assert.equal(shared.getFramesLog(cwd).length, 500, 'per-cwd ring buffer survives other sessions')
+  assert.equal(shared.getFramesLog(cwd)[0].label, 'L300')
+  // other cwd has its own content only
+  const other = shared.getFramesLog('/tmp/other-cwd')
+  assert.equal(other.length, 1)
+  assert.equal(other[0].label, 'X')
+  // clear only affects the requested cwd
+  shared.clearFramesLog(cwd)
   assert.equal(shared.getFramesLog(cwd).length, 0)
+  assert.equal(shared.getFramesLog('/tmp/other-cwd').length, 1)
 })

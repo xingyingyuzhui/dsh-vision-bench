@@ -165,20 +165,79 @@ export function journalPanel(el, t, journal) {
       el('span', { className: 'dvb-hint' }, item.summary || item.kind))))
 }
 
-// One shared /state poller per cwd instead of six independent loops.
-const STATE_BUS = { cwd: '', data: null, subs: new Set(), timer: 0, seq: 0 }
+// ── per-cwd shared /state poller ─────────────────────────────────────────────
+// Task1/0.18.3: ONE bus per workspace so sessions never broadcast to each other.
+const STATE_BUSES = new Map() // cwd -> { cwd, data, subs:Set, timer, seq, post }
 
-// Modbus frame stream per connection (framesByConnection). Ring buffer keyed by cwd+connId;
-// fed by read / write / poll responses from any surface (HMI actions and the live polling loop).
-// Supports overloaded legacy signature pushFramesLog(cwd, logArray) for backward compat.
-const FRAME_LOGS = { cwd: '', byConn: {} }
+function busEntry(post, cwd) {
+  let e = STATE_BUSES.get(cwd)
+  if (!e) {
+    e = { cwd, data: null, subs: new Set(), timer: 0, seq: 0, post: null }
+    STATE_BUSES.set(cwd, e)
+  }
+  // keep the freshest post fn (hot reload must not hold a stale closure)
+  if (typeof post === 'function') e.post = post
+  return e
+}
+
+function busPull(e) {
+  const seq = ++e.seq
+  const post = e.post
+  if (typeof post !== 'function') return
+  post('/dsh-vision-bench/state', { cwd: e.cwd }).then((data) => {
+    // unsubscribed (map entry gone) or a newer request superseded this one
+    if (!STATE_BUSES.has(e.cwd) || seq !== e.seq) return
+    e.data = data
+    for (const sub of Array.from(e.subs)) {
+      try { sub(data) } catch { /* subscriber errors stay isolated */ }
+    }
+  }).catch(() => { /* next tick retries */ })
+}
+
+export function subscribeState(post, cwd, cb) {
+  if (!cwd) {
+    cb(null)
+    return function () {}
+  }
+  const e = busEntry(post, cwd)
+  // register BEFORE the first pull so an extremely fast response can't miss us
+  e.subs.add(cb)
+  if (e.subs.size === 1) {
+    e.seq++ // cancel any stale in-flight response from a previous last subscriber
+    busPull(e)
+    if (e.timer) clearInterval(e.timer)
+    e.timer = setInterval(() => busPull(e), POLL_MS)
+  } else if (e.data) {
+    // later subscribers get the cached snapshot immediately
+    try { cb(e.data) } catch { /* isolate */ }
+  }
+  return function () {
+    const cur = STATE_BUSES.get(cwd)
+    if (!cur || cur !== e) return
+    cur.subs.delete(cb)
+    if (cur.subs.size === 0) {
+      clearInterval(cur.timer)
+      cur.timer = 0
+      cur.seq++ // in-flight responses must not deliver after final unsubscribe
+      STATE_BUSES.delete(cwd)
+    }
+  }
+}
+
+// Modbus frame stream per connection (framesByConnection). Task2/0.18.3: ring
+// buffers are keyed per-CWD; sessions never clear or read each other's frames.
+// API signatures intentionally unchanged: pushFramesLog(cwd, connId, frames),
+// getFramesLog(cwd, connId), clearFramesLog(cwd, connId), framesLogCount(cwd, connId).
+const FRAME_LOGS_BY_CWD = new Map() // cwd -> { byConn: {} }
 const FRAME_LOG_CAP = 500
 
-function ensureFrameCwd(cwd) {
-  if (FRAME_LOGS.cwd !== cwd) {
-    FRAME_LOGS.cwd = cwd
-    FRAME_LOGS.byConn = {}
+function frameEntryFor(cwd) {
+  let s = FRAME_LOGS_BY_CWD.get(cwd)
+  if (!s) {
+    s = { byConn: {} }
+    FRAME_LOGS_BY_CWD.set(cwd, s)
   }
+  return s
 }
 
 export function pushFramesLog(cwd, connId, logArray) {
@@ -202,8 +261,8 @@ export function pushFramesLog(cwd, connId, logArray) {
     // fallback: treat second arg as array if no third
     if (Array.isArray(connId)) { list = connId } else { list = [] }
   }
-  ensureFrameCwd(cwd)
-  if (!FRAME_LOGS.byConn[cid]) FRAME_LOGS.byConn[cid] = []
+  const state = frameEntryFor(cwd)
+  if (!state.byConn[cid]) state.byConn[cid] = []
   const arr = Array.isArray(list) ? list : []
   for (const entry of arr) {
     if (!entry) continue
@@ -211,7 +270,7 @@ export function pushFramesLog(cwd, connId, logArray) {
     const cidNorm = String(entry.connectionId || cid || '')
     const fid = String(entry.frameId || entry.id || (cidNorm ? (cidNorm + ':' + at + ':' + String(entry.label || '').slice(0, 8)) : ('f:' + at)))
     const txId = String(entry.transactionId || fid)
-    FRAME_LOGS.byConn[cid].push({
+    state.byConn[cid].push({
       id: fid,
       frameId: fid,
       transactionId: txId,
@@ -236,69 +295,42 @@ export function pushFramesLog(cwd, connId, logArray) {
       error: String(entry.error || '').slice(0, 200),
     })
   }
-  if (FRAME_LOGS.byConn[cid].length > FRAME_LOG_CAP) {
-    FRAME_LOGS.byConn[cid].splice(0, FRAME_LOGS.byConn[cid].length - FRAME_LOG_CAP)
+  if (state.byConn[cid].length > FRAME_LOG_CAP) {
+    state.byConn[cid].splice(0, state.byConn[cid].length - FRAME_LOG_CAP)
   }
 }
 
 export function getFramesLog(cwd, connId) {
-  if (FRAME_LOGS.cwd !== cwd) return []
+  const s = FRAME_LOGS_BY_CWD.get(cwd)
+  if (!s) return []
   if (connId === undefined || connId === null || connId === '' || connId === 'all') {
     const all = []
-    for (const arr of Object.values(FRAME_LOGS.byConn)) all.push(...arr)
+    for (const arr of Object.values(s.byConn)) all.push(...arr)
     all.sort((a, b) => (Number(a.t) || 0) - (Number(b.t) || 0))
     // cap aggregated to 500 most recent across all conns
     if (all.length > FRAME_LOG_CAP) return all.slice(all.length - FRAME_LOG_CAP)
     return all
   }
-  return FRAME_LOGS.byConn[connId] ? FRAME_LOGS.byConn[connId].slice() : []
+  return s.byConn[connId] ? s.byConn[connId].slice() : []
 }
 
 export function clearFramesLog(cwd, connId) {
-  if (FRAME_LOGS.cwd !== cwd) return
+  const s = FRAME_LOGS_BY_CWD.get(cwd)
+  if (!s) return
   if (connId === undefined || connId === null || connId === '' || connId === 'all') {
-    FRAME_LOGS.byConn = {}
+    s.byConn = {}
   } else {
-    delete FRAME_LOGS.byConn[connId]
+    delete s.byConn[connId]
   }
 }
 
 export function framesLogCount(cwd, connId) {
-  if (FRAME_LOGS.cwd !== cwd) return 0
-  if (connId) return (FRAME_LOGS.byConn[connId] || []).length
+  const s = FRAME_LOGS_BY_CWD.get(cwd)
+  if (!s) return 0
+  if (connId) return (s.byConn[connId] || []).length
   let n = 0
-  for (const arr of Object.values(FRAME_LOGS.byConn)) n += arr.length
+  for (const arr of Object.values(s.byConn)) n += arr.length
   return n
-}
-
-function busPull(post) {
-  const seq = ++STATE_BUS.seq
-  post('/dsh-vision-bench/state', { cwd: STATE_BUS.cwd }).then((data) => {
-    if (seq !== STATE_BUS.seq) return
-    STATE_BUS.data = data
-    for (const sub of STATE_BUS.subs) {
-      try { sub(data) } catch { /* subscriber errors stay isolated */ }
-    }
-  }).catch(() => { /* next tick retries */ })
-}
-
-export function subscribeState(post, cwd, cb) {
-  if (!cwd) {
-    cb(null)
-    return function () {}
-  }
-  if (STATE_BUS.cwd !== cwd) {
-    STATE_BUS.cwd = cwd
-    STATE_BUS.data = null
-    clearInterval(STATE_BUS.timer)
-    busPull(post)
-    STATE_BUS.timer = setInterval(() => busPull(post), POLL_MS)
-  }
-  if (STATE_BUS.data) cb(STATE_BUS.data)
-  STATE_BUS.subs.add(cb)
-  return function () {
-    STATE_BUS.subs.delete(cb)
-  }
 }
 
 // ── Sidebar scope (follow / pinned) helpers ────────────────────────────────
@@ -345,39 +377,68 @@ export function filterByScope(list, scope, getIds) {
   })
 }
 
-// ── Agent focus / highlight / temp watch / evidence ────────────────────────
+// ── Agent focus / highlight / temp watch / evidence (per-cwd) ───────────────
+// Task2/0.18.3: sessions no longer clobber each other's focus.
 
-const FOCUS_STATE = { cwd: '', request: null, prev: null, tempWatchIds: [], badgeOnly: false, evidence: [], subs: new Set() }
+const FOCUS_BY_CWD = new Map() // cwd -> { request, prev, tempWatchIds, badgeOnly, evidence, subs:Set }
+const FOCUS_WILDCARD = new Set() // global subscribers get (focus, cwd)
+
+const emptyFocus = () => ({ request: null, prev: null, tempWatchIds: [], badgeOnly: false, evidence: [] })
+
+function focusEntry(cwd) {
+  if (!cwd) return null
+  let e = FOCUS_BY_CWD.get(cwd)
+  if (!e) {
+    e = { ...emptyFocus(), subs: new Set() }
+    FOCUS_BY_CWD.set(cwd, e)
+  }
+  return e
+}
 
 export function getFocusState(cwd) {
-  if (FOCUS_STATE.cwd !== cwd) return { request: null, prev: null, tempWatchIds: [], badgeOnly: false, evidence: [] }
-  return { request: FOCUS_STATE.request, prev: FOCUS_STATE.prev, tempWatchIds: FOCUS_STATE.tempWatchIds.slice(), badgeOnly: !!FOCUS_STATE.badgeOnly, evidence: FOCUS_STATE.evidence.slice() }
+  const e = FOCUS_BY_CWD.get(cwd)
+  if (!e) return emptyFocus()
+  return {
+    request: e.request,
+    prev: e.prev,
+    tempWatchIds: (e.tempWatchIds || []).slice(),
+    badgeOnly: !!e.badgeOnly,
+    evidence: (e.evidence || []).slice(),
+  }
 }
 
 export function setFocusState(cwd, focus) {
-  FOCUS_STATE.cwd = cwd || ''
+  const e = focusEntry(cwd)
+  if (!e) return
   if (!focus || typeof focus !== 'object') {
-    FOCUS_STATE.request = null
-    FOCUS_STATE.prev = null
-    FOCUS_STATE.tempWatchIds = []
-    FOCUS_STATE.badgeOnly = false
-    FOCUS_STATE.evidence = []
+    Object.assign(e, emptyFocus())
   } else {
-    FOCUS_STATE.request = focus.request || null
-    FOCUS_STATE.prev = focus.prev || null
-    FOCUS_STATE.tempWatchIds = Array.isArray(focus.tempWatchIds) ? focus.tempWatchIds.slice(0, 32) : []
-    FOCUS_STATE.badgeOnly = !!focus.badgeOnly
-    FOCUS_STATE.evidence = Array.isArray(focus.evidence) ? focus.evidence.slice(0, 20) : []
+    e.request = focus.request || null
+    e.prev = focus.prev || null
+    e.tempWatchIds = Array.isArray(focus.tempWatchIds) ? focus.tempWatchIds.slice(0, 32) : []
+    e.badgeOnly = !!focus.badgeOnly
+    e.evidence = Array.isArray(focus.evidence) ? focus.evidence.slice(0, 20) : []
   }
-  for (const sub of FOCUS_STATE.subs) {
-    try { sub(getFocusState(cwd)) } catch {}
+  const snapshot = getFocusState(cwd)
+  for (const sub of Array.from(e.subs)) {
+    try { sub(snapshot) } catch {}
+  }
+  for (const sub of Array.from(FOCUS_WILDCARD)) {
+    try { sub(snapshot, cwd) } catch {}
   }
 }
 
 export function subscribeFocus(cwd, cb) {
   if (typeof cb !== 'function') return function () {}
-  FOCUS_STATE.subs.add(cb)
-  return function () { FOCUS_STATE.subs.delete(cb) }
+  if (!cwd) {
+    // wildcard: receives (focus, changedCwd) for every workspace
+    FOCUS_WILDCARD.add(cb)
+    return function () { FOCUS_WILDCARD.delete(cb) }
+  }
+  const e = focusEntry(cwd)
+  if (!e) return function () {}
+  e.subs.add(cb)
+  return function () { e.subs.delete(cb) }
 }
 
 export function isFocusTarget(item, focusRequest) {
