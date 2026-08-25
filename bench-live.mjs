@@ -6,6 +6,7 @@ import { normalizeModbus } from './bench-devices.mjs'
 import { getTrendState, clearTrendState, TREND_CAP, TREND_WINDOW_MS, trendKey, sampleTrend, computeStats, toUplotData, UPLOT_PROTO, exportRangeCsv } from './bench-trend.mjs'
 import { normalizeAlarmState, groupAlarms, acknowledgeAlarm, ACTIVE, RECOVERED, ACKED, PROCESS, COMM, COND_ACTIVE, COND_RECOVERED } from './bench-alarm.mjs'
 import { vendorUPlot, vendorVirtualizer, vendorAvailable } from './bench-vendor.mjs'
+import { canUseModbus } from './bench-io-capability.mjs'
 
 const TAB_TABLE = 'dsh-vision-bench:modbus'
 const TAB_CHART = 'dsh-vision-bench:charts'
@@ -29,10 +30,6 @@ export function sessionCwd(props) {
       return (s && s.byId && id && s.byId[id] && s.byId[id].cwd) || ''
     })
     : ''
-}
-
-function healthReady(health) {
-  return !!(health && health.python && health.python.bound && health.python.exists)
 }
 
 const displayValue = (rec, point) => {
@@ -62,7 +59,7 @@ export function createLiveView(React, t, post, hooks) {
     // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
     const inputDraft = readInputDraft(props && props.useInput)
     const agentBridge = buildInputBridge(props, inputDraft)
-    const [health, setHealth] = React.useState({})
+    const [ioRuntime, setIoRuntime] = React.useState({})
     const [modbus, setModbus] = React.useState({ version: 3, connections: [], devices: [], points: [], values: [], pollingByConnection: {} })
     const [tickError, setTickError] = React.useState('')
     const [search, setSearch] = React.useState('')
@@ -90,7 +87,7 @@ export function createLiveView(React, t, post, hooks) {
           try {
             const data = await post('/dsh-vision-bench/state', { cwd })
             if (stop) return
-            if (data && data.health) setHealth(data.health)
+            if (data && data.ioRuntime) setIoRuntime(data.ioRuntime)
             if (data && data.workspace && data.workspace.focus) {
               setFocusUi(data.workspace.focus)
               try { setFocusState(cwd, data.workspace.focus) } catch {}
@@ -109,7 +106,9 @@ export function createLiveView(React, t, post, hooks) {
             const pollingForActive = packTmp && activeCid ? (packTmp.pollingByConnection && packTmp.pollingByConnection[activeCid]) : null
             const enabled = pollingForActive ? pollingForActive.enabled : (next && next.polling && next.polling.enabled)
             const interval = pollingForActive ? pollingForActive.intervalMs : (next && next.polling && next.polling.intervalMs) || 1000
-            const canPoll = enabled && hasPoints && (healthReady(data && data.health) || (next && (next.conn && next.conn.sim)))
+            const activeRow = packTmp && packTmp.connections.find((c) => c.id === activeCid)
+            const simPoll = !!(activeRow && activeRow.conn && activeRow.conn.sim)
+            const canPoll = enabled && hasPoints && canUseModbus(data && data.ioRuntime, activeRow && activeRow.conn && activeRow.conn.mode, { simulated: simPoll })
             if (canPoll) {
               // poll only the scoped connection (follow or pinned)
               const scope = resolveSidebarScope(cwd, packTmp.activeConnectionId, packTmp.activeDeviceId)
@@ -238,9 +237,8 @@ export function createLiveView(React, t, post, hooks) {
     const pollingForScope = scope.connectionId ? (pack.pollingByConnection && pack.pollingByConnection[scope.connectionId]) : null
     const polling = pollingForScope || pack.polling || { enabled: false, intervalMs: 1000 }
     const enabled = polling.enabled === true
-    const pythonReady = healthReady(health)
     const sim = activeConn ? (activeConn.conn && activeConn.conn.sim === true) : false
-    const canWatch = pythonReady || sim
+    const canWatch = canUseModbus(ioRuntime, activeConn && activeConn.conn && activeConn.conn.mode, { simulated: sim })
     const points = Array.isArray(pack.points) ? pack.points : []
     // v3 scope filtering: must match connectionId and optionally deviceId
     const scopedPoints = points.filter((p) => {
@@ -368,23 +366,14 @@ export function createLiveView(React, t, post, hooks) {
           ? el('button', { type: 'button', className: 'dvb-btn dvb-live-close', title: t('liveClose'), onClick() { closeTab(tabId) } }, '×')
           : null),
       draftPanel,
-      // Agent 聚焦横幅 + 临时监视组 + 证据跳转（后台任务仅角标）
-      focusState && focusState.request
-        ? el('div', { className: 'dvb-panel dvb-focus-banner', 'data-badge': focusState.badgeOnly ? 'true' : 'false', style: { margin: '8px 0', padding: '6px 8px', borderLeft: focusState.badgeOnly ? '3px solid #e0912f' : '3px solid #4f8ef7', background: focusState.badgeOnly ? 'rgba(224,145,47,.08)' : 'rgba(79,142,247,.08)' } },
-            el('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } },
-              el('span', { className: 'dvb-badge', 'data-kind': focusState.badgeOnly ? 'warn' : 'live' }, focusState.badgeOnly ? '后台 · 角标' : 'Agent 聚焦'),
-              el('span', { className: 'dvb-hint', title: [focusState.request.connectionId, focusState.request.deviceId, focusState.request.pointId || focusState.request.frameId].filter(Boolean).join(' / ') }, [focusState.request.connectionId, focusState.request.deviceId, focusState.request.pointId || focusState.request.frameId].filter(Boolean).join(' / ') || '未知目标'),
-              focusState.request.at ? el('span', { className: 'dvb-map-meta' }, clockOf(focusState.request.at)) : null,
-              focusState.badgeOnly ? el('span', { className: 'dvb-hint' }, '后台任务仅角标，不抢焦点') : null,
-              el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: returnToPrevFocus, disabled: !focusState.prev }, '返回原焦点'),
-              el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { setFocusUi({ request: null, prev: focusState.request, tempWatchIds: [], badgeOnly: false, evidence: [] }); post('/dsh-vision-bench/focus', { cwd, target: {} }).catch(()=>{}) } }, '清除'),
-              focusState.tempWatchIds && focusState.tempWatchIds.length ? el('span', { className: 'dvb-tag' }, '临时监视 ' + focusState.tempWatchIds.length) : null,
-              focusState.evidence && focusState.evidence.length ? el('span', { className: 'dvb-tag', title: focusState.evidence.map((e)=> e.kind + ':' + e.id).join('；') }, '证据 ' + focusState.evidence.length) : null),
-            el('div', { style: { display: 'flex', gap: '4px', marginTop: '4px' } },
-              el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', onClick() { if (focusState.request && focusState.request.pointId && typeof openHmi === 'function') try { openHmi({ connectionId: focusState.request.connectionId, deviceId: focusState.request.deviceId, pointId: focusState.request.pointId }) } catch {} } }, '跳转点位'),
-              el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { if (focusState.request) sendToAgent('focus', focusState.request) } }, agentBtnLabel('focus', focusState.request)),
-              tempWatchNote ? el('span', { className: 'dvb-hint' }, tempWatchNote) : null,
-              agentCopied ? el('span', { className: 'dvb-hint' }, agentCopied.split(':').pop() + ' · 引用已处理') : null))
+      // Task8/0.19.2: Agent 聚焦只短暂提醒，不再展示大面板
+      !focusState.badgeOnly && focusState.request
+        ? el('div', { className: 'dvb-focus-toast', role: 'status' },
+            el('span', null, 'Agent 已定位到 ' + [focusState.request.connectionId, focusState.request.deviceId, focusState.request.pointId || focusState.request.frameId].filter(Boolean).join(' / ')),
+            focusState.prev
+              ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: returnToPrevFocus }, '返回原位置')
+              : null,
+            el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { setFocusUi({ request: null, prev: focusState.request, tempWatchIds: [], badgeOnly: false, evidence: [] }) } }, '×'))
         : null,
       el('div', { className: 'dvb-live-controls' },
         el('button', {
@@ -449,12 +438,6 @@ export function createLiveView(React, t, post, hooks) {
               title: '让 Agent 分析此点位（稳定 ID+配置版本+时间范围）',
               onClick() { sendToAgent('point', { pointId: row.key, connectionId: row.connectionId, deviceId: row.deviceId, name: row.name }) },
             }, agentBtnLabel('point', { pointId: row.key })),
-            el('button', {
-              type: 'button',
-              className: 'dvb-btn dvb-btn-sm' + (isFocused ? ' is-on' : ''),
-              title: '聚焦此点位 · 高亮并支持临时监视组与返回原焦点',
-              onClick() { requestFocusUi({ connectionId: row.connectionId, deviceId: row.deviceId, pointId: row.key, kind: 'point' }) },
-            }, '聚焦'),
             el('button', {
               type: 'button',
               className: 'dvb-btn dvb-btn-sm' + (inTemp ? ' is-on' : ''),
@@ -719,11 +702,7 @@ export function createTrendPage(React, t, post, hooks) {
             title: agentAllowed ? '让 Agent 分析此曲线区间' : '配置版本未就绪',
             onClick() { sendTrend(item) },
           }, copied === item.key + ':已加入输入框' ? '已加入' : (copied === item.key + ':已发送' ? '已发送' : '让 Agent 分析')),
-          el('button', {
-            type: 'button', className: 'dvb-btn dvb-btn-sm',
-            onClick() { focusTrend(item) },
-          }, '聚焦'))))
-        : null)
+          el('span', { className: 'dvb-hint' }, item.key))))        : null)
   }
 }
 
@@ -838,11 +817,6 @@ export function createAlarmPage(React, t, post, hooks) {
               title: '复制告警结构化引用（稳定 ID+配置版本+时间范围，含 point/connection/device/frame/transaction/task）',
               onClick(){ sendToAgentAlarm(row) },
             }, copiedAlarm===row.a.id ? '已复制' : '让 Agent 分析'),
-            el('button', {
-              type:'button', className:'dvb-btn dvb-btn-sm',
-              title: '聚焦此告警，高亮并支持证据跳转',
-              onClick(){ focusAlarm(row) },
-            }, '聚焦'),
             row.pt ? el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ jumpPoint(row) } }, '点位') : null,
             el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick: jumpChart }, '曲线'),
             el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ jumpFrames(row) } }, '报文')

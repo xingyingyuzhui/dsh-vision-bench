@@ -43,3 +43,29 @@ export function planReadBatches(points) {
   }
   return batches
 }
+
+export function planScopedReadBatches(points) {
+  const buckets = new Map()
+  for (const p of Array.isArray(points) ? points : []) {
+    const connectionId = String(p.connectionId || p.connId || '')
+    const deviceId = String(p.deviceId || '')
+    const unitId = Math.min(247, Math.max(1, Math.trunc(Number(p.unitId) || 1)))
+    const functionCode = Number(p.function) || 3
+    const key = [connectionId, deviceId, unitId, functionCode].join('\0')
+    if (!buckets.has(key)) {
+      buckets.set(key, { connectionId, deviceId, unitId, functionCode, points: [] })
+    }
+    buckets.get(key).points.push(p)
+  }
+  const scopes = []
+  for (const scope of buckets.values()) {
+    const batches = planReadBatches(scope.points).map((batch) => ({
+      ...batch,
+      connectionId: scope.connectionId,
+      deviceId: scope.deviceId,
+      unitId: scope.unitId,
+    }))
+    scopes.push({ ...scope, batches })
+  }
+  return scopes
+}

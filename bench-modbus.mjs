@@ -17,11 +17,13 @@ import {
 } from './bench-points.mjs'
 import { normalizeModbus, normalizePointV3 } from './bench-devices.mjs'
 import { evaluateAlarms, normalizeAlarmState } from './bench-alarm.mjs'
-import { planReadBatches } from './bench-pollplan.mjs'
+import { planScopedReadBatches } from './bench-pollplan.mjs'
+import { changedConnectionIds, createModbusTransport, notifyConnectionRelease, toReadRequest, toWriteRequest } from './bench-modbus-transport.mjs'
+import { toEndpoint } from './bench-io-contract.mjs'
+import { commitPollResult, commitReadResult, commitWriteResult } from './bench-modbus-commit.mjs'
 import { aborted, hasRunning, originOf, signalOf } from './bench-journal.mjs'
 import {
   finishTask,
-  loadBindings,
   loadWorkspace,
   normalizeFocusRequest,
   normalizeFocusState,
@@ -30,10 +32,7 @@ import {
   recordBenchEvent,
   saveWorkspace,
 } from './bench-store.mjs'
-import { runPythonScript } from './bench-run.mjs'
-import { serialDevicePath } from './bench-serial.mjs'
-import { withPortLock } from './bench-portlock.mjs'
-import { findMonitoredPort } from './bench-serial-monitor.mjs'
+import { portKey } from './bench-portlock.mjs'
 import { notifyBenchEvent } from './bench-notify.mjs'
 import { resolveTarget as resolveUnifiedTarget, TARGET_CODES } from './bench-targets.mjs'
 
@@ -49,12 +48,15 @@ export const ERROR_CODES = {
   CONNECTION_NOT_FOUND: 'CONNECTION_NOT_FOUND',
   CONFIG_DRIFT: 'CONFIG_DRIFT',
   CONFLICT: 'CONFLICT',
+  WRITE_OUTCOME_UNKNOWN: 'WRITE_OUTCOME_UNKNOWN',
 }
 
-const needPython = (bindings) => {
-  if (!bindings.python) return '请先在设置 → 台架 绑定 Python'
-  return null
-}
+const transportOf = (opts) => (opts && opts.transport) || createModbusTransport()
+
+const stampPoints = (pack) => (pack.points || []).map((p) => {
+  const dev = (pack.devices || []).find((d) => d.id === p.deviceId)
+  return { ...p, unitId: Math.min(247, Math.max(1, Math.trunc(Number(dev && dev.unitId) || 1))) }
+})
 
 const STALE_MS = 30 * 1000
 
@@ -116,41 +118,68 @@ export const pickConnPatch = (raw) => {
   return out
 }
 
-export const connectOp = (home, cwd, body) => {
+export const connectOp = async (home, cwd, body, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
-  const patch = pickConnPatch(body)
-  if (!Object.keys(patch).length) return { ok: false, error: '缺少连接参数' }
   const cidRaw = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
   if (cidRaw) {
     const workspace = loadWorkspace(home, room.cwd)
     const pack = normalizeModbus(workspace.modbus)
     const target = pack.connections.find((c) => c.id === cidRaw)
     if (!target) return { ok: false, error: '连接不存在: ' + cidRaw }
-    const nextConns = pack.connections.map((c) => c.id === cidRaw ? { ...c, conn: { ...c.conn, ...patch } } : c)
-    let nextDevices = pack.devices
-    if (patch.slave !== undefined) {
-      const didRaw = body && body.deviceId ? String(body.deviceId).trim() : ''
-      let devId = didRaw
-      if (!devId) {
-        if (pack.activeConnectionId === cidRaw && pack.activeDeviceId) devId = pack.activeDeviceId
-        else {
-          const devFor = pack.devices.find((d) => d.connectionId === cidRaw)
-          devId = devFor ? devFor.id : ''
+    // Task6/0.19.2: 从机模式未启用 — 显式拒绝，不允许当主机执行
+    const role = (target.role || 'client')
+    if (role === 'server' || role === 'slave') {
+      return { ok: false, error: '当前版本暂未启用 Modbus 从机模式', code: 'ROLE_NOT_SUPPORTED', connectionId: cidRaw }
+    }
+    // Task5/0.19.2: close 优先 — 仅凭 connectionId 即可断开，不要求 patch
+    const transport = transportOf(opts)
+    if (body && body.close === true) {
+      await transport.closeConnection({ cwd: room.cwd, connectionId: cidRaw })
+      return { ok: true, action: 'connect', connectionId: cidRaw, connId: cidRaw, configured: !!(body && Object.keys(pickConnPatch(body)).length), connected: false, live: 'disconnected' }
+    }
+    const patch = pickConnPatch(body)
+    let outConn = target.conn
+    if (Object.keys(patch).length) {
+      const nextConns = pack.connections.map((c) => c.id === cidRaw ? { ...c, conn: { ...c.conn, ...patch } } : c)
+      let nextDevices = pack.devices
+      if (patch.slave !== undefined) {
+        const devId = String(body && body.deviceId || '').trim() || (pack.activeConnectionId === cidRaw ? pack.activeDeviceId : '') || (pack.devices.find((d) => d.connectionId === cidRaw) || {}).id || ''
+        if (devId) {
+          const unit = Math.min(247, Math.max(0, Math.trunc(Number(patch.slave) || 1)))
+          nextDevices = pack.devices.map((d) => d.id === devId ? { ...d, unitId: unit } : d)
         }
       }
-      if (devId) {
-        const unit = Math.min(247, Math.max(0, Math.trunc(Number(patch.slave) || 1)))
-        nextDevices = pack.devices.map((d) => d.id === devId ? { ...d, unitId: unit } : d)
+      const saved = saveWorkspace(home, room.cwd, { modbus: { connections: nextConns, devices: nextDevices, version: 3 } })
+      if (!saved.ok) return saved
+      notifyConnectionRelease(room.cwd, changedConnectionIds(workspace.modbus, saved.workspace.modbus).filter((id) => id !== cidRaw))
+      outConn = (saved.workspace.modbus.connections.find((c) => c.id === cidRaw) || {}).conn || saved.workspace.modbus.conn
+    }
+    if (outConn && outConn.sim === true) {
+      await transport.closeConnection({ cwd: room.cwd, connectionId: cidRaw })
+      return { ok: true, action: 'connect', conn: outConn, connectionId: cidRaw, connId: cidRaw, configured: !!Object.keys(patch).length, simulated: true }
+    }
+    const opened = await transport.openConnection({ cwd: room.cwd, connectionId: cidRaw, endpoint: toEndpoint({ conn: outConn }) })
+    if (opened.ok === false) {
+      // Task5/0.19.2: 配置已保存但物理连接失败 — 不偷偷回滚
+      return {
+        ok: false,
+        action: 'connect',
+        connectionId: cidRaw,
+        connId: cidRaw,
+        configured: !!Object.keys(patch).length,
+        connected: false,
+        conn: outConn,
+        error: (opened.error && opened.error.message) || opened.error,
       }
     }
-    const saved = saveWorkspace(home, room.cwd, { modbus: { connections: nextConns, devices: nextDevices, version: 3 } })
-    if (!saved.ok) return saved
-    const outConn = (saved.workspace.modbus.connections.find((c) => c.id === cidRaw) || {}).conn || saved.workspace.modbus.conn
-    return { ok: true, action: 'connect', conn: outConn, connectionId: cidRaw, connId: cidRaw }
+    return { ok: true, action: 'connect', conn: outConn, connectionId: cidRaw, connId: cidRaw, configured: !!Object.keys(patch).length, connected: true, live: opened.data || opened }
   }
-  const saved = saveWorkspace(home, room.cwd, { modbus: { conn: patch } })
+  // legacy no-id path (kept for backward compat)
+  const prev = loadWorkspace(home, room.cwd)
+  const saved = saveWorkspace(home, room.cwd, { modbus: { conn: pickConnPatch(body) } })
   if (!saved.ok) return saved
+  notifyConnectionRelease(room.cwd, changedConnectionIds(prev.modbus, saved.workspace.modbus))
   return { ok: true, action: 'connect', conn: saved.workspace.modbus.conn }
 }
 
@@ -347,7 +376,7 @@ export const listPendingWrites = (cwd) => {
   return out
 }
 
-export const resolvePendingWrite = async (home, cwd, id, approved) => {
+export const resolvePendingWrite = async (home, cwd, id, approved, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
   const entry = popPendingWrite(room.cwd, id)
@@ -399,48 +428,16 @@ export const resolvePendingWrite = async (home, cwd, id, approved) => {
     ...entry.params,
     source: 'agent',
     confirm: true,
-  })
+  }, opts)
 }
 
 // ── transport ────────────────────────────────────────────────────────────
 
-const MONITOR_BUSY_MSG = '串口正被日志监视占用，请先在上位机页关闭串口日志；要看总线报文可改用第二个只听适配器接另一个 COM'
-
-const connArgs = (conn) => {
-  const args = [
-    '--mode', conn.mode,
-    '--slave', String(conn.slave),
-    '--timeout', '1',
-    '--json',
-  ]
-  if (conn.mode === 'rtu') {
-    if (!conn.port) return { error: 'RTU 需要串口' }
-    args.push(
-      '--port', serialDevicePath(conn.port),
-      '--baudrate', String(conn.baudrate),
-      '--bytesize', String(conn.bytesize),
-      '--parity', String(conn.parity),
-      '--stopbits', String(conn.stopbits),
-    )
-  } else {
-    if (!conn.host) return { error: 'TCP 需要主机地址' }
-    args.push('--host', conn.host, '--tcp-port', String(conn.tcpPort))
-  }
-  return { args }
-}
-
-// Every pymodbus spawn goes through here: RTU ports are exclusive on Windows,
-// so transactions queue on a per-port lock and refuse while the log monitor
-// holds the same COM.
-const runModbusScript = (python, scriptName, args, conn, opts) => {
-  const port = conn && conn.mode === 'rtu' ? conn.port : ''
-  if (port) {
-    if (findMonitoredPort(port)) {
-      return Promise.resolve({ ok: false, error: MONITOR_BUSY_MSG, errorCode: ERROR_CODES.PORT_IN_USE })
-    }
-    return withPortLock(port, () => runPythonScript(python, scriptName, args, opts))
-  }
-  return runPythonScript(python, scriptName, args, opts)
+const connReady = (conn) => {
+  if (!conn) return { error: '连接不存在' }
+  if (conn.mode === 'rtu' && !portKey(conn.port) && conn.sim !== true) return { error: 'RTU 需要串口' }
+  if (conn.mode === 'tcp' && !conn.host && conn.sim !== true) return { error: 'TCP 需要主机地址' }
+  return { ok: true }
 }
 
 const framesOf = (ran) => {
@@ -454,15 +451,17 @@ const framesOf = (ran) => {
   }
 }
 
-const frameEntry = (label, frames, at = Date.now(), extra = {}) => {
+const createTransactionFrame = (label, frames, extra = {}) => {
+  const at = Number(extra.at) || Date.now()
   const cid = String(extra.connectionId || '')
-  const did = String(extra.deviceId || 'conn')
+  const did = String(extra.deviceId || '')
   const tid = String(extra.taskId || '')
-  const fid = String(extra.frameId || extra.transactionId || (cid ? (cid + ':' + at + ':' + String(label).slice(0, 12) + ':' + String(tid).slice(-4)) : ('f:' + at)))
-  const txId = String(extra.transactionId || fid)
+  const txId = String(extra.transactionId || extra.frameId || (cid + ':' + at + ':' + tid))
+  const req = frames && (frames.requestHex || frames.request) || ''
+  const res = frames && (frames.responseHex || frames.response) || ''
   return {
-    id: fid,
-    frameId: fid,
+    id: txId,
+    frameId: txId,
     transactionId: txId,
     t: at,
     at,
@@ -470,31 +469,66 @@ const frameEntry = (label, frames, at = Date.now(), extra = {}) => {
     deviceId: did,
     deviceName: String(extra.deviceName || ''),
     taskId: tid,
+    sessionId: String(extra.sessionId || ''),
+    toolCallId: String(extra.toolCallId || ''),
+    port: String(extra.port || ''),
     source: String(extra.source || 'user'),
     direction: String(extra.direction || 'tx'),
     label,
-    request: frames ? frames.request : '',
-    response: frames ? frames.response : '',
-    requestHex: String(extra.requestHex || (frames ? frames.request : '')).slice(0, 400),
-    responseHex: String(extra.responseHex || (frames ? frames.response : '')).slice(0, 400),
-    trace: frames ? frames.trace : [],
+    request: req,
+    response: res,
+    requestHex: String(req).slice(0, 400),
+    responseHex: String(res).slice(0, 400),
+    frameFormat: String((frames && frames.frameFormat) || extra.frameFormat || ''),
+    trace: frames && Array.isArray(frames.trace) ? frames.trace : [],
     unitId: Number.isFinite(Number(extra.unitId)) ? Math.trunc(Number(extra.unitId)) : 1,
     functionCode: Number.isFinite(Number(extra.functionCode)) ? Math.trunc(Number(extra.functionCode)) : 3,
     durationMs: Number.isFinite(Number(extra.durationMs)) ? Math.trunc(Number(extra.durationMs)) : 0,
-    status: String(extra.status || (frames ? 'ok' : 'ok')).slice(0, 16),
+    status: String(extra.status || 'ok').slice(0, 16),
     error: String(extra.error || '').slice(0, 200),
   }
 }
 
+const frameEntry = createTransactionFrame
+
+const pointValuesOfBatch = (values, pack, batch) => {
+  const ids = new Set()
+  for (const p of pack.points || []) {
+    if (Number(p.function) !== Number(batch.fc)) continue
+    if (Number(p.address) < batch.address || Number(p.address) >= batch.address + batch.count) continue
+    if (batch.connectionId && (p.connectionId || p.connId) !== batch.connectionId) continue
+    if (batch.deviceId && p.deviceId !== batch.deviceId) continue
+    ids.add(p.id)
+  }
+  return (Array.isArray(values) ? values : []).filter((rec) => rec && ids.has(rec.pointId || rec.key))
+}
+
 // ── reads ────────────────────────────────────────────────────────────────
 
-const runReadTx = (python, conn, fc, address, count, cwd, timeoutMs, signal) =>
-  runModbusScript(python, 'modbus_read.py', [
-    '--function', String(fc),
-    '--address', String(address),
-    '--count', String(count),
-    '--debug',
-  ], conn, { cwd, timeoutMs: timeoutMs || 20000, signal })
+const runReadTx = async (transport, pack, connObj, device, batch, cwd, timeoutMs, signal, source) => {
+  const req = toReadRequest({
+    cwd,
+    connection: connObj,
+    device,
+    batch,
+    timeoutMs,
+    configVersion: pack.configVersion,
+    source,
+  })
+  const sim = !!(connObj && connObj.conn && connObj.conn.sim)
+  const ran = await transport.read(req, { signal, sim })
+  if (ran && ran.ok === false) {
+    return { ok: false, error: (ran.error && ran.error.message) || ran.error, errorCode: ran.error && ran.error.code, cancelled: ran.error && ran.error.code === 'CANCELLED', frames: ran.frames, transactionId: ran.transactionId, durationMs: ran.durationMs }
+  }
+  const raw = Array.isArray(ran.data) ? ran.data : (ran.result && ran.result.details && ran.result.details.raw) || []
+  return {
+    ok: true,
+    result: { details: { raw } },
+    frames: ran.frames,
+    transactionId: ran.transactionId,
+    durationMs: ran.durationMs,
+  }
+}
 
 export const modbusRead = async (home, cwd, body, opts) => {
   const room = requireWorkspaceCwd(cwd)
@@ -525,13 +559,9 @@ export const modbusRead = async (home, cwd, body, opts) => {
     return { ok: false, error: '连接不存在: ' + targetCid, errorCode: ERROR_CODES.CONNECTION_NOT_FOUND }
   }
   const sim = conn.sim === true
-  const bindings = sim ? { python: '' } : loadBindings(home)
-  if (!sim) {
-    const missing = needPython(bindings)
-    if (missing) return { ok: false, error: missing }
-    const connCheck = connArgs(conn)
-    if (connCheck.error) return { ok: false, error: connCheck.error, errorCode: ERROR_CODES.TARGET_REQUIRED }
-  }
+  const ready = connReady(conn)
+  if (!sim && ready.error) return { ok: false, error: ready.error, errorCode: ERROR_CODES.TARGET_REQUIRED }
+  const transport = transportOf(opts)
   if (hasRunning(workspace, 'read')) {
     return { ok: false, error: '已有读点任务进行中' }
   }
@@ -542,19 +572,21 @@ export const modbusRead = async (home, cwd, body, opts) => {
   //   function+address    → standalone scratch read (no point needed) - still validates point existence for scoped reads
   let batches = []
   let labels = []
-  let batchConnIds = []
   if (body && body.all === true) {
-    let filtered = pack.points
+    let filtered = stampPoints(pack)
     if (cidArg) filtered = filtered.filter((p) => (p.connectionId || p.connId) === cidArg)
     if (didArg) filtered = filtered.filter((p) => p.deviceId === didArg)
-    // if no filter, use all points but keep per-connection grouping for frames
     if (!filtered.length) return { ok: false, error: '无点位，请先添加点位' }
-    batches = planReadBatches(filtered)
-    labels = batches.map((b) => '读 ' + functionTag(b.fc) + b.address + '×' + b.count)
-    // for all=true without filter, we need to know which connection each batch belongs to? batches are mixed across connections;
-    // we will treat all batches as belonging to targetCid for sim vs real? But real needs per-connection conn.
-    // For multi-connection all read, we will group batches by connectionId: simpler send all via target conn if filtered, else per-connection loop below handles multi.
-    batchConnIds = batches.map(() => targetCid)
+    const scopes = planScopedReadBatches(filtered)
+    for (const scope of scopes) {
+      for (const batch of scope.batches) {
+        if (batch.connectionId !== scope.connectionId || batch.deviceId !== scope.deviceId || batch.unitId !== scope.unitId) {
+          return { ok: false, error: '读批次身份不一致', errorCode: ERROR_CODES.CONFIG_DRIFT }
+        }
+        batches.push(batch)
+        labels.push('读 ' + functionTag(batch.fc) + batch.address + '×' + batch.count)
+      }
+    }
   } else if (body && body.pointId) {
     const point = pack.points.find((item) => item.id === body.pointId)
     if (!point) return { ok: false, error: '点位不存在: ' + body.pointId, errorCode: ERROR_CODES.POINT_NOT_FOUND }
@@ -562,9 +594,9 @@ export const modbusRead = async (home, cwd, body, opts) => {
       const rt = resolveUnifiedTarget(pack, { connectionId: cidArg || point.connectionId || targetCid, deviceId: didArg || point.deviceId || targetDid, pointId: body.pointId })
       if (!rt.ok) return { ok: false, error: rt.error, errorCode: rt.errorCode === TARGET_CODES.TARGET_MISMATCH ? ERROR_CODES.TARGET_MISMATCH : rt.errorCode }
     }
-    batches = [{ fc: point.function, address: point.address, count: 1 }]
+    const dev = pack.devices.find((d) => d.id === (didArg || point.deviceId || targetDid)) || { id: targetDid, unitId: 1 }
+    batches = [{ fc: point.function, address: point.address, count: 1, connectionId: point.connectionId || targetCid, deviceId: point.deviceId || targetDid, unitId: dev.unitId }]
     labels = ['读 ' + pointLabel(point)]
-    batchConnIds = [point.connectionId || targetCid]
   } else if (body && Number.isFinite(Number(body.function)) && Number.isFinite(Number(body.address))) {
     const fc = Number(body.function)
     const address = clampInt(body.address, -1, 0, 65535)
@@ -590,9 +622,9 @@ export const modbusRead = async (home, cwd, body, opts) => {
       // Only enforce when the caller explicitly targets a pointId-less but scoped read and we have points for that connection
       void hasAny
     }
-    batches = [{ fc, address, count }]
+    const dev = pack.devices.find((d) => d.id === targetDid) || { id: targetDid, unitId: 1 }
+    batches = [{ fc, address, count, connectionId: targetCid, deviceId: targetDid, unitId: dev.unitId }]
     labels = ['读 ' + functionTag(fc) + address + '×' + count]
-    batchConnIds = [targetCid]
   } else {
     return { ok: false, error: '无点位：请传 all、pointId 或 function+address' }
   }
@@ -614,20 +646,16 @@ export const modbusRead = async (home, cwd, body, opts) => {
 
   for (let bi = 0; bi < batches.length; bi++) {
     const batch = batches[bi]
-    const batchCid = batchConnIds[bi] || targetCid
+    const batchCid = batch.connectionId || targetCid
+    const batchDid = batch.deviceId || targetDid
     const batchConnObj = pack.connections.find((c) => c.id === batchCid) || targetConnObj
-    const batchConn = batchConnObj ? batchConnObj.conn : conn
-    const batchSim = batchConn.sim === true
+    const batchDevice = pack.devices.find((d) => d.id === batchDid) || { id: batchDid, unitId: batch.unitId || 1 }
+    const batchSim = !!(batchConnObj && batchConnObj.conn && batchConnObj.conn.sim)
     if (aborted(signal)) {
       finishTask(home, room.cwd, task.id, { cancelled: true, summary: '读取已取消' })
       return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source, values, framesLog, framesByConnection }
     }
-     const ran = await (batchSim
-        ? Promise.resolve({
-          ok: true,
-          result: { details: { raw: Array.from({ length: batch.count }, (_, i) => ((batch.address + i) * 10 + Math.floor(Date.now() / 1000)) & 0xffff) } },
-        })
-        : runReadTx(bindings.python, batchConn, batch.fc, batch.address, batch.count, room.cwd, 20000, signal))
+    const ran = await runReadTx(transport, pack, batchConnObj, batchDevice, batch, room.cwd, 20000, signal, origin.source)
     if (ran.cancelled) {
       finishTask(home, room.cwd, task.id, { cancelled: true, summary: '读取已取消' })
       return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source, values, framesLog, framesByConnection }
@@ -636,32 +664,48 @@ export const modbusRead = async (home, cwd, body, opts) => {
       ? ran.result.details.raw
       : []
     values = scatterBatch(values, pack.points, batch, raw, !!ran.ok, ran.ok ? '' : (ran.error || ''))
-    let f = framesOf(ran)
+    let f = ran.frames || framesOf(ran)
     if (!f && batchSim) {
-      f = { request: `SIM TX ${batch.fc}@${batch.address}×${batch.count}`, response: `SIM RX ${raw.slice(0,3).join(',')}`, trace: [] }
+      f = { request: `SIM TX ${batch.fc}@${batch.address}×${batch.count}`, response: `SIM RX ${raw.slice(0,3).join(',')}`, trace: [], frameFormat: 'rtu-adu' }
     }
+    if (!f && (ran.transactionId || ran.error)) {
+      f = {
+        requestHex: '',
+        responseHex: '',
+        frameFormat: (batchConnObj && batchConnObj.conn && batchConnObj.conn.mode === 'tcp') ? 'tcp-normalized' : 'rtu-adu',
+      }
+    }
+    let entry = null
     if (f) {
       lastFrames = f
-      const devForBatch = pack.devices.find((d) => d.connectionId === batchCid) || pack.devices.find((d) => d.id === targetDid) || { unitId: 1 }
-      const entry = frameEntry(labels[bi] + (batchSim ? '（仿真）' : ''), f, Date.now(), {
+      entry = createTransactionFrame(labels[bi] + (batchSim ? '（仿真）' : ''), f, {
         connectionId: batchCid,
-        deviceId: targetDid,
+        deviceId: batchDid,
         taskId: task.id,
         source: origin.source,
+        sessionId: origin.sessionId,
         direction: 'tx',
-        unitId: devForBatch ? devForBatch.unitId : 1,
+        unitId: batchDevice.unitId,
         functionCode: batch.fc,
-        durationMs: batchSim ? 5 : 20,
+        durationMs: ran.durationMs || 0,
         status: ran.ok ? 'ok' : 'error',
         error: ran.ok ? '' : (ran.error || ''),
-        requestHex: f.request,
-        responseHex: f.response,
+        transactionId: ran.transactionId,
+        port: (batchConnObj && batchConnObj.conn && batchConnObj.conn.port) || '',
+        at: Date.now(),
       })
       framesLog.push(entry)
       if (!framesByConnection[batchCid]) framesByConnection[batchCid] = []
       framesByConnection[batchCid] = framesByConnection[batchCid].concat([entry]).slice(-500)
     }
-    results.push({ label: labels[bi], ok: !!ran.ok, error: ran.ok ? '' : (ran.error || ''), count: batch.count })
+    await commitReadResult(home, room.cwd, {
+      baseConfigVersion: pack.configVersion,
+      connectionId: batchCid,
+      deviceId: batchDid,
+      pointValues: pointValuesOfBatch(values, pack, batch),
+      frame: entry,
+    })
+    results.push({ label: labels[bi], ok: !!ran.ok, error: ran.ok ? '' : (ran.error || ''), count: batch.count, connectionId: batchCid, deviceId: batchDid })
     if (ran.ok) okCount += 1
     else lastError = ran.error || lastError
   }
@@ -670,20 +714,16 @@ export const modbusRead = async (home, cwd, body, opts) => {
   const summary = (sim ? '仿真 ' : '')
     + (okAll ? ('读取成功（' + batches.length + ' 批）') : ('读取 ' + okCount + '/' + batches.length + ' 批成功' + (lastError ? '：' + lastError : '')))
   finishTask(home, room.cwd, task.id, { ok: okAll, summary, frames: lastFrames })
-  // persist framesByConnection and values
-  try {
-    const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
-    saveWorkspace(home, room.cwd, { modbus: { values, framesByConnection, version: 3 } })
-  } catch {}
+  const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
   return {
     ok: okAll,
     taskId: task.id,
     source: origin.source,
     summary,
     results,
-    values,
+    values: latest.values,
     framesLog,
-    framesByConnection,
+    framesByConnection: latest.framesByConnection,
     simulated: sim,
     error: okAll ? undefined : lastError,
   }
@@ -785,12 +825,9 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       error: 'Agent 写点是高影响操作，需要用户在界面上批准',
     }
   }
-  const bindings = conn.sim ? { python: '' } : loadBindings(home)
-  let connChecked = null
-  if (!conn.sim) {
-    connChecked = connArgs(conn)
-    if (connChecked.error) return { ok: false, error: connChecked.error }
-  }
+  const ready = connReady(conn)
+  if (!conn.sim && ready.error) return { ok: false, error: ready.error }
+  const transport = transportOf(opts)
   const label = entryLabel(fn, address, count, check.values)
   const before = []
   for (let i = 0; i < count; i++) before.push(pointBefore(pack, fn, address + i, targetCid, targetDid))
@@ -800,57 +837,41 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     sessionId: origin.sessionId,
     summary: label,
   })
-  const done = (ok, summaryText, extra = {}) => {
+  const done = async (ok, summaryText, extra = {}) => {
     finishTask(home, room.cwd, task.id, {
       ok,
       summary: summaryText,
       frames: extra.frames || null,
     })
-    // persist framesByConnection for this connection
-    try {
-      const cur = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
-      const fbc = { ...(cur.framesByConnection || {}) }
-      const frameForLog = extra.frames || (extra.simulated ? { request: `SIM TX ${fn}@${address}×${count}`, response: `SIM RX ${extra.readback ? extra.readback.join(',') : ''}`, trace: [] } : null)
-      if (frameForLog) {
-        const devForWrite = pack.devices.find((d) => d.id === targetDid) || { unitId: 1 }
-        const entry = frameEntry(label, frameForLog, Date.now(), {
-          connectionId: targetCid,
-          deviceId: targetDid,
-          taskId: task.id,
-          source: origin.source,
-          direction: 'tx',
-          unitId: devForWrite ? devForWrite.unitId : 1,
-          functionCode: fn,
-          durationMs: extra.simulated ? 5 : 20,
-          status: ok ? 'ok' : 'error',
-          error: ok ? '' : (extra.error || summaryText),
-          requestHex: frameForLog.request,
-          responseHex: frameForLog.response,
-        })
-        fbc[targetCid] = (fbc[targetCid] || []).concat([entry]).slice(-500)
-        saveWorkspace(home, room.cwd, { modbus: { framesByConnection: fbc, version: 3 } })
-      }
-    } catch {}
-    const errorCode = extra.errorCode || (!ok
-      ? (extra.readbackMismatch ? ERROR_CODES.WRITE_READBACK_MISMATCH
-        : (!extra.readbackOk && extra.readbackTried ? ERROR_CODES.STALE_VALUE : undefined))
-      : undefined)
-    const _frameForLog = extra.frames || (extra.simulated ? { request: `SIM TX ${fn}@${address}×${count}`, response: `SIM RX ${extra.readback ? extra.readback.join(',') : ''}`, trace: [] } : null)
-    const _devForWrite = pack.devices.find((d) => d.id === targetDid) || { unitId: 1 }
-    const _entry = _frameForLog ? frameEntry(label, _frameForLog, Date.now(), {
+    const frameForLog = extra.frame || extra.frames || (extra.simulated ? { request: `SIM TX ${fn}@${address}×${count}`, response: `SIM RX ${extra.readback ? extra.readback.join(',') : ''}`, trace: [], frameFormat: 'rtu-adu' } : null)
+    const devForWrite = pack.devices.find((d) => d.id === targetDid) || { unitId: 1 }
+    const _entry = extra.frame || (frameForLog ? createTransactionFrame(label, frameForLog, {
       connectionId: targetCid,
       deviceId: targetDid,
       taskId: task.id,
       source: origin.source,
       direction: 'tx',
-      unitId: _devForWrite ? _devForWrite.unitId : 1,
+      unitId: devForWrite.unitId,
       functionCode: fn,
-      durationMs: extra.simulated ? 5 : 20,
+      durationMs: extra.durationMs || 0,
       status: ok ? 'ok' : 'error',
       error: ok ? '' : (extra.error || summaryText),
-      requestHex: _frameForLog.request,
-      responseHex: _frameForLog.response,
-    }) : null
+      transactionId: extra.transactionId,
+      at: extra.at || Date.now(),
+    }) : null)
+    if (_entry) {
+      await commitWriteResult(home, room.cwd, {
+        baseConfigVersion: pack.configVersion,
+        connectionId: targetCid,
+        deviceId: targetDid,
+        pointValues: extra.pointValues || [],
+        frame: _entry,
+      })
+    }
+    const errorCode = extra.errorCode || (!ok
+      ? (extra.readbackMismatch ? ERROR_CODES.WRITE_READBACK_MISMATCH
+        : (!extra.readbackOk && extra.readbackTried ? ERROR_CODES.STALE_VALUE : undefined))
+      : undefined)
     return {
       ok,
       taskId: task.id,
@@ -872,6 +893,11 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       simulated: !!extra.simulated,
       ...(ok ? {} : { error: summaryText, errorCode }),
       ...(errorCode ? { errorCode } : {}),
+      ...(extra.outcomeUnknown ? {
+        outcomeUnknown: true,
+        retryable: false,
+        transportErrorCode: extra.transportErrorCode || 'MODBUS_TIMEOUT',
+      } : {}),
     }
   }
 
@@ -892,24 +918,95 @@ export const modbusWrite = async (home, cwd, body, opts) => {
       values: vals,
       simulated: true,
       readback: check.values.slice(),
+      pointValues: vals.filter((rec) => targetPointIds.includes(rec.pointId || rec.key)),
     })
   }
 
-  const ran = await runModbusScript(bindings.python, 'modbus_write.py', [
-    '--function', String(check.fc),
-    '--address', String(address),
-    '--values', check.values.join(','),
-    '--debug',
-  ], conn, { cwd: room.cwd, timeoutMs: 20000, signal })
-  if (ran.cancelled) {
+  const writeReq = toWriteRequest({
+    cwd: room.cwd,
+    connection: targetConnObj,
+    device: pack.devices.find((d) => d.id === targetDid) || { id: targetDid, unitId: 1 },
+    point: { address, function: fn },
+    values: check.values,
+    timeoutMs: 20000,
+    configVersion: pack.configVersion,
+    fc: check.fc,
+    source: origin.source,
+  })
+  const ran = await transport.write(writeReq, { signal, sim: false })
+  if (ran && ran.error && ran.error.code === 'CANCELLED') {
     finishTask(home, room.cwd, task.id, { cancelled: true, summary: '写入已取消' })
     return { ok: false, cancelled: true, taskId: task.id, source: origin.source, error: '已取消' }
   }
-  if (!ran.ok) {
-    return done(false, '写入失败 ' + (ran.error || ''), { frames: framesOf(ran), errorCode: ran.errorCode || ERROR_CODES.TARGET_REQUIRED })
+  if (!ran || ran.ok === false) {
+    const frames = ran && ran.frames
+    const code = ran && ran.error && ran.error.code
+    if (code === 'MODBUS_TIMEOUT') {
+      return done(false, '写入响应超时，设备是否已执行未知；请先读取回读值，不要直接重试', {
+        frames,
+        frame: createTransactionFrame(label, frames || {}, {
+          connectionId: targetCid,
+          deviceId: targetDid,
+          taskId: task.id,
+          source: origin.source,
+          unitId: writeReq.unitId,
+          functionCode: check.fc,
+          durationMs: ran && ran.durationMs || 0,
+          transactionId: ran && ran.transactionId,
+          status: 'error',
+          error: 'WRITE_OUTCOME_UNKNOWN',
+          at: Date.now(),
+        }),
+        transactionId: ran && ran.transactionId,
+        durationMs: ran && ran.durationMs,
+        errorCode: ERROR_CODES.WRITE_OUTCOME_UNKNOWN,
+        transportErrorCode: 'MODBUS_TIMEOUT',
+        outcomeUnknown: true,
+        retryable: false,
+      })
+    }
+    return done(false, '写入失败 ' + ((ran && ran.error && ran.error.message) || (ran && ran.error) || ''), {
+      frames,
+      frame: frames || ran && ran.transactionId ? createTransactionFrame(label, frames || {}, {
+        connectionId: targetCid,
+        deviceId: targetDid,
+        taskId: task.id,
+        source: origin.source,
+        unitId: writeReq.unitId,
+        functionCode: check.fc,
+        durationMs: ran && ran.durationMs || 0,
+        transactionId: ran && ran.transactionId,
+        status: 'error',
+        error: (ran && ran.error && ran.error.message) || '',
+        at: Date.now(),
+      }) : null,
+      transactionId: ran && ran.transactionId,
+      durationMs: ran && ran.durationMs,
+      errorCode: code || ERROR_CODES.TARGET_REQUIRED,
+    })
   }
-  // Read back the written range so success means verified.
-  const readbackRan = await runReadTx(bindings.python, conn, fn, address, count, room.cwd, 20000, signal)
+  const writeFrame = createTransactionFrame(label, ran.frames || {}, {
+    connectionId: targetCid,
+    deviceId: targetDid,
+    taskId: task.id,
+    source: origin.source,
+    unitId: writeReq.unitId,
+    functionCode: check.fc,
+    durationMs: ran.durationMs || 0,
+    transactionId: ran.transactionId,
+    status: 'ok',
+    at: Date.now(),
+  })
+  const readbackRan = await runReadTx(
+    transport,
+    pack,
+    targetConnObj,
+    pack.devices.find((d) => d.id === targetDid) || { id: targetDid, unitId: writeReq.unitId },
+    { fc: fn, address, count, connectionId: targetCid, deviceId: targetDid },
+    room.cwd,
+    20000,
+    signal,
+  )
   const raw = readbackRan.ok && readbackRan.result && readbackRan.result.details && Array.isArray(readbackRan.result.details.raw)
     ? readbackRan.result.details.raw.slice(0, count)
     : []
@@ -929,13 +1026,14 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     ? (mismatch ? '，回读不一致：' + JSON.stringify(raw) : '，回读一致')
     : ('，回读失败 ' + (readbackRan.error || '')))
   // persist values immediately for readback
-  try {
-    saveWorkspace(home, room.cwd, { modbus: { values: vals, version: 3 } })
-  } catch {}
   return done(readbackOk && !mismatch, summary, {
     values: vals,
     readback: readbackOk ? raw : [],
-    frames: framesOf(ran) || framesOf(readbackRan),
+    frame: writeFrame,
+    frames: ran.frames || readbackRan.frames,
+    transactionId: writeFrame.transactionId,
+    durationMs: writeFrame.durationMs,
+    pointValues: vals.filter((rec) => targetPointIds.includes(rec.pointId || rec.key)),
     readbackOk,
     readbackTried: true,
     readbackMismatch: !!mismatch,
@@ -999,40 +1097,51 @@ export const modbusPoll = async (home, cwd, opts) => {
         pollingByConnection[connId] = { ...(pollingByConnection[connId] || { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' }), lastAt: Date.now(), lastOk: true, error: '' }
         continue
       }
-      // check python bindings only if any non-sim connection needs it
-      if (!conn.sim) {
-        const bindings = loadBindings(home)
-        const missing = needPython(bindings)
-        if (missing) {
-          return { ok: false, error: missing, polling: pollingByConnection[connId] || pack.polling, pollingByConnection, values }
-        }
-      }
-      const batches = planReadBatches(pts)
+      const transport = transportOf(opts)
+      const scopes = planScopedReadBatches(stampPoints({ ...pack, points: pts }))
       const interval = pollingByConnection[connId] || { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' }
       let connOk = true
-      for (const batch of batches) {
-        if (aborted(signal)) { timedOut = true; ok = false; connOk = false; break }
-        const bindings = conn.sim ? { python: '' } : loadBindings(home)
-        const ran = await (conn.sim
-          ? Promise.resolve({
-            ok: true,
-            result: { details: { raw: Array.from({ length: batch.count }, (_, i) => ((batch.address + i) * 10 + Math.floor(Date.now() / 1000)) & 0xffff) } },
+      for (const scope of scopes) {
+        const batchConnObj = pack.connections.find((c) => c.id === scope.connectionId) || connObj
+        const batchDevice = pack.devices.find((d) => d.id === scope.deviceId) || { id: scope.deviceId, unitId: scope.unitId }
+        for (const batch of scope.batches) {
+          if (aborted(signal)) { timedOut = true; ok = false; connOk = false; break }
+          const ran = await runReadTx(transport, pack, batchConnObj, batchDevice, batch, room.cwd, 4000, signal, 'polling')
+          if (ran.cancelled || aborted(signal)) { timedOut = true; ok = false; connOk = false; break }
+          if (!ran.ok) { ok = false; connOk = false }
+          const raw = ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw) ? ran.result.details.raw : []
+          values = scatterBatch(values, pack.points, batch, raw, !!ran.ok, ran.ok ? '' : (ran.error || ''))
+          let f = ran.frames || framesOf(ran)
+          if (!f && batchConnObj && batchConnObj.conn && batchConnObj.conn.sim) {
+            f = { request: `SIM TX ${batch.fc}@${batch.address}×${batch.count}`, response: 'SIM RX ' + raw.slice(0, 3).join(','), trace: [], frameFormat: 'rtu-adu' }
+          }
+          const entry = f ? createTransactionFrame('读 ' + functionTag(batch.fc) + batch.address + '×' + batch.count + '（监视）', f, {
+            connectionId: scope.connectionId || connId,
+            deviceId: scope.deviceId,
+            unitId: scope.unitId,
+            functionCode: batch.fc,
+            durationMs: ran.durationMs || 0,
+            transactionId: ran.transactionId,
+            status: ran.ok ? 'ok' : 'error',
+            error: ran.ok ? '' : (ran.error || ''),
+            source: 'polling',
+            port: (batchConnObj && batchConnObj.conn && batchConnObj.conn.port) || '',
+            at: Date.now(),
+          }) : null
+          if (entry) {
+            framesLog.push(entry)
+            if (!framesByConnection[connId]) framesByConnection[connId] = []
+            framesByConnection[connId] = framesByConnection[connId].concat([entry]).slice(-500)
+          }
+          await commitPollResult(home, room.cwd, {
+            baseConfigVersion: pack.configVersion,
+            connectionId: scope.connectionId || connId,
+            deviceId: scope.deviceId,
+            pointValues: pointValuesOfBatch(values, pack, batch),
+            frame: entry,
           })
-          : runReadTx(bindings.python, conn, batch.fc, batch.address, batch.count, room.cwd, 4000, signal))
-        if (ran.cancelled || aborted(signal)) { timedOut = true; ok = false; connOk = false; break }
-        if (!ran.ok) { ok = false; connOk = false }
-        const raw = ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw) ? ran.result.details.raw : []
-        values = scatterBatch(values, pack.points, batch, raw, !!ran.ok, ran.ok ? '' : (ran.error || ''))
-        let f = framesOf(ran)
-        if (!f && conn.sim) {
-          f = { request: `SIM TX ${batch.fc}@${batch.address}×${batch.count}`, response: 'SIM RX ' + raw.slice(0, 3).join(','), trace: [] }
         }
-        if (f) {
-          const entry = frameEntry('读 ' + functionTag(batch.fc) + batch.address + '×' + batch.count + '（监视）', f, Date.now(), { connectionId: connId })
-          framesLog.push(entry)
-          if (!framesByConnection[connId]) framesByConnection[connId] = []
-          framesByConnection[connId] = framesByConnection[connId].concat([entry]).slice(-500)
-        }
+        if (!connOk) break
       }
       pollingByConnection[connId] = { ...interval, lastAt: Date.now(), lastOk: connOk && !timedOut, error: timedOut ? '轮询超时' : (connOk ? '' : '轮询部分失败') }
     }
@@ -1075,17 +1184,16 @@ export const modbusPoll = async (home, cwd, opts) => {
         recordBenchEvent(home, room.cwd, { action: 'alarm-clear', ok: true, summary: '通信恢复：' + commRec.slice(0,3).map(c=> c.connectionId).join('；') }, { source: 'system' })
       }
     }
-    const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
-    const mergedPolling = { ...latest.pollingByConnection, ...pollingByConnection }
-    const activePolling = mergedPolling[pack.activeConnectionId] || pollingByConnection[targetConns[0]?.id] || latest.polling
+    await commitPollResult(home, room.cwd, {
+      baseConfigVersion: pack.configVersion,
+      pollingByConnection,
+    })
     const saved = saveWorkspace(home, room.cwd, {
       modbus: {
-        values,
         alarmActive: activeBool,
         alarmState: alarmEval.next,
-        polling: activePolling,
-        pollingByConnection: mergedPolling,
-        framesByConnection,
+        polling: pollingByConnection[pack.activeConnectionId] || pollingByConnection[targetConns[0]?.id] || pack.polling,
+        pollingByConnection,
         version: 3,
       },
     })

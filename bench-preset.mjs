@@ -35,8 +35,12 @@ export const VISION_GUIDANCE = [
   '- Background reads must not steal focus; only explicit focus requests switch tabs.',
   '- Config changes produce draft + diff for user apply.',
   '- Writes/downloads/resets require approval with endpoint fingerprint and config version.',
-  '- Diagnostics cite build log, point quality, frames, trend intervals or operation results.',
+  '- Diagnostics cite build log, point quality, frames (transactionId), trend intervals or operation results.',
   '- Do not stream high-frequency values or bulk frames into system prompt.',
+  '- Modbus TCP/RTU and raw serial use the bundled Node runtime; they do not require Python.',
+  '- WRITE_OUTCOME_UNKNOWN means the write may have executed; do not retry. Read the address first and wait for the user to re-approve.',
+  '- TCP frames are protocol-normalized, not raw MBAP.',
+  '- Use an existing HMI serial connection. If it is disconnected, call connect first. Never open a second serial port just to view frames; TX/RX from user, polling and Agent I/O already appear on the frames page.',
 ].join('\n')
 
 const LEGACY_VISION_PERSONAS = [

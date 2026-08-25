@@ -20,10 +20,12 @@ export function createSettingsPage(React, t, post) {
     const [checking, setChecking] = React.useState(false)
     const [checks, setChecks] = React.useState(null)
     const [message, setMessage] = React.useState(null)
+    const [ioRuntime, setIoRuntime] = React.useState(null)
 
     const applySnap = (data) => {
       if (data && data.bindings) setBindings(data.bindings)
       if (data && data.health) setHealth(data.health)
+      if (data && data.ioRuntime) setIoRuntime(data.ioRuntime)
     }
 
     React.useEffect(() => {
@@ -61,6 +63,7 @@ export function createSettingsPage(React, t, post) {
     return el('div', { className: 'dvb-page' },
       el('div', { className: 'dvb-title' }, t('settingsTitle')),
       el('div', { className: 'dvb-hint' }, t('settingsHint')),
+      el('div', { className: 'dvb-hint' }, t('ioRuntime') + (ioRuntime && ioRuntime.state ? ' · ' + ioRuntime.state : ' · idle')),
       FIELDS.map((field) => {
         const kind = statusKind(health[field.key])
         return el('div', { key: field.key, className: 'dvb-row' },
@@ -92,7 +95,17 @@ export function createSettingsPage(React, t, post) {
           },
             el('span', { className: 'dvb-badge' }, item.ok ? '✓' : '✗'),
             el('span', null, item.name),
-            el('span', { className: 'dvb-hint' }, item.detail))))
+            el('span', { className: 'dvb-hint' }, item.detail))),
+          checks.capabilities
+            ? Object.entries(checks.capabilities).map(([key, cap]) => el('div', {
+              key: 'cap-' + key,
+              className: 'dvb-task',
+              'data-ok': cap && cap.ready ? 'true' : 'false',
+            },
+              el('span', { className: 'dvb-badge' }, cap && cap.ready ? '✓' : '✗'),
+              el('span', null, key),
+              el('span', { className: 'dvb-hint' }, (cap && cap.reason) || '')))
+            : null)
         : null)
   }
 }

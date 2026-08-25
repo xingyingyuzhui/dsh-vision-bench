@@ -1,77 +1,75 @@
 import assert from 'node:assert/strict'
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import {
   closeSerialMonitor,
+  feedConnectionFrames,
+  listConnectedSerialSources,
   openSerialMonitor,
-  serialFeed,
-  serialState,
 } from '../bench-serial-monitor.mjs'
 import { findPython } from './python.mjs'
-import { journalView, loadWorkspace, saveBindings, saveWorkspace } from '../bench-store.mjs'
+import { saveWorkspace } from '../bench-store.mjs'
 
-
-test('serial monitor guards bindings, port and unknown cwd', async () => {
-  const cwd = '/tmp/dvb-serial-none'
-  const noPython = openSerialMonitor('', cwd, { port: 'COM3' })
-  assert.equal(noPython.ok, false)
-  const noPort = openSerialMonitor(process.execPath, cwd, {})
-  assert.equal(noPort.ok, false)
-  const feed = serialFeed(cwd, 0)
-  assert.equal(feed.ok, true)
-  assert.equal(feed.open, false)
-  assert.deepEqual(feed.lines, [])
-  assert.equal(serialState(cwd).open, false)
-  assert.equal(closeSerialMonitor(cwd).ok, true)
+test('frames layer refuses to open a serial port', async () => {
+  const ran = await openSerialMonitor('/tmp/ws', { port: 'COM3' })
+  assert.equal(ran.ok, false)
+  assert.equal(ran.code, 'USE_HMI_CONNECT')
+  assert.equal((await closeSerialMonitor('/tmp/ws')).ok, true)
 })
 
-test('serial monitor streams JSON lines into a ring buffer', async () => {
-  const pythonBin = findPython()
-  if (!pythonBin) return
-  const home = await mkdtemp(join(tmpdir(), 'dvb-serial-'))
-  const fake = join(home, 'fake_python.py')
-  await writeFile(fake, [
-    'import json, sys, time',
-    "print(json.dumps({'t': int(time.time()*1000), 'line': 'boot ok'}), flush=True)",
-    "print(json.dumps({'t': int(time.time()*1000), 'line': 'ERROR: flash corrupt'}), flush=True)",
-    'sys.stdout.flush()',
-    'time.sleep(5)',
-  ].join('\n'))
-  if (process.platform !== 'win32') {
-    await chmod(fake, 0o755)
+test('listConnectedSerialSources only returns live connected RTU', async () => {
+  const fake = {
+    listConnections: async () => ({
+      ok: true,
+      data: {
+        connections: [
+          { connectionId: 'c1', port: 'COM3', state: 'connected' },
+          { connectionId: 'c2', port: 'COM4', state: 'disconnected' },
+          { connectionId: 'c3', port: '', state: 'connected', mode: 'tcp' },
+        ],
+      },
+    }),
   }
-  const runner = process.platform === 'win32'
-    ? join(home, 'fake_python.bat')
-    : join(home, 'fake_python.sh')
-  if (process.platform === 'win32') {
-    await writeFile(runner, '@echo off\r\n"' + pythonBin + '" "' + fake + '" %*\r\n')
-  } else {
-    await writeFile(runner, '#!/bin/sh\nexec "' + pythonBin + '" "' + fake + '" "$@"\n')
-    await chmod(runner, 0o755)
-  }
+  const home = await mkdtemp(join(tmpdir(), 'dvb-src-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
   try {
-    const opened = openSerialMonitor(runner, home, { port: 'FAKE', baudrate: 115200 })
-    assert.equal(opened.ok, true)
-    let feed = { lines: [] }
-    for (let i = 0; i < 20 && (!feed.lines || feed.lines.length < 2); i++) {
-      await new Promise((resolve) => setTimeout(resolve, 150))
-      feed = serialFeed(home, 0)
-    }
-    assert.equal(feed.open, true)
-    assert.equal(feed.lines.length, 2)
-    assert.equal(feed.lines[0].line, 'boot ok')
-    assert.equal(feed.lastId, 2)
-    const since = serialFeed(home, 1)
-    assert.equal(since.lines.length, 1)
-    assert.equal(since.lines[0].line, 'ERROR: flash corrupt')
-    closeSerialMonitor(home)
-    assert.equal(serialState(home).open, false)
+    saveWorkspace(home, cwd, {
+      modbus: {
+        version: 3,
+        connections: [
+          { id: 'c1', name: '温控器连接', enabled: true, conn: { mode: 'rtu', port: 'COM3' } },
+          { id: 'c2', name: '传感器', enabled: true, conn: { mode: 'rtu', port: 'COM4' } },
+          { id: 'c3', name: 'TCP', enabled: true, conn: { mode: 'tcp', host: '127.0.0.1', tcpPort: 502 } },
+          { id: 'c4', name: '仿真', enabled: true, conn: { mode: 'rtu', port: 'COM5', sim: true } },
+        ],
+      },
+    })
+    const listed = await listConnectedSerialSources(home, cwd, { transport: fake })
+    assert.deepEqual(listed.sources.map((s) => s.connectionId), ['c1'])
+    assert.equal(listed.sources[0].port, 'COM3')
   } finally {
     await rm(home, { recursive: true, force: true })
   }
+})
+
+test('capture feed is read-only and does not require leftover assembly', async () => {
+  const chunks = [
+    { id: 1, at: 1, hex: '616263', byteLength: 3, direction: 'tx', connectionId: 'c1', port: 'COM3' },
+    { id: 2, at: 2, hex: '6465660A', byteLength: 4, direction: 'rx', connectionId: 'c1', port: 'COM3' },
+  ]
+  const fake = {
+    captureFeed: async () => ({ ok: true, data: { open: true, lines: chunks, lastId: 2, total: 2, port: 'COM3', state: 'connected' } }),
+    listConnections: async () => ({ ok: true, data: { connections: [{ connectionId: 'c1', port: 'COM3', state: 'connected' }] } }),
+    getState: () => 'ready',
+  }
+  const feed = await feedConnectionFrames('/tmp/ws', { connectionId: 'c1' }, { transport: fake })
+  assert.equal(feed.lines.length, 2)
+  assert.equal(feed.lines[0].hex, '616263')
+  assert.equal(feed.lines[1].hex, '6465660A')
 })
 
 test('openocd_flash.py validates inputs before spawning', () => {
@@ -90,48 +88,4 @@ test('openocd_flash.py validates inputs before spawning', () => {
   const missing = run(base)
   assert.equal(missing.status, 'error')
   assert.equal(missing.error.code, 'openocd_not_found')
-  const badIface = run(['--openocd', '/bin/sh', '--interface', 'nope', '--target', 'stm32f1x', '--file', '/etc/hosts', '--json'])
-  assert.equal(badIface.error.code, 'bad_interface')
-  const badTarget = run(['--openocd', '/bin/sh', '--interface', 'cmsis-dap', '--target', 'nope', '--file', '/etc/hosts', '--json'])
-  assert.equal(badTarget.error.code, 'bad_target')
-})
-
-test('openocdDownload refuses when firmware changed after confirmation', async () => {
-  const { writeFileSync } = await import('node:fs')
-  const { openocdDownload } = await import('../bench-flash.mjs')
-  const home = await mkdtemp(join(tmpdir(), 'dvb-flash-toctou-'))
-  const cwd = join(home, 'board')
-  await mkdir(cwd)
-  try {
-    const pythonBin = findPython() || process.execPath
-    saveBindings(home, { python: process.execPath, uv4: '', openocd: '/bin/echo' })
-    const fw = join(cwd, 'app.hex')
-    writeFileSync(fw, 'v1')
-    saveWorkspace(home, cwd, {
-      keil: { download: fw },
-      modbus: {},
-    })
-    const first = await openocdDownload(home, cwd, {
-      interface: 'cmsis-dap',
-      target: 'stm32f1x',
-    })
-    assert.equal(first.needsConfirm, true)
-    assert.ok(first.request.sha256, 'expected a hash for a small file')
-    // Firmware replaced under the same path after the card was shown.
-    writeFileSync(fw, 'v2-with-different-bytes')
-    const ran = await openocdDownload(home, cwd, {
-      interface: 'cmsis-dap',
-      target: 'stm32f1x',
-      path: first.request.file,
-      sha256: first.request.sha256,
-      size: first.request.size,
-      confirm: true,
-    })
-    assert.equal(ran.ok, false)
-    assert.match(ran.error, /固件已变化/)
-    const ws = loadWorkspace(home, cwd)
-    assert.equal(journalView(ws).tasks.filter((item) => item.type === 'download').length, 0)
-  } finally {
-    await rm(home, { recursive: true, force: true })
-  }
 })

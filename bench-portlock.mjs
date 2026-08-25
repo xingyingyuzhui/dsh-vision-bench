@@ -1,5 +1,4 @@
-// Serial ports are exclusive on Windows: every pymodbus transaction goes through
-// a per-port mutex so readers, writers and polls never open the same COM twice.
+// Host-side COM key helper. Physical owner tables live in the I/O Worker.
 const portLocks = new Map()
 
 export const portKey = (port) =>

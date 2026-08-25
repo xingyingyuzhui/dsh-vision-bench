@@ -135,29 +135,7 @@ export function createDebugView(React, t, post, openProject) {
       setWorkspace((prev) => ({ ...prev, keil: { ...prev.keil, ...patch } }))
     }
 
-    const boundId = workspace.session && workspace.session.boundId ? workspace.session.boundId : ''
-    const bindState = !sessionId
-      ? 'none'
-      : (boundId === sessionId ? 'self' : (boundId ? 'other' : 'open'))
-
-    function bindToSelf() {
-      if (!cwd || !sessionId) return
-      post('/dsh-vision-bench/session/bind', { cwd, sessionId }, 15000).then(() => {
-        return post('/dsh-vision-bench/state', { cwd })
-      }).then((data) => {
-        if (data && data.workspace) {
-          setWorkspace((prev) => ({ ...prev, session: data.workspace.session || prev.session }))
-        }
-      }).catch(() => { /* chip refreshes on next poll */ })
-    }
-
-    function unbindBench() {
-      if (!cwd) return
-      post('/dsh-vision-bench/session/unbind', { cwd }, 15000).then(() => {
-        setWorkspace((prev) => ({ ...prev, session: { boundId: '' } }))
-      }).catch(() => { /* chip refreshes on next poll */ })
-    }
-
+    // Task7/0.19.2: Vision 自动服务当前 Session — 绑定 UI 已移除，boundId 只读兼容。
     function resolveManual(id, done) {
       if (!cwd) return
       post('/dsh-vision-bench/manual/resolve', { cwd, id, done }, 15000).then(() => {
@@ -447,26 +425,6 @@ export function createDebugView(React, t, post, openProject) {
         { key: 'uv4', health: health.uv4 },
       ]),
       visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites, sessionId }),
-      sessionId
-        ? el('div', { className: 'dvb-bindbar' },
-          el('span', {
-            className: 'dvb-chip',
-            'data-kind': bindState === 'self' ? 'ready' : 'unbound',
-          }, t('bindChip') + ' · ' + t('bindState_' + bindState)),
-          bindState === 'self'
-            ? el('button', {
-              type: 'button', className: 'dvb-btn',
-              disabled: !cwd,
-              onClick: unbindBench,
-            }, t('bindOff'))
-            : el('button', {
-              type: 'button',
-              className: 'dvb-btn' + (bindState === 'open' ? ' dvb-btn-primary' : ''),
-              disabled: !cwd,
-              title: t('bindHint'),
-              onClick: bindToSelf,
-            }, t('bindOn')))
-        : null,
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
       el('div', { className: 'dvb-split' },
         el('div', { className: 'dvb-panel' },

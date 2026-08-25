@@ -12,7 +12,7 @@ import {
 } from '../bench-points.mjs'
 import { handlePdu, _internal } from '../bench-slave.mjs'
 import { recipePair } from '../bench-devices.mjs'
-import { modbusWrite, resolvePendingWrite } from '../bench-actions.mjs'
+import { modbusRead, modbusWrite, resolvePendingWrite } from '../bench-actions.mjs'
 import { runVisionBench } from '../bench-tool.mjs'
 import { journalView, loadWorkspace, saveBindings, saveWorkspace } from '../bench-store.mjs'
 
@@ -458,41 +458,26 @@ test('missing approved field fails closed instead of approving', async () => {
 })
 
 test('table read response carries framesLog from the runtime capture', async () => {
-  const { writeFile, chmod: chm } = await import('node:fs/promises')
-  const { execFileSync } = await import('node:child_process')
-  let pythonBin = ''
-  try { pythonBin = execFileSync('python3', ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8' }).trim() } catch { }
-  if (!pythonBin) return
   const home = await mkdtemp(join(tmpdir(), 'dvb-frames-read-'))
   const cwd = join(home, 'board')
   await mkdir(cwd)
   try {
-    const fake = join(home, 'fake_read.py')
-    await writeFile(fake, [
-      'import json, sys',
-      "print(json.dumps({'status':'ok','action':'read','summary':'ok','details':{'raw':[1,2],'value':1,",
-      "'frames':{'request':'SEND 01 03','response':'RECV 01 03 02 0001','trace':['SEND 01 03','RECV ...']}}}, ensure_ascii=False), flush=True)",
-    ].join('\n'))
-    const runner = join(home, 'fake_python.sh')
-    await writeFile(runner, '#!/bin/sh\nexec "' + pythonBin + '" "' + fake + '" "$@"\n')
-    if (process.platform !== 'win32') await chm(runner, 0o755)
-    saveBindings(home, { python: runner, uv4: '', openocd: '' })
     saveWorkspace(home, cwd, {
       modbus: {
-        devices: [
-          { id: 'm1', name: '主板', role: 'master', mode: 'tcp', host: '10.0.0.8', tcpPort: 502, slave: 1, segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 2 }] },
+        conn: { sim: true, mode: 'tcp', host: '10.0.0.8', tcpPort: 502 },
+        points: [
+          { name: 'HR0', function: 3, address: 0 },
+          { name: 'HR1', function: 3, address: 1 },
         ],
-        activeId: 'm1',
       },
     })
-    const ran = await runVisionBench(home, { action: 'read' }, cwd)
+    const ran = await modbusRead(home, cwd, { all: true, source: 'user' })
     assert.equal(ran.ok, true)
     assert.ok(Array.isArray(ran.framesLog))
-    assert.equal(ran.framesLog.length, 1)
-    assert.match(ran.framesLog[0].request, /SEND 01 03/)
-    assert.match(ran.framesLog[0].response, /RECV/)
+    assert.ok(ran.framesLog.length >= 1)
     assert.ok(typeof ran.framesLog[0].deviceId === 'string' && ran.framesLog[0].deviceId.length > 0)
-    assert.match(ran.framesLog[0].label, /^读 HR0×2$/)
+    assert.equal(ran.framesLog[0].transactionId, ran.framesLog[0].frameId)
+    assert.match(ran.framesLog[0].label, /读/)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

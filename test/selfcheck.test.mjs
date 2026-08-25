@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { runSelfCheck } from '../bench-check.mjs'
+import { stopVisionIoBroker } from '../bench-io-broker.mjs'
 import { saveBindings } from '../bench-store.mjs'
 
 test('runSelfCheck reports structured results without bindings', async () => {
@@ -23,6 +24,11 @@ test('runSelfCheck reports structured results without bindings', async () => {
     assert.equal(workspace.ok, true)
     const binds = ran.checks.filter((item) => item.name.startsWith('bind-'))
     assert.equal(binds.every((item) => item.ok === false), true)
+    assert.ok(ran.capabilities)
+    assert.equal(ran.capabilities.keilProject.ready, false)
+    assert.equal(typeof ran.requiredOk, 'boolean')
+    assert.equal(ran.ok, ran.requiredOk)
+    await stopVisionIoBroker('test')
   } finally {
     await rm(home, { recursive: true, force: true })
   }
@@ -37,8 +43,11 @@ test('runSelfCheck probes a runnable interpreter', async () => {
     const ran = await runSelfCheck(home, cwd)
     const runs = ran.checks.find((item) => item.name === 'python-runs')
     assert.equal(runs.ok, true)
-    const modbus = ran.checks.find((item) => item.name === 'pymodbus')
-    assert.equal(typeof modbus.ok, 'boolean')
+    const io = ran.checks.find((item) => item.name === 'io-runtime')
+    assert.equal(typeof io.ok, 'boolean')
+    assert.ok(ran.capabilities)
+    assert.equal(typeof ran.capabilities.modbusTcp.ready, 'boolean')
+    await stopVisionIoBroker('test')
   } finally {
     await rm(home, { recursive: true, force: true })
   }

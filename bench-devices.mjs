@@ -255,6 +255,7 @@ export const normalizeFramesByConnection = (input, connections) => {
       if (f && typeof f.error === 'string') rec.error = f.error.slice(0, 200)
       if (f && typeof f.requestHex === 'string') rec.requestHex = f.requestHex.slice(0, 400)
       if (f && typeof f.responseHex === 'string') rec.responseHex = f.responseHex.slice(0, 400)
+      if (f && (f.frameFormat === 'tcp-normalized' || f.frameFormat === 'rtu-adu')) rec.frameFormat = f.frameFormat
       return rec
     }).slice(-MAX_FRAMES_PER_CONN)
   }

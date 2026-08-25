@@ -217,7 +217,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
   if (action === 'connect') {
     const cid = typeof args.connectionId === 'string' ? args.connectionId : (typeof args.connId === 'string' ? args.connId : undefined)
     const did = typeof args.deviceId === 'string' ? args.deviceId : undefined
-    const ran = connectOp(home, room.cwd, {
+    const ran = await connectOp(home, room.cwd, {
       connectionId: cid,
       connId: cid,
       deviceId: did,
@@ -231,7 +231,9 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
       tcpPort: args.tcpPort,
       slave: args.slave,
       sim: args.sim,
-    })
+      open: args.close === true ? false : true,
+      close: args.close === true,
+    }, opts)
     return { action, ...ran }
   }
 
@@ -433,9 +435,9 @@ export function visionBenchTool(home) {
       + 'read：不传 address/function 则按点表整段读；传入则单次读；必须携带 connectionId/connId+deviceId 显式定向（pointId 校验按 connectionId+deviceId+area+address），不得依赖隐式当前连接；错误码 TARGET_REQUIRED/DEVICE_DISABLED/PORT_IN_USE/STALE_VALUE 等显式；'
       + 'write：写线圈或保持寄存器（function 只能 1 或 3，address 必填且为原始地址 0–65535；values 数组长度 1 走单点写 FC05/06，大于 1 走批量写 FC15/16），写入后自动回读并报告一致性，必须携带 connectionId/connId+deviceId 显式定向，endpoint 指纹按连接；错误码 WRITE_READBACK_MISMATCH/ENDPOINT_DRIFT/DEVICE_DISABLED 等；'
       + 'Agent 发起的 write 需要用户在界面上批准：返回 needsConfirm 时告知用户去上位机页的确认卡操作，批准或拒绝后结果会以通知回到本会话；'
-      + 'connect：配置串口/TCP 连接（mode rtu|tcp、port、baudrate、bytesize 7|8、parity N|E|O、stopbits 1|2、host、tcpPort、slave），支持 connectionId/connId 定向到指定连接；错误码 PORT_IN_USE；'
+      + 'connect：仅凭 connectionId 可直接连接已保存的配置或断开（close=true 时不要求其他参数）；可附 mode/port/baudrate/bytesize 7|8/parity N|E|O/stopbits 1|2/host/tcpPort/slave 保存后连接；仿真连接不占串口；从机模式未启用（ROLE_NOT_SUPPORTED）；错误码 PORT_IN_USE；未连接时先 connect 再 read/write；禁止为查看报文再开一套串口；'
       + 'points：配置点位表——op=list 列出全部点位与当前值，op=add/update 配合 point 或 points 数组增改（每点字段 name/function/address/scale/offset/unit/alarmMin/alarmMax，function 为 01/02/03/04，支持 connectionId/connId+deviceId 定向），op=remove 配合 ids 删除，op=clear 清空。'
-      + 'frames：查询某连接的报文流，必须携带 connectionId，可选 frameId/deviceId/limit/offset，错误码 TARGET_REQUIRED/CONNECTION_NOT_FOUND/DEVICE_DISABLED/STALE_VALUE；'
+      + 'frames：查询已有连接产生的报文，必须携带 connectionId；报文来自同一串口实例（用户读写/自动刷新/本 Agent 操作都会进入当前 Session 的串口报文页），不要为看报文单独打开串口；可选 frameId/deviceId/limit/offset，错误码 TARGET_REQUIRED/CONNECTION_NOT_FOUND/DEVICE_DISABLED/STALE_VALUE；'
       + 'focus：Agent 请求 UI 聚焦到指定连接/设备/点位/报文/曲线区间/告警，必须携带显式 ID（connectionId/deviceId/pointId/frameId/trendKey/alarmId），支持临时监视组 tempWatchIds 与证据回挂 evidence（后台任务 badgeOnly 不抢焦点，并提供 prev 回退）；'
       + 'trend/alarm/evidence：分别返回趋势区间、告警状态与结论证据（关联编译/日志/点值/报文/趋势）；均要求显式 ID 与配置版本；'
       + 'draft：配置草稿以 RFC6902 patch 表示，基于明确 baseConfigVersion，用户批准前不写入共享配置；op=list 查询、op=create 创建（patch 必填、基于 baseConfigVersion）、op=discard/get 丢弃或查询；返回新增/删除/修改、COM 冲突、Unit ID 冲突和影响点位数；创建成功返回 needsConfirm:true，需用户在上位机确认卡批准（Agent 不可直接 apply）；'

@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { runVisionBench } from '../bench-tool.mjs'
-import { ERROR_CODES, listFrames, requestFocus, resolvePendingWrite } from '../bench-modbus.mjs'
+import { ERROR_CODES, listFrames, modbusWrite, requestFocus, resolvePendingWrite } from '../bench-modbus.mjs'
 import { buildAgentRef, agentRefToText, getFocusState, setFocusState } from '../bench-shared.mjs'
-import { loadWorkspace, saveBindings, saveWorkspace } from '../bench-store.mjs'
+import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
 
 test('Agent frames requires explicit connectionId (TARGET_REQUIRED) and lists with stable id', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-agent-frames-'))
@@ -160,37 +160,70 @@ test('approved write reports protocol result and readback consistency (§16.5-34
   const home = await mkdtemp(join(tmpdir(), 'dvb-agent-readback-'))
   const cwd = join(home, 'board')
   await mkdir(cwd)
+  const transport = {
+    write: async () => ({
+      ok: true,
+      data: [7],
+      transactionId: 'fake-w',
+      durationMs: 1,
+      frames: { request: 'TX 06', response: 'RX 06', requestHex: '010600000007', responseHex: '010600000007', frameFormat: 'tcp-normalized' },
+    }),
+    read: async () => ({
+      ok: true,
+      data: [7],
+      transactionId: 'fake-r',
+      durationMs: 1,
+      frames: { request: 'TX 03', response: 'RX 03', requestHex: '010300000001', responseHex: '0103020007', frameFormat: 'tcp-normalized' },
+    }),
+  }
   try {
-    const { writeFile, chmod } = await import('node:fs/promises')
-    const { execFileSync } = await import('node:child_process')
-    let pythonBin = ''
-    try { pythonBin = execFileSync('python3', ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8' }).trim() } catch { }
-    if (!pythonBin) return
-    const fake = join(home, 'fake_modbus.py')
-    await writeFile(fake, [
-      'import json, sys',
-      "f = {'request': 'SEND 01 03', 'response': 'RECV 01 03 02 0007', 'trace': ['SEND 01 03']}",
-      "print(json.dumps({'status':'ok','details':{'frames':f,'raw':[7],'value':7} if '--values' not in sys.argv[1:] else {'frames':f}}, ensure_ascii=False), flush=True)",
-    ].join('\n'))
-    const runner = join(home, 'fake_python.sh')
-    await writeFile(runner, '#!/bin/sh\nexec "' + pythonBin + '" "' + fake + '" "$@"\n')
-    if (process.platform !== 'win32') await chmod(runner, 0o755)
-    saveBindings(home, { python: runner, uv4: '', openocd: '' })
     const c1 = { id: 'c1', name: 'C1', role: 'client', enabled: true, conn: { mode: 'tcp', host: '10.0.0.8', tcpPort: 502, slave: 1 } }
     saveWorkspace(home, cwd, { modbus: { version: 3, connections: [c1], devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }], points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: 'T1', area: 'holdingRegister', function: 3, address: 0 }] } })
-    // consistent: written 7, device answers 7 -> summary carries protocol + 回读一致
     const okReq = await runVisionBench(home, { action: 'write', connectionId: 'c1', deviceId: 'd1', function: 3, address: 0, values: [7] }, cwd, { source: 'agent', sessionId: 's1' })
-    const okRun = await resolvePendingWrite(home, cwd, okReq.requestId, true)
+    const okRun = await resolvePendingWrite(home, cwd, okReq.requestId, true, { transport })
     assert.equal(okRun.ok, true)
     assert.match(okRun.summary, /回读一致/)
     assert.deepEqual(okRun.readback, [7])
     assert.ok(okRun.frames && okRun.frames.request)
-    // mismatch: written 5, device still answers 7
     const badReq = await runVisionBench(home, { action: 'write', connectionId: 'c1', deviceId: 'd1', function: 3, address: 0, values: [5] }, cwd, { source: 'agent', sessionId: 's1' })
-    const badRun = await resolvePendingWrite(home, cwd, badReq.requestId, true)
+    const badRun = await resolvePendingWrite(home, cwd, badReq.requestId, true, { transport })
     assert.equal(badRun.ok, false)
     assert.equal(badRun.errorCode, ERROR_CODES.WRITE_READBACK_MISMATCH)
     assert.match(badRun.summary || badRun.error, /回读不一致/)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('write timeout is outcome-unknown and not retried', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-write-unknown-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  const transport = {
+    write: async () => ({
+      ok: false,
+      error: { code: 'MODBUS_TIMEOUT', message: 'I/O 超时' },
+      transactionId: 'tx-timeout',
+      frames: { requestHex: '0106', responseHex: '', frameFormat: 'tcp-normalized' },
+    }),
+    read: async () => { throw new Error('must not readback after unknown write') },
+  }
+  try {
+    saveWorkspace(home, cwd, {
+      modbus: {
+        connections: [{ id: 'c1', name: 'C1', enabled: true, conn: { mode: 'tcp', host: '10.0.0.8', tcpPort: 502 } }],
+        devices: [{ id: 'd1', connectionId: 'c1', unitId: 1 }],
+        points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', function: 3, address: 0, name: 'T1' }],
+      },
+    })
+    const ran = await modbusWrite(home, cwd, {
+      source: 'user', connectionId: 'c1', deviceId: 'd1', function: 3, address: 0, values: [7],
+    }, { transport })
+    assert.equal(ran.ok, false)
+    assert.equal(ran.errorCode, ERROR_CODES.WRITE_OUTCOME_UNKNOWN)
+    assert.equal(ran.outcomeUnknown, true)
+    assert.equal(ran.retryable, false)
+    assert.match(ran.error, /未知/)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

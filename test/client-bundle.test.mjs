@@ -59,6 +59,13 @@ test('generated client keeps the factory contract', () => {
   assert.match(src, /mapTruncated/)
   assert.doesNotMatch(src, /\.uvmpw \/ \.uvprojx/)
   assert.doesNotMatch(src, /\.uvprojx \/ \.uvmpw/)
+  assert.doesNotMatch(src, /require\(['"]serialport['"]\)/)
+  assert.doesNotMatch(src, /require\(['"]modbus-serial['"]\)/)
+  assert.doesNotMatch(src, /from ['"]serialport['"]/)
+  assert.doesNotMatch(src, /from ['"]modbus-serial['"]/)
+  assert.doesNotMatch(src, /node_modules\/(serialport|modbus-serial)/)
+  assert.doesNotMatch(src, /pythonReady \|\| sim/)
+  assert.doesNotMatch(src, /healthReady\(health\.python\)/)
 })
 
 test('generated client is valid JavaScript', () => {

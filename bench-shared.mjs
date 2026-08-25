@@ -92,8 +92,8 @@ export function statusBar(el, t, cwd, rows) {
     el('div', { className: 'dvb-health' }, rows.map((row) => el('span', {
       key: row.key,
       className: 'dvb-chip',
-      'data-kind': statusKind(row.health),
-    }, t(row.key) + ' · ' + t(statusKind(row.health))))),
+      'data-kind': row.kind || statusKind(row.health),
+    }, row.text || (t(row.key) + ' · ' + t(statusKind(row.health)))))),
     cwd
       ? el('div', { className: 'dvb-cwd' }, t('workspace') + '  ' + cwd)
       : el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('needWorkspace')))
@@ -105,9 +105,7 @@ export function visionCollabBar(el, t, opts) {
   const journal = opts && opts.journal || { tasks: [], running: [], timeline: [] }
   const pendingWrites = opts && opts.pendingWrites || opts && opts.pending || []
   const sessionId = opts && opts.sessionId || ''
-  const session = workspace.session || {}
-  const boundId = session.boundId || ''
-  const bindState = !sessionId ? 'none' : (boundId === sessionId ? 'self' : (boundId ? 'other' : 'open'))
+  // Task7/0.19.2: Vision 服务当前 Session — boundId 仅做读取兼容，不再展示
   const running = journal.running || []
   const pendingCount = Array.isArray(pendingWrites) ? pendingWrites.length : 0
   const manualPending = (workspace.manualRequests || []).filter((m) => m.status === 'pending').length
@@ -116,7 +114,6 @@ export function visionCollabBar(el, t, opts) {
   return el('div', { className: 'dvb-vision-bar' },
     el('div', { className: 'dvb-vision-chips' },
       cwd ? el('span', { className: 'dvb-chip', title: cwd }, t('workspace') + ' ' + cwd.slice(-32)) : null,
-      el('span', { className: 'dvb-chip', 'data-kind': bindState === 'self' ? 'ready' : 'unbound' }, t('bindChip') + ' · ' + t('bindState_' + bindState)),
       runningCount ? el('span', { className: 'dvb-chip', 'data-kind': 'live' }, '任务 ' + runningCount) : null,
       pendingCount ? el('span', { className: 'dvb-chip', 'data-kind': 'warn' }, '待确认 ' + pendingCount) : null,
       manualPending ? el('span', { className: 'dvb-chip', 'data-kind': 'warn' }, '人工 ' + manualPending) : null,

@@ -5,7 +5,6 @@ import { seedVisionBenchPreset } from './bench-preset.mjs'
 import {
   appendEvidence,
   applyConfigDraft,
-  bindSession,
   createConfigDraft,
   createManualRequest,
   defaultDshHome,
@@ -20,7 +19,6 @@ import {
   saveBindings,
   saveWorkspace,
   sweepStaleTasks,
-  unbindSession,
 } from './bench-store.mjs'
 import { maybeNotifyResult, notifyBenchEvent, setAgentsRegistry } from './bench-notify.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
@@ -28,7 +26,10 @@ import { normalizeModbus } from './bench-devices.mjs'
 import { clearFramesByConnection } from './bench-store.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
 import { listSerialPorts } from './bench-serial.mjs'
-import { closeSerialMonitor, openSerialMonitor, serialFeed, serialState, stopAllSerialMonitors } from './bench-serial-monitor.mjs'
+import { clearSerialMonitorState, closeConnectionLink, feedConnectionFrames, listConnectedSerialSources, openConnectionLink } from './bench-serial-monitor.mjs'
+import { getVisionIoBroker, stopVisionIoBroker } from './bench-io-broker.mjs'
+import { changedConnectionIds, notifyConnectionRelease } from './bench-modbus-transport.mjs'
+import { toEndpoint } from './bench-io-contract.mjs'
 import { VISION_GUIDANCE } from './bench-preset.mjs'
 
 export const name = 'dsh-vision-bench'
@@ -88,13 +89,20 @@ const guard = (req, res) => {
 
 const snapshot = async (cwd) => {
   const bindings = loadBindings(dshHome)
-  const body = { ok: true, bindings, health: probeBindings(bindings) }
+  const body = {
+    ok: true,
+    bindings,
+    health: probeBindings(bindings),
+    ioRuntime: getVisionIoBroker().snapshot(),
+  }
   const room = cwd ? requireWorkspaceCwd(cwd) : { error: 'no-cwd' }
   if (!room.error) {
     const workspace = loadWorkspace(dshHome, room.cwd)
     body.workspace = workspace
     body.journal = journalView(body.workspace)
     body.pendingWrites = listPendingWrites(room.cwd)
+    const sources = await listConnectedSerialSources(dshHome, room.cwd)
+    body.serialSources = sources.sources || []
   }
   return body
 }
@@ -181,11 +189,13 @@ export function apply(ctx, config = {}) {
       const body = await readJsonBody(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
+      const prev = loadWorkspace(dshHome, room.cwd)
       const saved = saveWorkspace(dshHome, room.cwd, {
         keil: body && body.keil,
         modbus: body && body.modbus,
       })
       if (!saved.ok) return { ok: false, error: saved.error, workspace: saved.workspace }
+      notifyConnectionRelease(room.cwd, changedConnectionIds(prev.modbus, saved.workspace.modbus))
       return { ok: true, workspace: saved.workspace, journal: journalView(saved.workspace) }
     }),
     route('/dsh-vision-bench/fs/list', async (req) => {
@@ -277,14 +287,6 @@ export function apply(ctx, config = {}) {
       if (!list.length) return { ok: false, error: '缺少 evidence' }
       return appendEvidence(dshHome, room.cwd, list)
     }),
-    route('/dsh-vision-bench/session/bind', async (req) => {
-      const body = await readJsonBody(req)
-      return bindSession(dshHome, body && body.cwd, body && body.sessionId)
-    }),
-    route('/dsh-vision-bench/session/unbind', async (req) => {
-      const body = await readJsonBody(req)
-      return unbindSession(dshHome, body && body.cwd)
-    }),
     route('/dsh-vision-bench/manual/resolve', async (req) => {
       const body = await readJsonBody(req)
       const room = requireWorkspaceCwd(body && body.cwd)
@@ -301,29 +303,38 @@ export function apply(ctx, config = {}) {
       const body = normalizeConnAlias(await readJsonBody(req))
       return modbusPoll(dshHome, body && body.cwd, body)
     }),
+    route('/dsh-vision-bench/connection/open', async (req) => {
+      const body = await readJsonBody(req)
+      const room = requireWorkspaceCwd(body && body.cwd)
+      if (room.error) return { ok: false, error: room.error }
+      const pack = normalizeModbus(loadWorkspace(dshHome, room.cwd).modbus)
+      const conn = pack.connections.find((c) => c.id === (body.connectionId || body.connId))
+      if (!conn) return { ok: false, error: '连接不存在' }
+      if (conn.conn && conn.conn.sim) return { ok: true, skipped: true, simulated: true }
+      return openConnectionLink(room.cwd, { connectionId: conn.id, endpoint: toEndpoint(conn) })
+    }),
+    route('/dsh-vision-bench/connection/close', async (req) => {
+      const body = await readJsonBody(req)
+      const room = requireWorkspaceCwd(body && body.cwd)
+      if (room.error) return { ok: false, error: room.error }
+      return closeConnectionLink(room.cwd, body.connectionId || body.connId)
+    }),
     route('/dsh-vision-bench/serial/ports', async () => listSerialPorts()),
+    route('/dsh-vision-bench/serial/sources', async (req) => {
+      const body = await readJsonBody(req)
+      const room = requireWorkspaceCwd(body && body.cwd)
+      if (room.error) return { ok: false, error: room.error }
+      return listConnectedSerialSources(dshHome, room.cwd)
+    }),
     route('/dsh-vision-bench/selfcheck', async (req) => {
       const body = await readJsonBody(req)
       return runSelfCheck(dshHome, body && body.cwd)
-    }),
-    route('/dsh-vision-bench/serial/open', async (req) => {
-      const body = await readJsonBody(req)
-      const room = requireWorkspaceCwd(body && body.cwd)
-      if (room.error) return { ok: false, error: room.error }
-      const bindings = loadBindings(dshHome)
-      return openSerialMonitor(bindings.python, room.cwd, body || {})
-    }),
-    route('/dsh-vision-bench/serial/close', async (req) => {
-      const body = await readJsonBody(req)
-      const room = requireWorkspaceCwd(body && body.cwd)
-      if (room.error) return { ok: false, error: room.error }
-      return closeSerialMonitor(room.cwd)
     }),
     route('/dsh-vision-bench/serial/feed', async (req) => {
       const body = await readJsonBody(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
-      return serialFeed(room.cwd, body && body.since)
+      return feedConnectionFrames(room.cwd, { connectionId: body.connectionId || '', since: body.since })
     }),
     route('/dsh-vision-bench/config/draft', async (req) => {
       const body = await readJsonBody(req)
@@ -369,7 +380,8 @@ export function apply(ctx, config = {}) {
   void seedVisionBenchPreset(ctx.agentPresets, dshHome).catch(() => { /* roster copy is best-effort */ })
   ctx.effect(() => () => {
     for (const dispose of disposers) dispose()
-    stopAllSerialMonitors()
+    clearSerialMonitorState()
+    void stopVisionIoBroker('plugin-dispose')
   })
 }
 

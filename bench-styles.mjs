@@ -156,6 +156,7 @@ export const CSS = [
   'body[' + ATTR + '] .dvb-vision-bar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;padding:6px 10px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.22));border-radius:6px;background:var(--dsw-alias-bg-layer-2,rgba(128,128,128,.06))}',
   'body[' + ATTR + '] .dvb-vision-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
   'body[' + ATTR + '] .dvb-vision-meta{display:flex;gap:10px;align-items:center}',
+  'body[' + ATTR + '] .dvb-focus-toast{position:fixed;right:14px;bottom:14px;z-index:60;display:flex;gap:8px;align-items:center;max-width:420px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.4));border-radius:8px;background:var(--dsw-alias-bg-layer-1,#1e1e1e);box-shadow:0 4px 16px rgba(0,0,0,.2);font-size:12px}',
   'body[' + ATTR + '] .dvb-frames-page{display:flex;flex-direction:column;gap:8px}',
   'body[' + ATTR + '] .dvb-frames-virtual{border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.28));border-radius:4px;background:var(--dsw-alias-bg-layer-1,#fff);overscroll-behavior:contain}',
   'body[' + ATTR + '] .dvb-frames-virtual .dvb-live-row{border-bottom:1px solid rgba(128,128,128,.08);padding:6px 8px;box-sizing:border-box}',

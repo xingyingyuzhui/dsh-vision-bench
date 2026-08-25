@@ -35,7 +35,7 @@ import {
   useSessionCwd,
   visionCollabBar,
 } from './bench-shared.mjs'
-import { statusKind } from './bench-settings.mjs'
+import { canUseModbus, ioRuntimeStatus } from './bench-io-capability.mjs'
 import { connLabel, normalizeModbus } from './bench-devices.mjs'
 import {
   csvToPoints,
@@ -57,7 +57,7 @@ function hmiGenId(prefix) {
   return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
 
-export function createHmiView(React, t, post, openLive) {
+export function createHmiView(React, t, post, openLive, openFrames) {
   return function HmiView(props) {
     const el = React.createElement
     const cwd = useSessionCwd(React, props)
@@ -66,6 +66,7 @@ export function createHmiView(React, t, post, openLive) {
     const inputDraft = readInputDraft(props && props.useInput)
     const agentBridge = buildInputBridge(props, inputDraft)
     const [health, setHealth] = React.useState({})
+    const [ioRuntime, setIoRuntime] = React.useState({})
     const [workspace, setWorkspace] = React.useState(emptyWorkspace)
     const [journal, setJournal] = React.useState(emptyJournal)
     const [busy, setBusy] = React.useState('')
@@ -79,11 +80,11 @@ export function createHmiView(React, t, post, openLive) {
     const [csvOpen, setCsvOpen] = React.useState(false)
     const [csvText, setCsvText] = React.useState('')
     const [csvNote, setCsvNote] = React.useState('')
-    const [logMode, setLogMode] = React.useState('serial')
-    const [serial, setSerial] = React.useState({ open: false, port: '', baudrate: 115200, lines: [], filter: '', paused: false, error: '', lastId: 0 })
+    const [serialSources, setSerialSources] = React.useState([])
+    const [linkBusy, setLinkBusy] = React.useState('')
     const [draftBusy, setDraftBusy] = React.useState('')
     const [draftNote, setDraftNote] = React.useState('')
-    const [copiedSerial, setCopiedSerial] = React.useState(false)
+
     const [connForm, setConnForm] = React.useState({ open: false, id: '', name: '', role: 'client', enabled: true, conn: { mode: 'rtu', port: '', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, host: '', tcpPort: 502, slave: 1, sim: false } })
     const [pendingDeleteId, setPendingDeleteId] = React.useState('')
     const [frameFilter, setFrameFilter] = React.useState('all')
@@ -93,8 +94,6 @@ export function createHmiView(React, t, post, openLive) {
     const [agentCopied, setAgentCopied] = React.useState('')
     const [tempWatchNote, setTempWatchNote] = React.useState('')
     const lastDeviceByConn = React.useRef({})
-    const serialRef = React.useRef(serial)
-    serialRef.current = serial
     const workspaceRef = React.useRef(workspace)
     workspaceRef.current = workspace
     const inflight = React.useRef(0)
@@ -114,29 +113,11 @@ export function createHmiView(React, t, post, openLive) {
       scanPorts()
     }, [cwd])
 
-    React.useEffect(() => {
-      if (!cwd || !serial.open) return undefined
-      let stop = false
-      const timer = setInterval(() => {
-        post('/dsh-vision-bench/serial/feed', { cwd, since: serialRef.current.lastId }, 10000).then((data) => {
-          if (stop || !data) return
-          setSerial((prev) => ({
-            ...prev,
-            open: data.open !== false,
-            error: data.error || '',
-            lastId: data.lastId || prev.lastId,
-            lines: Array.isArray(data.lines) && data.lines.length
-              ? prev.lines.concat(data.lines).slice(-1000)
-              : prev.lines,
-          }))
-        }).catch(() => { /* next tick retries */ })
-      }, 700)
-      return () => { stop = true; clearInterval(timer) }
-    }, [cwd, serial.open])
-
     React.useEffect(() => subscribeState(post, cwd, (data) => {
       if (!data) return
       if (data.health) setHealth(data.health)
+      if (data.ioRuntime) setIoRuntime(data.ioRuntime)
+      if (Array.isArray(data.serialSources)) setSerialSources(data.serialSources)
       if (Array.isArray(data.pendingWrites)) setPending(data.pendingWrites)
       setJournal(pickJournal(data))
       if (data.workspace && data.workspace.focus) {
@@ -177,6 +158,15 @@ export function createHmiView(React, t, post, openLive) {
         setFrameFilter(r.connectionId || pack.activeConnectionId || 'all')
       }
     }, [cwd, focusState.request && focusState.request.connectionId, focusState.request && focusState.request.deviceId, focusState.request && focusState.request.pointId, focusState.request && focusState.request.frameId, focusState.badgeOnly])
+
+    // Task8/0.19.2: 高亮与轻提示只短暂停留（3~5 秒），随后自动回到常态
+    React.useEffect(() => {
+      if (!focusState.request || focusState.badgeOnly) return
+      const timer = setTimeout(() => {
+        setFocusUi((prev) => prev && prev.request ? { request: null, prev: prev.request, tempWatchIds: [], badgeOnly: false, evidence: [] } : prev)
+      }, 5000)
+      return () => clearTimeout(timer)
+    }, [focusState.request && focusState.request.connectionId, focusState.request && focusState.request.deviceId, focusState.request && focusState.request.pointId, focusState.request && focusState.request.frameId])
 
     function normalizePack() {
       const mb = (workspaceRef.current.modbus) || emptyWorkspace().modbus
@@ -658,13 +648,31 @@ export function createHmiView(React, t, post, openLive) {
       const k = item.key || item.pointId
       if (k) valueMap[k] = item
     }
-    const pythonReady = statusKind(health.python) === 'ready'
     const sim = conn.sim === true
-    const canDevice = sim || pythonReady
+    const canDevice = canUseModbus(ioRuntime, conn.mode, { simulated: sim })
+    const ioStatus = ioRuntimeStatus(ioRuntime, conn.mode)
     const connMissing = !sim && (conn.mode === 'tcp' ? !conn.host : !conn.port)
     const pollingByConnection = pack.pollingByConnection || {}
     const polling = pollingByConnection[activeConnId] || { enabled: false, intervalMs: 1000 }
     const watchEnabled = !!polling.enabled
+
+    function linkConnection(id) {
+      if (!cwd || !id) return
+      setLinkBusy(id)
+      post('/dsh-vision-bench/connection/open', { cwd, connectionId: id }, 15000).then((data) => {
+        if (data && data.ok === false) setError(data.error || t('fail'))
+        return post('/dsh-vision-bench/state', { cwd })
+      }).then((data) => {
+        if (data && Array.isArray(data.serialSources)) setSerialSources(data.serialSources)
+      }).catch((err) => setError(String((err && err.message) || t('fail')))).finally(() => setLinkBusy(''))
+    }
+    function unlinkConnection(id) {
+      if (!cwd || !id) return
+      setLinkBusy(id)
+      post('/dsh-vision-bench/connection/close', { cwd, connectionId: id }, 15000).then(() => post('/dsh-vision-bench/state', { cwd })).then((data) => {
+        if (data && Array.isArray(data.serialSources)) setSerialSources(data.serialSources)
+      }).catch(() => {}).finally(() => setLinkBusy(''))
+    }
 
     function toggleSim() {
       const next = !sim
@@ -703,210 +711,30 @@ export function createHmiView(React, t, post, openLive) {
       return hit ? hit.name : null
     }
 
-    // ── serial log / frames 分轨 ──
-    function openSerial() {
-      if (!cwd) return
-      post('/dsh-vision-bench/serial/open', {
-        cwd,
-        port: serial.port,
-        baudrate: Number(serial.baudrate) || 115200,
-      }, 15000).then((data) => {
-        if (!data || data.ok === false) {
-          setSerial((prev) => ({ ...prev, error: (data && data.error) || t('fail') }))
-          return
-        }
-        setSerial((prev) => ({ ...prev, open: true, error: '', lines: [], lastId: 0 }))
-      }).catch((err) => {
-        setSerial((prev) => ({ ...prev, error: String((err && err.message) || t('fail')) }))
-      })
-    }
-
-    function closeSerial() {
-      if (!cwd) return
-      post('/dsh-vision-bench/serial/close', { cwd }, 10000).catch(() => { /* ignore */ })
-      setSerial((prev) => ({ ...prev, open: false, lines: [], lastId: 0, error: '' }))
-    }
-
-    const serialFilterText = serial.filter.trim().toLowerCase()
-    const serialLines = serialFilterText
-      ? serial.lines.filter((item) => item.line.toLowerCase().includes(serialFilterText))
-      : serial.lines
-    // 报文分轨：framesByConnection 按 activeConnId 切轨，顶部 全部|COM3|COM4 切轨
-    // getFramesLog 支持按 connId，'all' 聚合
-    const framesAll = frameFilter === 'all' ? getFramesLog(cwd) : getFramesLog(cwd, frameFilter)
-    // 若当前 filter 为 all 但 activeConnId 存在时，仍可按 activeConnId 高亮？保持按 filter 展示
-    const frameRows = framesAll.map((item) => ({
-      t: item.t,
-      tx: '→ ' + (item.request || '(无帧)') + ' · ' + item.label + (item.deviceName ? ' · ' + item.deviceName : ''),
-      rx: item.response ? '← ' + item.response : '',
-      connectionId: item.connectionId || '',
-    }))
-    const frameRowsFiltered = serialFilterText
-      ? frameRows.filter((item) => (item.tx + item.rx).toLowerCase().includes(serialFilterText))
-      : frameRows
-
-    function copyLogText() {
-      if (logMode === 'frames') {
-        const rows = frameRowsFiltered
-        const text = rows.map((item) => '[' + clockOf(item.t) + '] ' + item.tx + (item.rx ? '\n  ' + item.rx : '')).join('\n')
-        if (!text) return
-        navigator.clipboard.writeText(text).then(() => {
-          setCopiedSerial(true)
-          setTimeout(() => setCopiedSerial(false), 1500)
-        }).catch(() => { /* clipboard unavailable */ })
-        return
-      }
-      const filterText = serial.filter.trim().toLowerCase()
-      const visible = filterText
-        ? serial.lines.filter((item) => item.line.toLowerCase().includes(filterText))
-        : serial.lines
-      const text = visible.map((item) => '[' + clockOf(item.t) + '] ' + item.line).join('\n')
-      if (!text) return
-      navigator.clipboard.writeText(text).then(() => {
-        setCopiedSerial(true)
-        setTimeout(() => setCopiedSerial(false), 1500)
-      }).catch(() => { /* clipboard unavailable */ })
-    }
-
-    function logBody() {
-      if (logMode === 'frames') {
-        if (!frameRowsFiltered.length) return el('div', { className: 'dvb-empty' }, t('framesEmpty'))
-        return el('div', {
-          className: 'dvb-log dvb-serial-log',
-          style: { maxHeight: '260px', overflowY: 'auto' },
-          ref: (node) => {
-            if (node && !serial.paused) node.scrollTop = node.scrollHeight
-          },
-        }, frameRowsFiltered.map((item, idx) => {
-          const fid = item.id || item.frameId || (String(item.connectionId || 'c') + ':' + String(item.t) + ':' + idx)
-          const isFocused = shouldHighlightFocus(focusState) && focusState.request.frameId === fid
-          return el('div', {
-            key: fid + ':' + idx,
-            className: 'dvb-serial-line' + focusHighlightClass(isFocused),
-            'data-focused': isFocused ? 'true' : 'false',
-            style: isFocused ? { background: 'rgba(79,142,247,.12)', borderRadius: '4px', padding: '2px 4px' } : null,
-          },
-            '[' + clockOf(item.t) + '] ' + item.tx,
-            item.rx ? el('div', null, '  ' + item.rx) : null,
-            el('span', { style: { display: 'inline-flex', gap: '4px', marginLeft: '8px' } },
-              el('button', {
-                type: 'button', className: 'dvb-btn dvb-btn-sm',
-                title: '复制报文结构化引用（稳定 ID+配置版本+时间范围）',
-                onClick() { sendToAgent('frame', { frameId: fid, connectionId: item.connectionId, deviceId: item.deviceId, label: item.label }) },
-              }, agentBtnLabel('frame', { frameId: fid })),
-              el('button', {
-                type: 'button', className: 'dvb-btn dvb-btn-sm' + (isFocused ? ' is-on' : ''),
-                title: '聚焦此报文，高亮并支持证据跳转',
-                onClick() { requestFocusUi({ connectionId: item.connectionId, deviceId: item.deviceId, frameId: fid, kind: 'frame' }) },
-              }, '聚焦')))
-        }))
-      }
-      if (!serialLines.length) return el('div', { className: 'dvb-empty' }, t('serialEmpty'))
-      return el('pre', {
-        className: 'dvb-log dvb-serial-log',
-        ref: (node) => {
-          if (node && !serial.paused) node.scrollTop = node.scrollHeight
-        },
-      }, serialLines.map((item) => el('div', {
-        key: item.id,
-        className: 'dvb-serial-line',
-        'data-kind': lineKind(item.line),
-      }, '[' + clockOf(item.t) + '] ' + item.line)))
-    }
-
+    const recentFrames = (getFramesLog(cwd) || []).slice(-8)
     const serialPanel = el('div', { className: 'dvb-panel' },
       el('div', { className: 'dvb-panel-head' },
-        el('span', { className: 'dvb-panel-title' }, logMode === 'frames' ? t('framesTitle') : t('serialTitle')),
+        el('span', { className: 'dvb-panel-title' }, t('framesTab') || '串口报文'),
         el('button', {
           type: 'button',
-          className: 'dvb-btn' + (logMode === 'serial' ? ' is-on' : ''),
-          onClick() { setLogMode('serial') },
-        }, t('logTabSerial')),
-        el('button', {
-          type: 'button',
-          className: 'dvb-btn' + (logMode === 'frames' ? ' is-on' : ''),
-          onClick() { setLogMode('frames') },
-        }, t('logTabFrames')),
-        logMode === 'frames'
-          ? el('span', { style: { display: 'flex', gap: '4px', alignItems: 'center', marginLeft: '8px' } },
-              el('button', {
-                type: 'button',
-                className: 'dvb-btn' + (frameFilter === 'all' ? ' is-on' : ''),
-                onClick() { setFrameFilter('all') },
-              }, '全部'),
-              connections.map((c)=> {
-                const label = c.conn && c.conn.mode==='tcp' ? ((c.conn.host||'TCP') + ':' + (c.conn.tcpPort||502)) : (c.conn && c.conn.port ? c.conn.port : c.name)
-                return el('button', {
-                  key: c.id,
-                  type: 'button',
-                  className: 'dvb-btn' + (frameFilter===c.id ? ' is-on' : ''),
-                  title: c.name + ' · ' + connLabel(c.conn||{}),
-                  onClick() { setFrameFilter(c.id) },
-                }, label)
-              }),
-              el('button', {
-                type: 'button', className: 'dvb-btn',
-                onClick() { clearFramesLog(cwd, frameFilter) },
-              }, t('framesClear')))
-          : null,
-        el('div', { style: { flex: 1 } }),
-        logMode === 'serial'
-          ? el('span', { className: 'dvb-live-dot', 'data-kind': serial.open ? (serial.error ? 'err' : 'live') : 'idle' })
-          : null,
-        logMode === 'serial' && serial.open && serial.port ? el('span', { className: 'dvb-map-meta' }, serial.port + ' @ ' + serial.baudrate) : null,
-        logMode === 'serial' && serial.error ? el('span', { className: 'dvb-need' }, serial.error) : null,
-        el('button', {
-          type: 'button', className: 'dvb-btn',
-          disabled: logMode === 'serial'
-            ? (!serial.open || !serialLines.length)
-            : (!frameRows.length),
-          onClick: copyLogText,
-        }, copiedSerial ? t('serialCopied') : t('serialCopy')),
-        el('button', {
-          type: 'button', className: 'dvb-btn',
-          disabled: logMode === 'serial' && !serial.open,
-          onClick() { setSerial((prev) => ({ ...prev, paused: !prev.paused })) },
-        }, serial.paused ? t('serialResume') : t('serialPause'))),
-      field(t('serialFilter'), el('input', {
-        className: 'dvb-input',
-        value: serial.filter,
-        placeholder: 'error, assert…',
-        spellCheck: false,
-        autoComplete: 'off',
-        onChange: (event)=>{ setSerial((prev) => ({ ...prev, filter: event.target.value })) },
-      })),
-      logBody())
+          className: 'dvb-btn',
+          onClick() { if (typeof openFrames === 'function') try { openFrames() } catch { if (typeof openLive === 'function') try { openLive() } catch {} } },
+        }, t('framesViewAll') || '查看全部报文')),
+      recentFrames.length
+        ? el('div', { className: 'dvb-live-list' }, recentFrames.map((item, idx) => el('div', { key: String(item.frameId || item.id || idx), className: 'dvb-live-row' },
+          el('span', { className: 'dvb-map-meta' }, clockOf(item.t || item.at)),
+          el('span', { className: 'dvb-hint' }, item.connectionId || ''),
+          el('span', null, item.label || item.request || ''))))
+        : el('div', { className: 'dvb-hint' }, t('framesEmpty') || '暂无报文'))
 
-    // ── Agent 聚焦横幅（角标不抢焦点，支持返回原焦点 + 临时监视组）──
-    const focusBanner = focusState && focusState.request
-      ? el('div', { className: 'dvb-panel dvb-focus-banner', 'data-badge': focusState.badgeOnly ? 'true' : 'false' },
-          el('div', { className: 'dvb-panel-head' },
-            el('span', { className: 'dvb-panel-title' }, 'Agent 聚焦' + (focusState.badgeOnly ? ' · 角标' : ' · 高亮')),
-            el('span', { className: 'dvb-tag' }, [focusState.request.connectionId, focusState.request.deviceId, focusState.request.pointId || focusState.request.frameId].filter(Boolean).join(' / ') || '未知目标'),
-            focusState.request && focusState.request.at ? el('span', { className: 'dvb-map-meta' }, clockOf(focusState.request.at)) : null,
-            el('button', { type: 'button', className: 'dvb-btn', onClick: returnToPrevFocus, disabled: !focusState.prev }, '返回原焦点'),
-            el('button', { type: 'button', className: 'dvb-btn', onClick() { requestFocusUi(null, { badgeOnly: false }); setFocusUi({ request: null, prev: focusState.request, tempWatchIds: [], badgeOnly: false, evidence: [] }) } }, '清除聚焦'),
-            focusState.tempWatchIds && focusState.tempWatchIds.length ? el('span', { className: 'dvb-tag' }, '临时监视 ' + focusState.tempWatchIds.length) : null,
-            focusState.badgeOnly ? el('span', { className: 'dvb-chip', 'data-kind': 'warn' }, '后台任务 · 仅角标') : null),
-          el('div', { className: 'dvb-toolbar' },
-            el('button', {
-              type: 'button', className: 'dvb-btn dvb-btn-primary',
-              onClick() {
-                const r = focusState.request
-                if (r && r.connectionId) { selectConnection(r.connectionId); if (r.deviceId) persist({ activeDeviceId: r.deviceId, version: 3 }) }
-                if (r && r.pointId) setFrameFilter(r.connectionId || frameFilter)
-              },
-            }, '跳转到目标'),
-            focusState.request && focusState.request.pointId ? el('button', {
-              type: 'button', className: 'dvb-btn',
-              onClick() { sendToAgent('point', { pointId: focusState.request.pointId, connectionId: focusState.request.connectionId, deviceId: focusState.request.deviceId }) },
-            }, agentBtnLabel('point', { pointId: focusState.request.pointId })) : null,
-            focusState.request && focusState.request.frameId ? el('button', {
-              type: 'button', className: 'dvb-btn',
-              onClick() { sendToAgent('frame', { frameId: focusState.request.frameId, connectionId: focusState.request.connectionId }) },
-            }, agentBtnLabel('frame', { frameId: focusState.request.frameId })) : null,
-            tempWatchNote ? el('span', { className: 'dvb-hint' }, tempWatchNote) : null,
-            agentCopied ? el('span', { className: 'dvb-hint' }, agentCopied.split(':').pop() + ' · 引用已处理') : null))
+    // ── Agent 聚焦（内部能力）：目标短时高亮 + 右下角轻提示，不再展示大面板 ──
+    const focusToast = focusState && focusState.request && !focusState.badgeOnly
+      ? el('div', { className: 'dvb-focus-toast', role: 'status' },
+          el('span', null, 'Agent 已定位到 ' + [focusState.request.connectionId, focusState.request.deviceId, focusState.request.pointId || focusState.request.frameId].filter(Boolean).join(' / ')),
+          focusState.prev
+            ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: returnToPrevFocus }, '返回原位置')
+            : null,
+          el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { setFocusUi({ request: null, prev: focusState && focusState.request, tempWatchIds: [], badgeOnly: false, evidence: [] }) } }, '×'))
       : null
 
     // ── 顶部连接列表 ──
@@ -936,12 +764,12 @@ export function createHmiView(React, t, post, openLive) {
               el('thead', null, el('tr', null,
                 el('th', null, '名称'),
                 el('th', null, t('role') || '角色'),
-                el('th', null, '启用'),
+                el('th', null, t('connParticipate') || '参与运行'),
                 el('th', null, t('connBar')),
                 el('th', null, '操作'))),
               el('tbody', null, connections.map((c)=> {
                 const isActive = c.id === activeConnId
-                const roleLabel = (c.role === 'server' || c.role === 'slave') ? (t('roleSlave')||'从机') : (t('roleMaster')||'主机')
+                const roleLabel = (c.role === 'server' || c.role === 'slave') ? ((t('roleSlave')||'从机') + '(未启用)') : (t('roleMaster')||'主机')
                 const enabled = c.enabled !== false
                 const occupiedPort = c.conn && c.conn.mode==='rtu' && c.conn.port ? findRtuOccupier(c.conn.port, c.id) : null
                 return el('tr', { key: c.id, 'data-active': isActive ? 'true' : 'false', style: isActive ? { background: 'var(--dsw-alias-bg-layer-2,rgba(128,128,128,.1))' } : null },
@@ -964,7 +792,7 @@ export function createHmiView(React, t, post, openLive) {
                       },
                     },
                       el('option', { value: 'client' }, t('roleMaster')||'主机(master)'),
-                      el('option', { value: 'server' }, t('roleSlave')||'从机(slave)'))),
+                      el('option', { value: 'server', disabled: true, title: '从机模式暂未启用' }, t('roleSlave')||'从机(未启用)'))),
                   el('td', null,
                     el('label', { style: { display: 'flex', alignItems: 'center', gap: '4px' } },
                       el('input', {
@@ -973,10 +801,20 @@ export function createHmiView(React, t, post, openLive) {
                         disabled: !cwd,
                         onChange() { toggleConnEnabled(c.id) },
                       }),
-                      enabled ? '启用' : '禁用')),
+                      enabled ? (t('connParticipate') || '参与运行') : (t('connIdle') || '不参与'))),
                   el('td', { title: occupiedPort ? '已被 ' + occupiedPort + ' 占用' : '' }, connLabel(c.conn||{}) + (occupiedPort ? ' · 已被 ' + occupiedPort + ' 占用' : '')),
                   el('td', null,
                     el('div', { className: 'dvb-actions' },
+                      el('button', {
+                        type: 'button', className: 'dvb-btn dvb-btn-primary',
+                        disabled: !cwd || !!linkBusy || !!(c.conn && c.conn.sim) || serialSources.some((s) => s.connectionId === c.id),
+                        onClick() { linkConnection(c.id) },
+                      }, serialSources.some((s) => s.connectionId === c.id) ? (t('connLive') || '已连接') : (t('connLink') || '连接')),
+                      el('button', {
+                        type: 'button', className: 'dvb-btn',
+                        disabled: !cwd || !!linkBusy || !serialSources.some((s) => s.connectionId === c.id),
+                        onClick() { unlinkConnection(c.id) },
+                      }, t('connUnlink') || '断开'),
                       el('button', {
                         type: 'button', className: 'dvb-btn',
                         onClick() { openConnEdit(c) },
@@ -986,11 +824,6 @@ export function createHmiView(React, t, post, openLive) {
                         title: '复制结构化引用（稳定 ID+配置版本）并让 Agent 分析',
                         onClick() { sendToAgent('connection', { connectionId: c.id, name: c.name }) },
                       }, agentBtnLabel('connection', { connectionId: c.id })),
-                      el('button', {
-                        type: 'button', className: 'dvb-btn dvb-btn-sm' + (shouldHighlightFocus(focusState) && focusState.request.connectionId === c.id && !focusState.request.pointId ? ' is-on' : ''),
-                        title: '聚焦此连接标签，高亮并支持返回原焦点',
-                        onClick() { requestFocusUi({ connectionId: c.id, kind: 'connection' }, { badgeOnly: false }) },
-                      }, '聚焦'),
                       pendingDeleteId === c.id
                         ? el('span', { style: { display: 'flex', gap: '4px', alignItems: 'center' } },
                             el('span', { className: 'dvb-need' }, '确认删除？'),
@@ -1028,10 +861,10 @@ export function createHmiView(React, t, post, openLive) {
               onChange: (event)=>{ setConnForm((prev)=> ({ ...prev, role: event.target.value })) },
             },
               el('option', { value: 'client' }, '主机(master)'),
-              el('option', { value: 'server' }, '从机(slave)'))),
-            field('启用', el('label', { style:{display:'flex',gap:'4px',alignItems:'center'} },
+              el('option', { value: 'server', disabled: true, title: '从机模式暂未启用' }, '从机(未启用)'))),
+            field(t('connParticipate') || '参与运行', el('label', { style:{display:'flex',gap:'4px',alignItems:'center'} },
               el('input', { type:'checkbox', checked: !!connForm.enabled, onChange: (event)=>{ setConnForm((prev)=>({...prev, enabled: event.target.checked})) } }),
-              connForm.enabled ? '启用' : '禁用')),
+              connForm.enabled ? (t('connParticipate') || '参与运行') : (t('connIdle') || '不参与'))),
             field(t('mode'), el('select', {
               className: 'dvb-input',
               value: connForm.conn.mode || 'rtu',
@@ -1140,11 +973,6 @@ export function createHmiView(React, t, post, openLive) {
                         onClick(){ sendToAgent('device', { deviceId: d.id, connectionId: d.connectionId, name: d.name }) },
                       }, agentBtnLabel('device', { deviceId: d.id })),
                       el('button', {
-                        type:'button', className:'dvb-btn dvb-btn-sm' + (shouldHighlightFocus(focusState) && focusState.request.deviceId === d.id ? ' is-on' : ''),
-                        title: '聚焦此设备',
-                        onClick(){ requestFocusUi({ connectionId: d.connectionId, deviceId: d.id, kind: 'device' }, { badgeOnly: false }) },
-                      }, '聚焦'),
-                      el('button', {
                         type:'button', className:'dvb-btn',
                         disabled: activeDevices.length<=1,
                         onClick(){
@@ -1224,9 +1052,9 @@ export function createHmiView(React, t, post, openLive) {
               value: activeConnObj.role === 'server' || activeConnObj.role==='slave' ? 'server' : 'client',
               onChange: (event)=>{ updateActiveConnMeta({ role: event.target.value }) },
             }, el('option',{value:'client'}, '主机(master)'), el('option',{value:'server'}, '从机(slave)'))),
-            field('启用', el('label', { style:{display:'flex',gap:'4px',alignItems:'center'} },
+            field(t('connParticipate') || '参与运行', el('label', { style:{display:'flex',gap:'4px',alignItems:'center'} },
               el('input', { type:'checkbox', checked: activeConnObj.enabled!==false, onChange(){ toggleConnEnabled(activeConnId) } }),
-              activeConnObj.enabled!==false ? '启用' : '禁用'))))
+              activeConnObj.enabled!==false ? (t('connParticipate') || '参与运行') : (t('connIdle') || '不参与')))))
       : null
 
     // ── point form ──
@@ -1383,11 +1211,7 @@ export function createHmiView(React, t, post, openLive) {
           title: '复制结构化引用（稳定 ID+配置版本+时间范围）',
           onClick() { sendToAgent('point', { pointId: point.id, connectionId: point.connectionId, deviceId: point.deviceId, name: point.name }) },
         }, agentBtnLabel('point', { pointId: point.id }))),
-        el('td', null, el('button', {
-          type: 'button', className: 'dvb-btn dvb-btn-sm' + (isFocused ? ' is-on' : ''),
-          title: 'Agent 聚焦此点位 · 支持临时监视组与返回原焦点',
-          onClick() { requestFocusUi({ connectionId: point.connectionId, deviceId: point.deviceId, pointId: point.id, kind: 'point' }, { badgeOnly: false }) },
-        }, '聚焦')))
+        el('td', null, null))
     })
 
     const pointsPanel = el('div', { className: 'dvb-panel' },
@@ -1752,12 +1576,12 @@ export function createHmiView(React, t, post, openLive) {
     // 全部连接视图：仅管理表
     if (hmiTab === 'all') {
       return el('div', { className: 'dvb-page' },
-        statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),
+        statusBar(el, t, cwd, [{ key: 'io', kind: ioStatus.kind, text: t('ioRuntimeShort') + ' · ' + t(ioStatus.labelKey) }]),
         visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
         error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
         agentCopied ? el('div', { className: 'dvb-msg', 'data-kind': 'ok' }, agentCopied.split(':').pop() + ' · ' + agentCopied.split(':').slice(0,2).join(':')) : null,
         tabBar,
-        focusBanner,
+        focusToast,
         connListPanel,
         connFormPanel,
         draftPanel,
@@ -1765,17 +1589,18 @@ export function createHmiView(React, t, post, openLive) {
     }
 
     return el('div', { className: 'dvb-page' },
-      statusBar(el, t, cwd, [{ key: 'python', health: health.python }]),
+      statusBar(el, t, cwd, [{ key: 'io', kind: ioStatus.kind, text: t('ioRuntimeShort') + ' · ' + t(ioStatus.labelKey) }]),
       visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
       agentCopied ? el('div', { className: 'dvb-msg', 'data-kind': 'ok' }, agentCopied.split(':').pop() + ' · ' + agentCopied.split(':').slice(0,2).join(':')) : null,
       tabBar,
-      focusBanner,
+      focusToast,
       activeConnDetail,
       devicePanel,
       pointsPanel,
       formPanel,
       writeStrip,
+      serialPanel,
       pendingPanel,
       draftPanel,
       journalPanel(el, t, journal))

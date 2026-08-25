@@ -79,13 +79,15 @@ export function apply(ctx) {
   let openLiveImpl = function () {}
   let openProjectImpl = function () {}
   let openHmiImpl = function () {}
+  let openFramesImpl = function () {}
   let closeTabImpl = function () {}
   function openLive() { openLiveImpl() }
   function openProject() { openProjectImpl() }
   function openHmi(target) { try { openHmiImpl(target) } catch {} }
+  function openFrames() { try { openFramesImpl() } catch {} }
   const SettingsPage = createSettingsPage(React, t, post)
   const DebugView = createDebugView(React, t, post, openProject)
-  const HmiView = createHmiView(React, t, post, openLive)
+  const HmiView = createHmiView(React, t, post, openLive, openFrames)
   const LivePage = createLiveView(React, t, post, {
     openLive,
     openHmi,
@@ -98,7 +100,9 @@ export function apply(ctx) {
   if (typeof ctx.inject === 'function') {
     ctx.inject(['betterSidebar'], (side) => {
       openLiveImpl = function () { openModbusTab(side) }
+      openHmiImpl = function (target) { openModbusTab(side, target) }
       openProjectImpl = function () { openProjectTab(side) }
+      openFramesImpl = function () { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} }
       closeTabImpl = function (id) { closeBetterTab(side, id) }
       const FramesPage = createFramesPage(React, t, post, { openLive, openHmi })
       const stopLive = registerLive(side, React, t, scopedSidebarPage(React, LivePage, 'live'), {

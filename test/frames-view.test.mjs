@@ -31,22 +31,19 @@ const FBC = {
 test('frames identity: parseFramePortSelection maps explicit internal types', () => {
   assert.deepEqual(parseFramePortSelection('all'), { kind: 'all', connectionId: '', port: '' })
   assert.deepEqual(parseFramePortSelection('conn:c1'), { kind: 'conn', connectionId: 'c1', port: '' })
-  assert.deepEqual(parseFramePortSelection('raw:COM7'), { kind: 'raw', connectionId: '', port: 'COM7' })
-  // unknown/display COM name must NEVER be treated as a connection id
+  assert.deepEqual(parseFramePortSelection('raw:COM7'), { kind: 'all', connectionId: '', port: '' })
   assert.deepEqual(parseFramePortSelection('COM3'), { kind: 'all', connectionId: '', port: '' })
   assert.deepEqual(parseFramePortSelection(''), { kind: 'all', connectionId: '', port: '' })
   assert.deepEqual(parseFramePortSelection(undefined), { kind: 'all', connectionId: '', port: '' })
 })
 
-test('frames identity: options use all/conn:<id>/raw:<port>; proto hides unconfigured COM', () => {
-  const proto = buildFramePortOptions(CONNECTIONS, ['COM3', 'COM4', 'COM7'], 'proto')
+test('frames identity: options list only live connected RTU sources', () => {
+  const live = [{ connectionId: 'c1', port: 'COM3', state: 'connected' }]
+  const proto = buildFramePortOptions(CONNECTIONS, ['COM3', 'COM4', 'COM7'], 'proto', live)
   assert.equal(proto[0].value, 'all')
-  assert.ok(proto.some((o) => o.value === 'conn:c1' && o.kind === 'configured'))
-  assert.ok(proto.some((o) => o.value === 'conn:c2' && o.kind === 'configured'))
-  assert.ok(!proto.some((o) => o.value.startsWith('raw:')), 'proto mode must not expose unconfigured COM')
-  const raw = buildFramePortOptions(CONNECTIONS, ['COM3', 'COM4', 'COM7'], 'raw')
-  assert.ok(raw.some((o) => o.value === 'raw:COM7' && o.kind === 'unconfigured'), 'raw mode exposes unconfigured COM7')
-  assert.ok(!raw.some((o) => o.value === 'raw:COM3'), 'configured COM3 must not be duplicated as unconfigured')
+  assert.ok(proto.some((o) => o.value === 'conn:c1' && o.kind === 'connected'))
+  assert.ok(!proto.some((o) => o.value === 'conn:c2'), 'unconnected COM4 is hidden')
+  assert.ok(!proto.some((o) => String(o.value).startsWith('raw:')), 'must not list unconfigured COM')
 })
 
 test('frames identity: selecting COM3 only shows c1 frames, COM4 only c2, all merges by time', () => {
@@ -114,25 +111,29 @@ test('bench-frames-view.mjs exists and registers dsh-vision-bench:frames', () =>
   assert.match(src, /createFramesPage/)
 })
 
-test('Task3: resolveFrameSelection maps conn:<id> to its real COM port in raw mode', () => {
+test('resolveFrameSelection maps conn:<id> to its COM port; raw: is not a source', () => {
   const conns = CONNECTIONS
-  // raw mode: conn:c1 resolves to COM3 (the connection's port)
-  assert.deepEqual(resolveFrameSelection('conn:c1', conns, { mode: 'raw' }), { kind: 'conn', connectionId: 'c1', port: 'COM3' })
-  // raw mode: raw:COM7 stays as-is
-  assert.deepEqual(resolveFrameSelection('raw:COM7', conns, { mode: 'raw' }), { kind: 'raw', connectionId: '', port: 'COM7' })
-  // proto mode: conn: without port requirement resolves connection id only
-  assert.deepEqual(resolveFrameSelection('conn:c2', conns, { mode: 'proto' }), { kind: 'conn', connectionId: 'c2', port: 'COM4' })
-  // all modes
-  assert.deepEqual(resolveFrameSelection('all', conns, { mode: 'raw' }), { kind: 'all', connectionId: '', port: '' })
-  // conn whose port is empty (e.g. TCP) can't open raw
+  assert.deepEqual(resolveFrameSelection('conn:c1', conns), { kind: 'conn', connectionId: 'c1', port: 'COM3' })
+  assert.deepEqual(resolveFrameSelection('raw:COM7', conns), { kind: 'all', connectionId: '', port: '' })
+  assert.deepEqual(resolveFrameSelection('conn:c2', conns), { kind: 'conn', connectionId: 'c2', port: 'COM4' })
+  assert.deepEqual(resolveFrameSelection('all', conns), { kind: 'all', connectionId: '', port: '' })
   const tcpOnly = [{ id: 't1', name: 'T1', conn: { mode: 'tcp', host: '10.0.0.8', tcpPort: 502 } }]
-  assert.deepEqual(resolveFrameSelection('conn:t1', tcpOnly, { mode: 'raw' }), { kind: 'all', connectionId: '', port: '' })
+  assert.deepEqual(resolveFrameSelection('conn:t1', tcpOnly), { kind: 'conn', connectionId: 't1', port: '' })
 })
 
-test('Task3: mode switch keeps valid conn selection and drops raw only in proto', () => {
+test('mode switch keeps conn selection; unconfigured COM is never a source', () => {
   const conns = CONNECTIONS
-  // raw: conn:c1 stays valid (its port resolvable)
-  assert.equal(resolveFrameSelection('conn:c1', conns, { mode: 'raw' }).kind, 'conn')
-  // switching to proto: raw selection must degrade to all (never treated as key)
-  assert.equal(resolveFrameSelection('raw:COM7', conns, { mode: 'proto' }).kind, 'all')
+  assert.equal(resolveFrameSelection('conn:c1', conns).kind, 'conn')
+  assert.equal(resolveFrameSelection('raw:COM7', conns).kind, 'all')
+})
+
+test('frames page source has no open/close serial UI', () => {
+  const src = readFileSync(join(root, 'bench-frames-view.mjs'), 'utf8')
+  assert.doesNotMatch(src, /打开串口/)
+  assert.doesNotMatch(src, /关闭串口/)
+  assert.doesNotMatch(src, /serial\/open/)
+  assert.doesNotMatch(src, /serial\/close/)
+  assert.doesNotMatch(src, /openedByFramesRef/)
+  assert.match(src, /serialSources/)
+  assert.match(src, /framesClearView|清空显示/)
 })

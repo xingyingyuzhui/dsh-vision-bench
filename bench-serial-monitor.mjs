@@ -1,138 +1,78 @@
-import { spawn } from 'node:child_process'
-import { join } from 'node:path'
-import { _internal as runInternal } from './bench-run.mjs'
-import { isPortBusy, portKey } from './bench-portlock.mjs'
+import { createModbusTransport } from './bench-modbus-transport.mjs'
+import { normalizeModbus } from './bench-devices.mjs'
+import { loadWorkspace } from './bench-store.mjs'
 
-const MONITOR_SCRIPT = join(runInternal.RUNTIME_DIR, 'serial_monitor.py')
-const MAX_LINES = 2000
+const transportOf = (opts) => (opts && opts.transport) || createModbusTransport()
 
-const monitors = new Map()
-
-export const findMonitoredPort = (port) => {
-  const want = portKey(port)
-  if (!want) return null
-  for (const [cwd, state] of monitors) {
-    if (state.closed) continue
-    if (portKey(state.port) === want) return { cwd, port: state.port }
-  }
-  return null
-}
-
-export const openSerialMonitor = (pythonBin, cwd, opts) => {
-  if (!pythonBin) return { ok: false, error: '请先在设置 → 台架 绑定 Python', code: 'NO_PYTHON' }
-  const port = String((opts && opts.port) || '').trim()
-  const baudrate = Number(opts && opts.baudrate) > 0 ? Number(opts.baudrate) : 115200
-  if (!port) return { ok: false, error: '缺少串口', code: 'MISSING_PORT' }
-  if (isPortBusy(port)) {
-    return { ok: false, error: '串口被占用: ' + port + ' 正被 Modbus 占用', code: 'PORT_IN_USE' }
-  }
-  const busy = findMonitoredPort(port)
-  if (busy && busy.cwd !== cwd) {
-    return { ok: false, error: '串口被占用: ' + port + ' 正被其他工作区监视', code: 'PORT_IN_USE' }
-  }
-  closeSerialMonitor(cwd)
-  let child
-  try {
-    child = spawn(pythonBin, [
-      MONITOR_SCRIPT,
-      '--port', port,
-      '--baudrate', String(baudrate),
-      '--parent', String(process.pid),
-    ], {
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
+export const listConnectedSerialSources = async (home, cwd, extra = {}) => {
+  const transport = transportOf(extra)
+  const live = await transport.listConnections({ cwd })
+  const data = live && live.data ? live.data : live
+  const rows = Array.isArray(data && data.connections) ? data.connections : (data && data.connectionId ? [data] : [])
+  const pack = home && cwd ? normalizeModbus(loadWorkspace(home, cwd).modbus) : { connections: [] }
+  const byId = new Map((pack.connections || []).map((c) => [c.id, c]))
+  const sources = []
+  for (const row of rows) {
+    if (!row || row.state !== 'connected') continue
+    const conn = byId.get(row.connectionId)
+    const mode = (conn && conn.conn && conn.conn.mode) || row.mode || 'rtu'
+    if (mode !== 'rtu') continue
+    if (conn && conn.conn && conn.conn.sim) continue
+    if (conn && conn.enabled === false) continue
+    const port = row.port || (conn && conn.conn && conn.conn.port) || ''
+    if (!port) continue
+    sources.push({
+      connectionId: row.connectionId,
+      port,
+      name: (conn && conn.name) || row.connectionId,
+      state: 'connected',
+      connectedAt: row.connectedAt || 0,
     })
-  } catch (error) {
-    return { ok: false, error: '无法启动监视进程: ' + String((error && error.message) || error).slice(0, 160) }
   }
-  const state = {
-    child,
-    buffer: [],
-    nextId: 1,
-    closed: false,
-    error: '',
-    port,
-    baudrate,
-  }
-  monitors.set(cwd, state)
-  child.stdout.setEncoding('utf8')
-  let pending = ''
-  child.stdout.on('data', (chunk) => {
-    pending += chunk
-    let idx
-    while ((idx = pending.indexOf('\n')) >= 0) {
-      const raw = pending.slice(0, idx).trim()
-      pending = pending.slice(idx + 1)
-      if (!raw) continue
-      try {
-        const obj = JSON.parse(raw)
-        if (obj && obj.error) {
-          state.error = String(obj.error.message || '串口错误').slice(0, 180)
-          continue
-        }
-        state.buffer.push({
-          id: state.nextId++,
-          t: Number(obj.t) || Date.now(),
-          line: String(obj.line || '').slice(0, 500),
-        })
-        if (state.buffer.length > MAX_LINES) {
-          state.buffer.splice(0, state.buffer.length - MAX_LINES)
-        }
-      } catch { /* skip malformed line */ }
-    }
-  })
-  child.stderr.on('data', (chunk) => {
-    const text = String(chunk || '').trim()
-    if (text && !state.error) state.error = text.slice(0, 180)
-  })
-  child.on('exit', (code) => {
-    state.closed = true
-    if (!state.error && code) state.error = '监视进程退出（' + code + '）'
-  })
-  child.on('error', (error) => {
-    state.closed = true
-    state.error = String((error && error.message) || error).slice(0, 180)
-  })
-  return { ok: true, port, baudrate }
+  return { ok: true, sources }
 }
 
-export const serialState = (cwd) => {
-  const m = monitors.get(cwd)
-  if (!m) return { open: false, port: '', baudrate: 0, error: '', total: 0 }
-  return {
-    open: !m.closed,
-    port: m.port,
-    baudrate: m.baudrate,
-    error: m.error,
-    total: m.nextId - 1,
-  }
-}
-
-export const serialFeed = (cwd, since) => {
-  const m = monitors.get(cwd)
-  if (!m) return { ok: true, open: false, lines: [], lastId: 0, error: '' }
-  const after = Number(since) > 0 ? Number(since) : 0
-  const lines = m.buffer.filter((item) => item.id > after).slice(-500)
+export const feedConnectionFrames = async (cwd, opts = {}, extra = {}) => {
+  const transport = transportOf(extra)
+  const ran = await transport.captureFeed({
+    cwd,
+    connectionId: opts.connectionId || '',
+    since: opts.since || 0,
+    max: opts.max || 500,
+  })
+  const data = ran && ran.data ? ran.data : ran
+  const lines = Array.isArray(data && data.lines) ? data.lines : []
   return {
     ok: true,
-    open: !m.closed,
-    error: m.error,
+    open: !!(data && data.open),
+    state: (data && data.state) || '',
+    port: (data && data.port) || '',
+    connectionId: opts.connectionId || '',
     lines,
-    lastId: m.nextId - 1,
+    lastId: (data && data.lastId) || 0,
+    total: (data && data.total) || 0,
+    epoch: (data && data.epoch) || '',
   }
 }
 
-export const closeSerialMonitor = (cwd) => {
-  const m = monitors.get(cwd)
-  if (!m) return { ok: true }
-  try { m.child.kill() } catch { /* already gone */ }
-  monitors.delete(cwd)
-  return { ok: true }
+export const openConnectionLink = async (cwd, body, extra = {}) => {
+  const transport = transportOf(extra)
+  return transport.openConnection({
+    cwd,
+    connectionId: body.connectionId,
+    endpoint: body.endpoint || body,
+  })
 }
 
-export const stopAllSerialMonitors = () => {
-  for (const m of monitors.values()) {
-    try { m.child.kill() } catch { /* ignore */ }
-  }
-  monitors.clear()
+export const closeConnectionLink = async (cwd, connectionId, extra = {}) => {
+  const transport = transportOf(extra)
+  return transport.closeConnection({ cwd, connectionId })
 }
+
+export const findMonitoredPort = () => null
+export const openSerialMonitor = async () => ({ ok: false, error: '请在上位机连接串口', code: 'USE_HMI_CONNECT' })
+export const closeSerialMonitor = async () => ({ ok: true, skipped: true })
+export const serialFeed = (cwd, since, extra) => feedConnectionFrames(cwd, { since }, extra)
+export const serialState = () => ({ open: false, port: '', baudrate: 0, error: '', lastId: 0, total: 0 })
+export const clearSerialMonitorState = () => {}
+export const stopAllSerialMonitors = async () => {}

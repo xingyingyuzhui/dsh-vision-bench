@@ -1,36 +1,18 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import test from 'node:test'
-import { renderBenchPrompt } from '../bench-prompt.mjs'
-import { recordBenchEvent, saveWorkspace } from '../bench-store.mjs'
+import { mergeLog, normalizeEvent } from '../bench-prompt.mjs'
 
-test('renderBenchPrompt is empty until a project or operation exists', () => {
-  assert.equal(renderBenchPrompt({ keil: {}, modbus: {}, log: [] }, '/tmp/ws'), '')
+test('normalizeEvent caps summary and defaults action', () => {
+  const ev = normalizeEvent({ action: 'read', ok: true, summary: 'x'.repeat(400), at: 1 })
+  assert.equal(ev.action, 'read')
+  assert.equal(ev.ok, true)
+  assert.equal(ev.at, 1)
+  assert.ok(ev.summary.length <= 180)
 })
 
-test('renderBenchPrompt names the selected project and recent ops', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'dvb-prompt-'))
-  try {
-    const cwd = join(home, 'board')
-    const project = join(cwd, 'app.uvprojx')
-    saveWorkspace(home, cwd, {
-      keil: { project, target: 'Debug', artifact: 'hex' },
-    })
-    const again = recordBenchEvent(home, cwd, {
-      action: 'build',
-      ok: true,
-      summary: 'build 成功，errors=0 warnings=1',
-    }, { keil: { download: join(cwd, 'app.hex') } })
-    const text = renderBenchPrompt(again.workspace, cwd)
-    assert.match(text, /Vision 台架/)
-    assert.match(text, /app\.uvprojx/)
-    assert.match(text, /Target: Debug/)
-    assert.match(text, /app\.hex/)
-    assert.match(text, /选择工程/)
-    assert.match(text, /build 成功/)
-  } finally {
-    await rm(home, { recursive: true, force: true })
-  }
+test('mergeLog keeps newest first with a hard cap', () => {
+  let log = []
+  for (let i = 0; i < 12; i++) log = mergeLog(log, { action: 'build', ok: true, summary: 'n' + i, at: i + 1 })
+  assert.equal(log.length, 8)
+  assert.equal(log[0].summary, 'n11')
 })

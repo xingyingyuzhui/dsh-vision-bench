@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict'
-import { chmod, mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import test from 'node:test'
 import { isPortBusy, portKey, withPortLock } from '../bench-portlock.mjs'
-import { closeSerialMonitor, findMonitoredPort, openSerialMonitor } from '../bench-serial-monitor.mjs'
+import { findMonitoredPort, openSerialMonitor } from '../bench-serial-monitor.mjs'
 import { normalizeTask } from '../bench-journal.mjs'
 
 test('portKey normalizes device prefixes and case', () => {
@@ -45,40 +42,11 @@ test('isPortBusy reflects in-flight transactions only', async () => {
   assert.equal(isPortBusy('COM5'), false)
 })
 
-test('openSerialMonitor refuses while the bus is busy and findMonitoredPort matches', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'dvb-portlock-'))
-  const fake = join(home, 'fake_python.py')
-  const { writeFile } = await import('node:fs/promises')
-  await writeFile(fake, [
-    'import json, sys, time',
-    "print(json.dumps({'t': int(time.time()*1000), 'line': 'x'}), flush=True)",
-    'time.sleep(5)',
-  ].join('\n'))
-  if (process.platform !== 'win32') await chmod(fake, 0o755)
-  const runner = join(home, 'fake_python.sh')
-  await writeFile(runner, '#!/bin/sh\nexec "' + process.execPath + '" "' + fake + '" "$@"\n')
-  if (process.platform !== 'win32') await chmod(runner, 0o755)
-  try {
-    let release
-    const gate = new Promise((resolve) => { release = resolve })
-    const running = withPortLock('COM7', () => gate)
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    const busy = openSerialMonitor(runner, home, { port: '\\\\.\\COM7' })
-    assert.equal(busy.ok, false)
-    assert.match(busy.error, /串口被占用/)
-    release()
-    await running
-
-    const opened = openSerialMonitor(runner, home, { port: 'COM7' })
-    assert.equal(opened.ok, true)
-    const found = findMonitoredPort('\\\\.\\com7')
-    assert.ok(found, 'monitor not found by normalized port')
-    assert.equal(found.cwd, home)
-    closeSerialMonitor(home)
-    assert.equal(findMonitoredPort('COM7'), null)
-  } finally {
-    await rm(home, { recursive: true, force: true })
-  }
+test('frames layer cannot open a SerialPort; findMonitoredPort is retired', async () => {
+  const opened = await openSerialMonitor('/tmp/ws', { port: 'COM7' })
+  assert.equal(opened.ok, false)
+  assert.equal(opened.code, 'USE_HMI_CONNECT')
+  assert.equal(findMonitoredPort('COM7'), null)
 })
 
 test('normalizeTask caps frame payloads', () => {

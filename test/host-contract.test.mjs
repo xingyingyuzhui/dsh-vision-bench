@@ -30,6 +30,36 @@ test('host named exports', () => {
   assert.deepEqual(inject, ['webServer', 'tools', 'agentPresets', 'systemPrompt'])
 })
 
+test('/state returns idle ioRuntime without starting a Worker', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-host-io-'))
+  const routes = []
+  let stop
+  apply({
+    webServer: { register(entry) { routes.push(entry); return () => {} } },
+    tools: { register() { return () => {} } },
+    effect(factory) { stop = factory() },
+  })
+  _internal.setDshHome(home)
+  try {
+    const state = routes.find((r) => r.path === '/dsh-vision-bench/state').handler
+    const box = resBox()
+    await new Promise((resolve) => {
+      box.res.end = (text) => { box.body = text; resolve() }
+      state(req('POST', csrf), box.res)
+    })
+    const snap = JSON.parse(box.body)
+    assert.equal(snap.ok, true)
+    assert.ok(snap.ioRuntime)
+    assert.equal(snap.ioRuntime.state, 'idle')
+    assert.equal(snap.ioRuntime.pid, 0)
+    assert.equal(snap.health.python.bound, false)
+    assert.equal(snap.ioRuntime.capabilities.modbusTcp, 'unknown')
+  } finally {
+    if (stop) stop()
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
 test('apply registers state and bindings routes and disposes them', () => {
   const disposed = []
   const routes = []
@@ -52,6 +82,11 @@ test('apply registers state and bindings routes and disposes them', () => {
   assert.ok(paths.includes('/dsh-vision-bench/modbus/read'))
   assert.ok(paths.includes('/dsh-vision-bench/modbus/poll'))
   assert.ok(paths.includes('/dsh-vision-bench/serial/ports'))
+  assert.ok(paths.includes('/dsh-vision-bench/connection/open'))
+  assert.ok(paths.includes('/dsh-vision-bench/connection/close'))
+  assert.ok(paths.includes('/dsh-vision-bench/serial/feed'))
+  assert.ok(!paths.includes('/dsh-vision-bench/serial/open'))
+  assert.ok(!paths.includes('/dsh-vision-bench/serial/close'))
   ctx._stop()
   assert.deepEqual(disposed, paths)
 })

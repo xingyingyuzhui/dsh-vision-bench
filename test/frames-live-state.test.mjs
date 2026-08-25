@@ -39,23 +39,18 @@ test('streams are strictly separated per mode/selection', () => {
   assert.notEqual(frameStreamKey('proto', 'conn:c1'), frameStreamKey('proto', 'conn:c2'))
   assert.notEqual(frameStreamKey('raw', 'conn:c1'), frameStreamKey('proto', 'conn:c1'))
   assert.notEqual(frameStreamKey('raw', 'conn:c1'), frameStreamKey('raw', 'conn:c2'))
-  assert.notEqual(frameStreamKey('raw', 'raw:COM7'), frameStreamKey('raw', 'conn:c1'))
-  // same stream stays the same key (cursor continuity)
+  assert.equal(frameStreamKey('raw', 'raw:COM7'), frameStreamKey('raw', 'all'))
   assert.equal(frameStreamKey('proto', 'conn:c1'), frameStreamKey('proto', 'conn:c1'))
-  assert.equal(frameStreamKey('raw', 'raw:COM7'), frameStreamKey('raw', 'raw:COM7'))
-  // raw degrades to all when selection is empty
-  assert.equal(frameStreamKey('raw', 'all'), 'raw|all')
+  assert.equal(frameStreamKey('raw', 'all'), 'raw:all')
 })
 
 test('raw lines get stable ids independent of array index', () => {
-  const l1 = { id: 12, t: 1000, line: 'x' }
-  const l2 = { id: 13, t: 1001, line: 'y' }
+  const l1 = { id: 12, epoch: 'e1', connectionId: 'c1', t: 1000, line: 'x' }
+  const l2 = { id: 13, epoch: 'e1', connectionId: 'c1', t: 1001, line: 'y' }
   const a1 = rawLineId('COM3', l1, 0)
   const a2 = rawLineId('COM3', l2, 1)
-  assert.ok(a1.startsWith('raw:COM3:'))
+  assert.equal(a1, 'c1:e1:12')
   assert.notEqual(a1, a2)
-  // same line at different indexes keeps the SAME id (id wins over index)
-  assert.equal(rawLineId('COM3', { id: 12 }, 0), rawLineId('COM3', { id: 12 }, 9))
-  // no-id fallback still unique-ish and stable per (port, t, index)
+  assert.equal(rawLineId('COM3', { id: 12, epoch: 'e1', connectionId: 'c1' }, 0), rawLineId('COM3', { id: 12, epoch: 'e1', connectionId: 'c1' }, 9))
   assert.notEqual(rawLineId('COM4', { t: 1 }, 0), rawLineId('COM4', { t: 2 }, 0))
 })
