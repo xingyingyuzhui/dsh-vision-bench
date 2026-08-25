@@ -545,6 +545,12 @@ export function createTrendPage(React, t, post, hooks) {
     const [cvReady, setCvReady] = React.useState(false)
     const [evNote, setEvNote] = React.useState('')
 
+    // Task4/0.18.3: agent input bridge read at the TOP of the render (no Hooks
+    // inside click handlers); preserves existing draft text, clipboard fallback
+    // when the harness has no writer.
+    const inputDraft = readInputDraft(props && props.useInput)
+    const agentBridge = buildInputBridge(props, inputDraft)
+
     // Task6/0.18.2: real configVersion — bootstrap via /state then KEEP
     // subscribing to later config changes (drafts applied elsewhere bump it).
     const applyCv = (data) => {

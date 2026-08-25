@@ -176,3 +176,110 @@ test('Task8: TrendPage mounts with real effects without leaking listeners', asyn
   // hard to assert listener count generically; at least unmount must not throw
   assert.ok(true)
 })
+test('Task4: TrendPage 让 Agent 分析区间 uses the input bridge, preserves text, posts typed trend evidence', async () => {
+  const { sampleTrend, clearTrendState } = await import('../bench-trend.mjs')
+  const cwdA = '/tmp/trend-agent-' + Math.random()
+  clearTrendState(cwdA)
+  const wall = Date.now()
+  sampleTrend(cwdA, {
+    points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: 'Temp', scale: 1, offset: 0 }],
+    values: [{ pointId: 'p1', raw: 42, ok: true }],
+  })
+  let undoNow = null
+  try {
+    const oldNow = Date.now
+    Date.now = () => Math.max(wall + 1000, oldNow())
+    undoNow = () => { Date.now = oldNow }
+
+    let draft = '用户已写好的中文输入'
+    const evidenceCalls = []
+    const evidenceOkFlag = { ok: true, evidence: [] }
+    const post = async (path, body) => {
+      if (path === '/dsh-vision-bench/state') return { ok: true, workspace: { modbus: { version: 3, configVersion: 7, connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }], devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }], points: [], framesByConnection: {} } }, health: {} }
+      if (path === '/dsh-vision-bench/evidence') { evidenceCalls.push(body.evidence || body.item || [body]); return evidenceOkFlag }
+      return { ok: true }
+    }
+    const tMap = (k) => ({ liveChart: '曲线', chartWindow: '最近 5 分钟' }[k] || k)
+    const Trend = createTrendPage(React, tMap, post, {})
+    let setDraftCalls = 0
+    let submissions = 0
+    const props = {
+      sessionId: 's1',
+      scope: { cwd: cwdA },
+      useSessions: noop,
+      useInput: (sel) => sel({ draft }),
+      inputActions: {
+        setDraft(v) { setDraftCalls++; draft = v },
+        submit() { submissions++ },
+      },
+    }
+    const errors = []
+    const onError = (e) => errors.push(e)
+    window.addEventListener('error', onError)
+    const tree = render(createElement(Trend, props))
+    await waitFor(() => {
+      const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '让 Agent 分析区间')
+      assert.ok(btn, 'trend agent button rendered after real effect')
+    }, { timeout: 6000 })
+    await act(async () => {
+      const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '让 Agent 分析区间')
+      btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+      await new Promise((r) => setTimeout(r, 120))
+    })
+    assert.equal(errors.length, 0, 'no uncaught/window errors: ' + JSON.stringify(errors))
+    assert.equal(setDraftCalls, 1, 'setDraft called exactly once')
+    assert.equal(submissions, 0, 'no auto-submit without send option')
+    // original text preserved, reference appended after it
+    assert.ok(draft.startsWith('用户已写好的中文输入'), 'user text preserved')
+    assert.ok(draft.includes('"kind": "trend"'), 'typed trend kind present')
+    assert.ok(draft.includes('"trendKey"'), 'trendKey present')
+    for (const key of ['connectionId', 'deviceId', 'pointId', 'configVersion', 'timeRange']) {
+      assert.ok(draft.includes('"' + key + '"'), key + ' present in serialized ref')
+    }
+    assert.ok(draft.includes('"configVersion": 7'), 'real configVersion 7, not 1')
+    // typed trend evidence posted
+    assert.equal(evidenceCalls.length, 1, 'evidence posted once')
+    const ev = evidenceCalls[0][0]
+    assert.equal(ev.kind, 'trend')
+    assert.ok(ev.trendKey)
+    assert.equal(ev.version, 7)
+    tree.unmount()
+    window.removeEventListener('error', onError)
+  } finally {
+    if (undoNow) undoNow()
+    clearTrendState(cwdA)
+  }
+})
+
+test('Task4: no input writer → clipboard fallback and no crash', async () => {
+  const { sampleTrend, clearTrendState } = await import('../bench-trend.mjs')
+  const cwdB = '/tmp/trend-agent-cb-' + Math.random()
+  clearTrendState(cwdB)
+  sampleTrend(cwdB, {
+    points: [{ id: 'p2', connectionId: 'c2', deviceId: 'd2', name: 'P', scale: 1, offset: 0 }],
+    values: [{ pointId: 'p2', raw: 1, ok: true }],
+  })
+  const post = async (path) => {
+    if (path === '/dsh-vision-bench/state') return { ok: true, workspace: { modbus: { version: 3, configVersion: 3, connections: [{ id: 'c2', name: 'C2', conn: { mode: 'tcp', host: '10.0.0.8', tcpPort: 502 } }], devices: [], points: [] } }, health: {} }
+    return { ok: true }
+  }
+  const tMap = (k) => ({ liveChart: '曲线', chartWindow: '最近 5 分钟' }[k] || k)
+  const Trend = createTrendPage(React, tMap, post, {})
+  const errors = []
+  const onError = (e) => errors.push(e)
+  window.addEventListener('error', onError)
+  const tree = render(createElement(Trend, { sessionId: 's1', scope: { cwd: cwdB }, useSessions: noop }))
+  await waitFor(() => {
+    const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '让 Agent 分析区间')
+    assert.ok(btn)
+  }, { timeout: 6000 })
+  await act(async () => {
+    const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '让 Agent 分析区间')
+    btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 80))
+  })
+  assert.equal(errors.length, 0, 'no errors on clipboard fallback: ' + JSON.stringify(errors))
+  tree.unmount()
+  window.removeEventListener('error', onError)
+  clearTrendState(cwdB)
+})
