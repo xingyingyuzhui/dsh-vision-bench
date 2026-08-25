@@ -7,7 +7,34 @@ import { createMapView, openProjectTab, registerMap } from './bench-map.mjs'
 import { createDebugView, registerView } from './bench-view.mjs'
 import { createFramesPage } from './bench-frames-view.mjs'
 // Task15: Harness inputActions dispatch in bench-shared, runtime respects focus badgeOnly
-import { getFocusState, shouldHighlightFocus, subscribeFocus } from './bench-shared.mjs'
+import { getFocusState, shouldHighlightFocus, subscribeFocus, shouldRouteFocus, setActiveScope, clearActiveScope, getActiveScope } from './bench-shared.mjs'
+
+// Task2/0.18.4: a unified sidebar page wrapper that keeps the ACTIVE session
+// cwd authoritative (token-guarded so an unmounting stale session page never
+// wipes a newer session's scope).
+function scopedSidebarPage(React, Page, pageId) {
+  return function ScopedSidebarPage(props) {
+    const el = React.createElement
+    const cwd = (() => {
+      try {
+        if (props && props.scope && props.scope.cwd) return props.scope.cwd
+        if (props && typeof props.useSessions === 'function') {
+          return props.useSessions((s) => {
+            const cur = s && s.current
+            return (s && s.byId && cur && s.byId[cur] && s.byId[cur].cwd) || ''
+          }) || ''
+        }
+      } catch {}
+      return ''
+    })()
+    const tokenRef = React.useRef('')
+    React.useEffect(() => {
+      tokenRef.current = setActiveScope('sb-' + String(pageId) + '-' + Math.random().toString(36).slice(2, 8), cwd)
+      return () => { if (tokenRef.current) clearActiveScope(tokenRef.current) }
+    }, [cwd, pageId])
+    return Page(props)
+  }
+}
 
 export function apply(ctx) {
   const React = require('react')
@@ -74,26 +101,30 @@ export function apply(ctx) {
       openProjectImpl = function () { openProjectTab(side) }
       closeTabImpl = function (id) { closeBetterTab(side, id) }
       const FramesPage = createFramesPage(React, t, post, { openLive, openHmi })
-      const stopLive = registerLive(side, React, t, LivePage, {
-        trend: createTrendPage(React, t, post, { openLive, openHmi }),
-        alarm: createAlarmPage(React, t, post, { openLive, openHmi }),
-        frames: FramesPage,
+      const stopLive = registerLive(side, React, t, scopedSidebarPage(React, LivePage, 'live'), {
+        trend: scopedSidebarPage(React, createTrendPage(React, t, post, { openLive, openHmi }), 'trend'),
+        alarm: scopedSidebarPage(React, createAlarmPage(React, t, post, { openLive, openHmi }), 'alarm'),
+        frames: scopedSidebarPage(React, FramesPage, 'frames'),
       })
-      const stopMap = registerMap(side, React, t, MapPage)
-      // Task14: 仅当显式 foreground 才自动切页；badgeOnly 仅角标
-      let lastFocusKey = ''
-      const applyFocus = (fs) => {
-        if (!fs || !fs.request || fs.badgeOnly || !shouldHighlightFocus(fs)) return
-        const key = fs.request.connectionId + '|' + fs.request.deviceId + '|' + fs.request.pointId + '|' + fs.request.frameId + '|' + fs.request.trendKey + '|' + fs.request.alarmId
-        if (key === lastFocusKey) return
-        lastFocusKey = key
-        const kind = fs.request.kind || (fs.request.pointId ? 'point' : fs.request.frameId ? 'frame' : fs.request.trendKey ? 'trend' : fs.request.alarmId ? 'alarm' : 'connection')
-        if (kind === 'trend') { try { side.openTab({ type: 'dsh-vision-bench:charts' }) } catch {} }
-        else if (kind === 'alarm') { try { side.openTab({ type: 'dsh-vision-bench:alarms' }) } catch {} }
-        else if (kind === 'frame') { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} }
+      const stopMap = registerMap(side, React, t, scopedSidebarPage(React, MapPage, 'map'))
+      // Task1+2/0.18.4: only the ACTIVE session's foreground focus may drive the
+      // sidebar; routeKey dedup stops repeated polls from toggling tabs.
+      let lastRouteKey = ''
+      const applyFocus = (fs, changedCwd) => {
+        const decision = shouldRouteFocus({
+          activeCwd: getActiveScope().cwd,
+          changedCwd,
+          focus: fs,
+          previousRouteKey: lastRouteKey,
+        })
+        if (!decision.route) return
+        lastRouteKey = decision.routeKey
+        if (decision.tab === 'trend') { try { side.openTab({ type: 'dsh-vision-bench:charts' }) } catch {} }
+        else if (decision.tab === 'alarm') { try { side.openTab({ type: 'dsh-vision-bench:alarms' }) } catch {} }
+        else if (decision.tab === 'frames') { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} }
         else { try { openModbusTab(side) } catch { try { openLiveImpl() } catch {} } }
       }
-      const focusUnsub = subscribeFocus('', (fs) => applyFocus(fs))
+      const focusUnsub = subscribeFocus('', (fs, cwd) => applyFocus(fs, cwd))
       side.effect(() => () => { try { focusUnsub() } catch {} })
       side.effect(() => () => {
         if (typeof stopLive === 'function') stopLive()

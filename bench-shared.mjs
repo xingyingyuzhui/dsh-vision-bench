@@ -420,6 +420,11 @@ export function setFocusState(cwd, focus) {
     e.evidence = Array.isArray(focus.evidence) ? focus.evidence.slice(0, 20) : []
   }
   const snapshot = getFocusState(cwd)
+  // Task2/0.18.4: identical normalized focus must not re-broadcast every
+  // /state poll (drives wildcard listeners repeatedly)
+  const sig = JSON.stringify([snapshot.request, snapshot.prev, snapshot.tempWatchIds, snapshot.badgeOnly, snapshot.evidence])
+  if (e.__sig === sig) return
+  e.__sig = sig
   for (const sub of Array.from(e.subs)) {
     try { sub(snapshot) } catch {}
   }
@@ -716,4 +721,62 @@ export function lineKind(line) {
   if (/(assert|panic|fault|hardfault|error|错误|失败|exception)/i.test(line)) return 'err'
   if (/(warn|警告)/i.test(line)) return 'warn'
   return ''
+}
+
+// ── Task1/0.18.4: pure focus → sidebar routing decision ────────────────────
+// A focus may drive the sidebar ONLY when it belongs to the ACTIVE session's
+// cwd, is foreground (not badgeOnly) and actually carries a target.
+export function shouldRouteFocus({ activeCwd, changedCwd, focus, previousRouteKey }) {
+  if (!activeCwd) return { route: false, routeKey: '', tab: '' }
+  if (changedCwd && changedCwd !== activeCwd) return { route: false, routeKey: previousRouteKey || '', tab: '' }
+  const fs = focus || {}
+  const req = fs.request
+  if (!req || typeof req !== 'object') return { route: false, routeKey: previousRouteKey || '', tab: '' }
+  if (fs.badgeOnly === true) return { route: false, routeKey: previousRouteKey || '', tab: '' }
+  if (fs.foreground === false && req.foreground === undefined) return { route: false, routeKey: previousRouteKey || '', tab: '' }
+  // specific target ids win over the generic connection/point bucket
+  const kind = (fs.kind || req.kind || '')
+    || (req.frameId ? 'frame' : '')
+    || (req.trendKey ? 'trend' : '')
+    || (req.alarmId ? 'alarm' : '')
+    || (req.pointId || req.connectionId || req.deviceId ? 'point' : '')
+    || 'point'
+  // routeKey MUST include cwd and every target id so same-target polls are
+  // deduplicated and different cwds with identical ids never collide.
+  const routeKey = [
+    activeCwd,
+    kind,
+    String(req.connectionId || ''),
+    String(req.deviceId || ''),
+    String(req.pointId || ''),
+    String(req.frameId || ''),
+    String(req.trendKey || ''),
+    String(req.alarmId || ''),
+  ].join('|')
+  if (previousRouteKey && previousRouteKey === routeKey) return { route: false, routeKey, tab: '' }
+  let tab = ''
+  if (kind === 'trend') tab = 'trend'
+  else if (kind === 'alarm') tab = 'alarm'
+  else if (kind === 'frame') tab = 'frames'
+  else tab = 'table'
+  return { route: true, routeKey, tab }
+}
+
+// Task2/0.18.4: token-guarded active sidebar scope — unmounting a stale session
+// page must never wipe the cwd set by a newer session.
+const ACTIVE_SCOPE = { token: '', cwd: '', seq: 0 }
+export function setActiveScope(token, cwd) {
+  ACTIVE_SCOPE.seq++
+  ACTIVE_SCOPE.token = String(token || ACTIVE_SCOPE.seq)
+  ACTIVE_SCOPE.cwd = String(cwd || '')
+  return ACTIVE_SCOPE.token
+}
+export function clearActiveScope(token) {
+  if (token && token !== ACTIVE_SCOPE.token) return ACTIVE_SCOPE.cwd
+  ACTIVE_SCOPE.cwd = ''
+  ACTIVE_SCOPE.token = ''
+  return ''
+}
+export function getActiveScope() {
+  return { token: ACTIVE_SCOPE.token, cwd: ACTIVE_SCOPE.cwd }
 }

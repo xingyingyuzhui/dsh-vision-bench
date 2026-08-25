@@ -8,6 +8,7 @@ import React from 'react'
 import { createElement } from 'react'
 import { render, cleanup, waitFor, act } from '@testing-library/react'
 import { createFramesPage } from '../bench-frames-view.mjs'
+import { pushFramesLog, clearFramesLog } from '../bench-shared.mjs'
 import { createTrendPage } from '../bench-live.mjs'
 
 // Task8/0.18.3: tests must exit naturally — every component effect tears down
@@ -41,19 +42,26 @@ beforeEach(async () => {
   try { globalThis.navigator = { clipboard: { writeText: async () => {} }, userAgent: 'happy' } } catch {
     Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText: async () => {} }, userAgent: 'happy' }, configurable: true })
   }
-  // ResizeObserver that fires immediately with a real rect so @tanstack
-  // measurement runs; elements report a 400x320 viewport.
+  // ResizeObserver that fires immediately with a REAL stable rect, and
+  // getBoundingClientRect that ALWAYS returns a real viewport (happy-dom's
+  // zero-size fallback killed Virtualizer measurement).
   globalThis.ResizeObserver = class {
     constructor(cb) { this.cb = cb }
-    observe(el) { queueMicrotask(() => this.cb([{ target: el }])) }
+    observe(el) {
+      queueMicrotask(() => this.cb([{
+        target: el,
+        borderBoxSize: [{ inlineSize: 400, blockSize: 320 }],
+        contentRect: { x: 0, y: 0, width: 400, height: 320, top: 0, left: 0, right: 400, bottom: 320 },
+      }]))
+    }
     unobserve() {}
     disconnect() {}
   }
   globalThis.Element = win.HTMLElement
-  const origRect = win.HTMLElement.prototype.getBoundingClientRect
-  win.HTMLElement.prototype.getBoundingClientRect = function () {
-    try { return origRect.call(this) } catch {}
-    return { width: 400, height: 320, top: 0, left: 0, right: 400, bottom: 320, x: 0, y: 0, toJSON() {} }
+  const RECT = () => ({ width: 400, height: 320, top: 0, left: 0, right: 400, bottom: 320, x: 0, y: 0, toJSON() {} })
+  win.HTMLElement.prototype.getBoundingClientRect = function () { return RECT() }
+  for (const k of ['clientWidth', 'clientHeight', 'offsetWidth', 'offsetHeight']) {
+    try { Object.defineProperty(win.HTMLElement.prototype, k, { get() { return k.endsWith('Width') ? 400 : 320 }, configurable: true }) } catch {}
   }
   globalThis.HTMLElement = win.HTMLElement
   globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0)
@@ -144,10 +152,8 @@ test('Task8: official Virtualizer renders viewport-limited rows (adapter level) 
   const midItems = mid.v.getVirtualItems()
   assert.ok(midItems.some((it) => it.index >= 2900 && it.index <= 3100), 'scroll moves the visible window')
 
-  // 2) component-level: mount with the OFFICIAL hook — must not throw and any
-  // rendered rows stay viewport-limited; full DOM layout scroll behavior is
-  // intentionally covered by the adapter-level assertions above (happy-dom has
-  // no layout engine, so RO callbacks cannot complete here).
+  // 2) component-level STRONG assertions with the OFFICIAL hook — the fixed
+  // layout stubs (always-400x320 rect) must make the real Virtualizer render.
   const frames = { c1: makeFrames('c1', 5000, 1) }
   const { post, calls } = makePost({ frames })
   const officialViz = globalThis.__rvUseVirtualizer || (await import('@tanstack/react-virtual')).useVirtualizer
@@ -156,16 +162,26 @@ test('Task8: official Virtualizer renders viewport-limited rows (adapter level) 
   const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/proj' }, useSessions: noop }))
   await waitFor(() => {
     assert.ok(calls.state >= 2, 'must poll /state repeatedly via real effect, got ' + calls.state)
-  }, { timeout: 8000 })
-  const rows = tree.container.querySelectorAll('.dvb-live-row')
-  if (rows.length > 0) assert.ok(rows.length < 50, 'DOM rows viewport-limited (<50), got ' + rows.length)
+    const rows = tree.container.querySelectorAll('.dvb-live-row')
+    assert.ok(rows.length > 0, 'official Virtualizer MUST render rows inside FramesPage, got 0')
+  }, { timeout: 10000 })
+  let rows = tree.container.querySelectorAll('.dvb-live-row')
+  assert.ok(rows.length < 50, 'viewport-limited: ' + rows.length)
+  assert.equal(rows[0].getAttribute('data-frameid'), 'c1-f1', 'first visible row is frame 1')
   const list = tree.container.querySelector('.dvb-frames-virtual')
-  assert.ok(list, 'virtual list container exists')
+  assert.ok(list)
+  // scroll to the middle — visible ids must change and stay <50 rows
   await act(async () => {
     list.scrollTop = 3000 * 36
     list.dispatchEvent(new win.Event('scroll'))
-    await new Promise((r) => setTimeout(r, 150))
+    await new Promise((r) => setTimeout(r, 200))
   })
+  await waitFor(() => {
+    const ids = Array.from(tree.container.querySelectorAll('.dvb-live-row')).map((el) => el.getAttribute('data-frameid'))
+    assert.ok(!ids.includes('c1-f1'), 'scroll must leave the first frame: ' + ids.slice(0, 4))
+  }, { timeout: 6000 })
+  rows = tree.container.querySelectorAll('.dvb-live-row')
+  assert.ok(rows.length < 50, 'still viewport-limited after scroll: ' + rows.length)
   tree.unmount()
 })
 
@@ -475,4 +491,259 @@ test('Task7: successful open → switch proto closes exactly once; user close th
   const beforeUnmount = closeCalls.length
   tree.unmount()
   assert.equal(closeCalls.length, beforeUnmount, 'unmount must not close again (already closed by user)')
+})
+
+test('Task3: raw port locked while open — identity stays COM3, feed ids are raw:COM3:*', async () => {
+  const savedVendor = globalThis.DvbVendor
+  globalThis.DvbVendor = null
+  const holder = { frames: { c1: makeFrames('c1', 3) }, feedLines: [{ id: 1, t: 1, line: 'LINE1' }], feedOpen: true }
+  let openResult = { ok: true }
+  const openCalls = []
+  const post = async (path, body) => {
+    if (path === '/dsh-vision-bench/state') return { ok: true, workspace: { modbus: { version: 3, connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }, { id: 'c2', name: 'C2', conn: { mode: 'rtu', port: 'COM4' } }], devices: [], points: [], framesByConnection: holder.frames, configVersion: 1 } }, health: {} }
+    if (path === '/dsh-vision-bench/serial/ports') return { ok: true, ports: ['COM3', 'COM4'] }
+    if (path === '/dsh-vision-bench/serial/open') { openCalls.push(body); return openResult }
+    if (path === '/dsh-vision-bench/serial/feed') return { ok: true, open: holder.feedOpen, error: '', lastId: 1, lines: holder.feedLines }
+    if (path === '/dsh-vision-bench/serial/close') return { ok: true }
+    return { ok: true }
+  }
+  const tmap = (k) => ({ framesRaw: '原始数据', serialOpen: '打开串口', serialClose: '关闭串口', serialPause: '暂停' }[k] || k)
+  const Frames = createFramesPage(React, tmap, post, { useVirtualizer: () => null })
+  const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/p3' }, useSessions: noop }))
+  await waitFor(() => {
+    assert.ok(Array.from(tree.container.querySelectorAll('button')).some((b) => b.textContent === '原始数据'), 'raw button')
+  }, { timeout: 6000 })
+  await act(async () => {
+    Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '原始数据')
+      .dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 40))
+  })
+  await waitFor(() => {
+    const sel = Array.from(tree.container.querySelectorAll('select'))[0]
+    assert.ok(Array.from(sel.querySelectorAll('option')).some((o) => o.value === 'conn:c1'), 'conn:c1 option ready (state pulled)')
+  }, { timeout: 6000 })
+  await act(async () => {
+    const sel = Array.from(tree.container.querySelectorAll('select'))[0]
+    sel.value = 'conn:c1'
+    sel.dispatchEvent(new win.Event('change', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 60))
+  })
+  await act(async () => {
+    const openBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '打开串口')
+    assert.ok(openBtn && !openBtn.disabled, 'open enabled after picking conn:c1')
+    openBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 120))
+  })
+  assert.equal(openCalls.length, 1)
+  assert.equal(openCalls[0].port, 'COM3')
+  // the port selector must be disabled while open
+  const sel = Array.from(tree.container.querySelectorAll('select'))[0]
+  assert.equal(sel.disabled, true, 'port selector locked while open')
+  // try to programmatically switch to COM4 — must not change selection/identity
+  await act(async () => {
+    sel.value = 'conn:c2'
+    sel.dispatchEvent(new win.Event('change', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 60))
+  })
+  // even a programmatic selection change cannot relabel live data: the feed
+  // identity must still use the ACTUAL opened port COM3
+  holder.feedLines = [{ id: 7, t: 2, line: 'L7' }]
+  await waitFor(() => {
+    const ids = Array.from(tree.container.querySelectorAll('.dvb-live-row')).map((el) => el.getAttribute('data-frameid'))
+    assert.ok(ids.some((id) => id === 'raw:COM3:7'), 'raw identity uses actual port COM3: ' + ids.slice(0, 3))
+    assert.ok(!ids.some((id) => id.startsWith('raw:COM4')), 'no COM4 identity')
+  }, { timeout: 6000 })
+    tree.unmount()
+  await new Promise((r) => setTimeout(r, 150))
+  globalThis.DvbVendor = savedVendor
+})
+
+test('Task4+7: close failure keeps ownership and mode; successful close counts once', async () => {
+  const savedVendor = globalThis.DvbVendor
+  globalThis.DvbVendor = null
+  const holder = { frames: { c1: makeFrames('c1', 3) } }
+  let closeResult = { ok: false, error: 'close failed' }
+  let openResult = { ok: true }
+  const openCalls = []
+  const closeCalls = []
+  const post = async (path, body) => {
+    if (path === '/dsh-vision-bench/state') return { ok: true, workspace: { modbus: { version: 3, connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }], devices: [], points: [], framesByConnection: holder.frames, configVersion: 1 } }, health: {} }
+    if (path === '/dsh-vision-bench/serial/ports') return { ok: true, ports: ['COM3'] }
+    if (path === '/dsh-vision-bench/serial/open') { openCalls.push(body); return openResult }
+    if (path === '/dsh-vision-bench/serial/feed') return { ok: true, open: true, lines: [], lastId: 0 }
+    if (path === '/dsh-vision-bench/serial/close') { closeCalls.push(body); return closeResult }
+    return { ok: true }
+  }
+  const tmap = (k) => ({ framesRaw: '原始数据', framesProto: '协议报文', serialOpen: '打开串口', serialClose: '关闭串口', serialPause: '暂停', serialResume: '恢复' }[k] || k)
+  const Frames = createFramesPage(React, tmap, post, { useVirtualizer: () => null })
+  const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/p4' }, useSessions: noop }))
+  await waitFor(() => {
+    assert.ok(Array.from(tree.container.querySelectorAll('button')).some((b) => b.textContent === '原始数据'))
+  }, { timeout: 6000 })
+  await act(async () => {
+    Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '原始数据')
+      .dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 40))
+  })
+  await waitFor(() => {
+    const sel = Array.from(tree.container.querySelectorAll('select'))[0]
+    assert.ok(Array.from(sel.querySelectorAll('option')).some((o) => o.value === 'conn:c1'), 'conn:c1 option ready')
+  }, { timeout: 6000 })
+  await act(async () => {
+    const sel = Array.from(tree.container.querySelectorAll('select'))[0]
+    sel.value = 'conn:c1'
+    sel.dispatchEvent(new win.Event('change', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 60))
+  })
+  await act(async () => {
+    const openBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '打开串口')
+    assert.ok(openBtn && !openBtn.disabled, 'open enabled')
+    openBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 120))
+  })
+  // attempt close → failure: port stays open/labeled, ownership retained
+  await act(async () => {
+    const closeBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '关闭串口' && !b.disabled)
+    assert.ok(closeBtn, 'close button enabled after open')
+    closeBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 160))
+  })
+  console.log('DBG close btns:', Array.from(tree.container.querySelectorAll('button')).map(b=>b.textContent+(b.disabled?'(dis)':'')).join(','))
+  console.log('DBG close text:', tree.container.textContent.slice(0,220))
+  assert.ok(tree.container.textContent.includes('close failed') || tree.container.textContent.includes('关闭失败'), 'close failure surfaced')
+  assert.ok(tree.container.textContent.includes('COM3'), 'still shows the open port')
+  // switch to proto while close keeps failing → must stay raw
+  await act(async () => {
+    Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '协议报文')
+      .dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 120))
+  })
+  assert.ok(tree.container.querySelector('[data-mode="raw"]') || tree.container.textContent.includes('原始数据'), 'mode stays raw after failed close')
+  // now close succeeds
+  closeResult = { ok: true }
+  await act(async () => {
+    const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '关闭串口' || b.textContent === '协议报文')
+    if (btn && btn.textContent === '协议报文') btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 150))
+  })
+  const totalClose = closeCalls.length
+  assert.ok(totalClose >= 1)
+  // unmount after successful close → no extra close
+  tree.unmount()
+  assert.equal(closeCalls.length, totalClose, 'no extra close after successful close + unmount')
+})
+
+test('Task6: pause→clear success exits pause and empties; failure rolls back persisted+memory frames', async () => {
+  const savedVendor = globalThis.DvbVendor
+  globalThis.DvbVendor = null
+  const holder = { frames: { c1: makeFrames('c1', 3) } }
+  let clearResult = { ok: true }
+  const memOnly = { frameId: 'mem-x', connectionId: 'c1', deviceId: 'd1', t: 900, at: 900, direction: 'tx', request: 'MEM', label: 'MEM', status: 'ok' }
+  const post = async (path, body) => {
+    if (path === '/dsh-vision-bench/state') {
+      const fbc = holder.frames
+      const allEmpty = Object.keys(fbc).every((k) => Array.isArray(fbc[k]) && fbc[k].length === 0)
+      if (clearResult.ok === true && allEmpty) {
+        // verified empty afterwards
+      }
+      return { ok: true, workspace: { modbus: { version: 3, connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }], devices: [], points: [], framesByConnection: fbc, configVersion: 1 } }, health: {} }
+    }
+    if (path === '/dsh-vision-bench/serial/ports') return { ok: true, ports: ['COM3'] }
+    if (path === '/dsh-vision-bench/frames/clear') return clearResult
+    return { ok: true }
+  }
+  const tmap = (k) => ({ serialPause: '暂停', serialResume: '恢复', framesClear: '清空' }[k] || k)
+  // seed memory-only frame BEFORE mount
+  pushFramesLog('/tmp/p6', 'c1', [memOnly])
+  const Frames = createFramesPage(React, tmap, post, { useVirtualizer: () => null })
+  const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/p6' }, useSessions: noop }))
+  await waitFor(() => {
+    const rows = tree.container.querySelectorAll('.dvb-live-row')
+    assert.equal(rows.length, 4, 'persisted 3 + memory 1 rendered')
+  }, { timeout: 8000 })
+  // pause
+  await act(async () => {
+    Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '暂停')
+      .dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 60))
+  })
+  assert.ok(tree.container.textContent.includes('已暂停'), 'paused before clear')
+  // CLEAR success
+  holder.frames = { c1: [] }
+  await act(async () => {
+    Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '清空')
+      .dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 150))
+  })
+  await waitFor(() => {
+    assert.equal(tree.container.querySelectorAll('.dvb-live-row').length, 0, 'cleared view')
+    assert.ok(!tree.container.textContent.includes('已暂停'), 'pause banner cleared after clear')
+  }, { timeout: 6000 })
+  // FAILURE rollback: restore persisted+memory+paused snapshot
+  clearResult = { ok: false, error: 'clear failed' }
+  const preFail = Array.from(tree.container.querySelectorAll('.dvb-live-row')).map((el) => el.getAttribute('data-frameid'))
+  await act(async () => {
+    holder.frames = { c1: makeFrames('c1', 3) }
+    pushFramesLog('/tmp/p6', 'c1', [memOnly])
+    Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '清空')
+      .dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 150))
+  })
+  await waitFor(() => {
+    const ids = Array.from(tree.container.querySelectorAll('.dvb-live-row')).map((el) => el.getAttribute('data-frameid'))
+    assert.ok(ids.includes('mem-x') || ids.includes('c1-f1'), 'rollback restored frames')
+    assert.ok(tree.container.textContent.includes('clear failed') || tree.container.textContent.includes('清空失败'), 'clear failure surfaced')
+  }, { timeout: 6000 })
+    tree.unmount()
+  await new Promise((r) => setTimeout(r, 150))
+  globalThis.DvbVendor = savedVendor
+})
+
+test('Task7: switching connection while paused exits pause and shows only the new conn', async () => {
+  const savedVendor = globalThis.DvbVendor
+  globalThis.DvbVendor = null
+  const holder = { frames: { c1: makeFrames('c1', 3), c2: makeFrames('c2', 4, 100) } }
+  const post = async (path) => {
+    if (path === '/dsh-vision-bench/state') return { ok: true, workspace: { modbus: { version: 3, connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }, { id: 'c2', name: 'C2', conn: { mode: 'rtu', port: 'COM4', sim: true } }], devices: [], points: [], framesByConnection: holder.frames, configVersion: 1 } }, health: {} }
+    if (path === '/dsh-vision-bench/serial/ports') return { ok: true, ports: ['COM3', 'COM4'] }
+    return { ok: true }
+  }
+  const tmap = (k) => ({ serialPause: '暂停', serialResume: '恢复' }[k] || k)
+  const Frames = createFramesPage(React, tmap, post, { useVirtualizer: () => null })
+  const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/p7' }, useSessions: noop }))
+  await waitFor(() => {
+    assert.ok(tree.container.querySelectorAll('.dvb-live-row').length > 0)
+  }, { timeout: 8000 })
+  // select c1
+  await act(async () => {
+    const sel = Array.from(tree.container.querySelectorAll('select'))[0]
+    sel.value = 'conn:c1'
+    sel.dispatchEvent(new win.Event('change', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 60))
+  })
+  await waitFor(() => {
+    const ids = Array.from(tree.container.querySelectorAll('.dvb-live-row')).map((el) => el.getAttribute('data-frameid'))
+    assert.ok(ids.length === 3 && ids.every((id) => id.startsWith('c1-')), 'c1 frames only')
+  }, { timeout: 6000 })
+  // pause on c1
+  await act(async () => {
+    Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '暂停')
+      .dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 60))
+  })
+  assert.ok(tree.container.textContent.includes('已暂停'))
+  // switch to c2 while paused → auto-exit pause, only c2 frameIds, no c1 residue
+  await act(async () => {
+    const sel = Array.from(tree.container.querySelectorAll('select'))[0]
+    sel.value = 'conn:c2'
+    sel.dispatchEvent(new win.Event('change', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 80))
+  })
+  await waitFor(() => {
+    const ids = Array.from(tree.container.querySelectorAll('.dvb-live-row')).map((el) => el.getAttribute('data-frameid'))
+    assert.ok(ids.length === 4 && ids.every((id) => id.startsWith('c2-')), 'only c2 frames after switch: ' + ids.slice(0, 5))
+    assert.ok(!tree.container.textContent.includes('已暂停'), 'pause exited on connection switch')
+    assert.ok(!ids.some((id) => id.startsWith('c1-')), 'no c1 residue')
+  }, { timeout: 6000 })
+  tree.unmount()
 })

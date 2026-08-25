@@ -45,7 +45,7 @@ export function createFramesPage(React, t, post, hooks) {
     const [filters, setFilters] = React.useState({ connectionId: '', deviceId: '', direction: '', functionCode: '', status: '' })
     const [search, setSearch] = React.useState('')
     const [paused, setPaused] = React.useState(false)
-    const [serial, setSerial] = React.useState({ open: false, port: '', baudrate: 115200, lines: [], error: '', lastId: 0 })
+    const [serial, setSerial] = React.useState({ open: false, opening: false, closing: false, port: '', baudrate: 115200, lines: [], error: '', lastId: 0 })
     const [copied, setCopied] = React.useState('')
     const [liveEpoch, setLiveEpoch] = React.useState(0) // bump when new frames collected
     const [pendingNew, setPendingNew] = React.useState(0) // 新增数量（非总量）
@@ -84,6 +84,14 @@ export function createFramesPage(React, t, post, hooks) {
             setSerial((prev) => ({ ...prev, error: data.error, open: false }))
             return
           }
+          if (data.open === false) {
+            // Task4/0.18.4: the monitor vanished server-side — release ownership
+            // so unmount/switch never issues a redundant close.
+            openedByFramesRef.current = false
+            setSerial((prev) => ({ ...prev, open: false, closing: false, port: '', error: data.error || '' }))
+            setLiveEpoch((n) => n + 1)
+            return
+          }
           setSerial((prev) => {
             const next = {
               ...prev,
@@ -101,18 +109,42 @@ export function createFramesPage(React, t, post, hooks) {
       return () => { stop = true; clearInterval(timer) }
     }, [realCwd, mode, serial.open, serial.lastId])
 
-    // Task3: close raw monitor when switching away from raw or unmounting
-    const closeRawMonitor = React.useCallback(() => {
-      // Task7/0.18.3: only close a serial monitor this page successfully opened
-      if (openedByFramesRef.current) {
-        if (realCwd) post('/dsh-vision-bench/serial/close', { cwd: realCwd }).catch(() => {})
-        openedByFramesRef.current = false
+    // Task2/0.18.4: unified raw-close lifecycle — async transitions, ownership
+    // only released after the server confirms (or feed reports open=false).
+    const closeRawMonitor = React.useCallback((opts = {}) => {
+      const onDone = opts.onDone || (() => {})
+      if (!openedByFramesRef.current) {
+        setSerial((pp) => ({ ...pp, open: false, closing: false, lines: [], error: '' }))
+        exitPausedState({ resetCursor: true })
+        onDone({ ok: true, skipped: true })
+        return
       }
-      setSerial((pp) => ({ ...pp, open: false, lines: [], error: '' }))
-      setPausedSnapshot(null)
+      setSerial((pp) => ({ ...pp, closing: true, error: '' }))
+      if (realCwd) {
+        post('/dsh-vision-bench/serial/close', { cwd: realCwd }).then((data) => {
+          if (data && data.ok === false) {
+            // Task4/0.18.4: close failure keeps ownership and port (never fake closed)
+            setSerial((pp) => ({ ...pp, closing: false, error: data.error || '关闭串口失败' }))
+            onDone({ ok: false, error: data.error || '关闭串口失败' })
+            return
+          }
+          openedByFramesRef.current = false
+          setSerial((pp) => ({ ...pp, open: false, closing: false, port: '', lines: [], error: '' }))
+          exitPausedState({ resetCursor: true })
+          onDone({ ok: true })
+        }).catch((e) => {
+          setSerial((pp) => ({ ...pp, closing: false, error: String(e && e.message || '关闭串口失败') }))
+          onDone({ ok: false, error: String(e && e.message || '关闭串口失败') })
+        })
+      } else {
+        openedByFramesRef.current = false
+        setSerial((pp) => ({ ...pp, open: false, closing: false, lines: [], error: '' }))
+        exitPausedState({ resetCursor: true })
+        onDone({ ok: true })
+      }
     }, [realCwd, post])
     React.useEffect(() => () => {
-      // Task7/0.18.3: unmount cleanup closes ONLY what this page opened
+      // Task4/0.18.4: unmount closes ONLY what this page opened, once
       if (openedByFramesRef.current && realCwd) {
         post('/dsh-vision-bench/serial/close', { cwd: realCwd }).catch(() => {})
         openedByFramesRef.current = false
@@ -137,11 +169,14 @@ export function createFramesPage(React, t, post, hooks) {
         liveFrames = mergeFramesDedup(selectProtocolFrames(framesByConnection, 'all'), getFramesLog(realCwd), 1000)
       }
     } else {
-      // Task5/0.18.3: raw lines keep stable ids (never array index)
+      // Task3/0.18.4: raw identity uses the ACTUAL opened port (serial.port),
+      // never the dropdown selection — a background COM change must not relabel
+      // live data.
+      const rawPort = serial.port || sel.port || 'raw'
       liveFrames = serial.lines.map((l, idx) => ({
         t: l.t, at: l.t, request: l.line, response: '',
-        id: rawLineId(sel.port || 'raw', l, idx),
-        frameId: rawLineId(sel.port || 'raw', l, idx),
+        id: rawLineId(rawPort, l, idx),
+        frameId: rawLineId(rawPort, l, idx),
         label: l.line.slice(0, 20), direction: 'rx', status: 'ok',
         connectionId: sel.connectionId || '', deviceId: '', functionCode: 0,
       }))
@@ -203,6 +238,36 @@ export function createFramesPage(React, t, post, hooks) {
       setPendingNew(0)
     }
 
+    // Task5/0.18.4: the ONE exit path for the paused state — every flow that
+    // leaves pause (clear / switch stream / switch mode / close serial / cwd
+    // change / invalid selection) must go through here, never partial clears.
+    function exitPausedState(opts = {}) {
+      const { resetCursor = false, followLatest = false } = opts
+      if (resetCursor) resetCursors()
+      else {
+        const cursors = cursorRef.current
+        const cur = cursors.get(streamKey)
+        if (cur) { cur.pausedAnchor = null; cur.anchor = new Set(liveIds) }
+        setPendingNew(0)
+      }
+      setPaused(false)
+      setPausedSnapshot(null)
+      if (followLatest && (wasAtBottomRef.current || lastAtBottomRef.current)) {
+        setTimeout(() => scrollToLatest(false), 40)
+      }
+    }
+
+    // Task5/0.18.4: any stream change while paused must exit through the unified
+    // path — no half-state (paused=true, snapshot=null).
+    React.useEffect(() => {
+      if (paused) exitPausedState({ resetCursor: true })
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selection, mode])
+    React.useEffect(() => {
+      if (paused) exitPausedState({ resetCursor: true })
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [realCwd, streamKey])
+
     function scrollToLatest(updateRef = true) {
       const inst = vizer
       if (inst && inst.scrollToIndex) inst.scrollToIndex(filtered.length - 1)
@@ -223,13 +288,7 @@ export function createFramesPage(React, t, post, hooks) {
         if (cur) cur.pausedAnchor = new Set(liveIds)
       } else {
         // resume shows the live state; follow latest only if paused-at-bottom
-        setPausedSnapshot(null)
-        const wasBottom = wasAtBottomRef.current || lastAtBottomRef.current
-        const cursors = cursorRef.current
-        const cur = cursors.get(streamKey)
-        if (cur) { cur.pausedAnchor = null; cur.anchor = new Set(liveIds) }
-        setPendingNew(0)
-        if (wasBottom) setTimeout(() => scrollToLatest(false), 40)
+        exitPausedState({ followLatest: true })
       }
       setPaused(next)
     }
@@ -253,7 +312,7 @@ export function createFramesPage(React, t, post, hooks) {
         }
       },
     })
-    const measureRow = vendorUseVirtualizer() && vizer && typeof vizer.measureElement === 'function'
+    const measureRow = vizer && typeof vizer.measureElement === 'function'
       ? (node) => { if (node) vizer.measureElement(node) }
       : undefined
     const trackingRef = measureRow
@@ -263,50 +322,72 @@ export function createFramesPage(React, t, post, hooks) {
     const virtualRows = vizer && vizer.getVirtualItems ? vizer.getVirtualItems() : []
     const totalHeight = vizer && vizer.getTotalSize ? vizer.getTotalSize() : filtered.length * ESTIMATE_SIZE
 
-    // Task3: mode switching — proto: drop raw selections, close raw monitor;
-    // raw: keep valid conn ids, never auto-open.
+    // Task3+4/0.18.4: mode switching — leaving raw must first close an owned
+    // monitor; only after a confirmed close may proto take over. Closing or
+    // opening in flight blocks rapid toggling.
     function switchMode(nextMode) {
       if (nextMode === mode) return
+      if (serial.opening || serial.closing) return
       if (nextMode === 'proto') {
         const p = parseFramePortSelection(selection)
-        if (p.kind === 'raw') setSelection('all')
-        if (openedByFramesRef.current && serial.open) closeRawMonitor()
-        setSerial((s) => ({ ...s, error: '' }))
-        setPausedSnapshot(null)
-        setPendingNew(0)
+        const finish = () => {
+          if (p.kind === 'raw') setSelection('all')
+          setSerial((s) => ({ ...s, error: '' }))
+          exitPausedState({ resetCursor: true })
+          setMode('proto')
+        }
+        if (openedByFramesRef.current) {
+          closeRawMonitor({
+            onDone: (res) => {
+              if (res && res.ok) finish()
+              else setSerial((s) => ({ ...s, error: res && res.error || '关闭串口失败，仍处于原始模式' }))
+            },
+          })
+        } else {
+          finish()
+        }
       } else {
-        // raw: keep conn:<id> (resolvable to its port later); nothing auto-opens
         setSerial((s) => ({ ...s, error: '' }))
-        setPausedSnapshot(null)
-        setPendingNew(0)
+        exitPausedState({ resetCursor: true })
+        setMode('raw')
       }
-      setMode(nextMode)
-      setPaused(false)
-      resetCursors()
     }
 
     function openRawPort() {
       const port = sel && sel.port
       if (!realCwd || !port) return
+      if (serial.opening || serial.closing) return
+      if (serial.open) return
+      // Task3/0.18.4: lock the port selection while opening
+      setSerial((pp) => ({ ...pp, opening: true, error: '' }))
       post('/dsh-vision-bench/serial/open', { cwd: realCwd, port, baudrate: 115200 }, 15000).then((data) => {
-        // Task7/0.18.3: ONLY data.ok===true opens; every failure surfaces as error
         if (data && data.ok === true) {
           openedByFramesRef.current = true
-          setSerial((pp) => ({ ...pp, open: true, port, error: '' }))
+          setSerial((pp) => ({ ...pp, open: true, opening: false, port, error: '' }))
         } else {
           openedByFramesRef.current = false
-          setSerial((pp) => ({ ...pp, open: false, error: (data && data.error) || '打开串口失败' }))
+          setSerial((pp) => ({ ...pp, open: false, opening: false, port: '', error: (data && data.error) || '打开串口失败' }))
         }
       }).catch((e) => {
         openedByFramesRef.current = false
-        setSerial((pp) => ({ ...pp, open: false, error: String(e && e.message || '打开串口失败') }))
+        setSerial((pp) => ({ ...pp, open: false, opening: false, port: '', error: String(e && e.message || '打开串口失败') }))
       })
     }
 
     function clearView() {
       const payload = sel.kind === 'conn' ? { connectionId: sel.connectionId } : { all: true }
-      // optimistic local clear, then server; on failure restore from server state
-      const prevFbc = modbus.framesByConnection
+      // Task6/0.18.4: preserve EVERYTHING before clearing so a failed clear can
+      // restore persisted + memory frames, the pause state and cursors.
+      const snapshot = {
+        modbusFrames: modbus.framesByConnection,
+        memFrames: sel.kind === 'conn' ? getFramesLog(realCwd, sel.connectionId) : getFramesLog(realCwd),
+        paused: !!paused,
+        pausedSnapshot,
+        pendingNew,
+        cursors: new Map(cursorRef.current),
+      }
+      // clear means: exit pause, empty the current view, and rebuild an empty baseline
+      exitPausedState({ resetCursor: true })
       setModbus((prev) => {
         const fbc = { ...(prev.framesByConnection || {}) }
         if (payload.connectionId) delete fbc[payload.connectionId]
@@ -315,22 +396,39 @@ export function createFramesPage(React, t, post, hooks) {
       })
       if (sel.kind === 'conn') clearFramesLog(realCwd, sel.connectionId)
       else clearFramesLog(realCwd)
-      resetCursors()
-      setPausedSnapshot(null)
+      const restoreAll = () => {
+        setModbus((prev) => ({ ...prev, framesByConnection: snapshot.modbusFrames }))
+        if (snapshot.memFrames && snapshot.memFrames.length) {
+          if (sel.kind === 'conn') pushFramesLog(realCwd, sel.connectionId, snapshot.memFrames)
+          else pushFramesLog(realCwd, snapshot.memFrames)
+        }
+        if (snapshot.paused) {
+          setPaused(true)
+          if (snapshot.pausedSnapshot) setPausedSnapshot(snapshot.pausedSnapshot)
+          if (snapshot.pendingNew) setPendingNew(snapshot.pendingNew)
+        }
+        cursorRef.current = snapshot.cursors
+      }
       post('/dsh-vision-bench/frames/clear', { cwd: realCwd, ...payload }).then((data) => {
         if (!data || data.ok === false) {
           setError(data && data.error ? data.error : '清空失败')
-          // restore optimistic state from known-good copy
-          setModbus((prev) => ({ ...prev, framesByConnection: prevFbc }))
+          restoreAll()
           return
         }
-        // verify: refresh /state once
+        // verify via /state; if the server disagrees (frames returned), restore
         return post('/dsh-vision-bench/state', { cwd: realCwd }).then((st) => {
+          const fbc = st && st.workspace && st.workspace.modbus && st.workspace.modbus.framesByConnection
+          const stillThere = fbc && Object.keys(fbc).some((k) => Array.isArray(fbc[k]) && fbc[k].length > 0)
+          if (stillThere) {
+            setError('清空后服务端仍返回报文，已回滚')
+            restoreAll()
+            return
+          }
           if (st && st.workspace && st.workspace.modbus) setModbus((prev) => ({ ...prev, ...st.workspace.modbus }))
         })
       }).catch((e) => {
         setError(String(e && e.message || '清空失败'))
-        setModbus((prev) => ({ ...prev, framesByConnection: prevFbc }))
+        restoreAll()
       })
     }
     const [error, setError] = React.useState('')
@@ -387,12 +485,18 @@ export function createFramesPage(React, t, post, hooks) {
         el('button', { type: 'button', className: 'dvb-btn', onClick: togglePause }, paused ? (t('serialResume') || '恢复') : (t('serialPause') || '暂停')),
         el('button', { type: 'button', className: 'dvb-btn', disabled: !filtered.length, onClick: copyFrames }, copied === 'copy' ? (t('serialCopied') || '已复制') : (t('framesCopyHex') || '复制')),
         el('button', { type: 'button', className: 'dvb-btn', disabled: !filtered.length, onClick: exportFrames }, t('framesExport') || '导出'),
-        mode === 'raw' ? el('button', { type: 'button', className: 'dvb-btn', disabled: serial.open || !sel.port, onClick: openRawPort }, serial.open ? (t('serialClose') || '已打开') : (t('serialOpen') || '打开串口')) : null,
-        mode === 'raw' && serial.open ? el('button', { type: 'button', className: 'dvb-btn', onClick: closeRawMonitor }, t('serialClose') || '关闭串口') : null,
+        mode === 'raw' ? el('button', { type: 'button', className: 'dvb-btn', disabled: serial.open || serial.opening || serial.closing || !sel.port, onClick: openRawPort },
+          serial.opening ? '正在打开' : (serial.open ? (t('serialClose') || '已打开') : (t('serialOpen') || '打开串口'))) : null,
+        mode === 'raw' && serial.open ? el('button', { type: 'button', className: 'dvb-btn', disabled: serial.closing, onClick: () => closeRawMonitor({}) }, serial.closing ? '正在关闭' : (t('serialClose') || '关闭串口')) : null,
         mode === 'proto' ? el('button', { type: 'button', className: 'dvb-btn', onClick: clearView }, t('framesClear') || '清空') : null
       ),
+      // Task3/0.18.4: while a raw monitor is open (or opening/closing) the port
+      // selector is LOCKED so the page's actual identity never drifts.
+      mode === 'raw' && (serial.open || serial.opening || serial.closing)
+        ? el('div', { className: 'dvb-hint dvb-opened-port' }, (serial.port || '?') + ' @ ' + serial.baudrate + ' · ' + (serial.open ? '已连接' : (serial.opening ? '正在打开' : '正在关闭')))
+        : null,
       el('div', { className: 'dvb-toolbar' },
-        el('select', { className: 'dvb-input', value: selection, onChange: (e) => { setSelection(e.target.value); setPendingNew(0) } },
+        el('select', { className: 'dvb-input', value: selection, disabled: mode === 'raw' && (serial.open || serial.opening || serial.closing), onChange: (e) => { setSelection(e.target.value); setPendingNew(0) } },
           portOptions.map((o) => el('option', { key: o.value, value: o.value }, o.label))
         ),
         el('select', { className: 'dvb-input', value: filters.connectionId, onChange: (e) => setFilters((p) => ({ ...p, connectionId: e.target.value })) },
