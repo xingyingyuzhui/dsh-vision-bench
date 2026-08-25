@@ -26,7 +26,6 @@ import {
 import {
   emptyJournal,
   emptyWorkspace,
-  journalPanel,
   pickJournal,
   runningOf,
   runningSource,
@@ -1584,8 +1583,7 @@ export function createHmiView(React, t, post, openLive, openFrames) {
         focusToast,
         connListPanel,
         connFormPanel,
-        draftPanel,
-        journalPanel(el, t, journal))
+        draftPanel)
     }
 
     return el('div', { className: 'dvb-page' },
@@ -1602,7 +1600,6 @@ export function createHmiView(React, t, post, openLive, openFrames) {
       writeStrip,
       serialPanel,
       pendingPanel,
-      draftPanel,
-      journalPanel(el, t, journal))
+      draftPanel)
   }
 }

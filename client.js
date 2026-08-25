@@ -267,6 +267,15 @@ const COPY = {
     watchIv: '间隔',
     logTabSerial: '串口',
     logTabFrames: '报文',
+    liveLog: '操作记录',
+    logFilterAll: '全部',
+    logFilterUser: '用户',
+    logFilterAgent: 'Agent',
+    logFilterSystem: '系统',
+    logFilterErr: '错误',
+    logJump: '跳转',
+    logCopyAgent: '复制给Agent',
+    logViewFrames: '报文',
     framesClear: '清空',
     framesEmpty: '暂无报文，读写点表后显示',
     framesNoLink: '暂无已连接串口',
@@ -564,6 +573,15 @@ const COPY = {
     watchIv: 'Interval',
     logTabSerial: 'Serial',
     logTabFrames: 'Frames',
+    liveLog: 'Operation Log',
+    logFilterAll: 'All',
+    logFilterUser: 'User',
+    logFilterAgent: 'Agent',
+    logFilterSystem: 'System',
+    logFilterErr: 'Errors',
+    logJump: 'Jump',
+    logCopyAgent: 'Copy to Agent',
+    logViewFrames: 'Frames',
     framesClear: 'Clear',
     framesEmpty: 'No frames yet, read or write points first',
     framesNoLink: 'No connected serial ports',
@@ -2705,7 +2723,7 @@ function visionCollabBar(el, t, opts) {
     ),
     el('div', { className: 'dvb-vision-meta' },
       journal.tasks && journal.tasks.length ? el('span', { className: 'dvb-hint' }, t('tasks') + ' ' + journal.tasks.length) : null,
-      journal.timeline && journal.timeline.length ? el('span', { className: 'dvb-hint' }, t('timeline') + ' ' + journal.timeline.length) : null,
+
     )
   )
 }
@@ -4058,7 +4076,10 @@ function createDebugView(React, t, post, openProject) {
             : el('div', { className: 'dvb-empty' }, t('outputEmpty')))),
       flashPanel,
       manualPanel,
-      journalPanel(el, t, journal),
+      // Task9/0.19.2: 完整时间线已迁入侧边栏"操作记录"；这里只保留轻量运行摘要
+      journal && journal.running && journal.running.length
+        ? el('div', { className: 'dvb-hint' }, t('tasks') + ' · 运行中 ' + journal.running.map((r) => r.summary || r.type || r.id).filter(Boolean).join(' / '))
+        : null,
       pickerEl)
   }
 }
@@ -5628,8 +5649,7 @@ function createHmiView(React, t, post, openLive, openFrames) {
         focusToast,
         connListPanel,
         connFormPanel,
-        draftPanel,
-        journalPanel(el, t, journal))
+        draftPanel)
     }
 
     return el('div', { className: 'dvb-page' },
@@ -5646,8 +5666,7 @@ function createHmiView(React, t, post, openLive, openFrames) {
       writeStrip,
       serialPanel,
       pendingPanel,
-      draftPanel,
-      journalPanel(el, t, journal))
+      draftPanel)
   }
 }
 
@@ -5655,6 +5674,7 @@ const TAB_TABLE = 'dsh-vision-bench:modbus'
 const TAB_CHART = 'dsh-vision-bench:charts'
 const TAB_ALARM = 'dsh-vision-bench:alarms'
 const TAB_FRAMES = 'dsh-vision-bench:frames'
+const TAB_LOG = 'dsh-vision-bench:log'
 const INTERVALS = [500, 1000, 2000, 5000]
 
 function normalizePointsSafe(pack) {
@@ -6470,11 +6490,87 @@ function createAlarmPage(React, t, post, hooks) {
   }
 }
 
+// ── 操作记录（Task9/0.19.2）──────────────────────────────────────────────
+// 时间线从"调试/上位机"移入侧边栏：筛选 + 每行 跳转/复制给Agent/查看报文。
+function createLogPage(React, t, post, helpers = {}) {
+  const el = React.createElement
+  const FILTERS = [
+    { key: 'all', label: t('logFilterAll') || '全部' },
+    { key: 'user', label: t('logFilterUser') || '用户' },
+    { key: 'agent', label: t('logFilterAgent') || 'Agent' },
+    { key: 'system', label: t('logFilterSystem') || '系统' },
+    { key: 'err', label: t('logFilterErr') || '错误' },
+  ]
+  return function LogPage(props) {
+    const cwd = (props && props.scope && props.scope.cwd) || props && props.cwd || ''
+    const [journal, setJournal] = React.useState({ tasks: [], running: [], timeline: [] })
+    const [filter, setFilter] = React.useState('all')
+    const [note, setNote] = React.useState('')
+    React.useEffect(() => subscribeState(post, cwd, (data) => {
+      if (data && data.journal) setJournal(data.journal)
+    }), [cwd, post])
+    const tasks = journal && Array.isArray(journal.tasks) ? journal.tasks : []
+    const timeline = journal && Array.isArray(journal.timeline) ? journal.timeline : []
+    const running = journal && Array.isArray(journal.running) ? journal.running : []
+    const filtered = timeline.filter((item) => {
+      if (filter === 'err') return item.ok === false || item.kind === 'error' || String(item.summary || '').indexOf('异常') >= 0
+      if (filter === 'all') return true
+      return (item.source || 'system') === filter
+    })
+    const jump = (item) => {
+      const target = item && (item.pointId ? { connectionId: item.connectionId, deviceId: item.deviceId, pointId: item.pointId } : item && item.deviceId ? { connectionId: item.connectionId, deviceId: item.deviceId } : item && item.connectionId ? { connectionId: item.connectionId } : {})
+      if (helpers && typeof helpers.openHmi === 'function') { try { helpers.openHmi(target) } catch {} return }
+    }
+    const copyLine = (item) => {
+      const line = '[' + String(item.source || 'system') + '] ' + clockOf(item.at) + ' ' + (item.summary || item.kind || item.id)
+      try {
+        if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(line).then(() => setNote('已复制: ' + (item.summary || item.kind)), () => setNote('复制失败'))
+        } else { setNote('复制失败（无剪贴板）') }
+      } catch { setNote('复制失败') }
+    }
+    const viewFrames = (item) => { if (helpers && typeof helpers.openFrames === 'function') { try { helpers.openFrames() } catch {} } }
+    return el('div', { className: 'dvb-page' },
+      el('div', { className: 'dvb-toolbar', style: { flexWrap: 'wrap' } },
+        FILTERS.map((f) => el('button', {
+          key: f.key,
+          type: 'button',
+          className: 'dvb-btn dvb-btn-sm' + (filter === f.key ? ' dvb-btn-primary' : ''),
+          onClick() { setFilter(f.key) },
+        }, f.label)),
+        running.length ? el('span', { className: 'dvb-tag' }, '运行中 ' + running.length) : null,
+        el('span', { className: 'dvb-hint' }, '共 ' + filtered.length + ' 条')),
+      tasks.length ? el('div', { className: 'dvb-journal' },
+        el('div', { className: 'dvb-journal-title' }, t('tasks') || '任务'),
+        tasks.slice(0, 6).map((item) => el('div', { key: item.id, className: 'dvb-task', 'data-status': item.status, 'data-source': item.source },
+          el('span', { className: 'dvb-badge' }, clockOf(item.startedAt)),
+          el('span', { className: 'dvb-badge', 'data-source': item.source }, String(item.source || '')),
+          el('span', null, item.summary || String(item.type || '任务')),
+          item.status ? el('span', { className: 'dvb-badge' }, String(item.status)) : null))) : null,
+      filtered.length ? el('div', { className: 'dvb-journal' },
+        el('div', { className: 'dvb-journal-title' }, t('liveLog') || '操作记录'),
+        filtered.slice(-200).reverse().map((item) => el('div', {
+          key: item.id,
+          className: 'dvb-event',
+          'data-source': item.source,
+          'data-ok': item.ok === false ? 'false' : item.ok === true ? 'true' : '',
+        },
+          el('span', { className: 'dvb-badge' }, clockOf(item.at)),
+          el('span', { className: 'dvb-badge', 'data-source': item.source }, String(item.source || 'system')),
+          el('span', { className: 'dvb-hint', title: item.kind + (item.taskId ? ' · ' + item.taskId : '') }, item.summary || item.kind || item.id),
+          item.pointId || item.connectionId ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '跳转到目标', onClick() { jump(item) } }, t('logJump') || '跳转') : null,
+          el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '复制给 Agent', onClick() { copyLine(item) } }, t('logCopyAgent') || '复制'),
+          item.frameId ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { viewFrames(item) } }, t('logViewFrames') || '报文') : null))) : null,
+      note ? el('div', { className: 'dvb-hint' }, note) : null)
+  }
+}
+
 function registerLive(ctx, React, t, LivePage, pages = {}) {
   const bs = ctx.betterSidebar
   const TrendPage = pages.trend || createSoonPage(React, t, 'liveChart', 'chartSoon')
   const AlarmPage = pages.alarm || createSoonPage(React, t, 'liveAlarm', 'alarmSoon')
   const FramesPage = pages.frames || createSoonPage(React, t, 'framesTab', 'framesEmpty')
+  const LogPage = pages.log || createLogPage(React, t)
   const stops = [
     bs.registerTab({
       id: TAB_TABLE,
@@ -6503,6 +6599,13 @@ function registerLive(ctx, React, t, LivePage, pages = {}) {
       single: true,
       order: 73,
       component: FramesPage,
+    }),
+    bs.registerTab({
+      id: TAB_LOG,
+      title() { return t('liveLog') },
+      single: true,
+      order: 74,
+      component: LogPage,
     }),
   ]
   return function () {
@@ -7342,6 +7445,7 @@ function apply(ctx) {
         trend: scopedSidebarPage(React, createTrendPage(React, t, post, { openLive, openHmi }), 'trend'),
         alarm: scopedSidebarPage(React, createAlarmPage(React, t, post, { openLive, openHmi }), 'alarm'),
         frames: scopedSidebarPage(React, FramesPage, 'frames'),
+        log: scopedSidebarPage(React, createLogPage(React, t, post, { openLive, openHmi, openFrames: () => { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} } }), 'log'),
       })
       const stopMap = registerMap(side, React, t, scopedSidebarPage(React, MapPage, 'map'))
       // Task1+2/0.18.4: only the ACTIVE session's foreground focus may drive the

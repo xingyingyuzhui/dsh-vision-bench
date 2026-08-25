@@ -3,7 +3,6 @@ import {
   emptyJournal,
   emptyWorkspace,
   formatClock,
-  journalPanel,
   pickJournal,
   POLL_MS,
   runningOf,
@@ -487,7 +486,10 @@ export function createDebugView(React, t, post, openProject) {
             : el('div', { className: 'dvb-empty' }, t('outputEmpty')))),
       flashPanel,
       manualPanel,
-      journalPanel(el, t, journal),
+      // Task9/0.19.2: 完整时间线已迁入侧边栏"操作记录"；这里只保留轻量运行摘要
+      journal && journal.running && journal.running.length
+        ? el('div', { className: 'dvb-hint' }, t('tasks') + ' · 运行中 ' + journal.running.map((r) => r.summary || r.type || r.id).filter(Boolean).join(' / '))
+        : null,
       pickerEl)
   }
 }

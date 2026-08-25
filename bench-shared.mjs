@@ -120,7 +120,7 @@ export function visionCollabBar(el, t, opts) {
     ),
     el('div', { className: 'dvb-vision-meta' },
       journal.tasks && journal.tasks.length ? el('span', { className: 'dvb-hint' }, t('tasks') + ' ' + journal.tasks.length) : null,
-      journal.timeline && journal.timeline.length ? el('span', { className: 'dvb-hint' }, t('timeline') + ' ' + journal.timeline.length) : null,
+
     )
   )
 }
