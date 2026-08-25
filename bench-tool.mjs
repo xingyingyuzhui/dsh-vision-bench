@@ -4,6 +4,7 @@ import { decodeValue } from './bench-points.mjs'
 import { connLabel, normalizeModbus } from './bench-devices.mjs'
 import { appendEvidence, applyConfigDraft, createConfigDraft, createManualRequest, discardConfigDraft, getConfigDraft, journalView, listConfigDrafts, loadWorkspace, saveWorkspace } from './bench-store.mjs'
 import { resolveTarget } from './bench-targets.mjs'
+import { readTrendSeries } from './bench-trend-store.mjs'
 
 const ACTIONS = new Set(['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual', 'connect', 'points', 'frames', 'focus', 'trend', 'alarm', 'evidence', 'draft'])
 
@@ -313,18 +314,23 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
       const rt = resolveTarget(pack, { connectionId })
       if (!rt.ok) return { ok: false, action, error: rt.error, errorCode: rt.errorCode }
     }
-    // Return minimal trend evidence handle: configVersion + timeRange
+    // Task3/0.19.3: 返回真实样本（非时间范围句柄）— 采样在提交阶段产生，页面是否打开无关
     const start = Number(args.start) || (Date.now() - 5 * 60 * 1000)
     const end = Number(args.end) || Date.now()
+    const scopeIds = pointIds.length
+      ? pointIds
+      : pack.points.filter((p) => !connectionId || p.connectionId === connectionId).filter((p) => p.trendEnabled === true).slice(0, 8).map((p) => p.id)
+    const series = readTrendSeries(home, room.cwd, { pointIds: scopeIds, start, end })
     return {
       ok: true,
       action,
       trend: {
         connectionId: connectionId || pack.activeConnectionId,
-        pointIds: pointIds.length ? pointIds : pack.points.filter((p) => !connectionId || p.connectionId === connectionId).slice(0, 8).map((p) => p.id),
+        pointIds: series.map((sv) => sv.pointId),
         start,
         end,
         configVersion: pack.configVersion || 1,
+        series,
       },
     }
   }

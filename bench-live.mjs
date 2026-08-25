@@ -3,7 +3,7 @@ import { postEvidence, evidenceFromRef, readInputDraft, buildInputBridge } from 
 import { clockOf, decodeValue, functionTag } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
-import { getTrendState, clearTrendState, TREND_CAP, TREND_WINDOW_MS, trendKey, sampleTrend, computeStats, toUplotData, UPLOT_PROTO, exportRangeCsv } from './bench-trend.mjs'
+import { TREND_WINDOW_MS, trendKey, toUplotData, UPLOT_PROTO } from './bench-trend.mjs'
 import { normalizeAlarmState, groupAlarms, acknowledgeAlarm, ACTIVE, RECOVERED, ACKED, PROCESS, COMM, COND_ACTIVE, COND_RECOVERED } from './bench-alarm.mjs'
 import { vendorUPlot, vendorVirtualizer, vendorAvailable } from './bench-vendor.mjs'
 import { canUseModbus } from './bench-io-capability.mjs'
@@ -50,11 +50,13 @@ export function getBetterSidebar(ctx) {
   }
 }
 
-export const drawTrend = (container, cwd = '', now = Date.now()) => {
+export const drawTrend = (container, cwd = '', now = Date.now(), payload) => {
   if (!container) return null
   const UPlot = vendorUPlot()
   if (!UPlot) return null
-  const { data, keys, meta } = toUplotData(cwd, { now, windowMs: TREND_WINDOW_MS })
+  // Task3/0.19.3: 优先使用调用方传入的存储载荷；旧签名回退客户端缓存
+  const usePayload = payload && Array.isArray(payload.data) ? payload : toUplotData(cwd, { now, windowMs: TREND_WINDOW_MS })
+  const { data, keys, meta } = usePayload
   const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
   const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
   const ks = keys.slice(0, 8), ms = meta.slice(0, 8)
@@ -108,13 +110,14 @@ export function createTrendPage(React, t, post, hooks) {
     const inputDraft = readInputDraft(props && props.useInput)
     const agentBridge = buildInputBridge(props, inputDraft)
 
-    // Task6/0.18.2: real configVersion — bootstrap via /state then KEEP
-    // subscribing to later config changes (drafts applied elsewhere bump it).
+    // Task3/0.19.3: 曲线数据来自工作区 trend 存储（提交阶段采样），页面只消费
+    const [mbStore, setMbStore] = React.useState(null)
     const applyCv = (data) => {
       const mb = data && data.workspace && data.workspace.modbus
       const v = Number(mb && mb.configVersion)
       setConfigVersion(v > 0 ? v : 0)
       setCvReady(true)
+      if (mb) setMbStore(mb)
     }
     React.useEffect(() => {
       if (!cwd || !post) { setCvReady(true); return }
@@ -132,34 +135,36 @@ export function createTrendPage(React, t, post, hooks) {
       return () => clearInterval(timer)
     }, [paused])
 
-    const trendState = getTrendState(cwd)
-    const entries = []
-    let i = 0
-    for (const [key, list] of trendState.series) {
-      if (!list.length) continue
-      const window = list.filter((item) => item.t >= Date.now() - TREND_WINDOW_MS)
-      if (!window.length) continue
-      let min = Infinity, max = -Infinity, any = false
-      for (const item of window) {
-        if (item == null || !Number.isFinite(item.v)) continue
-        any = true
-        if (item.v < min) min = item.v
-        if (item.v > max) max = item.v
-      }
-      const last = list[list.length - 1]
-      entries.push({
-        key,
-        label: (trendState.meta.get(key) && trendState.meta.get(key).label) || key,
-        unit: (trendState.meta.get(key) && trendState.meta.get(key).unit) || '',
-        last,
-        lastValid: any,
-        min: any ? min : null,
-        max: any ? max : null,
-        color: TREND_COLORS[i % TREND_COLORS.length],
+    // 从工作区 trend 存储构建显示载荷（只显示 trendEnabled 点位，最多 8 条）
+    const trendPayload = (() => {
+      const mb = mbStore || null
+      if (!mb) return { data: [], keys: [], meta: [], entries: [] }
+      const trend = (mb && mb.trend) || {}
+      const pts = (() => { try { return normalizeModbus(mb).points || [] } catch { return [] } })()
+      const selected = pts.filter((p) => p.trendEnabled === true).slice(0, 8)
+      const data = [], keys = [], meta = [], entries = []
+      selected.forEach((pt, idx) => {
+        const list = Array.isArray(trend[pt.id]) ? trend[pt.id] : []
+        const now = Date.now()
+        const window = list.filter((sv) => Array.isArray(sv) && sv[0] >= now - TREND_WINDOW_MS)
+        if (!window.length) return
+        const xs = [], vs = []
+        let min = Infinity, max = -Infinity, any = false
+        for (const sv of window) {
+          xs.push(sv[0]); vs.push(sv[1] == null ? null : Number(sv[1]))
+          if (sv[1] != null && Number.isFinite(Number(sv[1]))) { any = true; min = Math.min(min, Number(sv[1])); max = Math.max(max, Number(sv[1])) }
+        }
+        const tk = trendKey(pt.connectionId || 'c1', pt.deviceId || 'd1', pt.id)
+        keys.push(tk)
+        meta.push({ label: pt.name || (functionTag(pt.function) + pt.address), unit: pt.unit || '' })
+        data.push(xs, vs)
+        const last = window[window.length - 1]
+        entries.push({ key: tk, label: pt.name || (functionTag(pt.function) + pt.address), unit: pt.unit || '', last: { t: last[0], v: last[1] }, lastValid: any, min: any ? min : null, max: any ? max : null, color: TREND_COLORS[idx % TREND_COLORS.length] })
       })
-      i++
-      if (entries.length >= 8) break
-    }
+      return { data, keys, meta, entries }
+    })()
+
+    const entries = trendPayload.entries
     const chartMountKey = entries.map((e) => e.key).join('|')
 
     // Task5: build uPlot once; rebuild only when the series set changes.
@@ -171,7 +176,7 @@ export function createTrendPage(React, t, post, hooks) {
         if (uplotRef.current) { try { uplotRef.current.destroy() } catch {} uplotRef.current = null }
         mountKeyRef.current = chartMountKey
       }
-      if (!uplotRef.current) uplotRef.current = drawTrend(c, cwd)
+      if (!uplotRef.current) uplotRef.current = drawTrend(c, cwd, Date.now(), trendPayload)
       const u = uplotRef.current
       const onResize = () => { const cc = wrapRef.current; if (u && cc && u.setSize) u.setSize({ width: cc.clientWidth || 560, height: 190 }) }
       if (typeof window !== 'undefined') window.addEventListener('resize', onResize)
@@ -189,7 +194,7 @@ export function createTrendPage(React, t, post, hooks) {
       if (paused) return
       const u = uplotRef.current
       if (!u || !u.setData) return
-      try { const { data } = toUplotData(cwd); u.setData(data) } catch {}
+      try { if (Array.isArray(trendPayload.data)) u.setData(trendPayload.data) } catch {}
     })
 
     const agentAllowed = cvReady && configVersion > 0
@@ -231,16 +236,28 @@ export function createTrendPage(React, t, post, hooks) {
       post('/dsh-vision-bench/focus', { cwd, target: { trendKey: key, kind: 'trend' } }).catch(() => {})
     }
     const doExport = () => {
-      const w = wrapRef.current, s = w && w._uplotSel, csv = s ? exportRangeCsv(cwd, { start: s.start, end: s.end }) : exportRangeCsv(cwd)
-      try { if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(csv) } catch {}
-      setExportNote(s ? '已导出区间 ' + new Date(s.start).toLocaleTimeString() + '→' + new Date(s.end).toLocaleTimeString() : '已导出最近 5 分钟')
+      const w = wrapRef.current, s = w && w._uplotSel
+      const start = s ? s.start : (Date.now() - TREND_WINDOW_MS)
+      const end = s ? s.end : Date.now()
+      const trend = (mbStore && mbStore.trend) || {}
+      const lines = ['time,point,name,unit,value']
+      const pts = (() => { try { return normalizeModbus(mbStore).points || [] } catch { return [] } })()
+      for (const pt of pts.filter((p) => p.trendEnabled === true).slice(0, 8)) {
+        const list = Array.isArray(trend[pt.id]) ? trend[pt.id] : []
+        for (const sv of list) {
+          if (!Array.isArray(sv) || sv[0] < start || sv[0] > end) continue
+          lines.push([sv[0], pt.id, (pt.name || String(pt.address)).replace(/,/g, '，'), pt.unit || '', sv[1] == null ? '' : sv[1]].join(','))
+        }
+      }
+      try { if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(lines.join('\n')) } catch {}
+      setExportNote(s ? '已导出区间 ' + new Date(start).toLocaleTimeString() + '→' + new Date(end).toLocaleTimeString() : '已导出最近 5 分钟')
       setTimeout(() => setExportNote(''), 2000)
     }
     const resetZoom = () => {
       const w = wrapRef.current; if (w) w._uplotSel = null
       const u = uplotRef.current
       if (u && u.setSelect) try { u.setSelect({ left: 0, width: 0, top: 0, height: 0 }, false) } catch {}
-      if (u && u.setData) try { const { data } = toUplotData(cwd); u.setData(data) } catch {}
+      if (u && u.setData) try { if (Array.isArray(trendPayload.data)) u.setData(trendPayload.data) } catch {}
     }
     return el('div', { className: 'dvb-live' },
       el('div', { className: 'dvb-live-head' },
@@ -264,7 +281,9 @@ export function createTrendPage(React, t, post, hooks) {
       evNote ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, evNote) : null,
       entries.length
         ? el('div', { ref: wrapRef, className: 'dvb-uplot', style: { width: '100%', height: '190px' } })
-        : el('div', { className: 'dvb-hint' }, t('chartEmpty')),
+        : el('div', { className: 'dvb-empty' },
+            el('div', null, t('trendEmptyPoint') || '暂无曲线点位'),
+            el('div', { className: 'dvb-hint' }, t('trendEmptyHint') || '请在上位机的点位配置中勾选“加入曲线”')),
       entries.length
         ? el('div', { className: 'dvb-trend-legend' }, entries.map((item) => el('div', { key: item.key, className: 'dvb-trend-row' },
           el('span', { className: 'dvb-trend-dot', style: { background: item.color } }),

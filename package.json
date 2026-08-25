@@ -76,7 +76,8 @@
     "cordis.patch.yml",
     "README.md",
     "LICENSE",
-    "bench-polling-service.mjs"
+    "bench-polling-service.mjs",
+    "bench-trend-store.mjs"
   ],
   "repository": {
     "type": "git",

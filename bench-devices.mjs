@@ -3,6 +3,23 @@
 
 import { functionTag, normalizePoints, normalizeValueRec } from './bench-points.mjs'
 import { normalizeAlarmState } from './bench-alarm.mjs'
+const TREND_KEEP_LOCAL = 600
+const normalizeTrendByPoint = (input) => {
+  if (!input || typeof input !== 'object') return {}
+  const out = {}
+  for (const [pid, list] of Object.entries(input)) {
+    if (!Array.isArray(list)) continue
+    const clean = []
+    for (const sample of list) {
+      const t = Number(sample && (sample.t ?? sample[0]))
+      if (!Number.isFinite(t) || t <= 0) continue
+      const v = sample == null ? null : (sample.v !== undefined ? sample.v : sample[1])
+      clean.push([t, v === null || v === undefined ? null : Number(v)])
+    }
+    if (clean.length) out[pid] = clean.slice(-TREND_KEEP_LOCAL)
+  }
+  return out
+}
 
 const PARITY = new Set(['N', 'E', 'O'])
 const VALID_ROLES = new Set(['client', 'server'])
@@ -572,6 +589,7 @@ export function normalizeModbus(input) {
       framesByConnection = normalizeFramesByConnection(null, connections)
     }
     let alarmState = normalizeAlarmState(src.alarmState && typeof src.alarmState === 'object' ? src.alarmState : (src.alarmActive && typeof src.alarmActive === 'object' ? src.alarmActive : {}), { pointsById: Object.fromEntries((points||[]).map(p=>[p.id,p])) })
+    const trend = normalizeTrendByPoint(src.trend)
     // active ids
     let activeConnectionId = devText(src.activeConnectionId, '')
     if (!connections.some(c=>c.id===activeConnectionId)) activeConnectionId = connections[0]?.id || 'c1'
@@ -594,6 +612,7 @@ export function normalizeModbus(input) {
       pollingByConnection,
       framesByConnection,
       alarmState,
+      trend,
     }
     // Legacy enumerable:false compat
     Object.defineProperties(ret, {

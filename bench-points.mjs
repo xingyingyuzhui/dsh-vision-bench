@@ -68,6 +68,8 @@ export const normalizePoint = (input) => {
     unit: text(input && input.unit, '').slice(0, 12),
     alarmMin: finiteOrNull(input && input.alarmMin),
     alarmMax: finiteOrNull(input && input.alarmMax),
+    // Task3/0.19.3: CSV 往返保留 trendEnabled 列
+    trendEnabled: (input && input.trendEnabled) === true || String(input && input.trendEnabled).toLowerCase() === 'true' || String(input && input.trendEnabled) === '1',
   }
 }
 
@@ -243,7 +245,7 @@ export const alarmLabelText = (item, kind) => {
 
 // ── CSV round-trip (per-point columns) ───────────────────────────────────
 
-const CSV_HEADER = ['name', 'function', 'address', 'scale', 'offset', 'unit', 'alarmMin', 'alarmMax']
+const CSV_HEADER = ['name', 'function', 'address', 'scale', 'offset', 'unit', 'alarmMin', 'alarmMax', 'trendEnabled']
 
 const csvCell = (value) => {
   const s = value === null || value === undefined ? '' : String(value)
@@ -285,6 +287,7 @@ export const pointsToCsv = (points) =>
       item.unit,
       item.alarmMin,
       item.alarmMax,
+      item.trendEnabled ? 'true' : '',
     ].map(csvCell).join(',')))
     .join('\n') + '\n'
 
@@ -311,6 +314,7 @@ export const csvToPoints = (input) => {
       unit: pick('unit'),
       alarmMin: pick('alarmMin') === '' ? null : Number(pick('alarmMin')),
       alarmMax: pick('alarmMax') === '' ? null : Number(pick('alarmMax')),
+      trendEnabled: pick('trendEnabled') === 'true' || pick('trendEnabled') === '1',
     })
   }
   const normalized = normalizePoints(points)
@@ -588,6 +592,7 @@ export const csvToSegments = (input) => {
       unit: pick('unit'),
       alarmMin: pick('alarmMin') === '' ? null : Number(pick('alarmMin')),
       alarmMax: pick('alarmMax') === '' ? null : Number(pick('alarmMax')),
+      trendEnabled: pick('trendEnabled') === 'true' || pick('trendEnabled') === '1',
     })
   }
   const normalized = normalizeSegments(segments)

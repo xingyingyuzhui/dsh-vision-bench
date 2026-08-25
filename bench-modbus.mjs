@@ -253,7 +253,16 @@ export const pointsOp = (home, cwd, body) => {
       } else {
         const idx = points.findIndex((p) => p.id === next.id)
         if (idx < 0) return { ok: false, error: '要更新的点位不存在: ' + next.id }
-        if (points.some((p, i) => i !== idx && p.connectionId === next.connectionId && p.function === next.function && p.address === next.address)) {
+        // Task1/0.19.3 (P1 修复): 编辑不得改变归属 — 未显式给出 deviceId/connectionId 时
+        // 保留原归属，绝不回落全局 activeDeviceId（会把设备2的点位移到设备1）
+        const existing = points[idx]
+        if (!inDid && !didArg) next.deviceId = existing.deviceId
+        if (!inCid && !cidArg) next.connectionId = existing.connectionId
+        // 未声明的新字段保留原值（趋势开关/告警上下限），显式 null 才清除
+        if (raw.trendEnabled === undefined) next.trendEnabled = existing.trendEnabled === true
+        if (raw.alarmMin === undefined) next.alarmMin = existing.alarmMin != null ? existing.alarmMin : null
+        if (raw.alarmMax === undefined) next.alarmMax = existing.alarmMax != null ? existing.alarmMax : null
+        if (points.some((p, i) => i !== idx && p.connectionId === next.connectionId && p.deviceId === next.deviceId && p.function === next.function && p.address === next.address)) {
           return { ok: false, error: '地址冲突: ' + pointLabel(next) }
         }
         points = points.map((p, i) => (i === idx ? { ...p, ...next, id: points[idx].id } : p))

@@ -1,6 +1,7 @@
 import { normalizeModbus } from './bench-devices.mjs'
 import { evaluateAlarms } from './bench-alarm.mjs'
 import { loadWorkspace, saveWorkspace } from './bench-store.mjs'
+import { sampleTrendValues } from './bench-trend-store.mjs'
 
 const tails = new Map()
 
@@ -76,10 +77,14 @@ const commit = (home, cwd, input, kind) =>
       connections: pack.connections,
       opts: { deadband: 1 },
     })
+    // Task3/0.19.3: 采样发生在提交阶段 — 与页面是否打开无关
+    const pointsById = Object.fromEntries((pack.points || []).map((p) => [p.id, p]))
+    const trend = sampleTrendValues(pack.trend || {}, input && input.pointValues, pointsById)
     const patch = {
       values,
       framesByConnection,
       alarmState: alarmEval.next,
+      trend,
       version: 3,
     }
     if (kind === 'poll' && input && input.pollingByConnection) {

@@ -288,14 +288,9 @@ test('Task8: TrendPage mounts with real effects without leaking listeners', asyn
   assert.ok(true)
 })
 test('Task4: TrendPage 让 Agent 分析区间 uses the input bridge, preserves text, posts typed trend evidence', async () => {
-  const { sampleTrend, clearTrendState } = await import('../bench-trend.mjs')
+  // Task3/0.19.3: 曲线数据来自工作区 trend 存储（提交阶段采样）
   const cwdA = '/tmp/trend-agent-' + Math.random()
-  clearTrendState(cwdA)
   const wall = Date.now()
-  sampleTrend(cwdA, {
-    points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: 'Temp', scale: 1, offset: 0 }],
-    values: [{ pointId: 'p1', raw: 42, ok: true }],
-  })
   let undoNow = null
   try {
     const oldNow = Date.now
@@ -306,7 +301,7 @@ test('Task4: TrendPage 让 Agent 分析区间 uses the input bridge, preserves t
     const evidenceCalls = []
     const evidenceOkFlag = { ok: true, evidence: [] }
     const post = async (path, body) => {
-      if (path === '/dsh-vision-bench/state') return { ok: true, workspace: { modbus: { version: 3, configVersion: 7, connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }], devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }], points: [], framesByConnection: {} } }, health: {} }
+      if (path === '/dsh-vision-bench/state') return { ok: true, workspace: { modbus: { version: 3, configVersion: 7, trend: { p1: [[wall, 42], [wall + 500, 43]] }, connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }], devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }], points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: 'Temp', function: 3, address: 0, scale: 1, offset: 0, trendEnabled: true }], framesByConnection: {} } }, health: {} }
       if (path === '/dsh-vision-bench/evidence') { evidenceCalls.push(body.evidence || body.item || [body]); return evidenceOkFlag }
       return { ok: true }
     }
@@ -358,20 +353,14 @@ test('Task4: TrendPage 让 Agent 分析区间 uses the input bridge, preserves t
     window.removeEventListener('error', onError)
   } finally {
     if (undoNow) undoNow()
-    clearTrendState(cwdA)
   }
 })
 
 test('Task4: no input writer → clipboard fallback and no crash', async () => {
-  const { sampleTrend, clearTrendState } = await import('../bench-trend.mjs')
   const cwdB = '/tmp/trend-agent-cb-' + Math.random()
-  clearTrendState(cwdB)
-  sampleTrend(cwdB, {
-    points: [{ id: 'p2', connectionId: 'c2', deviceId: 'd2', name: 'P', scale: 1, offset: 0 }],
-    values: [{ pointId: 'p2', raw: 1, ok: true }],
-  })
+  const wall = Date.now()
   const post = async (path) => {
-    if (path === '/dsh-vision-bench/state') return { ok: true, workspace: { modbus: { version: 3, configVersion: 3, connections: [{ id: 'c2', name: 'C2', conn: { mode: 'tcp', host: '10.0.0.8', tcpPort: 502 } }], devices: [], points: [] } }, health: {} }
+    if (path === '/dsh-vision-bench/state') return { ok: true, workspace: { modbus: { version: 3, configVersion: 3, trend: { p2: [[wall, 1]] }, connections: [{ id: 'c2', name: 'C2', conn: { mode: 'tcp', host: '10.0.0.8', tcpPort: 502 } }], devices: [{ id: 'd2', connectionId: 'c2', name: 'D2', unitId: 1 }], points: [{ id: 'p2', connectionId: 'c2', deviceId: 'd2', name: 'P', function: 3, address: 0, scale: 1, offset: 0, trendEnabled: true }] } }, health: {} }
     return { ok: true }
   }
   const tMap = (k) => ({ liveChart: '曲线', chartWindow: '最近 5 分钟' }[k] || k)
@@ -392,7 +381,6 @@ test('Task4: no input writer → clipboard fallback and no crash', async () => {
   assert.equal(errors.length, 0, 'no errors on clipboard fallback: ' + JSON.stringify(errors))
   tree.unmount()
   window.removeEventListener('error', onError)
-  clearTrendState(cwdB)
 })
 
 test('unmounting frames page never opens or closes a COM', async () => {

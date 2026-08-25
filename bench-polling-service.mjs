@@ -58,7 +58,8 @@ const reconcile = (home, cwd, packIn) => {
   const wanted = new Map()
   for (const c of pack.connections || []) {
     const p = (pack.pollingByConnection || {})[c.id]
-    if (p && p.enabled === true && (c.conn && !c.conn.sim)) {
+    // 仿真连接同样由协调器采集（sim 读由 Worker/驱动侧处理，不占串口）
+    if (p && p.enabled === true && c.conn) {
       wanted.set(c.id, { intervalMs: Number(p.intervalMs) || 1000 })
     }
   }

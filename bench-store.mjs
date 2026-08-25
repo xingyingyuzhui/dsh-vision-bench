@@ -409,6 +409,8 @@ export const saveWorkspace = (home, cwd, input) => {
     if (incoming.framesByConnection !== undefined) {
       mergedModbus.framesByConnection = { ...mergedModbus.framesByConnection, ...incoming.framesByConnection }
     }
+    // Task3/0.19.3: 曲线采样存储（提交阶段写入）
+    if (incoming.trend !== undefined) mergedModbus.trend = incoming.trend
     // Task1/0.18.2: explicit WHOLE-replacement semantics — merge cannot express
     // deletion. normalizeFramesByConnection pre-seeds every connection id, which
     // would resurrect cleared keys as empty arrays; normalize only provided keys.
