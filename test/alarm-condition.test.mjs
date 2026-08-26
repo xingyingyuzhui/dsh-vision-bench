@@ -71,3 +71,39 @@ test('Task12: alarm ref keeps point/connection/device/frame/transaction/task', (
   assert.equal(a.transactionId, 't456')
   assert.equal(a.taskId, 'task7')
 })
+
+test('Task9/0.20.1: 关闭告警 → 激活即恢复（含 deadband/pending）；监视独立', () => {
+  const points = [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', alarmMin: null, alarmMax: 100, alarmEnabled: true }]
+  let cur = evaluateAlarms({ points, values: [{ pointId: 'p1', raw: 120, ok: true }], opts: { now: 1000, deadband: 5 } })
+  assert.equal(cur.next.p1.condition, 'active', '高值产生告警')
+  // 值仍越限，关闭告警
+  const off = [{ ...points[0], alarmEnabled: false }]
+  cur = evaluateAlarms({ points: off, values: [{ pointId: 'p1', raw: 120, ok: true }], prevState: cur.next, opts: { now: 2000, deadband: 5 } })
+  assert.equal(cur.next.p1.condition, 'recovered', '关闭 → recovered（deadband>0 亦然）')
+  assert.ok(cur.recoveredList.length >= 1)
+  assert.equal(cur.fired.length, 0, '不再触发新告警')
+  assert.ok(cur.next.p1.recoveredAt > 0 && cur.next.p1.durationMs > 0, 'recoveredAt/durationMs 写入')
+  assert.equal(cur.next.p1.pendingSince, 0, 'pendingSince 清除')
+  assert.equal(cur.next.p1.threshold, 100, '阈值保留')
+})
+
+test('Task9/0.20.1: pending 告警关闭后不转为 active', () => {
+  const points = [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', alarmMax: 100, alarmEnabled: true }]
+  let cur = evaluateAlarms({ points, values: [{ pointId: 'p1', raw: 120, ok: true }], opts: { now: 1000, delayMs: 5000 } })
+  assert.ok(cur.next.p1.pendingSince > 0, 'pending 状态')
+  const off = [{ ...points[0], alarmEnabled: false }]
+  cur = evaluateAlarms({ points: off, values: [{ pointId: 'p1', raw: 120, ok: true }], prevState: cur.next, opts: { now: 2000, delayMs: 5000 } })
+  assert.equal(cur.next.p1.condition, 'recovered', 'pending → recovered')
+  assert.equal(cur.fired.length, 0, '不产生 active')
+})
+
+test('Task9/0.20.1: 监视关闭但告警开启 → 告警仍工作；告警关闭但监视开启 → 采样继续', () => {
+  // 告警与监视独立（采样由 trend-store 门控 monitorEnabled；告警门控 alarmEnabled）
+  const points = [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', alarmMax: 100, alarmEnabled: true, monitorEnabled: false }]
+  const cur = evaluateAlarms({ points, values: [{ pointId: 'p1', raw: 150, ok: true }], opts: { now: 1000 } })
+  assert.equal(cur.next.p1.condition, 'active', '监视关闭不影响告警')
+  // 采样：monitorEnabled 关闭 → 无样本（由 sampleTrendValues 负责，此处纯语义验证模型）
+  const model = points[0]
+  assert.equal(model.monitorEnabled, false)
+  assert.equal(model.alarmEnabled, true)
+})

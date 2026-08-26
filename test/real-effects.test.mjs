@@ -328,19 +328,23 @@ test('Task4: TrendPage 让 Agent 分析区间 uses the input bridge, preserves t
     if (origWrite) navigator.clipboard.writeText = writeSpy
     const tree = render(createElement(Trend, props))
     await waitFor(() => {
-      const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('复制组件引用'))
+      const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('让 Agent 分析组件'))
       assert.ok(btn, 'visualization agent button rendered after real effect')
     }, { timeout: 6000 })
     await act(async () => {
-      const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('复制组件引用'))
+      const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('让 Agent 分析组件'))
       btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
       await new Promise((r) => setTimeout(r, 120))
     })
     assert.equal(errors.length, 0, 'no uncaught/window errors: ' + JSON.stringify(errors))
-    // 可视化页 Agent 图标：复制结构化引用（不进入 input bridge，不自动提交）
-    assert.equal(setDraftCalls, 0, 'no draft mutation via agent icon')
+    // Task7/0.20.1: 组件引用追加到当前 Session 输入框——不覆盖已有输入、不自动发送
+    assert.equal(setDraftCalls, 1, 'setDraft called once via input bridge')
     assert.equal(submissions, 0, 'no auto-submit')
-    assert.equal(copiedNotes.length, 1, 'reference copied to clipboard')
+    assert.ok(draft.startsWith('用户已写好的中文输入'), '已有输入保留')
+    assert.ok(draft.includes('\n"kind": "visualization"') || draft.includes('\n{\n  "kind": "visualization"'), '换行追加引用')
+    assert.ok(draft.includes('"visualizationId"') && draft.includes('"componentType"') && draft.includes('"pointIds"'), '引用字段完整')
+    assert.ok(draft.includes('"configVersion": 7'), 'configVersion 7')
+    assert.ok(draft.includes('"timeRange"'), 'timeRange 存在')
     if (origWrite) navigator.clipboard.writeText = origWrite
     tree.unmount()
     window.removeEventListener('error', onError)
@@ -363,15 +367,16 @@ test('Task4: no input writer → clipboard fallback and no crash', async () => {
   window.addEventListener('error', onError)
   const tree = render(createElement(Trend, { sessionId: 's1', scope: { cwd: cwdB }, useSessions: noop }))
   await waitFor(() => {
-    const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('复制组件引用'))
+    const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('让 Agent 分析组件'))
     assert.ok(btn)
   }, { timeout: 6000 })
   await act(async () => {
-    const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('复制组件引用'))
+    const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('让 Agent 分析组件'))
     btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
     await new Promise((r) => setTimeout(r, 80))
   })
   assert.equal(errors.length, 0, 'no errors on clipboard fallback: ' + JSON.stringify(errors))
+  assert.ok(tree.container.textContent.includes('已复制组件引用') || tree.container.textContent.includes('仅复制'), '无输入桥时剪贴板回退并提示')
   tree.unmount()
   window.removeEventListener('error', onError)
 })

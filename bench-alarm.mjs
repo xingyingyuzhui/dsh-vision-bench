@@ -129,8 +129,12 @@ export function evaluateAlarms({ points, values, prevState, pollingByConnection,
   // process alarms with deadband and delay
   for (const p of Array.isArray(points) ? points : []) {
     if (!p || !p.id) continue
-    if (p.alarmMin == null && p.alarmMax == null) {
-      if (next[p.id] && next[p.id].group === PROCESS && next[p.id].condition === COND_ACTIVE) {
+    // Task9/0.20.1: 告警开关是真正的总开关（显式 alarmEnabled 优先；未声明按阈值推断）。
+    // 关闭 → 不进入死区/breach；激活或 pending 告警立即转 recovered，清除 pendingSince。
+    const effAlarmEnabled = (p.alarmEnabled === undefined) ? (p.alarmMin != null || p.alarmMax != null) : p.alarmEnabled
+    const alarmDisabled = effAlarmEnabled !== true || (p.alarmMin == null && p.alarmMax == null)
+    if (alarmDisabled) {
+      if (next[p.id] && next[p.id].group === PROCESS && (next[p.id].condition === COND_ACTIVE || next[p.id].pendingSince || next[p.id].status === ACTIVE)) {
         const pr = next[p.id]
         const ra = now
         next[p.id] = { ...pr, condition: COND_RECOVERED, status: pr.acknowledged ? ACKED : RECOVERED, recoveredAt: ra, durationMs: Math.max(0, ra - pr.firstAt), lastAt: now, suppressUntil: now + suppressMs, pendingSince: 0 }

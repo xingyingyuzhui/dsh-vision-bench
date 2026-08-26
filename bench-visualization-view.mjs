@@ -2,7 +2,7 @@
 // 组件编辑器：名称/类型/关联点位搜索多选（仅 monitorEnabled，限定路径）。
 // 渲染来源：line → modbus.trend（uPlot）；bar → 最新 values（uPlot bars）；
 // value → 数值卡；switch → FC01 写点（确认后写入并读回）。
-import { subscribeState, subscribeFocus, buildAgentRef, copyAgentRef, hasHarnessInput } from './bench-shared.mjs'
+import { subscribeState, subscribeFocus, buildAgentRef, copyAgentRef, hasHarnessInput, readInputDraft, buildInputBridge, dispatchAgentRef, postEvidence, evidenceFromRef, agentRefToText } from './bench-shared.mjs'
 import { sessionCwd } from './bench-live.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { TREND_WINDOW_MS, trendDataForComponents, componentLatestValues, UPLOT_PROTO } from './bench-trend.mjs'
@@ -20,7 +20,12 @@ export function createVisualizationPage(React, t, post, hooks) {
   const openHmi = hooks && hooks.openHmi
   const el = React.createElement
   return function VisualizationPage(props) {
+    const el2 = el
+    void el2
     const cwd = (props && props.scope && props.scope.cwd) || sessionCwd(props) || ''
+    // Task7/0.20.1: render 顶层读取输入桥（禁止在事件处理中调用 React Hook）
+    const inputDraft = readInputDraft(props && props.useInput)
+    const agentBridge = buildInputBridge(props, inputDraft)
     const [mb, setMb] = React.useState(null)
     const [editor, setEditor] = React.useState(null) // { id, name, type, pointIds, search }
     const [deleteId, setDeleteId] = React.useState('')
@@ -67,11 +72,17 @@ export function createVisualizationPage(React, t, post, hooks) {
     function saveComponent() {
       if (!editor) return
       if (!String(editor.name || '').trim()) { setNote('请填写组件名称'); return }
-      const cand = normalizeVisualizationComponent({ id: editor.id, name: editor.name, type: editor.type, pointIds: editor.pointIds })
+      const existingIndex = editor.id ? components.findIndex((c) => c.id === editor.id) : -1
+      // Task8/0.20.1: 编辑基于原组件合并，保留 id/order/settings/type/pointIds；
+      // 新组件才追加到末尾；禁止 filter+concat 改变排列
+      const base = existingIndex >= 0 ? components[existingIndex] : {}
+      const cand = normalizeVisualizationComponent({ ...base, ...editor, id: (existingIndex >= 0 ? base.id : '') })
       const v = validateVisualizationComponent(cand, points)
       if (!v.ok) { setNote(v.error); return }
-      const next = { schemaVersion: 1, components: components.filter((c) => c.id !== editor.id).concat([cand]) }
-      persistViz(next)
+      const nextComponents = components.slice()
+      if (existingIndex >= 0) nextComponents[existingIndex] = cand
+      else nextComponents.push(cand)
+      persistViz({ schemaVersion: 1, components: nextComponents })
       setEditor(null)
       setNote('')
     }
@@ -90,13 +101,12 @@ export function createVisualizationPage(React, t, post, hooks) {
     }
     function openEditor(comp) {
       setErrorless()
-      setEditor({
-        id: comp ? comp.id : '',
-        name: comp ? comp.name : ('组件' + (components.length + 1)),
-        type: comp ? comp.type : 'line',
-        pointIds: comp ? comp.pointIds.slice() : [],
-        search: '',
-      })
+      if (comp) {
+        // Task8/0.20.1: 保存完整编辑上下文（id/order/settings 原样保留）
+        setEditor({ ...comp, pointIds: (comp.pointIds || []).slice(), search: '' })
+      } else {
+        setEditor({ id: '', name: ('组件' + (components.length + 1)), type: 'line', pointIds: [], order: components.length, settings: { windowMs: 300000, confirmWrite: true }, search: '' })
+      }
     }
     function setErrorless() { setNote('') }
 
@@ -217,7 +227,7 @@ export function createVisualizationPage(React, t, post, hooks) {
           el('span', { className: 'dvb-tag' }, comp.pointIds.length + ' 点位'),
           degraded ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, '数据源未监视/缺失 — 请修复') : null,
           el('div', { className: 'dvb-actions' },
-            hasHarnessInput ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-icon', title: '复制组件结构化引用并让 Agent 分析', 'aria-label': '复制组件引用 ' + comp.name, onClick() { copyComponentRef(comp) } }, 'ⓘ') : null,
+            el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-icon', title: hasHarnessInput(props) ? '将组件引用加入当前 Session 输入框并让 Agent 分析' : '复制组件结构化引用', 'aria-label': '让 Agent 分析组件 ' + comp.name, onClick() { copyComponentRef(comp) } }, 'ⓘ'),
             deleteId === comp.id
               ? el('span', { className: 'dvb-actions' },
                   el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-danger', onClick() { removeComponent(comp.id) } }, '确认删除'),
@@ -248,14 +258,28 @@ export function createVisualizationPage(React, t, post, hooks) {
       }
       if (comp.type === 'bar') {
         const bd = barDataOf(comp)
+        // Task10/0.20.1: 柱长按 maxAbs 比例；正负方向；零值基线；null/非有限 → —
+        const nums = bd.latest.map((l) => (l.ok && l.value != null && Number.isFinite(Number(l.value))) ? Number(l.value) : null)
+        const maxAbs = Math.max(1, ...nums.filter((v) => v !== null).map((v) => Math.abs(v)))
         return el('div', { className: 'dvb-viz-body' },
           el('div', { className: 'dvb-viz-bars' },
-            bd.latest.map((item) => el('div', { key: item.pointId, className: 'dvb-viz-bar-row' },
-              el('span', { className: 'dvb-viz-bar-name', title: item.name }, item.name),
-              el('div', { className: 'dvb-viz-bar-track' },
-                el('div', { className: 'dvb-viz-bar-fill', style: { width: '100%', height: '100%' } })),
-              el('span', { className: 'dvb-viz-bar-val' }, item.ok && item.value != null ? String(item.value) + (item.unit ? ' ' + item.unit : '') : '—')))),
-          el('div', { className: 'dvb-hint' }, '柱高按当前值相对比例显示（最新 values）'))
+            bd.latest.map((item) => {
+              const v = (item.ok && item.value != null && Number.isFinite(Number(item.value))) ? Number(item.value) : null
+              const percent = v === null ? 0 : (Math.abs(v) / maxAbs) * 100
+              return el('div', { key: item.pointId, className: 'dvb-viz-bar-row' },
+                el('span', { className: 'dvb-viz-bar-name', title: item.name }, item.name),
+                el('div', { className: 'dvb-viz-bar-track' },
+                  v === null
+                    ? el('span', { className: 'dvb-viz-bar-missing', title: '无有效值' }, '—')
+                    : el('div', {
+                        className: 'dvb-viz-bar-fill' + (v < 0 ? ' dvb-viz-bar-neg' : v === 0 ? ' dvb-viz-bar-zero' : ''),
+                        'data-sign': v < 0 ? 'neg' : v > 0 ? 'pos' : 'zero',
+                        title: String(v) + (item.unit ? ' ' + item.unit : ''),
+                        style: { width: Math.max(v === 0 ? 0.5 : 1, percent) + '%' },
+                      })),
+                el('span', { className: 'dvb-viz-bar-val' }, v === null ? '—' : String(v) + (item.unit ? ' ' + item.unit : '')))
+            })),
+          el('div', { className: 'dvb-hint' }, '柱长按 |值| / 最大绝对值 比例显示；通信失败显示 —'))
       }
       if (comp.type === 'value') {
         const item = latest[0] || {}
@@ -281,13 +305,33 @@ export function createVisualizationPage(React, t, post, hooks) {
 
     function copyComponentRef(comp) {
       const ref = buildAgentRef('visualization', { visualizationId: comp.id, type: comp.type, pointIds: comp.pointIds, name: comp.name }, { configVersion: pack && pack.configVersion || 1, start: Date.now() - TREND_WINDOW_MS, end: Date.now() })
-      copyAgentRef(ref, () => setCopied('已复制组件引用'))
-      setTimeout(() => setCopied(''), 2000)
+      const copiedText = agentRefToText(ref)
+      if (agentBridge && typeof agentBridge.setDraft === 'function') {
+        // 追加引用到当前 Session 输入框；不覆盖已有输入；不自动发送
+        const res = dispatchAgentRef(ref, agentBridge)
+        setCopied((res.mode === 'input' ? '已加入输入框' : res.mode === 'sent' ? '已发送' : '仅复制') + ' · ' + comp.name)
+      } else {
+        try {
+          if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copiedText)
+          setCopied('已复制组件引用 · ' + comp.name)
+        } catch { setCopied('复制失败') }
+      }
+      try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setNote(reason)) } catch {}
+      setTimeout(() => setCopied(''), 2500)
     }
 
     const pointOptions = pack ? monitoredPointOptions(pack) : []
+    const numericOk = (o) => o.function === 3 || o.function === 4
     const editorOpts = editor
-      ? pointOptions.filter((o) => !editor.search || (o.name + ' ' + o.path + ' ' + o.pointId).toLowerCase().includes(editor.search.toLowerCase()))
+      ? pointOptions.filter((o) => {
+          // Task11/0.20.1: 按当前组件类型过滤可选点位（不静默删除已选不兼容点）
+          if (editor.type === 'line' || editor.type === 'bar') { if (!numericOk(o)) return false }
+          if (editor.type === 'switch' && o.function !== 1) return false
+          if (editor.search) {
+            return (o.name + ' ' + o.path + ' ' + o.pointId).toLowerCase().includes(editor.search.toLowerCase())
+          }
+          return true
+        })
       : []
 
     return el('div', { className: 'dvb-live dvb-viz' },

@@ -151,3 +151,78 @@ test('degraded 组件显示修复入口；关闭监视/删除点位不删除组�
   await waitFor(() => assert.ok(tree.container.textContent.includes('编辑组件')), { timeout: 6000 })
   tree.unmount()
 })
+test('Task10/0.20.1: 柱状图柱长按比例 + 正负方向 + null 显示 —', async () => {
+  const mb = JSON.parse(JSON.stringify(MB))
+  mb.points.push({ id: 'p4', connectionId: 'c1', deviceId: 'd1', name: '负值', function: 3, address: 3, monitorEnabled: true })
+  mb.points.push({ id: 'p5', connectionId: 'c1', deviceId: 'd1', name: '坏值', function: 3, address: 4, monitorEnabled: true })
+  mb.values = [
+    { key: 'p1', pointId: 'p1', value: 10, ok: true, at: Date.now() },
+    { key: 'p2', pointId: 'p2', value: 50, ok: true, at: Date.now() },
+    { key: 'p4', pointId: 'p4', value: -100, ok: true, at: Date.now() },
+    { key: 'p5', pointId: 'p5', value: null, ok: false, error: '超时', at: Date.now() },
+  ]
+  mb.visualization = { schemaVersion: 1, components: [{ id: 'viz_bar', name: '柱', type: 'bar', pointIds: ['p1', 'p2', 'p4', 'p5'] }] }
+  const { post } = makePost(mb)
+  const Viz = createVisualizationPage(React, t, post, {})
+  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  await waitFor(() => assert.ok(tree.container.textContent.includes('柱')), { timeout: 6000 })
+  const fills = Array.from(tree.container.querySelectorAll('.dvb-viz-bar-fill'))
+  assert.equal(fills.length, 3, '三个有效值柱')
+  const widths = fills.map((f) => parseFloat(f.style.width))
+  assert.ok(Math.abs(Math.max(...widths) - 100) < 0.5, '最大绝对值(100) → 100%')
+  assert.ok(widths[0] < widths[1], '10 < 50')
+  assert.ok(Boolean(fills.find((f) => f.getAttribute('data-sign') === 'neg')), '负值方向')
+  assert.ok(Boolean(fills.find((f) => f.getAttribute('data-sign') === 'pos')), '正值方向')
+  // null 显示 —
+  const missing = tree.container.querySelector('.dvb-viz-bar-missing')
+  assert.ok(missing && missing.textContent === '—', '通信失败显示 —')
+  assert.ok(tree.container.textContent.includes('10') && tree.container.textContent.includes('50'), '保留真实数值')
+  tree.unmount()
+})
+
+test('Task8/0.20.1: 编辑保留 ID/order/windowMs/confirmWrite 且排列不变（索引替换）', async () => {
+  const mb = JSON.parse(JSON.stringify(MB))
+  mb.visualization = { schemaVersion: 1, components: [
+    { id: 'viz_x', name: '第一', type: 'line', pointIds: ['p1'], order: 2, settings: { windowMs: 120000, confirmWrite: false } },
+    { id: 'viz_y', name: '第二', type: 'value', pointIds: ['p2'], order: 5, settings: { windowMs: 60000, confirmWrite: true } },
+  ] }
+  const saved = []
+  const base = makePost(mb)
+  const post = async (path, body) => {
+    if (path === '/dsh-vision-bench/workspace') saved.push(body)
+    return base.post(path, body)
+  }
+  const Viz = createVisualizationPage(React, t, post, {})
+  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  await waitFor(() => assert.ok(tree.container.textContent.includes('第一')), { timeout: 6000 })
+  const cards = Array.from(tree.container.querySelectorAll('.dvb-viz-card'))
+  assert.equal(cards.length, 2, '两个组件')
+  const editFirst = Array.from(cards[0].querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('编辑组件'))
+  await act(async () => { editFirst.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
+  await waitFor(() => assert.ok(tree.container.textContent.includes('编辑组件')), { timeout: 6000 })
+  // 保存（名称空不变更时，norm 后同值）→ 索引替换
+  const saveBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '保存')
+  await act(async () => { saveBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); await new Promise((r) => setTimeout(r, 60)) })
+  const vizPayload = saved.length && saved[saved.length - 1].modbus.visualization
+  assert.ok(vizPayload, '保存提交')
+  assert.equal(vizPayload.components.length, 2, '仍两个组件')
+  assert.deepEqual(vizPayload.components.map((c) => c.id), ['viz_x', 'viz_y'], '排列不变')
+  const c0 = vizPayload.components[0]
+  assert.equal(c0.id, 'viz_x', 'ID 不变')
+  assert.equal(c0.order, 2, 'order 不变')
+  assert.deepEqual(c0.settings, { windowMs: 120000, confirmWrite: false }, 'windowMs/confirmWrite 不变')
+  tree.unmount()
+})
+
+test('Task1/0.20.1: 无图表运行时 → 曲线卡片显示渲染失败 + 重试/编辑入口（不静默吞掉）', async () => {
+  const mb = JSON.parse(JSON.stringify(MB))
+  mb.visualization = { schemaVersion: 1, components: [{ id: 'viz_line', name: '线', type: 'line', pointIds: ['p1'] }] }
+  const { post } = makePost(mb)
+  const Viz = createVisualizationPage(React, t, post, {})
+  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  await waitFor(() => assert.ok(tree.container.textContent.includes('图表运行时不可用')), { timeout: 8000 })
+  const btns = Array.from(tree.container.querySelectorAll('button')).map((b) => b.textContent)
+  assert.ok(btns.includes('重试'), '重试入口')
+  assert.ok(btns.includes('编辑'), '编辑入口')
+  tree.unmount()
+})

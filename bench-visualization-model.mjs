@@ -91,15 +91,21 @@ export const validateVisualizationComponent = (component, points) => {
   }
   const byId = new Map((Array.isArray(points) ? points : []).map((p) => [p.id, p]))
   const notMonitored = []
-  const notWritable = []
+  const unsupported = []
+  // Task11/0.20.1: 类型-功能码 约束（line/bar 仅数值型 FC03/04；value 任意；switch 仅 FC01）
+  const numericFn = (fn) => fn === 3 || fn === 4
   for (const pid of ids) {
     const pt = byId.get(pid)
     if (!pt) { notMonitored.push(pid); continue }
     if (pt.monitorEnabled !== true) notMonitored.push(pid)
-    if (type === 'switch' && pt.function !== 1) notWritable.push(pid)
+    if ((type === 'line' || type === 'bar') && !numericFn(pt.function)) unsupported.push(pid)
+    if (type === 'switch' && pt.function !== 1) unsupported.push(pid)
+    if (type === 'value' && ![1, 2, 3, 4].includes(pt.function)) unsupported.push(pid)
+  }
+  if (unsupported.length) {
+    return { ok: false, error: '组件类型不支持这些点位功能码: ' + unsupported.join(', '), errorCode: 'VIZ_POINT_TYPE_UNSUPPORTED' }
   }
   if (notMonitored.length) return { ok: false, error: '以下点位未开启监视: ' + notMonitored.join(', ') }
-  if (notWritable.length) return { ok: false, error: '开关组件只接受 FC01 可写线圈点位: ' + notWritable.join(', ') }
   return { ok: true }
 }
 

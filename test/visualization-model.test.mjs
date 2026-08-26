@@ -70,7 +70,7 @@ test('switch 只接受 FC01 可写线圈点位', () => {
   assert.equal(ok.ok, true, ok.error || '')
   const bad = validateVisualizationComponent(normalizeVisualizationComponent({ type: 'switch', pointIds: ['hr'] }), points)
   assert.equal(bad.ok, false)
-  assert.ok(bad.error.includes('FC01'), bad.error)
+  assert.equal(bad.errorCode, 'VIZ_POINT_TYPE_UNSUPPORTED', bad.error)
   const bad2 = validateVisualizationComponent(normalizeVisualizationComponent({ type: 'switch', pointIds: ['di'] }), points)
   assert.equal(bad2.ok, false)
 })
@@ -112,4 +112,30 @@ test('emptyVisualization / componentUsesPoint', () => {
   assert.deepEqual(v.components, [])
   assert.equal(componentUsesPoint({ pointIds: ['p1', 'p2'] }, 'p2'), true)
   assert.equal(componentUsesPoint({ pointIds: ['p1'] }, 'pX'), false)
+})
+test('Task11/0.20.1: 组件类型-功能码约束（line/bar 仅数值型，value 任意，switch 仅 FC01）', () => {
+  const allPts = pts([
+    { id: 'coil', function: 1 }, { id: 'di', function: 2 }, { id: 'hr', function: 3 }, { id: 'ir', function: 4 },
+  ])
+  // line/bar: FC01/02 拒绝
+  for (const type of ['line', 'bar']) {
+    const bad = validateVisualizationComponent(normalizeVisualizationComponent({ type, pointIds: ['coil'] }), allPts)
+    assert.equal(bad.ok, false)
+    assert.equal(bad.errorCode, 'VIZ_POINT_TYPE_UNSUPPORTED')
+    const bad2 = validateVisualizationComponent(normalizeVisualizationComponent({ type, pointIds: ['di'] }), allPts)
+    assert.equal(bad2.ok, false)
+    const ok3 = validateVisualizationComponent(normalizeVisualizationComponent({ type, pointIds: ['hr'] }), allPts)
+    assert.equal(ok3.ok, true)
+    const ok4 = validateVisualizationComponent(normalizeVisualizationComponent({ type, pointIds: ['ir'] }), allPts)
+    assert.equal(ok4.ok, true)
+  }
+  // value 可显示任意（含布尔线圈）
+  const v = validateVisualizationComponent(normalizeVisualizationComponent({ type: 'value', pointIds: ['coil'] }), allPts)
+  assert.equal(v.ok, true)
+  // switch 仅 FC01
+  const sOk = validateVisualizationComponent(normalizeVisualizationComponent({ type: 'switch', pointIds: ['coil'] }), allPts)
+  assert.equal(sOk.ok, true)
+  const sBad = validateVisualizationComponent(normalizeVisualizationComponent({ type: 'switch', pointIds: ['hr'] }), allPts)
+  assert.equal(sBad.ok, false)
+  assert.equal(sBad.errorCode, 'VIZ_POINT_TYPE_UNSUPPORTED')
 })
