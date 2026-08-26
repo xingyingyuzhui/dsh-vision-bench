@@ -42,8 +42,8 @@ export function createMapView(React, t, post) {
           try { setTargetJump(jump) } catch {}
         }
         setKeil((prev) => (prev.project === project && prev.target === target ? prev : { project, target }))
-      })
-    }, [cwd, post])
+      }, { sessionId: (props && props.sessionId) || '' })
+    }, [cwd, post, props && props.sessionId])
 
     React.useEffect(() => {
       let stop = false

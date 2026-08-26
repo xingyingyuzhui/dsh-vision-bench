@@ -148,7 +148,10 @@ export const connectOp = async (home, cwd, body, opts) => {
       }
       const hit = pack.devices.find((d) => d.id === devId && d.connectionId === cidRaw)
       if (!hit) return { ok: false, error: '设备不存在: ' + devId, code: 'DEVICE_NOT_FOUND', connectionId: cidRaw }
-      const unit = Math.min(247, Math.max(0, Math.trunc(Number(unitArg) || 1)))
+      const unit = Math.trunc(Number(unitArg))
+      if (!Number.isFinite(unit) || unit < 1 || unit > 247) {
+        return { ok: false, error: 'Unit ID 必须是 1..247（不支持广播 0）', code: 'UNIT_ID_INVALID', connectionId: cidRaw, deviceId: devId }
+      }
       nextDevices = pack.devices.map((d) => d.id === devId ? { ...d, unitId: unit } : d)
     }
     const patch = pickConnPatch(body)
@@ -1405,6 +1408,7 @@ export const requestFocus = (home, cwd, body) => {
   {
     const rt = resolveUnifiedTarget(pack, target)
     if (!rt.ok) {
+      if (rt.errorCode === 'VIZ_NOT_FOUND') return { ok: false, error: rt.error, errorCode: 'VIZ_NOT_FOUND' }
       const code = rt.errorCode === TARGET_CODES.TARGET_REQUIRED ? ERROR_CODES.TARGET_REQUIRED : (rt.errorCode === TARGET_CODES.TARGET_MISMATCH ? ERROR_CODES.TARGET_MISMATCH : ERROR_CODES.TARGET_REQUIRED)
       // map not-found variants to MISMATCH for unified view
       if (/不存在/.test(rt.error) && code === ERROR_CODES.TARGET_REQUIRED) return { ok: false, error: rt.error, errorCode: ERROR_CODES.TARGET_MISMATCH }

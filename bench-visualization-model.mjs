@@ -159,3 +159,21 @@ export const findComponent = (visualization, id) => {
   const viz = visualization && typeof visualization === 'object' ? visualization : {}
   return (Array.isArray(viz.components) ? viz.components : []).find((c) => c && c.id === id) || null
 }
+/** 对齐 modbusWrite 返回：outcomeUnknown / ok / readback[] */
+export function formatSwitchWriteNote(data, wantOn) {
+  const target = wantOn ? '开' : '关'
+  if (!data || data.ok === false) {
+    if (data && (data.outcomeUnknown || data.unknown)) return '目标 ' + target + ' → 回读未知 → 结果未知'
+    const rbRaw = data && data.readback
+    const hasRb = Array.isArray(rbRaw) ? rbRaw.length > 0 : rbRaw != null
+    if (data && hasRb) {
+      const rb = Array.isArray(rbRaw) ? rbRaw[0] : rbRaw
+      return '目标 ' + target + ' → 回读 ' + String(rb) + ' → 不一致'
+    }
+    return (data && data.error) ? data.error : '写入失败'
+  }
+  if (data.outcomeUnknown || data.unknown) return '目标 ' + target + ' → 回读未知 → 结果未知'
+  const rbRaw = data.readback
+  const rb = Array.isArray(rbRaw) ? (rbRaw.length ? rbRaw[0] : '—') : (rbRaw != null ? rbRaw : (data.value != null ? data.value : '—'))
+  return '目标 ' + target + ' → 回读 ' + String(rb) + ' → 一致'
+}

@@ -129,7 +129,7 @@ export function createDebugView(React, t, post, openProject) {
         }))
       }
       setJournal(pickJournal(data))
-    }), [cwd, post])
+    }, { sessionId }), [cwd, post, sessionId])
 
     function setKeil(patch) {
       setWorkspace((prev) => ({ ...prev, keil: { ...prev.keil, ...patch } }))

@@ -113,7 +113,7 @@ export function createAlarmPage(React, t, post, hooks) {
       setEvents(timeline.filter((item) => item.kind === 'alarm' || item.kind === 'alarm-clear'))
       const mb = data.workspace && data.workspace.modbus
       if (mb) { setAlarmState(mb.alarmState || mb.alarmActive || {}); try { setPack(normalizeModbus(mb)) } catch { setPack(null) } }
-    }), [cwd, post])
+    }, { sessionId: (props && props.sessionId) || '' }), [cwd, post, props && props.sessionId])
     const grouped = groupAlarms(alarmState)
     const bucketMap = grouped.buckets || { activeUnacked: grouped.activeUnacked || [], activeAcked: grouped.activeAcked || [], recoveredUnacked: grouped.recoveredUnacked || [], recoveredAcked: grouped.recoveredAcked || [] }
     const legacyMap = { current: grouped.current, history: grouped.history }
@@ -136,7 +136,7 @@ export function createAlarmPage(React, t, post, hooks) {
       setAlarmState(next)
       if (cwd) post('/dsh-vision-bench/workspace', { cwd, modbus:{ alarmState: next, version:3 } }).catch(()=>{})
     }
-    const sendToAgentAlarm = (row)=>{
+    const sendToAgentAlarm = async (row)=>{
       const cv = pack ? (pack.configVersion || 1) : 1
       const ref = buildAgentRef('alarm', {
         alarmId: row.a.id,
@@ -147,9 +147,9 @@ export function createAlarmPage(React, t, post, hooks) {
         start: row.a.firstAt || row.a.lastAt,
         end: row.a.lastAt,
       }, { configVersion: cv, start: row.a.firstAt || row.a.lastAt, end: row.a.lastAt })
-      const res = dispatchAgentRef(ref, agentBridge)
+      const res = await dispatchAgentRef(ref, agentBridge)
       // Task5/0.18.2: unified status enum input|sent|copied|failed — surface it on screen
-      setCopiedAlarm(row.a.id + ':' + res.status)
+      setCopiedAlarm(row.a.id + ':' + ((res && res.status) || '复制失败'))
       setTimeout(()=> setCopiedAlarm(''), 2000)
       if (cwd) {
         // Task4/0.18.2: typed evidence back-mount — failures surface CONFIG_DRIFT/TARGET_MISMATCH
@@ -190,7 +190,7 @@ export function createAlarmPage(React, t, post, hooks) {
             el('span', { className: 'dvb-map-meta' }, clockOf(row.a.lastAt)),
             el('span', { className: 'dvb-hint', title: row.a.id }, row.label),
             row.conn ? el('span', { className: 'dvb-hint' }, row.conn.name) : null,
-            row.dev ? el('span', { className: 'dvb-hint' }, row.dev.name + '·Unit '+row.dev.unitId) : null,
+            row.dev ? el('span', { className: 'dvb-hint' }, row.dev.name + '·站号 '+row.dev.unitId) : null,
             el('span', { className: 'dvb-hint' }, row.a.threshold!=null?'阈值 '+row.a.threshold:''),
             el('span', { className: 'dvb-hint' }, row.a.value!=null?'当前 '+row.a.value:''),
             el('span', { className: 'dvb-badge', 'data-quality': row.a.quality || 'good' }, row.a.quality || 'good'),

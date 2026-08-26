@@ -2,7 +2,7 @@ import { buildEvidenceRefs, connectOp, keilBuild, keilMap, listDir, listFrames, 
 import { requireKeilProject, requireWorkspaceCwd } from './bench-paths.mjs'
 import { decodeValue, pointRuntimeStatus } from './bench-points.mjs'
 import { connLabel, normalizeModbus } from './bench-devices.mjs'
-import { appendEvidence, applyConfigDraft, createConfigDraft, createManualRequest, discardConfigDraft, getConfigDraft, journalView, listConfigDrafts, loadWorkspace, saveWorkspace } from './bench-store.mjs'
+import { appendEvidence, applyConfigDraft, createConfigDraft, createManualRequest, discardConfigDraft, getConfigDraft, journalView, listConfigDrafts, loadWorkspace, saveWorkspace, touchServiceSession } from './bench-store.mjs'
 import { resolveTarget } from './bench-targets.mjs'
 import { readTrendSeries } from './bench-trend-store.mjs'
 import { listConnectionStates } from './bench-serial-monitor.mjs'
@@ -87,6 +87,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
   const origin = originFrom(originInput)
   const signal = opts && opts.signal
   if (signal && signal.aborted) return { ok: false, action, cancelled: true, error: '已取消' }
+  if (origin.sessionId) touchServiceSession(home, room.cwd, origin.sessionId)
 
   if (action === 'status') {
     const workspace = loadWorkspace(home, room.cwd)
@@ -95,7 +96,6 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
     const states = await listConnectionStates(home, room.cwd, opts)
     const connectionStates = (states && states.connectionStates) || []
     const stateByConn = new Map(connectionStates.map((s) => [s.connectionId, s.status || '']))
-    const activeDev = (pack.devices || []).find((d) => d.id === pack.activeDeviceId) || (pack.devices || [])[0]
     return {
       ok: true,
       action,
@@ -103,7 +103,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
       session: {
         // Vision 自动服务当前 Session；不再暴露手动绑定语义
         autoService: true,
-        sessionId: origin.sessionId || '',
+        sessionId: origin.sessionId || (workspace.session && workspace.session.boundId) || '',
       },
       keil: workspace.keil,
       modbus: {
@@ -156,7 +156,6 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
           stopbits: pack.conn.stopbits,
           host: pack.conn.host,
           tcpPort: pack.conn.tcpPort,
-          unitId: activeDev ? activeDev.unitId : undefined,
           sim: pack.conn.sim,
           label: connLabel(pack.conn),
         },
@@ -618,7 +617,7 @@ export function visionBenchTool(home) {
         frameId: { type: 'string', description: 'frames/focus 的报文稳定 id（framesByConnection 中每条报文的 id，要求显式）' },
         trendKey: { type: 'string', description: 'focus 聚焦的趋势序列 key（connectionId:deviceId:pointId）' },
         alarmId: { type: 'string', description: 'alarm 告警 id（alarmState 的 key）或 focus 的告警聚焦 id' },
-        kind: { type: 'string', description: 'focus/evidence 的类型标签：point|frame|trend|alarm|build|log' },
+        kind: { type: 'string', description: 'focus/evidence 的类型标签：point|frame|trend|alarm|visualization|build|log' },
         limit: { type: 'number', description: 'frames 的返回条数（1–200，默认 50）' },
         offset: { type: 'number', description: 'frames 分页偏移' },
         start: { type: 'number', description: 'trend 区间起始时间戳（ms）' },

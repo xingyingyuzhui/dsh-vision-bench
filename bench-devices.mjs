@@ -45,6 +45,12 @@ const devClampInt = (v, fb, min, max) => {
   return i
 }
 
+/** Modbus Unit ID：合法范围为 1..247（不含广播 0）。非法返回 null，禁止静默纠正。 */
+export const parseUnitId = (value) => {
+  const n = Math.trunc(Number(value))
+  return Number.isFinite(n) && n >= 1 && n <= 247 ? n : null
+}
+
 export const emptyConn = () => ({
   mode: 'rtu',
   port: '',
@@ -125,8 +131,10 @@ export const normalizeDevice = (input, fallbackConnId) => {
   const id = devText(raw.id, '') || genId('d')
   const connectionId = devText(raw.connectionId, '') || devText(raw.connId, '') || fallbackConnId || 'c1'
   const name = devText(raw.name, '') || '设备1'
+  const hasUnit = raw.unitId !== undefined || raw.unit !== undefined || raw.slave !== undefined
   const unitRaw = raw.unitId !== undefined ? raw.unitId : (raw.unit !== undefined ? raw.unit : (raw.slave !== undefined ? raw.slave : 1))
-  const unitId = devClampInt(unitRaw, 1, 0, 247)
+  // 缺省默认 1；显式非法值在 validateDevices 拒绝，加载时钳到 1..247（不保留 0）
+  const unitId = hasUnit ? (parseUnitId(unitRaw) ?? 1) : 1
   return {
     id,
     connectionId,
@@ -384,7 +392,11 @@ export const validateDevices = (devices, connections) => {
   for (const d of enabledDevices) {
     const cid = d.connectionId || 'c1'
     if (connEnabled.has(cid) && connEnabled.get(cid) === false) continue
-    const unit = Number(d.unitId)
+    const unit = parseUnitId(d.unitId)
+    if (unit == null) {
+      errors.push(`Unit ID 必须是 1..247（设备 ${d.name || d.id}，不支持广播 0）`)
+      continue
+    }
     if (!byConn.has(cid)) byConn.set(cid, new Map())
     const unitMap = byConn.get(cid)
     if (unitMap.has(unit)) {
@@ -455,8 +467,8 @@ function migrateLegacy(modbusLike) {
 function migrateV2ToV3(v2) {
   // v2 shape: { version:2, conn, points:[{id:p3_0,function,address...}], values:[{key:p3_0 ...}], polling, alarmActive }
   const rawConn = v2.conn || {}
-  // 一次性：旧 conn.slave → 默认设备 unitId；迁移后连接不再保留 slave
-  const unitId = devClampInt(rawConn.slave !== undefined ? rawConn.slave : 1, 1, 0, 247)
+  // 一次性：旧 conn.slave → 默认设备 unitId；迁移后连接不再保留 slave；0/非法 → 1
+  const unitId = parseUnitId(rawConn.slave !== undefined ? rawConn.slave : 1) ?? 1
   const conn = normalizeConn(rawConn)
   const connection = {
     id: 'c1',

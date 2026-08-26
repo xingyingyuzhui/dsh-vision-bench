@@ -169,7 +169,7 @@ const STATE_BUSES = new Map() // cwd -> { cwd, data, subs:Set, timer, seq, post 
 function busEntry(post, cwd) {
   let e = STATE_BUSES.get(cwd)
   if (!e) {
-    e = { cwd, data: null, subs: new Set(), timer: 0, seq: 0, post: null }
+    e = { cwd, data: null, subs: new Set(), timer: 0, seq: 0, post: null, sessionId: '' }
     STATE_BUSES.set(cwd, e)
   }
   // keep the freshest post fn (hot reload must not hold a stale closure)
@@ -181,7 +181,9 @@ function busPull(e) {
   const seq = ++e.seq
   const post = e.post
   if (typeof post !== 'function') return
-  post('/dsh-vision-bench/state', { cwd: e.cwd }).then((data) => {
+  const payload = { cwd: e.cwd }
+  if (e.sessionId) payload.sessionId = e.sessionId
+  post('/dsh-vision-bench/state', payload).then((data) => {
     // unsubscribed (map entry gone) or a newer request superseded this one
     if (!STATE_BUSES.has(e.cwd) || seq !== e.seq) return
     e.data = data
@@ -191,12 +193,14 @@ function busPull(e) {
   }).catch(() => { /* next tick retries */ })
 }
 
-export function subscribeState(post, cwd, cb) {
+export function subscribeState(post, cwd, cb, opts) {
   if (!cwd) {
     cb(null)
     return function () {}
   }
   const e = busEntry(post, cwd)
+  const sid = opts && opts.sessionId ? String(opts.sessionId) : ''
+  if (sid) e.sessionId = sid
   // register BEFORE the first pull so an extremely fast response can't miss us
   e.subs.add(cb)
   if (e.subs.size === 1) {
@@ -679,7 +683,7 @@ export function buildInputBridge(props, currentDraft) {
   }
 }
 
-export function dispatchAgentRef(ref, bridge, opts) {
+export async function dispatchAgentRef(ref, bridge, opts) {
   const t = JSON.stringify(ref, null, 2)
   const b = bridge || {}
   const hasWriter = typeof b.setDraft === 'function'
@@ -699,13 +703,14 @@ export function dispatchAgentRef(ref, bridge, opts) {
     } catch {}
   }
   // 无写接口 → 剪贴板回退（完整 JSON）；权限失败不得提示成功
-  return Promise.resolve(copyAgentRef(ref)).then((ok) => ({
+  const ok = await copyAgentRef(ref)
+  return {
     mode: ok ? 'copied' : 'failed',
     ok: !!ok,
     status: ok ? '已复制组件引用' : '复制失败',
     text: t,
     fallback: true,
-  }))
+  }
 }
 export const hasHarnessInput = (p) => !!(p && (
   (p.inputActions && typeof p.inputActions.setDraft === 'function')
