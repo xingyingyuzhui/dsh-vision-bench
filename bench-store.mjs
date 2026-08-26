@@ -757,6 +757,18 @@ export const bindSession = (home, cwd, sessionId) => {
   }
 }
 
+/** Vision 自动服务当前 Session：有 sessionId 时写入工作区归属，供后台告警通知使用。 */
+export const touchServiceSession = (home, cwd, sessionId) => {
+  const id = typeof sessionId === 'string' ? sessionId.trim() : ''
+  if (!id || !cwd) return { ok: false, skipped: 'no-session' }
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const prev = loadWorkspace(home, room.cwd)
+  const cur = prev && prev.session && prev.session.boundId ? prev.session.boundId : ''
+  if (cur === id) return { ok: true, boundId: id, unchanged: true }
+  return bindSession(home, room.cwd, id)
+}
+
 export const unbindSession = (home, cwd) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -1053,6 +1065,54 @@ export const applyConfigDraft = (home, cwd, draftId, opts = {}) => {
     recordBenchEvent(home, room.cwd, { action: 'config-apply', ok: true, summary: '应用配置草稿 ' + id + '（v' + draft.baseConfigVersion + ' → v' + (saved.workspace.modbus.configVersion || 1) + '）' }, { source: 'user', sessionId: opts.sessionId || '' })
   } catch {}
   return { ok: true, draftId: id, prevVersion: draft.baseConfigVersion, nextVersion: saved.workspace.modbus.configVersion || 1, summary, workspace: saved.workspace }
+}
+
+// TaskP0/0.20.0: 点位级监视/告警开关（仅改 flags，不改地址/阈值等）
+export const patchPointFlags = (home, cwd, pointId, patch, options = {}) => {
+  const room = requireWorkspaceCwd(cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const workspace = loadWorkspace(home, room.cwd)
+  const pack = normalizeModbus(workspace.modbus)
+  const expected = Number(options && options.expectedConfigVersion)
+  if (Number.isFinite(expected) && expected > 0 && expected !== (pack.configVersion || 1)) {
+    return { ok: false, errorCode: 'CONFIG_DRIFT', error: '点位配置已更新，请刷新后重试' }
+  }
+  const id = typeof pointId === 'string' ? pointId.trim() : String(pointId == null ? '' : pointId).trim()
+  const points = Array.isArray(pack.points) ? pack.points : []
+  const hit = points.find((p) => p && p.id === id)
+  if (!hit) return { ok: false, errorCode: 'NOT_FOUND', error: '点位不存在: ' + id }
+  const hasMonitor = patch && patch.monitorEnabled !== undefined
+  const hasAlarm = patch && patch.alarmEnabled !== undefined
+  if (!hasMonitor && !hasAlarm) {
+    return { ok: false, error: '缺少 monitorEnabled 或 alarmEnabled' }
+  }
+  if (hasMonitor && typeof patch.monitorEnabled !== 'boolean') {
+    return { ok: false, error: 'monitorEnabled 必须是布尔值' }
+  }
+  if (hasAlarm && typeof patch.alarmEnabled !== 'boolean') {
+    return { ok: false, error: 'alarmEnabled 必须是布尔值' }
+  }
+  const nextPoints = points.map((p) => {
+    if (!p || p.id !== id) return p
+    const next = { ...p }
+    if (hasMonitor) {
+      next.monitorEnabled = patch.monitorEnabled === true
+      next.trendEnabled = next.monitorEnabled
+    }
+    if (hasAlarm) {
+      next.alarmEnabled = patch.alarmEnabled === true
+    }
+    return next
+  })
+  const saved = saveWorkspace(home, room.cwd, { modbus: { points: nextPoints, version: 3 } })
+  if (!saved.ok) return saved
+  const savedPoint = (saved.workspace.modbus.points || []).find((p) => p && p.id === id)
+  return {
+    ok: true,
+    point: savedPoint,
+    configVersion: saved.workspace.modbus.configVersion,
+    workspace: saved.workspace,
+  }
 }
 
 // Task1/0.18.2: explicit frame-deletion semantics. Merge cannot express delete;

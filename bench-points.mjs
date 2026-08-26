@@ -29,6 +29,13 @@ export const clockOf = (ms) => {
 
 export const functionTag = (fn) => FN_TAG[fn] || 'HR'
 
+/** 点位表功能码显示：01 / 02 / 03 / 04（两位数字） */
+export const functionCodeOf = (fn) => {
+  const n = Math.trunc(Number(fn))
+  if (!FUNCTIONS.has(n)) return '03'
+  return String(n).padStart(2, '0')
+}
+
 const WRITE_TARGET_OF = {
   1: { single: 5, multi: 15, kind: 'coil', maxMulti: 1968 },
   3: { single: 6, multi: 16, kind: 'register', maxMulti: 123 },
@@ -242,8 +249,8 @@ export const pointRuntimeStatus = (point, valueRec, alarmState, connectionState)
 
 export const evaluateAlarm = (point, value) => {
   const p = point || {}
-  // TaskP0/0.20.0: 告警开关独立于上下限；未启用或未配置阈值 → 不判
-  if (p.alarmEnabled === false) return ''
+  // TaskP0/0.20.0: 告警开关独立于上下限；仅 alarmEnabled === true 时判越限
+  if (p.alarmEnabled !== true) return ''
   if (p.alarmMin === null && p.alarmMax === null) return ''
   // 入参为工程值（调用方先 decodeValue）；阈值比较统一使用工程值
   const n = typeof value === 'number' ? value : Number(value)

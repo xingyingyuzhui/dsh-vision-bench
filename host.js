@@ -1,4 +1,4 @@
-import { listPendingWrites, keilBuild, keilMap, keilScan, keilTargets, listDir, listFrames, modbusPoll, modbusRead, modbusWrite, openocdDownload, requestFocus, resolvePendingWrite } from './bench-actions.mjs'
+import { listPendingWrites, keilBuild, keilMap, keilScan, keilTargets, listDir, listFrames, modbusPoll, modbusRead, modbusWrite, openocdDownload, pointsOp, connectOp, requestFocus, resolvePendingWrite } from './bench-actions.mjs'
 import { runSelfCheck } from './bench-check.mjs'
 import { artifactInfo, readBuildLog, readProjectFile } from './bench-fs.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
@@ -14,11 +14,13 @@ import {
   listConfigDrafts,
   loadBindings,
   loadWorkspace,
+  patchPointFlags,
   probeBindings,
   resolveManualRequest,
   saveBindings,
   saveWorkspace,
   sweepStaleTasks,
+  touchServiceSession,
 } from './bench-store.mjs'
 import { maybeNotifyResult, notifyBenchEvent, setAgentsRegistry } from './bench-notify.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
@@ -70,6 +72,13 @@ const readJsonBody = (req, cap = BODY_CAP) => new Promise((resolveBody, reject) 
   })
   req.on('error', reject)
 })
+
+/** 带 sessionId 的请求自动归属当前 Session（后台告警通知目标）。 */
+const readBodyAndTouchSession = async (req) => {
+  const body = await readJsonBody(req)
+  if (body && body.cwd && body.sessionId) touchServiceSession(dshHome, body.cwd, body.sessionId)
+  return body
+}
 
 const guard = (req, res) => {
   if (req.method !== 'POST') {
@@ -184,17 +193,17 @@ export function apply(ctx, config = {}) {
   } catch { /* agent registry is optional */ }
   const rows = [
     route('/dsh-vision-bench/state', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       return snapshot(body && body.cwd)
     }),
     route('/dsh-vision-bench/bindings', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const saved = saveBindings(dshHome, body && body.bindings)
       if (!saved.ok) return saved
       return { ok: true, bindings: saved.bindings, health: probeBindings(saved.bindings) }
     }),
     route('/dsh-vision-bench/workspace', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
       const prev = loadWorkspace(dshHome, room.cwd)
@@ -207,59 +216,59 @@ export function apply(ctx, config = {}) {
       return { ok: true, workspace: saved.workspace, journal: journalView(saved.workspace) }
     }),
     route('/dsh-vision-bench/fs/list', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       return listDir(body && body.cwd, body && body.path)
     }),
     route('/dsh-vision-bench/project/file', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = body && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
       if (room.error) return { ok: false, error: room.error }
       return readProjectFile(room.cwd, body && (body.path || body.file))
     }),
     route('/dsh-vision-bench/keil/log', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       return readBuildLog(dshHome, body && body.logFile)
     }),
     route('/dsh-vision-bench/keil/artifact', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       return artifactInfo(body && body.cwd, body && body.path)
     }),
     route('/dsh-vision-bench/keil/download', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const ran = await openocdDownload(dshHome, body && body.cwd, body)
       if (ran && !ran.needsConfirm) maybeNotifyResult(dshHome, body && body.cwd, '烧录', ran)
       return ran
     }),
     route('/dsh-vision-bench/keil/scan', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       return keilScan(dshHome, body && body.cwd)
     }),
     route('/dsh-vision-bench/keil/targets', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       return keilTargets(dshHome, body && body.cwd, body && body.project)
     }),
     route('/dsh-vision-bench/keil/map', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       return keilMap(dshHome, body && body.cwd, body && body.project, body && body.target)
     }),
     route('/dsh-vision-bench/keil/build', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const ran = await keilBuild(dshHome, body && body.cwd, body)
       maybeNotifyResult(dshHome, body && body.cwd, '编译', ran)
       return ran
     }),
     route('/dsh-vision-bench/modbus/read', async (req) => {
-      const body = normalizeConnAlias(await readJsonBody(req))
+      const body = normalizeConnAlias(await readBodyAndTouchSession(req))
       return modbusRead(dshHome, body && body.cwd, body)
     }),
     route('/dsh-vision-bench/modbus/write', async (req) => {
-      const body = normalizeConnAlias(await readJsonBody(req))
+      const body = normalizeConnAlias(await readBodyAndTouchSession(req))
       const ran = await modbusWrite(dshHome, body && body.cwd, body)
       maybeNotifyResult(dshHome, body && body.cwd, '写点', ran)
       return ran
     }),
     route('/dsh-vision-bench/modbus/write/approve', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
       const ran = await resolvePendingWrite(dshHome, room.cwd, body && body.id, (body && body.approved) === true)
@@ -267,19 +276,30 @@ export function apply(ctx, config = {}) {
       return ran
     }),
     route('/dsh-vision-bench/modbus/connect', async (req) => {
-      const body = normalizeConnAlias(await readJsonBody(req))
+      const body = normalizeConnAlias(await readBodyAndTouchSession(req))
       return connectOp(dshHome, body && body.cwd, body)
     }),
     route('/dsh-vision-bench/modbus/points', async (req) => {
-      const body = normalizeConnAlias(await readJsonBody(req))
+      const body = normalizeConnAlias(await readBodyAndTouchSession(req))
       return pointsOp(dshHome, body && body.cwd, body)
     }),
+    route('/dsh-vision-bench/points/flags', async (req) => {
+      const body = await readBodyAndTouchSession(req)
+      const room = requireWorkspaceCwd(body && body.cwd)
+      if (room.error) return { ok: false, error: room.error }
+      const patch = {}
+      if (typeof (body && body.monitorEnabled) === 'boolean') patch.monitorEnabled = body.monitorEnabled
+      if (typeof (body && body.alarmEnabled) === 'boolean') patch.alarmEnabled = body.alarmEnabled
+      return patchPointFlags(dshHome, room.cwd, body && body.pointId, patch, {
+        expectedConfigVersion: body && body.expectedConfigVersion,
+      })
+    }),
     route('/dsh-vision-bench/frames/list', async (req) => {
-      const body = normalizeConnAlias(await readJsonBody(req))
+      const body = normalizeConnAlias(await readBodyAndTouchSession(req))
       return listFrames(dshHome, body && body.cwd, body)
     }),
     route('/dsh-vision-bench/frames/clear', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
       // Task1/0.18.2: dedicated explicit-delete storage op (NOT merge)
@@ -289,11 +309,11 @@ export function apply(ctx, config = {}) {
       })
     }),
     route('/dsh-vision-bench/focus', async (req) => {
-      const body = normalizeConnAlias(await readJsonBody(req))
+      const body = normalizeConnAlias(await readBodyAndTouchSession(req))
       return requestFocus(dshHome, body && body.cwd, body)
     }),
     route('/dsh-vision-bench/evidence', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
       const ev = body && (body.evidence || body.evidences || body.item)
@@ -302,7 +322,7 @@ export function apply(ctx, config = {}) {
       return appendEvidence(dshHome, room.cwd, list)
     }),
     route('/dsh-vision-bench/manual/resolve', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
       const ran = resolveManualRequest(dshHome, room.cwd, body && body.id, body && body.done !== false)
@@ -314,29 +334,29 @@ export function apply(ctx, config = {}) {
       return ran
     }),
     route('/dsh-vision-bench/modbus/poll', async (req) => {
-      const body = normalizeConnAlias(await readJsonBody(req))
+      const body = normalizeConnAlias(await readBodyAndTouchSession(req))
       return modbusPoll(dshHome, body && body.cwd, body)
     }),
     route('/dsh-vision-bench/polling/start', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = body && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
       if (room.error) return { ok: false, error: room.error }
       return startPolling(dshHome, room.cwd, body)
     }),
     route('/dsh-vision-bench/polling/stop', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = body && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
       if (room.error) return { ok: false, error: room.error }
       return stopPolling(dshHome, room.cwd, body)
     }),
     route('/dsh-vision-bench/polling/status', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = body && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
       if (room.error) return { ok: false, error: room.error }
       return pollingStatus(dshHome, room.cwd)
     }),
     route('/dsh-vision-bench/connection/open', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
       const pack = normalizeModbus(loadWorkspace(dshHome, room.cwd).modbus)
@@ -346,30 +366,30 @@ export function apply(ctx, config = {}) {
       return openConnectionLink(room.cwd, { connectionId: conn.id, endpoint: toEndpoint(conn) })
     }),
     route('/dsh-vision-bench/connection/close', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
       return closeConnectionLink(room.cwd, body.connectionId || body.connId)
     }),
     route('/dsh-vision-bench/serial/ports', async () => listSerialPorts()),
     route('/dsh-vision-bench/serial/sources', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
       return listConnectedSerialSources(dshHome, room.cwd)
     }),
     route('/dsh-vision-bench/selfcheck', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       return runSelfCheck(dshHome, body && body.cwd)
     }),
     route('/dsh-vision-bench/serial/feed', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
       return feedConnectionFrames(room.cwd, { connectionId: body.connectionId || '', since: body.since })
     }),
     route('/dsh-vision-bench/config/draft', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
       const op = typeof body.op === 'string' ? body.op.trim() : (body.patch || body.target ? 'create' : 'list')
@@ -396,7 +416,7 @@ export function apply(ctx, config = {}) {
       return ran
     }),
     route('/dsh-vision-bench/config/draft/apply', async (req) => {
-      const body = await readJsonBody(req)
+      const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
       const ran = applyConfigDraft(dshHome, room.cwd, body.draftId || body.id, { source: 'user', sessionId: body.sessionId || '' })
