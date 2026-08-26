@@ -27,7 +27,7 @@ test('Task12: condition/acknowledged split and 4-quadrant buckets', () => {
 })
 
 test('Task12: active ack does not refire, recovered->breach new incident, agent suggest only', () => {
-  const points = [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', alarmMax: 100 }]
+  const points = [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', alarmEnabled: true, alarmMax: 100 }]
   let cur = evaluateAlarms({ points, values: [{ pointId: 'p1', raw: 120, ok: true }], opts: { now: 1000 } })
   assert.equal(cur.fired.length, 1)
   assert.equal(cur.next.p1.condition, 'active')

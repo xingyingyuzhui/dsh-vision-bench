@@ -105,7 +105,26 @@ test('connect 带 slave 必须提供 deviceId；只更新该设备 unitId', asyn
     assert.equal(ws.modbus.connections[0].conn.slave, undefined)
     assert.equal(ws.modbus.devices.find((d) => d.id === 'd1').unitId, 1)
     assert.equal(ws.modbus.devices.find((d) => d.id === 'd2').unitId, 9)
+    const bad0 = await connectOp(home, cwd, { connectionId: 'c1', deviceId: 'd1', slave: 0, sim: true })
+    assert.equal(bad0.ok, false)
+    assert.equal(bad0.code, 'UNIT_ID_INVALID')
+    assert.equal(loadWorkspace(home, cwd).modbus.devices.find((d) => d.id === 'd1').unitId, 1, '拒绝后不改写')
+    const badClamp = await connectOp(home, cwd, { connectionId: 'c1', deviceId: 'd1', unitId: 999, sim: true })
+    assert.equal(badClamp.ok, false)
+    assert.equal(badClamp.code, 'UNIT_ID_INVALID')
   } finally {
     await rm(home, { recursive: true, force: true })
   }
+})
+
+test('parseUnitId / validateDevices 拒绝 0 与越界', async () => {
+  const { parseUnitId, validateDevices } = await import('../bench-devices.mjs')
+  assert.equal(parseUnitId(0), null)
+  assert.equal(parseUnitId(1), 1)
+  assert.equal(parseUnitId(247), 247)
+  assert.equal(parseUnitId(248), null)
+  const errs = validateDevices([
+    { id: 'd1', connectionId: 'c1', name: 'A', unitId: 0, enabled: true },
+  ], [{ id: 'c1', enabled: true }])
+  assert.ok(errs.some((e) => /1\.\.247/.test(e)))
 })

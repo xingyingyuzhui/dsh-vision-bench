@@ -136,6 +136,34 @@ test('notifyBenchEvent only delivers to the bound live agent', async () => {
   }
 })
 
+test('touchServiceSession 自动归属：Agent/UI 触达后告警可通知', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-touch-sess-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    const { touchServiceSession, loadWorkspace } = await import('../bench-store.mjs')
+    const delivered = []
+    setAgentsRegistry({
+      get(id) {
+        if (id !== 'sess-auto') return null
+        return { followup(message) { delivered.push(message); return Promise.resolve() } }
+      },
+    })
+    assert.equal((await notifyBenchEvent(home, cwd, '告警')).skipped, 'unbound')
+    const touched = touchServiceSession(home, cwd, 'sess-auto')
+    assert.equal(touched.ok, true)
+    assert.equal(loadWorkspace(home, cwd).session.boundId, 'sess-auto')
+    const again = touchServiceSession(home, cwd, 'sess-auto')
+    assert.equal(again.unchanged, true)
+    const ran = await notifyBenchEvent(home, cwd, '越限告警：温度')
+    assert.equal(ran.ok, true)
+    assert.equal(delivered.length, 1)
+    setAgentsRegistry(null)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
 test('openTask accepts reserved types into the shared journal', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-reserve-'))
   const cwd = join(home, 'board')

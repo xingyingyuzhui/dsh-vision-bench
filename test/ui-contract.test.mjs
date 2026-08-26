@@ -53,9 +53,10 @@ test('页面契约：无绑定 UI、无大块聚焦面板、无完整时间线�
   assert.ok(!/t\('readSegment'\)/.test(hmi), 'no 读取 text button per row')
   assert.ok(!/t\('editing'\)\.slice\(0, 2\)/.test(hmi), 'no 编辑 text button per row')
   assert.ok(!/t\('deleteSegment'\)/.test(hmi), 'no 删除 text button (edit mode only, icon)')
-  // 行内写入与状态列
+  // 行内写入；点位状态改在设备头（仍复用 pointRuntimeStatus）
   assert.ok(/openWriteCell/.test(hmi), 'current-value inline write')
-  assert.ok(/pointRuntimeStatus/.test(hmi), 'status column via pointRuntimeStatus')
+  assert.ok(/pointRuntimeStatus/.test(hmi), 'device status via pointRuntimeStatus')
+  assert.ok(!/dvb-col-status/.test(hmi), 'no per-point status column')
   assert.ok(/dvb-switch/.test(hmi), 'monitor/alarm switches')
   assert.ok(/dvb-btn-danger/.test(hmi), 'edit-mode danger icon')
 })

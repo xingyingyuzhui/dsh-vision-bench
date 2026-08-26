@@ -22,7 +22,7 @@ test('normalizeAlarmState tri-state compat: boolean legacy -> active and groupAl
 })
 
 test('evaluateAlarms deadband + suppress window merges within window (process)', () => {
-  const points = [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: 'Temp', function: 3, address: 0, alarmMax: 100, alarmMin: null }]
+  const points = [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: 'Temp', function: 3, address: 0, alarmEnabled: true, alarmMax: 100, alarmMin: null }]
   let prev = {}
   // t0 breach -> fire
   let cur = evaluateAlarms({ points, values: [{ pointId: 'p1', raw: 120, ok: true }], prevState: prev, pollingByConnection: {}, connections: [{ id: 'c1', name: 'C1' }], opts: { deadband: 5, suppressWindowMs: 30000, now: 1000 } })

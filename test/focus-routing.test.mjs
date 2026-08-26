@@ -117,6 +117,33 @@ test('Task5/6/0.20.1: visualizationId 聚焦链路 — 仅传组件 ID 即解析
   assert.equal(missing.errorCode, 'VIZ_NOT_FOUND')
 })
 
+test('requestFocus 缺失组件保留 VIZ_NOT_FOUND（不退化 TARGET_MISMATCH）', async () => {
+  const { mkdtemp, rm, mkdir } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const { requestFocus } = await import('../bench-modbus.mjs')
+  const { saveWorkspace } = await import('../bench-store.mjs')
+  const home = await mkdtemp(join(tmpdir(), 'dvb-viz-focus-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveWorkspace(home, cwd, {
+      modbus: {
+        version: 3,
+        connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }],
+        devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
+        points: [],
+        visualization: { schemaVersion: 1, components: [] },
+      },
+    })
+    const miss = requestFocus(home, cwd, { visualizationId: 'viz_gone', kind: 'visualization' })
+    assert.equal(miss.ok, false)
+    assert.equal(miss.errorCode, 'VIZ_NOT_FOUND')
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
 test('Task6/0.20.1: 不同工作区相同组件 ID 不串扰（subscribeFocus 按 cwd 订阅）', async () => {
   const { setFocusState } = await import('../bench-shared.mjs')
   let gotA = null

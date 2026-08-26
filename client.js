@@ -158,10 +158,10 @@ const COPY = {
     unnamed: '未命名',
     listen: '监听',
     listenFail: '监听失败',
-    fnCoil: '01 线圈',
-    fnDiscrete: '02 离散输入',
-    fnHolding: '03 保持寄存器',
-    fnInput: '04 输入寄存器',
+    fnCoil: '01',
+    fnDiscrete: '02',
+    fnHolding: '03',
+    fnInput: '04',
     needSegments: '未添加寄存器段',
     pointsHint: '每段对应一帧报文。监视在右侧打开实时点表。',
     live: '实时',
@@ -284,16 +284,18 @@ const COPY = {
     devOwner: '所属设备',
     devAdd: '添加设备',
     devEdit: '编辑设备',
-    devSave: '保存修改',
+    devSave: '保存',
     devDelete: '删除设备',
     trendOn: '监视',
     monitorOn: '监视',
     writeUnknown: '结果未知',
     writeDone: '写入成功',
     trendHint: '开启后可被可视化组件关联并记录历史样本',
-    alarmOn: '启用告警',
+    alarmOn: '告警',
     alarmOnHint: '按上下限告警，未启用时隐藏上下限',
-    unitId: 'Unit ID',
+    unitId: '站号',
+    ptEdit: '编辑点位',
+    ptSave: '保存',
     collectStart: '开始采集',
     collectStop: '停止采集',
     collectHint: '采集由后台服务运行，曲线/告警/报文持续更新',
@@ -501,10 +503,10 @@ const COPY = {
     unnamed: 'Untitled',
     listen: 'Listen',
     listenFail: 'Listen failed',
-    fnCoil: '01 Coil',
-    fnDiscrete: '02 Discrete input',
-    fnHolding: '03 Holding register',
-    fnInput: '04 Input register',
+    fnCoil: '01',
+    fnDiscrete: '02',
+    fnHolding: '03',
+    fnInput: '04',
     needSegments: 'No register range',
     pointsHint: 'Each range is one PDU. Watch opens the live table on the right.',
     live: 'Live',
@@ -626,17 +628,19 @@ const COPY = {
     vizWaitingSamples: 'No history samples yet — waiting for collection…',
     devOwner: 'Device',
     devAdd: 'Add device',
-    devEdit: 'Edit',
-    devSave: 'Save changes',
+    devEdit: 'Edit device',
+    devSave: 'Save',
     devDelete: 'Delete device',
     trendOn: 'Monitor',
     monitorOn: 'Monitor',
     writeUnknown: 'Outcome unknown',
     writeDone: 'Write OK',
     trendHint: 'Enabled points become visualization data sources',
-    alarmOn: 'Enable alarm',
+    alarmOn: 'Alarm',
     alarmOnHint: 'Alarm by min/max bounds; hidden when disabled',
-    unitId: 'Unit ID',
+    unitId: 'Station',
+    ptEdit: 'Edit points',
+    ptSave: 'Save',
     collectStart: 'Start collecting',
     collectStop: 'Stop collecting',
     collectHint: 'Collection runs in the background service',
@@ -938,6 +942,22 @@ const CSS = [
   'body[' + ATTR + '] .dvb-vision-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
   'body[' + ATTR + '] .dvb-vision-meta{display:flex;gap:10px;align-items:center}',
   'body[' + ATTR + '] .dvb-focus-toast{position:fixed;right:14px;bottom:14px;z-index:60;display:flex;gap:8px;align-items:center;max-width:420px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.4));border-radius:8px;background:var(--dsw-alias-bg-layer-1,#1e1e1e);box-shadow:0 4px 16px rgba(0,0,0,.2);font-size:12px}',
+  'body[' + ATTR + '] .dvb-viz{display:flex;flex-direction:column;gap:12px;min-height:0}',
+  'body[' + ATTR + '] .dvb-viz-page-head{align-items:flex-end;padding-bottom:4px;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.18))}',
+  'body[' + ATTR + '] .dvb-viz-page-title-block{display:flex;flex-direction:column;gap:2px;min-width:0}',
+  'body[' + ATTR + '] .dvb-viz-list{display:flex;flex-direction:column;gap:12px}',
+  'body[' + ATTR + '] .dvb-viz-card{padding:12px 14px;gap:10px;background:var(--dsw-alias-bg-layer-1,transparent);border-color:var(--dsw-alias-border-l2,rgba(128,128,128,.28))}',
+  'body[' + ATTR + '] .dvb-viz-card.dvb-viz-degraded{border-color:rgba(180,83,9,.45)}',
+  'body[' + ATTR + '] .dvb-viz-head{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}',
+  'body[' + ATTR + '] .dvb-viz-head-main{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 160px}',
+  'body[' + ATTR + '] .dvb-viz-title-row{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}',
+  'body[' + ATTR + '] .dvb-viz-title{font-size:14px;font-weight:600;letter-spacing:.01em}',
+  'body[' + ATTR + '] .dvb-viz-type{font-size:11px;opacity:.62;padding:1px 0}',
+  'body[' + ATTR + '] .dvb-viz-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;opacity:.7}',
+  'body[' + ATTR + '] .dvb-viz-head-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}',
+  'body[' + ATTR + '] .dvb-viz-body-wrap{min-height:48px;padding-top:2px}',
+  'body[' + ATTR + '] .dvb-viz-empty{align-items:flex-start;gap:8px;padding:28px 16px}',
+  'body[' + ATTR + '] .dvb-viz-empty-title{font-size:13px;font-weight:600}',
   'body[' + ATTR + '] .dvb-viz-bars{display:flex;flex-direction:column;gap:6px}',
   'body[' + ATTR + '] .dvb-viz-bar-row{display:grid;grid-template-columns:max-content 1fr max-content;gap:8px;align-items:center}',
   'body[' + ATTR + '] .dvb-viz-bar-track{position:relative;height:14px;background:rgba(128,128,128,.12);border-radius:3px;overflow:hidden}',
@@ -948,10 +968,20 @@ const CSS = [
   'body[' + ATTR + '] .dvb-viz-bar-fill.dvb-viz-bar-zero{left:50%;width:2px!important;min-width:2px;background:rgba(128,128,128,.5);transform:translateX(-50%)}',
   'body[' + ATTR + '] .dvb-viz-bar-missing{display:inline-block;padding:0 8px;font-size:11px;opacity:.6}',
   'body[' + ATTR + '] .dvb-viz-card.dvb-viz-focused{outline:2px solid #4f8ef7;outline-offset:-2px}',
+  'body[' + ATTR + '] .dvb-viz-value-card{display:flex;flex-direction:column;gap:4px;padding:8px 0 2px}',
+  'body[' + ATTR + '] .dvb-viz-value{font-size:28px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.15}',
+  'body[' + ATTR + '] .dvb-viz-value-stale{opacity:.45}',
+  'body[' + ATTR + '] .dvb-viz-value-name{font-size:12px;opacity:.7}',
+  'body[' + ATTR + '] .dvb-viz-value-unit{font-size:12px;opacity:.55}',
+  'body[' + ATTR + '] .dvb-viz-switch-card{display:flex;flex-direction:column;gap:8px;padding:6px 0}',
+  'body[' + ATTR + '] .dvb-viz-picker{display:flex;flex-direction:column;gap:8px;margin-top:4px}',
+  'body[' + ATTR + '] .dvb-viz-picker-list{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:4px;padding:6px 0;border-top:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.14))}',
+  'body[' + ATTR + '] .dvb-viz-picker-opt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 2px;font-size:12px}',
   'body[' + ATTR + '] .dvb-point-table{table-layout:auto}',
-  'body[' + ATTR + '] .dvb-point-table .dvb-col-name,.dvb-point-table .dvb-col-value,.dvb-point-table .dvb-col-status,.dvb-point-table .dvb-col-fn,.dvb-point-table .dvb-col-addr,.dvb-point-table .dvb-col-monitor,.dvb-point-table .dvb-col-alarm,.dvb-point-table .dvb-col-min,.dvb-point-table .dvb-col-max{white-space:nowrap}',
+  'body[' + ATTR + '] .dvb-point-table .dvb-col-name,.dvb-point-table .dvb-col-value,.dvb-point-table .dvb-col-fn,.dvb-point-table .dvb-col-addr,.dvb-point-table .dvb-col-monitor,.dvb-point-table .dvb-col-alarm,.dvb-point-table .dvb-col-min,.dvb-point-table .dvb-col-max{white-space:nowrap}',
   'body[' + ATTR + '] .dvb-point-table .dvb-col-scale,.dvb-point-table .dvb-col-offset,.dvb-point-table .dvb-col-unit{white-space:nowrap;max-width:72px;overflow:hidden;text-overflow:ellipsis}',
   'body[' + ATTR + '] .dvb-dev-editing .dvb-point-table .dvb-col-scale,.dvb-dev-editing .dvb-point-table .dvb-col-offset,.dvb-dev-editing .dvb-point-table .dvb-col-unit{max-width:none;overflow:visible}',
+  'body[' + ATTR + '] .dvb-points-editing .dvb-point-table .dvb-col-scale,.dvb-points-editing .dvb-point-table .dvb-col-offset,.dvb-points-editing .dvb-point-table .dvb-col-unit{max-width:none;overflow:visible}',
   'body[' + ATTR + '] .dvb-point-table .dvb-input{min-width:56px;padding:1px 4px;font-size:11px}',
   'body[' + ATTR + '] .dvb-point-table .dvb-input-mono{width:72px}',
   'body[' + ATTR + '] .dvb-cell-name{display:inline-flex;gap:4px;align-items:center}',
@@ -962,15 +992,20 @@ const CSS = [
   'body[' + ATTR + '] .dvb-inline-write{display:inline-flex;gap:4px;align-items:center}',
   'body[' + ATTR + '] .dvb-inline-write .dvb-input{width:96px}',
   'body[' + ATTR + '] .dvb-dev-editing{outline:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.4))}',
+  'body[' + ATTR + '] .dvb-points-editing{outline:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.4))}',
+  'body[' + ATTR + '] .dvb-dev-edit-row{display:flex;flex-wrap:nowrap;gap:8px;align-items:center;width:100%}',
+  'body[' + ATTR + '] .dvb-dev-edit-row .dvb-input{margin:0}',
   'body[' + ATTR + '] .dvb-newpoint-row td{background:rgba(79,142,247,.05)}',
-  'body[' + ATTR + '] .dvb-switch{position:relative;display:inline-flex;align-items:center;width:26px;height:14px;cursor:pointer}',
-  'body[' + ATTR + '] .dvb-switch input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1}',
+  'body[' + ATTR + '] .dvb-btn-sm{height:24px;padding:0 8px;font-size:11px}',
+  'body[' + ATTR + '] .dvb-switch{position:relative;display:inline-flex;align-items:center;justify-content:center;width:30px;height:22px;margin:0;padding:0;border:0;background:transparent;color:inherit;cursor:pointer;vertical-align:middle;flex:none;pointer-events:auto;touch-action:manipulation;-webkit-appearance:none;appearance:none}',
   'body[' + ATTR + '] .dvb-switch-track{position:relative;display:block;width:26px;height:14px;border-radius:999px;background:rgba(128,128,128,.35);transition:background .15s;pointer-events:none}',
   'body[' + ATTR + '] .dvb-switch-track::after{content:"";position:absolute;top:1px;left:1px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 0 1px rgba(0,0,0,.35);transition:transform .15s}',
-  'body[' + ATTR + '] .dvb-switch input:checked + .dvb-switch-track{background:#4f8ef7}',
-  'body[' + ATTR + '] .dvb-switch input:checked + .dvb-switch-track::after{transform:translateX(12px)}',
-  'body[' + ATTR + '] .dvb-switch input:disabled + .dvb-switch-track{opacity:.45}',
-  'body[' + ATTR + '] .dvb-switch input:focus-visible + .dvb-switch-track{outline:2px solid #4f8ef7;outline-offset:2px}',
+  'body[' + ATTR + '] .dvb-switch.is-on .dvb-switch-track{background:#4f8ef7}',
+  'body[' + ATTR + '] .dvb-switch.is-on .dvb-switch-track::after{transform:translateX(12px)}',
+  'body[' + ATTR + '] .dvb-switch:focus-visible .dvb-switch-track{outline:2px solid #4f8ef7;outline-offset:2px}',
+  'body[' + ATTR + '] .dvb-switch:disabled{cursor:default;opacity:.7}',
+  'body[' + ATTR + '] .dvb-switch:disabled .dvb-switch-track{opacity:.45}',
+  'body[' + ATTR + '] .dvb-col-monitor,.dvb-col-alarm{position:relative;z-index:1;pointer-events:auto}',
   'body[' + ATTR + '] .dvb-badge.dvb-status[data-kind="err"]{color:var(--dsw-alias-label-danger,#c62828)}',
   'body[' + ATTR + '] .dvb-badge.dvb-status[data-kind="warn"]{color:var(--dsw-alias-label-warning,#b45309)}',
   'body[' + ATTR + '] .dvb-badge.dvb-status[data-kind="live"]{color:var(--dsw-alias-label-success,#2e7d32)}',
@@ -997,6 +1032,7 @@ const CSS = [
   'body[' + ATTR + '] .dvb-dev-card{border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.28));border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}',
   'body[' + ATTR + '] .dvb-dev-card.dvb-has-focus{outline:2px solid #4f8ef7;outline-offset:-2px}',
   'body[' + ATTR + '] .dvb-dev-head{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between}',
+  'body[' + ATTR + '] .dvb-dev-head-main{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;min-width:0}',
   'body[' + ATTR + '] .dvb-dev-title{font-weight:600;font-size:13px}',
   'body[' + ATTR + '] .dvb-dev-empty{padding:18px 12px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}',
   'body[' + ATTR + '] .dvb-dev-empty-title{font-size:13px;font-weight:600}',
@@ -1162,6 +1198,13 @@ const clockOf = (ms) => {
 }
 
 const functionTag = (fn) => FN_TAG[fn] || 'HR'
+
+/** 点位表功能码显示：01 / 02 / 03 / 04（两位数字） */
+const functionCodeOf = (fn) => {
+  const n = Math.trunc(Number(fn))
+  if (!FUNCTIONS.has(n)) return '03'
+  return String(n).padStart(2, '0')
+}
 
 const WRITE_TARGET_OF = {
   1: { single: 5, multi: 15, kind: 'coil', maxMulti: 1968 },
@@ -1376,8 +1419,8 @@ const pointRuntimeStatus = (point, valueRec, alarmState, connectionState) => {
 
 const evaluateAlarm = (point, value) => {
   const p = point || {}
-  // TaskP0/0.20.0: 告警开关独立于上下限；未启用或未配置阈值 → 不判
-  if (p.alarmEnabled === false) return ''
+  // TaskP0/0.20.0: 告警开关独立于上下限；仅 alarmEnabled === true 时判越限
+  if (p.alarmEnabled !== true) return ''
   if (p.alarmMin === null && p.alarmMax === null) return ''
   // 入参为工程值（调用方先 decodeValue）；阈值比较统一使用工程值
   const n = typeof value === 'number' ? value : Number(value)
@@ -2064,6 +2107,12 @@ const devClampInt = (v, fb, min, max) => {
   return i
 }
 
+/** Modbus Unit ID：合法范围为 1..247（不含广播 0）。非法返回 null，禁止静默纠正。 */
+const parseUnitId = (value) => {
+  const n = Math.trunc(Number(value))
+  return Number.isFinite(n) && n >= 1 && n <= 247 ? n : null
+}
+
 const emptyConn = () => ({
   mode: 'rtu',
   port: '',
@@ -2144,8 +2193,10 @@ const normalizeDevice = (input, fallbackConnId) => {
   const id = devText(raw.id, '') || genId('d')
   const connectionId = devText(raw.connectionId, '') || devText(raw.connId, '') || fallbackConnId || 'c1'
   const name = devText(raw.name, '') || '设备1'
+  const hasUnit = raw.unitId !== undefined || raw.unit !== undefined || raw.slave !== undefined
   const unitRaw = raw.unitId !== undefined ? raw.unitId : (raw.unit !== undefined ? raw.unit : (raw.slave !== undefined ? raw.slave : 1))
-  const unitId = devClampInt(unitRaw, 1, 0, 247)
+  // 缺省默认 1；显式非法值在 validateDevices 拒绝，加载时钳到 1..247（不保留 0）
+  const unitId = hasUnit ? (parseUnitId(unitRaw) ?? 1) : 1
   return {
     id,
     connectionId,
@@ -2403,7 +2454,11 @@ const validateDevices = (devices, connections) => {
   for (const d of enabledDevices) {
     const cid = d.connectionId || 'c1'
     if (connEnabled.has(cid) && connEnabled.get(cid) === false) continue
-    const unit = Number(d.unitId)
+    const unit = parseUnitId(d.unitId)
+    if (unit == null) {
+      errors.push(`Unit ID 必须是 1..247（设备 ${d.name || d.id}，不支持广播 0）`)
+      continue
+    }
     if (!byConn.has(cid)) byConn.set(cid, new Map())
     const unitMap = byConn.get(cid)
     if (unitMap.has(unit)) {
@@ -2474,8 +2529,8 @@ function migrateLegacy(modbusLike) {
 function migrateV2ToV3(v2) {
   // v2 shape: { version:2, conn, points:[{id:p3_0,function,address...}], values:[{key:p3_0 ...}], polling, alarmActive }
   const rawConn = v2.conn || {}
-  // 一次性：旧 conn.slave → 默认设备 unitId；迁移后连接不再保留 slave
-  const unitId = devClampInt(rawConn.slave !== undefined ? rawConn.slave : 1, 1, 0, 247)
+  // 一次性：旧 conn.slave → 默认设备 unitId；迁移后连接不再保留 slave；0/非法 → 1
+  const unitId = parseUnitId(rawConn.slave !== undefined ? rawConn.slave : 1) ?? 1
   const conn = normalizeConn(rawConn)
   const connection = {
     id: 'c1',
@@ -2984,6 +3039,25 @@ const findComponent = (visualization, id) => {
   const viz = visualization && typeof visualization === 'object' ? visualization : {}
   return (Array.isArray(viz.components) ? viz.components : []).find((c) => c && c.id === id) || null
 }
+/** 对齐 modbusWrite 返回：outcomeUnknown / ok / readback[] */
+function formatSwitchWriteNote(data, wantOn) {
+  const target = wantOn ? '开' : '关'
+  if (!data || data.ok === false) {
+    if (data && (data.outcomeUnknown || data.unknown)) return '目标 ' + target + ' → 回读未知 → 结果未知'
+    const rbRaw = data && data.readback
+    const hasRb = Array.isArray(rbRaw) ? rbRaw.length > 0 : rbRaw != null
+    if (data && hasRb) {
+      const rb = Array.isArray(rbRaw) ? rbRaw[0] : rbRaw
+      return '目标 ' + target + ' → 回读 ' + String(rb) + ' → 不一致'
+    }
+    return (data && data.error) ? data.error : '写入失败'
+  }
+  if (data.outcomeUnknown || data.unknown) return '目标 ' + target + ' → 回读未知 → 结果未知'
+  const rbRaw = data.readback
+  const rb = Array.isArray(rbRaw) ? (rbRaw.length ? rbRaw[0] : '—') : (rbRaw != null ? rbRaw : (data.value != null ? data.value : '—'))
+  return '目标 ' + target + ' → 回读 ' + String(rb) + ' → 一致'
+}
+
 // TaskP2/0.20.0: 侧边栏「可视化」— 以组件为中心（line/bar/value/switch）。
 // 组件编辑器：名称/类型/关联点位搜索（仅 monitorEnabled，限定路径）。
 // 渲染来源：line → modbus.trend（uPlot）；bar → 最新 values（CSS 条形，非 uPlot bars）；
@@ -3020,6 +3094,18 @@ function createVisualizationPage(React, t, post, hooks) {
     const [focusVizId, setFocusVizId] = React.useState('')
     const [chartErrors, setChartErrors] = React.useState({})
     const [saving, setSaving] = React.useState(false)
+    const aliveRef = React.useRef(true)
+    const copyClearTimer = React.useRef(0)
+    React.useEffect(() => {
+      aliveRef.current = true
+      return () => {
+        aliveRef.current = false
+        if (copyClearTimer.current) {
+          clearTimeout(copyClearTimer.current)
+          copyClearTimer.current = 0
+        }
+      }
+    }, [])
     React.useEffect(() => {
       setFocusVizId('')
       return subscribeFocus(cwd, (fs) => {
@@ -3029,18 +3115,20 @@ function createVisualizationPage(React, t, post, hooks) {
     const [, setTick] = React.useState(0)
     const uplotRefs = React.useRef({})
     const switchDraft = React.useRef(null)
+    const copyToken = React.useRef(0)
 
     React.useEffect(() => {
       if (!cwd || !post) return undefined
       let stop = false
-      post('/dsh-vision-bench/state', { cwd }).then((data) => { if (!stop && data) setMb(data.workspace && data.workspace.modbus || null) }).catch(() => {})
+      const sid = (props && props.sessionId) || ''
+      post('/dsh-vision-bench/state', { cwd, sessionId: sid || undefined }).then((data) => { if (!stop && data) setMb(data.workspace && data.workspace.modbus || null) }).catch(() => {})
       const unsub = subscribeState(post, cwd, (data) => {
         if (stop || !data) return
         const next = data.workspace && data.workspace.modbus
         if (next) setMb(next)
-      })
+      }, { sessionId: sid })
       return () => { stop = true; if (typeof unsub === 'function') unsub() }
-    }, [cwd, post])
+    }, [cwd, post, props && props.sessionId])
 
     React.useEffect(() => {
       const timer = setInterval(() => setTick((n) => n + 1), 1000)
@@ -3059,6 +3147,17 @@ function createVisualizationPage(React, t, post, hooks) {
       if (u) { try { u.destroy() } catch {} }
       delete uplotRefs.current[id]
     }
+
+    React.useEffect(() => {
+      const live = new Set()
+      for (const comp of components) {
+        if (comp.type !== 'line') continue
+        if (visualizationComponentStatus(comp, points) === 'ok') live.add(comp.id)
+      }
+      for (const id of Object.keys(uplotRefs.current)) {
+        if (!live.has(id)) destroyChart(id)
+      }
+    }, [components, points])
 
     function editorValidation(ed) {
       const cur = ed || editor
@@ -3089,19 +3188,22 @@ function createVisualizationPage(React, t, post, hooks) {
       const cand = normalizeVisualizationComponent({ ...base, ...editor, id: (existingIndex >= 0 ? base.id : '') })
       const nextComponents = components.slice()
       if (existingIndex >= 0) {
-        if (base.type === 'line' && cand.type !== 'line') destroyChart(base.id)
         nextComponents[existingIndex] = cand
       } else nextComponents.push(cand)
       setSaving(true)
       persistViz({ schemaVersion: 1, components: nextComponents }).then((ok) => {
         setSaving(false)
-        if (ok) { setEditor(null); setNote('') }
+        if (ok) {
+          if (existingIndex >= 0 && base.type === 'line' && cand.type !== 'line') destroyChart(base.id)
+          setEditor(null); setNote('')
+        }
       }).catch(() => setSaving(false))
     }
 
     function removeComponent(id) {
-      destroyChart(id)
-      persistViz({ schemaVersion: 1, components: components.filter((c) => c.id !== id) })
+      persistViz({ schemaVersion: 1, components: components.filter((c) => c.id !== id) }).then((ok) => {
+        if (ok) destroyChart(id)
+      })
       setDeleteId('')
     }
 
@@ -3141,15 +3243,8 @@ function createVisualizationPage(React, t, post, hooks) {
         address: point.address,
         values: [desiredValue],
       }).then((data) => {
-        const target = wantOn ? '开' : '关'
-        if (!data || data.ok === false) setNote(data && data.error ? data.error : '写入失败')
-        else if (data.unknown) setNote('目标 ' + target + ' → 回读未知 → 结果未知')
-        else {
-          const readback = data.readback != null ? data.readback : (data.value != null ? data.value : '—')
-          const consistent = data.consistent === true || data.match === true
-          setNote('目标 ' + target + ' → 回读 ' + String(readback) + ' → ' + (consistent ? '一致' : '不一致'))
-        }
-        return post('/dsh-vision-bench/state', { cwd })
+        setNote(formatSwitchWriteNote(data, wantOn))
+        return post('/dsh-vision-bench/state', { cwd, sessionId: (props && props.sessionId) || undefined })
       }).then((data) => {
         if (data && data.workspace) setMb(data.workspace.modbus)
       }).catch((err) => setNote(String((err && err.message) || '写入失败'))).finally(() => {
@@ -3180,12 +3275,13 @@ function createVisualizationPage(React, t, post, hooks) {
       }
       try {
         if (existing) destroyChart(comp.id)
-        const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        const hostWin = typeof globalThis !== 'undefined' ? globalThis.window : undefined
+        const isDark = !!(hostWin && hostWin.matchMedia && hostWin.matchMedia('(prefers-color-scheme: dark)').matches)
         const opts = {
           ...UPLOT_PROTO,
           width: node.clientWidth || 420,
           height: 150,
-          pxRatio: (typeof window !== 'undefined' && window.devicePixelRatio) || 1,
+          pxRatio: (hostWin && hostWin.devicePixelRatio) || 1,
           scales: { x: { time: true }, y: { auto: true } },
           axes: [
             { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
@@ -3209,9 +3305,9 @@ function createVisualizationPage(React, t, post, hooks) {
           if (u && u._node && u.setSize) try { u.setSize({ width: u._node.clientWidth || 420, height: 150 }) } catch {}
         }
       }
-      if (typeof window !== 'undefined') window.addEventListener('resize', onResize)
+      if (typeof globalThis !== 'undefined' && globalThis.window) globalThis.window.addEventListener('resize', onResize)
       return () => {
-        if (typeof window !== 'undefined') window.removeEventListener('resize', onResize)
+        if (typeof globalThis !== 'undefined' && globalThis.window) globalThis.window.removeEventListener('resize', onResize)
         for (const id of Object.keys(uplotRefs.current)) {
           try { uplotRefs.current[id] && uplotRefs.current[id].destroy() } catch {}
         }
@@ -3225,17 +3321,34 @@ function createVisualizationPage(React, t, post, hooks) {
     }
 
     function copyComponentRef(comp) {
+      const token = ++copyToken.current
+      if (copyClearTimer.current) {
+        clearTimeout(copyClearTimer.current)
+        copyClearTimer.current = 0
+      }
       const ref = buildAgentRef('visualization', { visualizationId: comp.id, type: comp.type, pointIds: comp.pointIds, name: comp.name }, { configVersion: pack && pack.configVersion || 1, start: Date.now() - TREND_WINDOW_MS, end: Date.now() })
-      Promise.resolve(dispatchAgentRef(ref, agentBridge)).then((res) => {
+      dispatchAgentRef(ref, agentBridge).then((res) => {
+        if (!aliveRef.current || token !== copyToken.current) return
         if (!res || !res.ok) { setCopied('复制失败'); return }
         setCopied((res.mode === 'input' ? '已加入输入框' : res.mode === 'sent' ? '已发送' : '已复制组件引用') + ' · ' + comp.name)
-      }).catch(() => setCopied('复制失败'))
-      try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setNote(reason)) } catch {}
-      setTimeout(() => setCopied(''), 2500)
+        copyClearTimer.current = setTimeout(() => {
+          copyClearTimer.current = 0
+          if (aliveRef.current && token === copyToken.current) setCopied('')
+        }, 2500)
+      }).catch(() => {
+        if (!aliveRef.current || token !== copyToken.current) return
+        setCopied('复制失败')
+        copyClearTimer.current = setTimeout(() => {
+          copyClearTimer.current = 0
+          if (aliveRef.current && token === copyToken.current) setCopied('')
+        }, 2500)
+      })
+      try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => { if (aliveRef.current) setNote(reason) }) } catch {}
     }
 
     function renderer(comp, latest, byId, degraded) {
       if (degraded) {
+        if (comp.type === 'line') destroyChart(comp.id)
         return el('div', { className: 'dvb-viz-body' },
           el('div', { className: 'dvb-hint dvb-need' }, '关联点位已关闭监视或被删除；请编辑组件恢复或选择新的监视点位。'),
           el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openEditor(comp) } }, '修复'))
@@ -3257,12 +3370,14 @@ function createVisualizationPage(React, t, post, hooks) {
         // CSS 条形图（非 uPlot bars）：中线为零基线，正右负左
         const bd = barDataOf(comp)
         const nums = bd.latest.map((l) => (l.ok && l.value != null && Number.isFinite(Number(l.value))) ? Number(l.value) : null)
-        const maxAbs = Math.max(1, ...nums.filter((v) => v !== null).map((v) => Math.abs(v)))
+        const absVals = nums.filter((v) => v !== null).map((v) => Math.abs(v))
+        const maxAbs = absVals.length ? Math.max(...absVals) : 0
+        const denom = maxAbs > 0 ? maxAbs : 1
         return el('div', { className: 'dvb-viz-body' },
           el('div', { className: 'dvb-viz-bars' },
             bd.latest.map((item) => {
               const v = (item.ok && item.value != null && Number.isFinite(Number(item.value))) ? Number(item.value) : null
-              const percent = v === null ? 0 : (Math.abs(v) / maxAbs) * 50
+              const percent = v === null ? 0 : (Math.abs(v) / denom) * 50
               return el('div', { key: item.pointId, className: 'dvb-viz-bar-row' },
                 el('span', { className: 'dvb-viz-bar-name', title: item.name }, item.name),
                 el('div', { className: 'dvb-viz-bar-track' },
@@ -3314,19 +3429,28 @@ function createVisualizationPage(React, t, post, hooks) {
       const degraded = status !== 'ok'
       return el('div', { key: comp.id, className: 'dvb-panel dvb-viz-card' + (degraded ? ' dvb-viz-degraded' : '') + (deleteId === comp.id ? ' dvb-viz-confirm' : '') + (focusVizId === comp.id ? ' dvb-viz-focused' : '') },
         el('div', { className: 'dvb-viz-head' },
-          el('span', { className: 'dvb-viz-title' }, comp.name),
-          el('span', { className: 'dvb-tag' }, vizTypeLabel(comp.type)),
-          el('span', { className: 'dvb-tag' }, comp.pointIds.length + ' 点位'),
-          degraded ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, '数据源未监视/缺失 — 请修复') : null,
-          el('div', { className: 'dvb-actions' },
-            el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-icon', title: hasHarnessInput(props) ? '将组件引用加入当前 Session 输入框并让 Agent 分析' : '复制组件结构化引用', 'aria-label': '让 Agent 分析组件 ' + comp.name, onClick() { copyComponentRef(comp) } }, 'ⓘ'),
+          el('div', { className: 'dvb-viz-head-main' },
+            el('div', { className: 'dvb-viz-title-row' },
+              el('span', { className: 'dvb-viz-title' }, comp.name),
+              el('span', { className: 'dvb-viz-type' }, vizTypeLabel(comp.type))),
+            el('div', { className: 'dvb-viz-meta' },
+              el('span', null, comp.pointIds.length + ' 个点位'),
+              degraded ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, '数据源不可用') : null)),
+          el('div', { className: 'dvb-viz-head-actions' },
+            el('button', {
+              type: 'button',
+              className: 'dvb-btn dvb-btn-sm',
+              title: hasHarnessInput(props) ? '将组件引用加入当前 Session 输入框并让 Agent 分析' : '复制组件结构化引用',
+              'aria-label': '让 Agent 分析组件 ' + (comp.name || comp.id),
+              onClick() { copyComponentRef(comp) },
+            }, hasHarnessInput(props) ? '让 Agent 分析' : '复制引用'),
+            el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openEditor(comp) } }, '编辑'),
             deleteId === comp.id
               ? el('span', { className: 'dvb-actions' },
                   el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-danger', onClick() { removeComponent(comp.id) } }, '确认删除'),
                   el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { setDeleteId('') } }, t('csvCancel') || '取消'))
-              : el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '删除组件', 'aria-label': '删除组件 ' + comp.name, onClick() { setDeleteId(comp.id) } }, '🗑'),
-            el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '编辑组件（名称/类型/关联点位）', 'aria-label': '编辑组件 ' + comp.name, onClick() { openEditor(comp) } }, '✎'))),
-        renderer(comp, latest, byId, degraded))
+              : el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-danger', onClick() { setDeleteId(comp.id) } }, '删除'))),
+        el('div', { className: 'dvb-viz-body-wrap' }, renderer(comp, latest, byId, degraded)))
     }
 
     const pointOptions = pack ? monitoredPointOptions(pack) : []
@@ -3363,17 +3487,19 @@ function createVisualizationPage(React, t, post, hooks) {
     const singleSelect = editor && (editor.type === 'value' || editor.type === 'switch')
 
     return el('div', { className: 'dvb-live dvb-viz' },
-      el('div', { className: 'dvb-live-head' },
-        el('span', { className: 'dvb-live-title' }, t('liveChart') || '可视化'),
-        el('span', { className: 'dvb-map-meta' }, components.length + ' 组件'),
-        !editor ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick() { openEditor(null) } }, t('vizNew') || '＋新建组件') : null),
+      el('div', { className: 'dvb-live-head dvb-viz-page-head' },
+        el('div', { className: 'dvb-viz-page-title-block' },
+          el('span', { className: 'dvb-live-title' }, t('liveChart') || '可视化'),
+          el('span', { className: 'dvb-map-meta' }, components.length + ' 个组件')),
+        !editor ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick() { openEditor(null) } }, t('vizNew') || '新建组件') : null),
       copied ? el('div', { className: 'dvb-hint' }, copied) : null,
       note ? el('div', { className: 'dvb-hint' }, note) : null,
       el('div', { className: 'dvb-viz-list' }, components.map(componentCard)),
       !components.length && !editor
-        ? el('div', { className: 'dvb-empty' },
-            el('div', null, t('vizEmptyPoint') || '还没有可视化组件'),
-            el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd || !pointOptions.length, onClick() { openEditor(null) } }, t('vizNew') || '＋新建组件'))
+        ? el('div', { className: 'dvb-empty dvb-viz-empty' },
+            el('div', { className: 'dvb-viz-empty-title' }, t('vizEmptyPoint') || '还没有可视化组件'),
+            el('div', { className: 'dvb-hint' }, pointOptions.length ? '从已监视点位创建曲线、柱状图、数值或开关组件' : '请先在上位机点位表开启「监视」'),
+            el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd || !pointOptions.length, onClick() { openEditor(null) } }, t('vizNew') || '新建组件'))
         : null,
       editor
         ? el('div', { className: 'dvb-panel dvb-write-panel' },
@@ -3386,7 +3512,6 @@ function createVisualizationPage(React, t, post, hooks) {
                 value: editor.type,
                 onChange: (e) => {
                   const nextType = e.target.value
-                  if (editor.id && editor.type === 'line' && nextType !== 'line') destroyChart(editor.id)
                   setEditor((prev) => ({ ...prev, type: nextType }))
                 },
               }, ...[...COMPONENT_TYPES].map((ty) => el('option', { key: ty, value: ty }, vizTypeLabel(ty)))))),
@@ -3607,7 +3732,7 @@ const STATE_BUSES = new Map() // cwd -> { cwd, data, subs:Set, timer, seq, post 
 function busEntry(post, cwd) {
   let e = STATE_BUSES.get(cwd)
   if (!e) {
-    e = { cwd, data: null, subs: new Set(), timer: 0, seq: 0, post: null }
+    e = { cwd, data: null, subs: new Set(), timer: 0, seq: 0, post: null, sessionId: '' }
     STATE_BUSES.set(cwd, e)
   }
   // keep the freshest post fn (hot reload must not hold a stale closure)
@@ -3619,7 +3744,9 @@ function busPull(e) {
   const seq = ++e.seq
   const post = e.post
   if (typeof post !== 'function') return
-  post('/dsh-vision-bench/state', { cwd: e.cwd }).then((data) => {
+  const payload = { cwd: e.cwd }
+  if (e.sessionId) payload.sessionId = e.sessionId
+  post('/dsh-vision-bench/state', payload).then((data) => {
     // unsubscribed (map entry gone) or a newer request superseded this one
     if (!STATE_BUSES.has(e.cwd) || seq !== e.seq) return
     e.data = data
@@ -3629,12 +3756,14 @@ function busPull(e) {
   }).catch(() => { /* next tick retries */ })
 }
 
-function subscribeState(post, cwd, cb) {
+function subscribeState(post, cwd, cb, opts) {
   if (!cwd) {
     cb(null)
     return function () {}
   }
   const e = busEntry(post, cwd)
+  const sid = opts && opts.sessionId ? String(opts.sessionId) : ''
+  if (sid) e.sessionId = sid
   // register BEFORE the first pull so an extremely fast response can't miss us
   e.subs.add(cb)
   if (e.subs.size === 1) {
@@ -4117,7 +4246,7 @@ function buildInputBridge(props, currentDraft) {
   }
 }
 
-function dispatchAgentRef(ref, bridge, opts) {
+async function dispatchAgentRef(ref, bridge, opts) {
   const t = JSON.stringify(ref, null, 2)
   const b = bridge || {}
   const hasWriter = typeof b.setDraft === 'function'
@@ -4137,13 +4266,14 @@ function dispatchAgentRef(ref, bridge, opts) {
     } catch {}
   }
   // 无写接口 → 剪贴板回退（完整 JSON）；权限失败不得提示成功
-  return Promise.resolve(copyAgentRef(ref)).then((ok) => ({
+  const ok = await copyAgentRef(ref)
+  return {
     mode: ok ? 'copied' : 'failed',
     ok: !!ok,
     status: ok ? '已复制组件引用' : '复制失败',
     text: t,
     fallback: true,
-  }))
+  }
 }
 const hasHarnessInput = (p) => !!(p && (
   (p.inputActions && typeof p.inputActions.setDraft === 'function')
@@ -4639,7 +4769,7 @@ function createDebugView(React, t, post, openProject) {
         }))
       }
       setJournal(pickJournal(data))
-    }), [cwd, post])
+    }, { sessionId }), [cwd, post, sessionId])
 
     function setKeil(patch) {
       setWorkspace((prev) => ({ ...prev, keil: { ...prev.keil, ...patch } }))
@@ -5116,9 +5246,11 @@ function registerView(ctx, React, t, DebugPage, HmiPage) {
 const POLL_INTERVALS = [500, 1000, 2000, 5000]
 
 function fnOptionLabel(t, fn) {
-  const key = fn === 1 ? 'fnCoil' : fn === 2 ? 'fnDiscrete' : fn === 4 ? 'fnInput' : 'fnHolding'
-  return t(key) + (isWritableFunction(fn) ? ' ' + t('writableTag') : '')
+  void t
+  return functionCodeOf(fn)
 }
+
+const AREA_BY_FN_EDIT = { 1: 'coil', 2: 'discreteInput', 3: 'holdingRegister', 4: 'inputRegister' }
 
 function hmiGenId(prefix) {
   return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
@@ -5144,6 +5276,7 @@ function createHmiView(React, t, post) {
     // Task1/0.19.3: 点位表单打开时固定 connectionId/deviceId，不依赖全局激活状态
     // TaskP1/0.20.0: 行内编辑/行内写入 — 草稿固定携带 connectionId/deviceId/pointId
     const [editingDeviceId, setEditingDeviceId] = React.useState('')
+    const [editingPointsDeviceId, setEditingPointsDeviceId] = React.useState('')
     const [deviceDraft, setDeviceDraft] = React.useState(null)
     const [pointDraftsById, setPointDraftsById] = React.useState({})
     const [newPointDraft, setNewPointDraft] = React.useState(null)
@@ -5158,6 +5291,8 @@ function createHmiView(React, t, post) {
     const [linkBusy, setLinkBusy] = React.useState('')
     const [draftBusy, setDraftBusy] = React.useState('')
     const [draftNote, setDraftNote] = React.useState('')
+    const [flagSavingByPoint, setFlagSavingByPoint] = React.useState({})
+    const flagRequestSeq = React.useRef({})
 
     const [connForm, setConnForm] = React.useState({ open: false, id: '', name: '', role: 'client', enabled: true, conn: { mode: 'rtu', port: '', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, host: '', tcpPort: 502, sim: false } })
     const [pendingDeleteId, setPendingDeleteId] = React.useState('')
@@ -5171,6 +5306,7 @@ function createHmiView(React, t, post) {
     const workspaceRef = React.useRef(workspace)
     workspaceRef.current = workspace
     const inflight = React.useRef(0)
+    const flagInflight = React.useRef(0)
 
     const field = (label, control) => el('div', { className: 'dvb-row' },
       el('div', { className: 'dvb-label' }, el('span', null, label)),
@@ -5198,7 +5334,7 @@ function createHmiView(React, t, post) {
         setFocusUi(data.workspace.focus)
         try { setFocusState(cwd, data.workspace.focus) } catch {}
       }
-      if (inflight.current > 0) return
+      if (inflight.current > 0 || flagInflight.current > 0) return
       if (data.workspace) {
         setWorkspace((prev) => ({
           ...prev,
@@ -5211,7 +5347,7 @@ function createHmiView(React, t, post) {
           workspaceRef.current = { ...workspaceRef.current, configDrafts: data.workspace.configDrafts, modbus: data.workspace.modbus || workspaceRef.current.modbus }
         }
       }
-    }), [cwd])
+    }, { sessionId }), [cwd, sessionId])
 
     // Task14: 显式 focus 且 foreground 显式时才切换连接/设备/高亮；badgeOnly 仅角标
     React.useEffect(() => {
@@ -5386,9 +5522,9 @@ function createHmiView(React, t, post) {
       const name = String(devForm.name || '').trim().slice(0, 40)
       if (!name) { setError('请填写设备名称'); return }
       const unitId = Math.trunc(Number(devForm.unitId))
-      if (!Number.isFinite(unitId) || unitId < 0 || unitId > 247) { setError('Unit ID 0–247'); return }
+      if (!Number.isFinite(unitId) || unitId < 1 || unitId > 247) { setError('站号 1–247'); return }
       const dupUnit = (pack.devices || []).some((d) => d.connectionId === activeConnId && d.id !== devForm.id && d.unitId === unitId)
-      if (dupUnit) { setError('该连接内 Unit ' + unitId + ' 已存在'); return }
+      if (dupUnit) { setError('该连接内站号 ' + unitId + ' 已存在'); return }
       if (devForm.id) {
         persist({ devices: (pack.devices || []).map((d) => d.id === devForm.id ? { ...d, name, unitId } : d), version: 3 })
       } else {
@@ -5653,12 +5789,22 @@ function createHmiView(React, t, post) {
       })
     }
 
-    // ── TaskP1/0.20.0 行内编辑草稿 ──
+    // ── TaskP1/0.20.0 行内编辑草稿：设备编辑与点位编辑分离 ──
     function enterDeviceEdit(d) {
       setError('')
       setNewPointDraft(null)
+      setEditingPointsDeviceId('')
+      setPointDraftsById({})
       setEditingDeviceId(d.id)
       setDeviceDraft({ id: d.id, name: d.name, unitId: d.unitId, connectionId: d.connectionId })
+    }
+
+    function enterPointsEdit(d) {
+      setError('')
+      setNewPointDraft(null)
+      setEditingDeviceId('')
+      setDeviceDraft(null)
+      setEditingPointsDeviceId(d.id)
       const drafts = {}
       for (const pt of pointsOfDevice(d.id)) {
         drafts[pt.id] = {
@@ -5667,12 +5813,11 @@ function createHmiView(React, t, post) {
           deviceId: pt.deviceId,
           name: pt.name || '',
           function: pt.function,
+          area: pt.area || AREA_BY_FN_EDIT[pt.function] || 'holdingRegister',
           address: pt.address,
           scale: pt.scale,
           offset: pt.offset,
           unit: pt.unit || '',
-          monitorEnabled: pt.monitorEnabled === true,
-          alarmEnabled: pt.alarmEnabled === true,
           alarmMin: pt.alarmMin == null ? '' : String(pt.alarmMin),
           alarmMax: pt.alarmMax == null ? '' : String(pt.alarmMax),
         }
@@ -5681,12 +5826,227 @@ function createHmiView(React, t, post) {
     }
 
     function patchDraft(pointId, patch) {
-      setPointDraftsById((prev) => ({ ...prev, [pointId]: { ...prev[pointId], ...patch } }))
+      setPointDraftsById((prev) => {
+        const cur = { ...(prev[pointId] || {}), ...patch }
+        // 功能码变更必须同步 area，否则 normalize 会按旧 area 盖回 function
+        if (patch.function !== undefined) {
+          const fn = Math.trunc(Number(patch.function))
+          if (AREA_BY_FN_EDIT[fn]) cur.area = AREA_BY_FN_EDIT[fn]
+          cur.function = fn
+        }
+        return { ...prev, [pointId]: cur }
+      })
+    }
+
+    function applyPointFlagLocal(pointId, patch) {
+      setWorkspace((prev) => {
+        const points = (prev.modbus && prev.modbus.points) || []
+        const nextPoints = points.map((p) => {
+          if (p.id !== pointId) return p
+          const next = { ...p, ...patch }
+          if (patch.monitorEnabled !== undefined) next.trendEnabled = patch.monitorEnabled === true
+          return next
+        })
+        const next = { ...prev, modbus: { ...prev.modbus, points: nextPoints } }
+        workspaceRef.current = next
+        return next
+      })
+    }
+
+    function validateAlarmEnable(point) {
+      const minRaw = point && point.alarmMin
+      const maxRaw = point && point.alarmMax
+      const hasMin = minRaw !== null && minRaw !== undefined && minRaw !== ''
+      const hasMax = maxRaw !== null && maxRaw !== undefined && maxRaw !== ''
+      if (!hasMin && !hasMax) return { ok: true, warn: '尚未配置阈值' }
+      if (hasMin && hasMax) {
+        const min = Number(minRaw)
+        const max = Number(maxRaw)
+        if (!(Number.isFinite(min) && Number.isFinite(max) && min < max)) {
+          return { ok: false, error: '告警上下限非法，无法开启' }
+        }
+      }
+      return { ok: true }
+    }
+
+    function persistPointFlags(pointId, patch) {
+      if (!cwd || !pointId || !patch || typeof patch !== 'object') return Promise.resolve()
+      const keys = Object.keys(patch).filter((k) => k === 'monitorEnabled' || k === 'alarmEnabled')
+      if (!keys.length) return Promise.resolve()
+
+      const packNow = normalizePack()
+      const current = (packNow.points || []).find((p) => p.id === pointId)
+      if (!current) {
+        setError('点位不存在')
+        return Promise.resolve()
+      }
+
+      if (patch.alarmEnabled === true) {
+        const check = validateAlarmEnable(current)
+        if (!check.ok) {
+          setError(check.error)
+          return Promise.resolve()
+        }
+        if (check.warn) setError(check.warn)
+      }
+
+      const prevSnapshot = {
+        monitorEnabled: current.monitorEnabled === true,
+        alarmEnabled: current.alarmEnabled === true,
+        trendEnabled: current.trendEnabled === true,
+      }
+      const seqKeys = keys.map((k) => pointId + ':' + k)
+      for (const sk of seqKeys) {
+        flagRequestSeq.current[sk] = (flagRequestSeq.current[sk] || 0) + 1
+      }
+      const seqAtStart = Object.fromEntries(seqKeys.map((sk) => [sk, flagRequestSeq.current[sk]]))
+
+      applyPointFlagLocal(pointId, patch)
+      flagInflight.current += 1
+      setFlagSavingByPoint((prev) => {
+        const next = { ...prev }
+        for (const sk of seqKeys) next[sk] = true
+        return next
+      })
+
+      const body = {
+        cwd,
+        pointId,
+        expectedConfigVersion: packNow.configVersion || 1,
+      }
+      for (const k of keys) body[k] = patch[k] === true
+
+      const isLatest = () => seqKeys.every((sk) => seqAtStart[sk] === flagRequestSeq.current[sk])
+
+      const rollback = (msg) => {
+        if (!isLatest()) return
+        applyPointFlagLocal(pointId, {
+          monitorEnabled: prevSnapshot.monitorEnabled,
+          alarmEnabled: prevSnapshot.alarmEnabled,
+          trendEnabled: prevSnapshot.trendEnabled,
+        })
+        if (msg) setError(msg)
+      }
+
+      const applySuccess = (data) => {
+        if (!isLatest()) return data
+        if (data.workspace && data.workspace.modbus) {
+          setWorkspace((prev) => {
+            const next = { ...prev, modbus: data.workspace.modbus }
+            workspaceRef.current = next
+            return next
+          })
+        } else if (data.point && data.point.id) {
+          applyPointFlagLocal(pointId, {
+            monitorEnabled: data.point.monitorEnabled === true,
+            alarmEnabled: data.point.alarmEnabled === true,
+            trendEnabled: data.point.monitorEnabled === true,
+          })
+          if (data.configVersion != null) {
+            setWorkspace((prev) => {
+              const next = { ...prev, modbus: { ...prev.modbus, configVersion: data.configVersion } }
+              workspaceRef.current = next
+              return next
+            })
+          }
+        }
+        setError('')
+        return data
+      }
+
+      // 兼容未重启的旧 host：flags 路由 404/405 时回退整表 workspace 写入
+      const fallbackWorkspacePersist = () => {
+        const pack = normalizePack()
+        const points = (pack.points || []).map((p) => {
+          if (p.id !== pointId) return p
+          const next = { ...p, ...patch }
+          if (patch.monitorEnabled !== undefined) next.trendEnabled = patch.monitorEnabled === true
+          return next
+        })
+        return post('/dsh-vision-bench/workspace', { cwd, modbus: { points, version: 3 } }).then((data) => {
+          if (!isLatest()) return data
+          if (!data || data.ok === false) {
+            rollback(keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态')
+            return data
+          }
+          if (data.workspace && data.workspace.modbus) {
+            setWorkspace((prev) => {
+              const next = { ...prev, modbus: data.workspace.modbus }
+              workspaceRef.current = next
+              return next
+            })
+            setError('')
+          }
+          return data
+        })
+      }
+
+      return post('/dsh-vision-bench/points/flags', body).then((data) => {
+        if (!isLatest()) return data
+          if (!data || data.ok === false) {
+            const code = data && data.errorCode
+            if (code === 'CONFIG_DRIFT') {
+              // 版本漂移：去掉 expected 重试一次（仍只改单点 flags）
+              const retry = { cwd, pointId }
+              for (const k of keys) retry[k] = patch[k] === true
+              return post('/dsh-vision-bench/points/flags', retry).then((data2) => {
+                if (!isLatest()) return data2
+                if (!data2 || data2.ok === false) {
+                  rollback('点位配置已被其他操作更新，请重试')
+                  return data2
+                }
+                return applySuccess(data2)
+              }).catch(() => fallbackWorkspacePersist().catch(() => {
+                rollback('点位配置已被其他操作更新，请重试')
+              }))
+            }
+            const tip = keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态'
+            rollback(tip)
+            return data
+          }
+        return applySuccess(data)
+      }).catch(() => {
+        // host 未重启时常见 405/空响应 → 回退 workspace
+        return fallbackWorkspacePersist().catch(() => {
+          rollback(keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态（请完全重启 dsh web）' : '告警状态保存失败，已恢复原状态（请完全重启 dsh web）')
+        })
+      }).finally(() => {
+        flagInflight.current = Math.max(0, flagInflight.current - 1)
+        setFlagSavingByPoint((prev) => {
+          const next = { ...prev }
+          for (const sk of seqKeys) {
+            if (seqAtStart[sk] === flagRequestSeq.current[sk]) delete next[sk]
+          }
+          return next
+        })
+      })
+    }
+
+    function flagSwitch(checked, title, onToggle, options = {}) {
+      // 视觉仍是 pill 开关；命中层用 button（与「当前值」同路径）。
+      // 禁止近透明 checkbox 作为命中层（宿主 WebView 经常点不中）。
+      const on = checked === true
+      const disabled = options.disabled === true
+      return el('button', {
+        type: 'button',
+        className: 'dvb-switch' + (on ? ' is-on' : ''),
+        title,
+        disabled,
+        'aria-label': title,
+        'aria-pressed': on ? 'true' : 'false',
+        onClick(event) {
+          event.preventDefault()
+          event.stopPropagation()
+          if (!disabled) onToggle(!on)
+        },
+      }, el('span', { className: 'dvb-switch-track', 'aria-hidden': 'true' }))
     }
 
     function addNewPointRow(deviceId) {
       setError('')
       setInlineWrite(null)
+      setEditingDeviceId('')
+      setDeviceDraft(null)
       setBatch((prev) => ({ ...prev, open: false, deviceId: deviceId, connectionId: activeConnId }))
       setNewPointDraft({
         connectionId: activeConnId,
@@ -5744,44 +6104,71 @@ function createHmiView(React, t, post) {
       const pack = normalizePack()
       const meta = deviceDraft
       if (!meta) return
+      const name = String(meta.name || '').trim().slice(0, 40)
+      if (!name) { setError('请填写设备名称'); return }
+      const unitId = Math.trunc(Number(meta.unitId))
+      if (!Number.isFinite(unitId) || unitId < 1 || unitId > 247) { setError('站号 1–247'); return }
+      if ((pack.devices || []).some((x) => x.connectionId === d.connectionId && x.id !== d.id && x.unitId === unitId)) {
+        setError('该连接内站号 ' + unitId + ' 已存在'); return
+      }
+      const nextDevices = (pack.devices || []).map((x) => x.id === d.id ? { ...x, name, unitId } : x)
+      persist({ devices: nextDevices, version: 3 })
+      setEditingDeviceId('')
+      setDeviceDraft(null)
+    }
+
+    function savePointsEdit(d) {
+      const pack = normalizePack()
       const drafts = pointDraftsById || {}
-      const done = []
-      const persisted = []
-      // 点位唯一键（不含自身 id）+ 阈值校验
       const keyOf = (p) => (p.connectionId || '') + '|' + (p.deviceId || '') + '|' + p.function + '|' + p.address
       const seen = new Map()
       for (const dOf of Object.values(drafts)) {
         if (seen.has(keyOf(dOf))) { setError('该设备下已存在相同功能码和地址的点位'); return }
         seen.set(keyOf(dOf), dOf)
       }
-      const name = String(meta.name || '').trim().slice(0, 40)
-      if (!name) { setError('请填写设备名称'); return }
-      const unitId = Math.trunc(Number(meta.unitId))
-      if (!Number.isFinite(unitId) || unitId < 0 || unitId > 247) { setError('Unit ID 0–247'); return }
-      if ((pack.devices || []).some((x) => x.connectionId === d.connectionId && x.id !== d.id && x.unitId === unitId)) {
-        setError('该连接内 Unit ' + unitId + ' 已存在'); return
+      try {
+        const nextPoints = (pack.points || []).map((p) => {
+          const dr = drafts[p.id]
+          if (!dr || (p.deviceId || '') !== d.id) return p
+          const min = dr.alarmMin !== '' ? Number(dr.alarmMin) : null
+          const max = dr.alarmMax !== '' ? Number(dr.alarmMax) : null
+          if (p.alarmEnabled === true && min != null && max != null && !(min < max)) {
+            throw new Error('下限必须小于上限: ' + (dr.name || p.name))
+          }
+          return {
+            ...p,
+            name: String(dr.name || '').slice(0, 40) || p.name,
+            function: (() => {
+              const fn = Math.trunc(Number(dr.function) || p.function)
+              return [1, 2, 3, 4].includes(fn) ? fn : p.function
+            })(),
+            area: (() => {
+              const fn = Math.trunc(Number(dr.function) || p.function)
+              return AREA_BY_FN_EDIT[fn] || p.area
+            })(),
+            address: Math.trunc(Number(dr.address)),
+            scale: Number(dr.scale) || 1,
+            offset: Number(dr.offset) || 0,
+            unit: String(dr.unit || '').slice(0, 12),
+            alarmMin: Number.isFinite(min) ? min : null,
+            alarmMax: Number.isFinite(max) ? max : null,
+          }
+        })
+        persist({ points: nextPoints, version: 3 })
+        setEditingPointsDeviceId('')
+        setPointDraftsById({})
+      } catch (err) {
+        setError(String((err && err.message) || err))
       }
-      const nextPoints = (pack.points || []).map((p) => {
-        const dr = drafts[p.id]
-        if (!dr) return p
-        const alarmOn = dr.alarmEnabled === true
-        const min = alarmOn && dr.alarmMin !== '' ? Number(dr.alarmMin) : null
-        const max = alarmOn && dr.alarmMax !== '' ? Number(dr.alarmMax) : null
-        if (alarmOn && min != null && max != null && !(min < max)) { throw new Error('下限必须小于上限: ' + dr.name) }
-        persisted.push(dr.id)
-        return { ...p, name: String(dr.name || '').slice(0, 40) || p.name, function: Math.trunc(Number(dr.function) || p.function), address: Math.trunc(Number(dr.address)), scale: Number(dr.scale) || 1, offset: Number(dr.offset) || 0, unit: String(dr.unit || '').slice(0, 12), monitorEnabled: dr.monitorEnabled === true, alarmEnabled: alarmOn, alarmMin: Number.isFinite(min) ? min : null, alarmMax: Number.isFinite(max) ? max : null, trendEnabled: dr.monitorEnabled === true }
-      })
-      const nextDevices = (pack.devices || []).map((x) => x.id === d.id ? { ...x, name, unitId } : x)
-      persist({ devices: nextDevices, points: nextPoints, version: 3 })
-      setEditingDeviceId('')
-      setDeviceDraft(null)
-      setPointDraftsById({})
-      void done
     }
 
     function cancelDeviceEdit() {
       setEditingDeviceId('')
       setDeviceDraft(null)
+    }
+
+    function cancelPointsEdit() {
+      setEditingPointsDeviceId('')
       setPointDraftsById({})
       setNewPointDraft(null)
     }
@@ -6022,11 +6409,11 @@ function createHmiView(React, t, post) {
                         onClick() { openConnEdit(c) },
                       }, '编辑'),
                       el('button', {
-                        type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-icon',
+                        type: 'button', className: 'dvb-btn dvb-btn-sm',
                         title: '复制结构化引用（稳定 ID+配置版本）并让 Agent 分析',
                         'aria-label': '让 Agent 分析连接 ' + c.name,
                         onClick() { sendToAgent('connection', { connectionId: c.id, name: c.name }) },
-                      }, 'ⓘ'),
+                      }, 'AI'),
                       pendingDeleteId === c.id
                         ? el('span', { style: { display: 'flex', gap: '4px', alignItems: 'center' } },
                             el('span', { className: 'dvb-need' }, '确认删除？'),
@@ -6136,7 +6523,7 @@ function createHmiView(React, t, post) {
             el('button', { type: 'button', className: 'dvb-btn', onClick() { setDevForm((p) => ({ ...p, open: false })) } }, t('csvCancel'))),
           el('div', { className: 'dvb-toolbar' },
             field('设备名称', el('input', { className: 'dvb-input', value: devForm.name, placeholder: '如 温度传感器', onChange: (e) => { setDevForm((p) => ({ ...p, name: e.target.value })) } })),
-            field(t('unitId') || 'Unit ID', el('input', { className: 'dvb-input dvb-input-mono', type: 'number', min: 0, max: 247, value: String(devForm.unitId), onChange: (e) => { setDevForm((p) => ({ ...p, unitId: Number(e.target.value) })) } })),
+            field(t('unitId') || '站号', el('input', { className: 'dvb-input dvb-input-mono', type: 'number', min: 0, max: 247, value: String(devForm.unitId), onChange: (e) => { setDevForm((p) => ({ ...p, unitId: Number(e.target.value) })) } })),
             el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick: saveDeviceForm }, t('savePoint')||'保存')))
       : null
 
@@ -6151,10 +6538,8 @@ function createHmiView(React, t, post) {
       const shown = eng !== null ? eng : (rec && rec.ok === false ? rec.error : '—')
       const writable = isWritableFunction(point.function)
       const isFocused = shouldHighlightFocus(focusState) && focusState.request.pointId === point.id
-      const editing = editingDeviceId === devId
+      const editing = editingPointsDeviceId === devId
       const draft = editing ? (pointDraftsById[point.id] || null) : null
-      const connState = (connectionStates.find((x) => x.connectionId === point.connectionId) || {}).status || ''
-      const st = pointRuntimeStatus(point, rec, alarmStateData, connState)
       const wCell = inlineWrite && inlineWrite.pointId === point.id
       // 当前值单元格：可写→可点击；编辑态仍可见不承担配置
       const valueCell = wCell
@@ -6191,27 +6576,40 @@ function createHmiView(React, t, post) {
             style: { padding: 0, border: 'none', background: 'none', cursor: writable ? 'pointer' : 'default', font: 'inherit' },
             onClick() { if (writable) openWriteCell(point) },
           }, String(shown))
-      return el('tr', { key: point.id, 'data-kind': 'pt', className: 'dvb-row' + focusHighlightClass(isFocused), 'data-focused': isFocused ? 'true' : 'false', 'data-editing': editing ? 'true' : 'false' },
+      return el('tr', { key: point.id, 'data-kind': 'pt', className: 'dvb-pt-row' + focusHighlightClass(isFocused), 'data-focused': isFocused ? 'true' : 'false', 'data-editing': editing ? 'true' : 'false' },
         el('td', null, editing
           ? el('input', { className: 'dvb-input', value: draft ? draft.name : point.name, onChange: (e) => patchDraft(point.id, { name: e.target.value }) })
           : el('span', { className: 'dvb-cell-name' },
-              el('span', null, point.name || functionTag(point.function) + point.address),
+              el('span', null, point.name || functionCodeOf(point.function) + point.address),
               el('button', {
-                type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-icon',
+                type: 'button', className: 'dvb-btn dvb-btn-sm',
                 title: '复制结构化引用（稳定 ID+配置版本）并让 Agent 分析',
                 'aria-label': '让 Agent 分析 ' + (point.name || point.id),
                 onClick() { sendToAgent('point', { pointId: point.id, connectionId: point.connectionId, deviceId: point.deviceId, name: point.name }) },
-              }, 'ⓘ'))),
-        el('td', null, editing
-          ? el('select', { className: 'dvb-input', value: String(draft ? draft.function : point.function), onChange: (e) => patchDraft(point.id, { function: Number(e.target.value) }) },
+              }, 'AI'))),
+        el('td', { className: 'dvb-col-fn' }, editing
+          ? el('select', {
+              className: 'dvb-input',
+              value: String((draft && draft.function != null) ? draft.function : point.function),
+              onChange: (e) => patchDraft(point.id, { function: Number(e.target.value) }),
+            },
               el('option', { value: '1' }, fnOptionLabel(t, 1)),
               el('option', { value: '2' }, fnOptionLabel(t, 2)),
               el('option', { value: '3' }, fnOptionLabel(t, 3)),
               el('option', { value: '4' }, fnOptionLabel(t, 4)))
-          : el('span', { className: 'dvb-val' }, functionTag(point.function))),
+          : el('span', { className: 'dvb-val' }, functionCodeOf(point.function))),
         el('td', null, editing
           ? el('input', { className: 'dvb-input dvb-input-mono', type: 'number', min: 0, max: 65535, value: draft ? draft.address : point.address, onChange: (e) => patchDraft(point.id, { address: Number(e.target.value) }) })
           : el('span', { className: 'dvb-val' }, String(point.address))),
+        el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' }, valueCell),
+        el('td', { className: 'dvb-col-monitor' },
+          flagSwitch(point.monitorEnabled === true, flagSavingByPoint[point.id + ':monitorEnabled'] ? '监视状态保存中…' : '开启后成为可视化数据源', (next) => {
+            persistPointFlags(point.id, { monitorEnabled: next })
+          })),
+        el('td', { className: 'dvb-col-alarm' },
+          flagSwitch(point.alarmEnabled === true, flagSavingByPoint[point.id + ':alarmEnabled'] ? '告警状态保存中…' : '参与告警判断', (next) => {
+            persistPointFlags(point.id, { alarmEnabled: next })
+          })),
         el('td', null, editing
           ? el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', value: draft ? draft.scale : point.scale, onChange: (e) => patchDraft(point.id, { scale: Number(e.target.value) }) })
           : el('span', { className: 'dvb-val' }, (point.scale === 1 ? '' : '×' + point.scale) || '—')),
@@ -6221,37 +6619,6 @@ function createHmiView(React, t, post) {
         el('td', null, editing
           ? el('input', { className: 'dvb-input', value: draft ? draft.unit : point.unit, onChange: (e) => patchDraft(point.id, { unit: e.target.value }) })
           : el('span', null, point.unit || '—')),
-        el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' }, valueCell),
-        el('td', null,
-          el('span', { className: 'dvb-badge dvb-status', 'data-kind': st.key === 'alarm' ? 'err' : (st.key === 'comm-error' ? 'err' : st.key === 'disconnected' ? 'warn' : st.key === 'ok' ? 'live' : 'idle') }, st.label)),
-        el('td', null,
-          el('label', { className: 'dvb-switch', title: '开启后成为可视化数据源' },
-            el('input', {
-              type: 'checkbox',
-              checked: editing ? (draft ? draft.monitorEnabled : point.monitorEnabled === true) : point.monitorEnabled === true,
-              onChange: (e) => {
-                if (editing) { patchDraft(point.id, { monitorEnabled: e.target.checked }) }
-                else {
-                  const packNow = normalizePack()
-                  persist({ points: (packNow.points || []).map((p) => p.id === point.id ? { ...p, monitorEnabled: e.target.checked, trendEnabled: e.target.checked } : p), version: 3 })
-                }
-              },
-            }),
-            el('span', { className: 'dvb-switch-track' }))),
-        el('td', null,
-          el('label', { className: 'dvb-switch', title: '参与告警判断' },
-            el('input', {
-              type: 'checkbox',
-              checked: editing ? (draft ? draft.alarmEnabled : point.alarmEnabled === true) : point.alarmEnabled === true,
-              onChange: (e) => {
-                if (editing) { patchDraft(point.id, { alarmEnabled: e.target.checked }) }
-                else {
-                  const packNow = normalizePack()
-                  persist({ points: (packNow.points || []).map((p) => p.id === point.id ? { ...p, alarmEnabled: e.target.checked } : p), version: 3 })
-                }
-              },
-            }),
-            el('span', { className: 'dvb-switch-track' }))),
         el('td', null, editing
           ? el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', placeholder: '—', value: draft ? draft.alarmMin : (point.alarmMin == null ? '' : point.alarmMin), onChange: (e) => patchDraft(point.id, { alarmMin: e.target.value }) })
           : el('span', { className: 'dvb-val' }, point.alarmMin == null ? '—' : String(point.alarmMin))),
@@ -6269,28 +6636,27 @@ function createHmiView(React, t, post) {
     }
 
     // 按设备生成表头：编辑态 / 新增草稿态多一列操作；互不影响其它设备
+    // 列序：名称|功能码|地址|当前值|监视|告警|倍率|偏移|单位|下限|上限（状态改到设备头）
     const pointTheadOf = (d) => {
-      const editing = editingDeviceId === d.id
+      const editing = editingPointsDeviceId === d.id
       const adding = !!(newPointDraft && newPointDraft.deviceId === d.id)
       const showOps = editing || adding
       return el('thead', null, el('tr', null,
         el('th', { className: 'dvb-col-name' }, t('colName')),
         el('th', { className: 'dvb-col-fn' }, t('colFn')),
         el('th', { className: 'dvb-col-addr' }, t('colAddr')),
+        el('th', { className: 'dvb-col-value' }, '当前值'),
+        el('th', { className: 'dvb-col-monitor' }, t('monitorOn') || '监视'),
+        el('th', { className: 'dvb-col-alarm' }, t('alarmOn') || '告警'),
         el('th', { className: 'dvb-col-scale' }, '倍率'),
         el('th', { className: 'dvb-col-offset' }, '偏移'),
         el('th', { className: 'dvb-col-unit' }, t('ptUnit')),
-        el('th', { className: 'dvb-col-value' }, '当前值'),
-        el('th', { className: 'dvb-col-status' }, '状态'),
-        el('th', { className: 'dvb-col-monitor' }, t('monitorOn') || '监视'),
-        el('th', { className: 'dvb-col-alarm' }, t('alarmOn') || '告警'),
         el('th', { className: 'dvb-col-min' }, t('ptAlarmMin')),
         el('th', { className: 'dvb-col-max' }, t('ptAlarmMax')),
         showOps ? el('th', { className: 'dvb-col-ops' }, '') : null))
     }
 
     const batchPanelFor = (d) => el('div', { className: 'dvb-write-panel' },
-      el('div', { className: 'dvb-hint' }, t('batchAdd') + ' · ' + d.name + ' · Unit ' + d.unitId),
       el('div', { className: 'dvb-toolbar' },
         field(t('batchPrefix'), el('input', { className: 'dvb-input', value: batch.prefix, placeholder: 'HR', onChange: (event)=>{ setBatch((prev) => ({ ...prev, prefix: event.target.value })) } })),
         field(t('ptFc'), el('select', { className: 'dvb-input', value: String(batch.fc), onChange: (event)=>{ setBatch((prev) => ({ ...prev, fc: Number(event.target.value) })) } },
@@ -6301,7 +6667,7 @@ function createHmiView(React, t, post) {
         el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick: generateBatch }, t('batchGenerate'))))
 
     const csvPanelFor = (d) => el('div', { className: 'dvb-write-panel' },
-      el('div', { className: 'dvb-hint' }, 'CSV 只作用于设备 ' + d.name + ' · Unit ' + d.unitId + '：' + (csvTarget.mode === 'replace' ? '替换该设备点位' : '合并导入')),
+      el('div', { className: 'dvb-hint' }, 'CSV 只作用于设备 ' + d.name + ' · 站号 ' + d.unitId + '：' + (csvTarget.mode === 'replace' ? '替换该设备点位' : '合并导入')),
       el('div', { className: 'dvb-actions' },
         el('button', { type: 'button', className: 'dvb-btn' + (csvTarget.mode !== 'replace' ? ' dvb-btn-primary' : ''), onClick() { setCsvTarget((p) => ({ ...p, mode: 'merge' })) } }, '合并导入'),
         el('button', { type: 'button', className: 'dvb-btn' + (csvTarget.mode === 'replace' ? ' dvb-btn-primary' : ''), onClick() { setCsvTarget((p) => ({ ...p, mode: 'replace' })) } }, '替换当前设备点位')),
@@ -6314,6 +6680,7 @@ function createHmiView(React, t, post) {
     const deviceCardsPanel = el('div', { className: 'dvb-panel' },
       el('div', { className: 'dvb-panel-head' },
         el('span', { className: 'dvb-panel-title' }, '设备 · ' + (activeConnObj ? activeConnObj.name : '')),
+        el('span', { className: 'dvb-tag', title: '插件版本；改 client 后需重启 dsh web' }, 'v0.20.6'),
         el('span', { className: 'dvb-tag' }, activeDevices.length + ' 个设备 · ' + points.length + ' 个点位'),
         el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd || !activeConnId, onClick: openAddDevice }, '＋添加设备')),
       activeDevices.length
@@ -6322,32 +6689,71 @@ function createHmiView(React, t, post) {
             const devBusy = busy === d.id
             const pDel = devDeleteId && devDeleteId.split('|')
             const confirmDel = pDel && pDel[0] === d.id
-            const editing = editingDeviceId === d.id
+            const editingDevice = editingDeviceId === d.id
+            const editingPoints = editingPointsDeviceId === d.id
             const adding = !!(newPointDraft && newPointDraft.deviceId === d.id)
-            const showOps = editing || adding
-            return el('div', { key: d.id, className: 'dvb-panel dvb-dev-card' + (shouldHighlightFocus(focusState) && focusState.request.deviceId === d.id ? ' dvb-has-focus' : '') + (editing ? ' dvb-dev-editing' : '') },
-              el('div', { className: 'dvb-dev-head' },
-                editing
-                  ? el('span', { className: 'dvb-dev-title' },
-                      el('input', { className: 'dvb-input', value: (deviceDraft && deviceDraft.name) || d.name, onChange: (e) => setDeviceDraft((prev) => ({ ...prev, name: e.target.value })) }),
-                      el('span', { className: 'dvb-tag' }, 'Unit'),
-                      el('input', { className: 'dvb-input dvb-input-mono', style: { width: '64px' }, type: 'number', min: 0, max: 247, value: (deviceDraft && deviceDraft.unitId) || d.unitId, onChange: (e) => setDeviceDraft((prev) => ({ ...prev, unitId: Number(e.target.value) })) }))
-                  : el('span', { className: 'dvb-dev-title' }, d.name),
-                !editing ? el('span', { className: 'dvb-tag' }, 'Unit ' + d.unitId) : null,
-                el('span', { className: 'dvb-tag' }, devPts.length + ' 个点位')),
-              editing
-                ? el('div', { className: 'dvb-toolbar', style: { flexWrap: 'wrap' } },
-                    el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: !!busy, onClick() { saveDeviceEdit(d) } }, t('devSave') || '保存修改'),
+            const showOps = editingPoints || adding
+            const batchOpen = batch.open && batch.deviceId === d.id
+            const cm = connectionStates.find((x) => x.connectionId === d.connectionId)
+            const linkSt = cm ? (cm.status || 'disconnected') : 'disconnected'
+            let devStatus = { kind: 'idle', label: '未连接' }
+            if (linkSt === 'connected') {
+              let alarm = false
+              let comm = false
+              let ok = false
+              for (const p of devPts) {
+                const rs = pointRuntimeStatus(p, valueMap[p.id], alarmStateData, linkSt)
+                if (rs.key === 'alarm') alarm = true
+                else if (rs.key === 'comm-error') comm = true
+                else if (rs.key === 'ok') ok = true
+              }
+              if (alarm) devStatus = { kind: 'err', label: '告警' }
+              else if (comm) devStatus = { kind: 'err', label: '通信异常' }
+              else if (ok) devStatus = { kind: 'live', label: '正常' }
+              else devStatus = { kind: 'live', label: '已连接' }
+            } else if (linkSt === 'connecting') devStatus = { kind: 'warn', label: '连接中' }
+            else if (linkSt === 'disconnecting') devStatus = { kind: 'warn', label: '断开中' }
+            else if (linkSt === 'error') devStatus = { kind: 'err', label: '连接异常' }
+            return el('div', { key: d.id, className: 'dvb-panel dvb-dev-card' + (shouldHighlightFocus(focusState) && focusState.request.deviceId === d.id ? ' dvb-has-focus' : '') + (editingDevice ? ' dvb-dev-editing' : '') + (editingPoints ? ' dvb-points-editing' : '') },
+              editingDevice
+                ? el('div', { className: 'dvb-dev-head dvb-dev-edit-row' },
+                    el('input', { className: 'dvb-input', style: { minWidth: '120px', flex: '1 1 140px' }, value: (deviceDraft && deviceDraft.name) || d.name, onChange: (e) => setDeviceDraft((prev) => ({ ...prev, name: e.target.value })) }),
+                    el('span', { className: 'dvb-tag' }, '站号'),
+                    el('input', { className: 'dvb-input dvb-input-mono', style: { width: '64px' }, type: 'number', min: 1, max: 247, value: (deviceDraft && deviceDraft.unitId) || d.unitId, onChange: (e) => setDeviceDraft((prev) => ({ ...prev, unitId: Number(e.target.value) })) }),
+                    el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: !!busy, onClick() { saveDeviceEdit(d) } }, t('devSave') || '保存'),
                     el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { cancelDeviceEdit() } }, t('csvCancel') || '取消'),
                     el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-danger', title: '删除该设备及全部点位', 'aria-label': '删除设备 ' + d.name, onClick() { requestDeleteDevice(d) } }, t('devDelete') || '删除设备'))
+                : el('div', { className: 'dvb-dev-head' },
+                    el('div', { className: 'dvb-dev-head-main' },
+                      el('span', { className: 'dvb-dev-title' }, d.name),
+                      el('span', { className: 'dvb-tag' }, '站号 ' + d.unitId),
+                      el('span', { className: 'dvb-badge dvb-status', 'data-kind': devStatus.kind }, devStatus.label)),
+                    el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !!devDeleteId || editingPoints, onClick() { enterDeviceEdit(d) } }, t('devEdit') || '编辑设备')),
+              editingDevice
+                ? null
+                : editingPoints
+                ? el('div', { className: 'dvb-toolbar', style: { flexWrap: 'wrap' } },
+                    el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: !!busy, onClick() { savePointsEdit(d) } }, t('ptSave') || '保存'),
+                    el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { cancelPointsEdit() } }, t('csvCancel') || '取消'))
                 : el('div', { className: 'dvb-toolbar', style: { flexWrap: 'wrap' } },
                     el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: !cwd, onClick() { addNewPointRow(d.id) } }, t('addPoint')),
-                    el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { setBatch((prev) => ({ ...prev, open: !prev.open, deviceId: d.id, connectionId: activeConnId })) } }, t('batchAdd')),
+                    el('button', {
+                      type: 'button',
+                      className: 'dvb-btn dvb-btn-sm' + (batchOpen ? ' is-on' : ''),
+                      'aria-pressed': batchOpen ? 'true' : 'false',
+                      onClick() {
+                        setBatch((prev) => {
+                          const same = prev.open && prev.deviceId === d.id
+                          return { ...prev, open: !same, deviceId: d.id, connectionId: activeConnId }
+                        })
+                        setCsvTarget((prev) => (prev.open && prev.deviceId === d.id ? { ...prev, open: false } : prev))
+                      },
+                    }, batchOpen ? '收起批量' : (t('batchAdd') || '批量添加')),
                     el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !cwd || !canDevice || connMissing || !devPts.length || !!busy || readRunning, onClick() { readAll(d.id) } }, devBusy ? t('reading') : t('readAll')),
-                    el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !!devDeleteId, onClick() { enterDeviceEdit(d) } }, t('devEdit') || '编辑'),
-                    el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { setCsvTarget((prev) => ({ ...prev, open: !prev.open, deviceId: d.id })) } }, csvNote || t('csvImport')),
+                    el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !!devDeleteId || !devPts.length, onClick() { enterPointsEdit(d) } }, t('ptEdit') || '编辑点位'),
+                    el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm' + (csvTarget.open && csvTarget.deviceId === d.id ? ' is-on' : ''), onClick() { setCsvTarget((prev) => ({ ...prev, open: !(prev.open && prev.deviceId === d.id), deviceId: d.id })); setBatch((prev) => (prev.open && prev.deviceId === d.id ? { ...prev, open: false } : prev)) } }, csvNote || t('csvImport')),
                     el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !devPts.length, onClick() { exportCsv(d.id) } }, t('csvExport')),
-                    el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-icon', title: '复制设备结构化引用并让 Agent 分析', 'aria-label': '让 Agent 分析设备 ' + d.name, onClick() { sendToAgent('device', { deviceId: d.id, connectionId: d.connectionId, name: d.name }) } }, 'ⓘ')),
+                    el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '复制设备结构化引用并让 Agent 分析', 'aria-label': '让 Agent 分析设备 ' + d.name, onClick() { sendToAgent('device', { deviceId: d.id, connectionId: d.connectionId, name: d.name }) } }, 'AI')),
               confirmDel
                 ? el('div', { className: 'dvb-write-panel', style: { marginBottom: '6px' } },
                     el('div', { className: 'dvb-hint dvb-need' }, '将同时删除该设备的 ' + pDel[1] + ' 个点位和 ' + pDel[2] + ' 个当前值'),
@@ -6362,7 +6768,7 @@ function createHmiView(React, t, post) {
                     el('table', { className: 'dvb-table dvb-point-table' }, pointTheadOf(d),
                       el('tbody', null,
                         newPointDraft && newPointDraft.deviceId === d.id
-                          ? el('tr', { className: 'dvb-row dvb-newpoint-row', 'data-editing': 'true' },
+                          ? el('tr', { className: 'dvb-pt-row dvb-newpoint-row', 'data-editing': 'true' },
                               el('td', { className: 'dvb-col-name' }, el('input', { className: 'dvb-input', placeholder: t('ptNamePh'), value: newPointDraft.name, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, name: e.target.value })) })),
                               el('td', { className: 'dvb-col-fn' }, el('select', { className: 'dvb-input', value: String(newPointDraft.function), onChange: (e) => setNewPointDraft((prev) => ({ ...prev, function: Number(e.target.value) })) },
                                   el('option', { value: '1' }, fnOptionLabel(t, 1)),
@@ -6370,18 +6776,17 @@ function createHmiView(React, t, post) {
                                   el('option', { value: '3' }, fnOptionLabel(t, 3)),
                                   el('option', { value: '4' }, fnOptionLabel(t, 4)))),
                               el('td', { className: 'dvb-col-addr' }, el('input', { className: 'dvb-input dvb-input-mono', type: 'number', min: 0, max: 65535, value: newPointDraft.address, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, address: Number(e.target.value) })) })),
+                              el('td', { className: 'dvb-col-value' }, '—'),
+                              el('td', { className: 'dvb-col-monitor' }, flagSwitch(newPointDraft.monitorEnabled === true, '开启后成为可视化数据源', (next) => setNewPointDraft((prev) => ({ ...prev, monitorEnabled: next })))),
+                              el('td', { className: 'dvb-col-alarm' }, flagSwitch(newPointDraft.alarmEnabled === true, '参与告警判断', (next) => setNewPointDraft((prev) => ({ ...prev, alarmEnabled: next })))),
                               el('td', { className: 'dvb-col-scale' }, el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', value: newPointDraft.scale, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, scale: Number(e.target.value) })) })),
                               el('td', { className: 'dvb-col-offset' }, el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', value: newPointDraft.offset, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, offset: Number(e.target.value) })) })),
                               el('td', { className: 'dvb-col-unit' }, el('input', { className: 'dvb-input', value: newPointDraft.unit, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, unit: e.target.value })) })),
-                              el('td', { className: 'dvb-col-value' }, '—'),
-                              el('td', { className: 'dvb-col-status' }, '—'),
-                              el('td', { className: 'dvb-col-monitor' }, el('label', { className: 'dvb-switch' }, el('input', { type: 'checkbox', checked: newPointDraft.monitorEnabled === true, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, monitorEnabled: e.target.checked })) }), el('span', { className: 'dvb-switch-track' }))),
-                              el('td', { className: 'dvb-col-alarm' }, el('label', { className: 'dvb-switch' }, el('input', { type: 'checkbox', checked: newPointDraft.alarmEnabled === true, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, alarmEnabled: e.target.checked })) }), el('span', { className: 'dvb-switch-track' }))),
                               el('td', { className: 'dvb-col-min' }, el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', value: newPointDraft.alarmMin, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, alarmMin: e.target.value })) })),
                               el('td', { className: 'dvb-col-max' }, el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', value: newPointDraft.alarmMax, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, alarmMax: e.target.value })) })),
                               el('td', { className: 'dvb-col-ops' }, el('div', { className: 'dvb-actions' },
-                                el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick: saveNewPointDraft }, t('savePoint') || '保存'),
-                                el('button', { type: 'button', className: 'dvb-btn', onClick() { setNewPointDraft(null) } }, t('csvCancel') || '取消'))))
+                                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: !cwd, title: t('savePoint') || '保存', 'aria-label': t('savePoint') || '保存', onClick: saveNewPointDraft }, '✓'),
+                                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: t('csvCancel') || '取消', 'aria-label': t('csvCancel') || '取消', onClick() { setNewPointDraft(null) } }, '✕'))))
                           : null,
                         devPts.map((point) => pointRow(point, d.id, showOps)))))
                 : el('div', { className: 'dvb-empty' }, t('noPoints')))
@@ -6633,7 +7038,7 @@ function createHmiView(React, t, post) {
       agentCopied ? el('div', { className: 'dvb-msg', 'data-kind': 'ok' }, agentCopied.split(':').pop() + ' · ' + agentCopied.split(':').slice(0,2).join(':')) : null,
       tabBar,
       focusToast,
-      connListPanel,
+      // 连接总览卡片仅在「全部连接」；单连接 tab 只看设备/点位
       devFormPanel,
       deviceCardsPanel,
       pendingPanel,
@@ -6745,7 +7150,7 @@ function createAlarmPage(React, t, post, hooks) {
       setEvents(timeline.filter((item) => item.kind === 'alarm' || item.kind === 'alarm-clear'))
       const mb = data.workspace && data.workspace.modbus
       if (mb) { setAlarmState(mb.alarmState || mb.alarmActive || {}); try { setPack(normalizeModbus(mb)) } catch { setPack(null) } }
-    }), [cwd, post])
+    }, { sessionId: (props && props.sessionId) || '' }), [cwd, post, props && props.sessionId])
     const grouped = groupAlarms(alarmState)
     const bucketMap = grouped.buckets || { activeUnacked: grouped.activeUnacked || [], activeAcked: grouped.activeAcked || [], recoveredUnacked: grouped.recoveredUnacked || [], recoveredAcked: grouped.recoveredAcked || [] }
     const legacyMap = { current: grouped.current, history: grouped.history }
@@ -6768,7 +7173,7 @@ function createAlarmPage(React, t, post, hooks) {
       setAlarmState(next)
       if (cwd) post('/dsh-vision-bench/workspace', { cwd, modbus:{ alarmState: next, version:3 } }).catch(()=>{})
     }
-    const sendToAgentAlarm = (row)=>{
+    const sendToAgentAlarm = async (row)=>{
       const cv = pack ? (pack.configVersion || 1) : 1
       const ref = buildAgentRef('alarm', {
         alarmId: row.a.id,
@@ -6779,9 +7184,9 @@ function createAlarmPage(React, t, post, hooks) {
         start: row.a.firstAt || row.a.lastAt,
         end: row.a.lastAt,
       }, { configVersion: cv, start: row.a.firstAt || row.a.lastAt, end: row.a.lastAt })
-      const res = dispatchAgentRef(ref, agentBridge)
+      const res = await dispatchAgentRef(ref, agentBridge)
       // Task5/0.18.2: unified status enum input|sent|copied|failed — surface it on screen
-      setCopiedAlarm(row.a.id + ':' + res.status)
+      setCopiedAlarm(row.a.id + ':' + ((res && res.status) || '复制失败'))
       setTimeout(()=> setCopiedAlarm(''), 2000)
       if (cwd) {
         // Task4/0.18.2: typed evidence back-mount — failures surface CONFIG_DRIFT/TARGET_MISMATCH
@@ -6822,7 +7227,7 @@ function createAlarmPage(React, t, post, hooks) {
             el('span', { className: 'dvb-map-meta' }, clockOf(row.a.lastAt)),
             el('span', { className: 'dvb-hint', title: row.a.id }, row.label),
             row.conn ? el('span', { className: 'dvb-hint' }, row.conn.name) : null,
-            row.dev ? el('span', { className: 'dvb-hint' }, row.dev.name + '·Unit '+row.dev.unitId) : null,
+            row.dev ? el('span', { className: 'dvb-hint' }, row.dev.name + '·站号 '+row.dev.unitId) : null,
             el('span', { className: 'dvb-hint' }, row.a.threshold!=null?'阈值 '+row.a.threshold:''),
             el('span', { className: 'dvb-hint' }, row.a.value!=null?'当前 '+row.a.value:''),
             el('span', { className: 'dvb-badge', 'data-quality': row.a.quality || 'good' }, row.a.quality || 'good'),
@@ -7090,7 +7495,6 @@ const OVERS_CAN = 10
 const useViz = vendorUseVirtualizer() || (() => null)
 
 function createFramesPage(React, t, post, hooks) {
-  const openHmi = hooks && hooks.openHmi
   // Task8/0.18.3: the virtualizer hook is injected ONCE per page factory —
   // tests pass the official adapter explicitly, production uses DvbVendor's.
   const useVizForPage = (hooks && typeof hooks.useVirtualizer === 'function' && hooks.useVirtualizer) || useViz
@@ -7314,9 +7718,17 @@ function createFramesPage(React, t, post, hooks) {
     }, [realCwd, streamKey])
 
     function scrollToLatest(updateRef = true) {
+      const el = listRef.current
       const inst = vizer
-      if (inst && inst.scrollToIndex) inst.scrollToIndex(filtered.length - 1)
-      else if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight
+      // Prefer offset scroll: scrollToIndex retries warn under dynamic measureElement
+      // when DOM row heights are approximate (happy-dom / first paint).
+      if (inst && typeof inst.scrollToOffset === 'function') {
+        const viewH = (el && el.clientHeight) || 320
+        const total = typeof inst.getTotalSize === 'function' ? inst.getTotalSize() : (filtered.length * ESTIMATE_SIZE)
+        inst.scrollToOffset(Math.max(0, total - viewH), { align: 'start' })
+      } else if (el) {
+        el.scrollTop = el.scrollHeight || (filtered.length * ESTIMATE_SIZE)
+      }
       if (updateRef) wasAtBottomRef.current = true
       setPendingNew(0)
     }
@@ -7386,7 +7798,7 @@ function createFramesPage(React, t, post, hooks) {
     }
     const [error, setError] = React.useState('')
 
-    function sendToAgent(frame) {
+    async function sendToAgent(frame) {
       if (mode === 'raw') {
         const text = [
           'port: ' + (frame.port || ''),
@@ -7408,9 +7820,9 @@ function createFramesPage(React, t, post, hooks) {
         label: frame.label,
         transactionId: frame.transactionId,
       }, { configVersion, start: (frame.t || frame.at || Date.now()) - 5 * 60 * 1000, end: frame.t || frame.at || Date.now() })
-      const res = dispatchAgentRef(ref, agentBridge) || { mode: 'copied' }
-      const labelByMode = { input: '已加入输入框', sent: '已发送', copied: '仅复制', failed: '处理失败' }
-      setCopied(labelByMode[res.mode] || '仅复制')
+      const res = await dispatchAgentRef(ref, agentBridge)
+      const labelByMode = { input: '已加入输入框', sent: '已发送', copied: '已复制组件引用', failed: '复制失败' }
+      setCopied(labelByMode[(res && res.mode) || 'failed'] || ((res && res.status) || '复制失败'))
       setTimeout(() => setCopied(''), 2000)
       // Task4/0.18.2: evidence append must surface CONFIG_DRIFT/TARGET_MISMATCH, never silent
       postEvidence(post, realCwd, evidenceFromRef(ref), (reason) => {
@@ -7441,7 +7853,6 @@ function createFramesPage(React, t, post, hooks) {
       : []
     const rows = vizer ? virtualRows : fallbackRows
 
-    const noLive = serialSources.length === 0
     const selectedGone = sel.kind === 'conn' && !serialSources.some((s) => s.connectionId === sel.connectionId)
 
     return el('div', { className: 'dvb-live dvb-frames-page', 'data-mode': mode },
@@ -7453,17 +7864,10 @@ function createFramesPage(React, t, post, hooks) {
         el('button', { type: 'button', className: 'dvb-btn', onClick: clearView }, t('framesClearView') || '清空显示'),
         el('button', { type: 'button', className: 'dvb-btn', disabled: !filtered.length, onClick: exportFrames }, t('framesExport') || '导出')
       ),
-      noLive
-        ? el('div', { className: 'dvb-hint' },
-          el('div', null, t('framesNoLink') || '暂无已连接串口'),
-          el('div', null, t('framesGoHmiHint') || '请先在上位机中创建连接并连接串口。'),
-          el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', onClick() { if (typeof openHmi === 'function') try { openHmi({}) } catch {} } }, t('framesGoHmi') || '前往上位机'))
-        : null,
       selectedGone
         ? el('div', { className: 'dvb-hint' },
           el('div', null, (sel.port || sel.connectionId) + ' ' + (t('framesDisconnected') || '已断开，已停止接收新报文。历史报文仍可查看。')),
-          el('button', { type: 'button', className: 'dvb-btn', onClick() { setSelection('all') } }, t('framesPickOther') || '选择其他串口'),
-          el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', onClick() { if (typeof openHmi === 'function') try { openHmi({}) } catch {} } }, t('framesGoHmi') || '前往上位机'))
+          el('button', { type: 'button', className: 'dvb-btn', onClick() { setSelection('all') } }, t('framesPickOther') || '选择其他串口'))
         : null,
       el('div', { className: 'dvb-toolbar' },
         el('select', { className: 'dvb-input', value: selection, onChange: (e) => { setSelection(e.target.value); setPendingNew(0) } },
@@ -7475,7 +7879,7 @@ function createFramesPage(React, t, post, hooks) {
       showFilters && mode === 'proto'
         ? el('div', { className: 'dvb-toolbar' },
           el('select', { className: 'dvb-input', value: filters.deviceId, onChange: (e) => setFilters((p) => ({ ...p, deviceId: e.target.value })) },
-            el('option', { value: '' }, '全部设备'), devices.map((d) => el('option', { key: d.id, value: d.id }, d.name + ' · Unit ' + d.unitId))
+            el('option', { value: '' }, '全部设备'), devices.map((d) => el('option', { key: d.id, value: d.id }, d.name + ' · 站号 ' + d.unitId))
           ),
           el('select', { className: 'dvb-input', value: filters.functionCode, onChange: (e) => setFilters((p) => ({ ...p, functionCode: e.target.value })) },
             el('option', { value: '' }, '全部功能码'), [1, 2, 3, 4, 5, 6, 15, 16].map((fc) => el('option', { key: String(fc), value: String(fc) }, 'FC' + fc))
@@ -7520,15 +7924,14 @@ function createFramesPage(React, t, post, hooks) {
                 : el('span', { className: 'dvb-hint' }, (dev && dev.name) || f.deviceName || f.deviceId || ''),
               mode === 'raw'
                 ? el('span', { className: 'dvb-hint' }, String(f.bytes || f.byteLength || ((f.hex || '').length / 2) || ''))
-                : el('span', { className: 'dvb-hint' }, 'U' + String(f.unitId || (dev && dev.unitId) || '')),
+                : el('span', { className: 'dvb-hint', title: '站号' }, String(f.unitId || (dev && dev.unitId) || '—')),
               mode === 'raw'
                 ? el('span', { className: 'dvb-hint' }, f.hex || f.request || '')
                 : el('span', { className: 'dvb-hint' }, 'FC' + String(f.functionCode || '')),
               mode === 'proto' ? el('span', { className: 'dvb-hint' }, (f.durationMs != null ? f.durationMs + 'ms' : '')) : null,
               srcLabel ? el('span', { className: 'dvb-hint' }, srcLabel) : null,
               mode === 'proto' ? el('span', { className: 'dvb-badge', 'data-kind': f.status === 'ok' ? 'ready' : 'err' }, f.status === 'ok' ? '成功' : (f.status || '失败')) : null,
-              el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick(ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); if (typeof openHmi === 'function') try { openHmi({ connectionId: f.connectionId, deviceId: f.deviceId, frameId: fid }) } catch {} } }, t('openInHmi') || '在上位机打开'),
-              el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick(ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); sendToAgent(f) } }, copied === '已加入输入框' ? '已加入' : (copied === '已发送' ? '已发送' : (hasHarnessInput(props) ? '让 Agent 分析' : '复制给 Agent')))
+              el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: hasHarnessInput(props) ? '让 Agent 分析' : '复制给 Agent', onClick(ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); sendToAgent(f) } }, copied === '已加入输入框' ? '已加入' : (copied === '已发送' ? '已发送' : 'AI'))
             )
           })
         )
@@ -7592,8 +7995,8 @@ function createMapView(React, t, post) {
           try { setTargetJump(jump) } catch {}
         }
         setKeil((prev) => (prev.project === project && prev.target === target ? prev : { project, target }))
-      })
-    }, [cwd, post])
+      }, { sessionId: (props && props.sessionId) || '' })
+    }, [cwd, post, props && props.sessionId])
 
     React.useEffect(() => {
       let stop = false

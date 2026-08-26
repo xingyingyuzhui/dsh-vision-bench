@@ -37,11 +37,12 @@ test('decodeValue applies scale and offset, passes booleans through', () => {
 })
 
 test('evaluateAlarm reports min and max breaches', () => {
-  const seg = { alarmMin: 10, alarmMax: 90 }
+  const seg = { alarmEnabled: true, alarmMin: 10, alarmMax: 90 }
   assert.equal(evaluateAlarm(seg, 5), 'min')
   assert.equal(evaluateAlarm(seg, 95), 'max')
   assert.equal(evaluateAlarm(seg, 50), '')
   assert.equal(evaluateAlarm({ alarmMin: null, alarmMax: null }, 999), '')
+  assert.equal(evaluateAlarm({ alarmMin: 10, alarmMax: 90 }, 5), '', '未显式 alarmEnabled → 不告警')
   assert.equal(evaluateAlarm(seg, 'abc'), '')
 })
 
@@ -74,7 +75,7 @@ test('csvToSegments rejects empty input and missing columns', () => {
 
 test('deviceAlarms fires once per breach and clears on recovery', () => {
   const device = {
-    segments: [{ id: 's1', name: '压力', function: 3, address: 0, count: 1, scale: 1, offset: 0, unit: 'kPa', alarmMin: null, alarmMax: 100 }],
+    segments: [{ id: 's1', name: '压力', function: 3, address: 0, count: 1, scale: 1, offset: 0, unit: 'kPa', alarmEnabled: true, alarmMin: null, alarmMax: 100 }],
     values: [],
   }
   const high = [{ key: 's1:3@0', segmentId: 's1', function: 3, address: 0, value: 120, ok: true }]

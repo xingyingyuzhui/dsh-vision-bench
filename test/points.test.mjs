@@ -90,9 +90,11 @@ test('fillSimValues produces plausible raw values for every point', () => {
 })
 
 test('evaluateAlarm and evaluatePointAlarms detect breaches with hysteresis', () => {
-  const p = { id: 's1', name: '压力', function: 3, address: 0, alarmMax: 100 }
+  const p = { id: 's1', name: '压力', function: 3, address: 0, alarmEnabled: true, alarmMax: 100 }
   assert.equal(evaluateAlarm(p, 120), 'max')
   assert.equal(evaluateAlarm(p, 50), '')
+  assert.equal(evaluateAlarm({ ...p, alarmEnabled: false }, 120), '')
+  assert.equal(evaluateAlarm({ id: 'x', alarmMax: 100 }, 120), '', '未显式 alarmEnabled → 不告警')
   const first = evaluatePointAlarms([p], [{ key: 's1', raw: 120, ok: true }], {})
   assert.equal(first.fired.length, 1)
   const again = evaluatePointAlarms([p], [{ key: 's1', raw: 130, ok: true }], first.next)

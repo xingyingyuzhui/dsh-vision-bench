@@ -3,9 +3,10 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-test('package.json: version 0.20.1 and no legacy python modbus files', async () => {
+test('package.json: version tracks package and no legacy python modbus files', async () => {
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
-  assert.equal(pkg.version, '0.20.1')
+  assert.equal(typeof pkg.version, 'string')
+  assert.match(pkg.version, /^\d+\.\d+\.\d+/)
   const files = Array.isArray(pkg.files) ? pkg.files : []
   for (const bad of ['modbus_read.py', 'modbus_write.py', 'serial_monitor.py']) {
     assert.ok(!files.some((f) => String(f).indexOf(bad) >= 0), bad + ' must not be packaged')
@@ -22,6 +23,9 @@ test('package.json: version 0.20.1 and no legacy python modbus files', async () 
   for (const bad of ['runtime/modbus_read.py', 'runtime/modbus_write.py', 'runtime/serial_monitor.py']) {
     await assert.rejects(access(new URL('../' + bad, import.meta.url)), bad + ' deleted from source')
   }
+  // UI 版本 chip 与 package 一致（禁止手改 client.js）
+  const hmi = await readFile(new URL('../bench-hmi.mjs', import.meta.url), 'utf8')
+  assert.ok(hmi.includes("'v" + pkg.version + "'") || hmi.includes('"v' + pkg.version + '"'), 'HMI version chip matches package.json')
 })
 
 test('bench-run script map keeps Keil/OpenOCD and drops modbus python', async () => {
