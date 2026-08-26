@@ -27,6 +27,7 @@ export function createVisualizationPage(React, t, post, hooks) {
     const [copied, setCopied] = React.useState('')
     const [note, setNote] = React.useState('')
     const [focusVizId, setFocusVizId] = React.useState('')
+    const [chartErrors, setChartErrors] = React.useState({})
     React.useEffect(() => subscribeFocus('', (fs) => {
       try { setFocusVizId((fs && fs.request && fs.request.visualizationId) || '') } catch {}
     }), [])
@@ -123,44 +124,54 @@ export function createVisualizationPage(React, t, post, hooks) {
       }).catch((err) => setNote(String((err && err.message) || '写入失败')))
     }
 
-    const linePayloadCache = {}
-    const seriesOfComponent = (comp) => {
-      const key = comp.id
-      if (!linePayloadCache[key]) {
-        linePayloadCache[key] = trendDataForComponents(trendStore, points, comp.pointIds, (comp.settings && comp.settings.windowMs) || TREND_WINDOW_MS)
-      }
-      return linePayloadCache[key]
-    }
+    const seriesOfComponent = (comp) =>
+      trendDataForComponents(trendStore, points, comp.pointIds, (comp.settings && comp.settings.windowMs) || TREND_WINDOW_MS)
 
+    // Task1/0.20.1: uPlot 实例生命周期 — 相同组件+相同 DOM 只 setData；
+    // 节点变化/空数据/删除/类型切换销毁；初始化失败显式提示（不静默吞掉）
+    const destroyChart = (id) => {
+      const u = uplotRefs.current[id]
+      if (u) { try { u.destroy() } catch {} }
+      delete uplotRefs.current[id]
+    }
     const ensureUplot = (node, comp) => {
       if (!node) return
       const payload = seriesOfComponent(comp)
       const existing = uplotRefs.current[comp.id]
       if (existing && existing._node === node) {
-        // 组件序列集合不变 → setData 实时更新
-        try { if (payload.keys.length && existing.setData) existing.setData(payload.data) } catch {}
+        if (!payload.keys.length) { destroyChart(comp.id); return }
+        try { existing.setData(payload.data) } catch (err) {
+          setChartErrors((prev) => ({ ...prev, [comp.id]: String((err && err.message) || err) }))
+        }
         return
       }
-      if (payload.keys.length && vendorUPlot()) {
-        try {
-          if (existing) existing.destroy()
-          const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-          const opts = {
-            ...UPLOT_PROTO,
-            width: node.clientWidth || 420,
-            height: 150,
-            pxRatio: (typeof window !== 'undefined' && window.devicePixelRatio) || 1,
-            scales: { x: { time: true }, y: { auto: true } },
-            axes: [
-              { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
-              { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
-            ],
-            series: [{ label: 'time' }].concat(payload.keys.map((k, i) => ({ label: (payload.meta[i] && payload.meta[i].label) || k, stroke: VIZ_COLORS[i % VIZ_COLORS.length], width: 1.5, spanGaps: false, points: { show: false } }))),
-          }
-          const c = new vendorUPlot()(opts, payload.data, node)
-          c._node = node
-          uplotRefs.current[comp.id] = c
-        } catch { /* uPlot 不可用时降级为提示 */ }
+      if (!payload.keys.length) { destroyChart(comp.id); return }
+      const UPlot = vendorUPlot()
+      if (!UPlot) {
+        setChartErrors((prev) => ({ ...prev, [comp.id]: '图表运行时不可用' }))
+        return
+      }
+      try {
+        if (existing) destroyChart(comp.id)
+        const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        const opts = {
+          ...UPLOT_PROTO,
+          width: node.clientWidth || 420,
+          height: 150,
+          pxRatio: (typeof window !== 'undefined' && window.devicePixelRatio) || 1,
+          scales: { x: { time: true }, y: { auto: true } },
+          axes: [
+            { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
+            { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
+          ],
+          series: [{ label: 'time' }].concat(payload.keys.map((k, i) => ({ label: (payload.meta[i] && payload.meta[i].label) || k, stroke: VIZ_COLORS[i % VIZ_COLORS.length], width: 1.5, spanGaps: false, points: { show: false } }))),
+        }
+        const chart = new UPlot(opts, payload.data, node)
+        chart._node = node
+        uplotRefs.current[comp.id] = chart
+        setChartErrors((prev) => { const next = { ...prev }; delete next[comp.id]; return next })
+      } catch (err) {
+        setChartErrors((prev) => ({ ...prev, [comp.id]: '曲线渲染失败: ' + String((err && err.message) || err) }))
       }
     }
 
@@ -220,10 +231,16 @@ export function createVisualizationPage(React, t, post, hooks) {
       }
       if (comp.type === 'line') {
         const payload = seriesOfComponent(comp)
+        const chartErr = chartErrors[comp.id]
         return el('div', { className: 'dvb-viz-body' },
-          payload.keys.length
-            ? el('div', { ref: (node) => { if (node) ensureUplot(node, comp) }, className: 'dvb-viz-uplot', style: { width: '100%', height: '150px' } })
-            : el('div', { className: 'dvb-hint' }, '暂无历史样本，等待采集…'))
+          chartErr
+            ? el('div', { className: 'dvb-msg dvb-viz-chart-error', 'data-kind': 'err' },
+                el('span', null, chartErr),
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '重试渲染该曲线', onClick() { setChartErrors((prev) => { const next = { ...prev }; delete next[comp.id]; return next }); setTick((n) => n + 1) } }, '重试'),
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openEditor(comp) } }, '编辑'))
+            : payload.keys.length
+              ? el('div', { ref: (node) => { if (node) ensureUplot(node, comp) }, className: 'dvb-viz-uplot', style: { width: '100%', height: '150px' } })
+              : el('div', { className: 'dvb-hint' }, '暂无历史样本，等待采集…'))
       }
       if (comp.type === 'bar') {
         const bd = barDataOf(comp)

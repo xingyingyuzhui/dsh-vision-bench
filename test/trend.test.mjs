@@ -13,6 +13,7 @@ import {
   computeStats,
   exportRangeCsv,
   toUplotData,
+  trendDataForComponents,
   UPLOT_PROTO,
 } from '../bench-trend.mjs'
 
@@ -174,4 +175,38 @@ test('Task5/6 guards: no hard-coded configVersion collapse and no window.uPlot r
   assert.match(live, /\.setData\(/, 'should update via setData, not re-create chart')
   assert.match(live, /setSize/, 'should resize via setSize')
   assert.match(live, /spanGaps: false/, 'curve does not connect error gaps')
+})
+test('Task2/0.20.1: trendDataForComponents aligned uPlot data (multi-series, seconds, null gaps)', () => {
+  const base = Date.now() - 60000
+  const store = {
+    p1: [[base, 1], [base + 1000, 2], [base + 2000, null]],
+    p2: [[base + 1000, 20], [base + 2000, 30], [base + 3000, 40]],
+  }
+  const points = [{ id: 'p1', name: 'A', unit: '°C' }, { id: 'p2', name: 'B' }]
+  const r = trendDataForComponents(store, points, ['p1', 'p2'], 300000)
+  assert.equal(r.data.length, r.keys.length + 1, 'data.length === keys.length + 1')
+  assert.deepEqual(r.keys, ['p1', 'p2'], '点位顺序稳定')
+  for (const row of r.data) assert.equal(row.length, r.data[0].length, '所有数组等长')
+  assert.deepEqual(r.data[0].map((v) => typeof v), ['number', 'number', 'number', 'number'], '时间轴为秒数值')
+  assert.ok(Math.abs(r.data[0][0] - base / 1000) < 0.001, '毫秒→秒')
+  assert.deepEqual(r.data[1], [1, 2, null, null], 'p1 对齐 + 通信失败 null 断点')
+  assert.deepEqual(r.data[2], [null, 20, 30, 40], 'p2 对齐')
+})
+
+test('Task2/0.20.1: 同时间戳合并去重；窗口过滤；零样本点保留 key 顺序', () => {
+  const base = Date.now() - 60000
+  const store = {
+    p1: [[base, 1], [base, 2], [base + 500, 3]],
+    p2: [[base + 500, 30]],
+  }
+  const points = [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }]
+  const r = trendDataForComponents(store, points, ['p1', 'p2', 'p3'], 300000)
+  assert.deepEqual(r.keys, ['p1', 'p2', 'p3'], '零样本点保留位置（p3 keys 存在）')
+  assert.deepEqual(r.data[1], [2, 3], '同时间戳去重(1,2 取后者)')
+  assert.deepEqual(r.data[3], [null, null], 'p3 全 null')
+  // 窗口过滤（now≈测试时间；2000ms 前样本应被 1500ms 窗口滤掉）
+  const nowRef = Date.now()
+  const narrow = trendDataForComponents({ p1: [[nowRef - 2000, 1], [nowRef - 1000, 2]] }, points, ['p1'], 1500)
+  assert.equal(narrow.data[0].length, 1, '窗口外样本被过滤')
+  assert.equal(narrow.data[1][0], 2)
 })

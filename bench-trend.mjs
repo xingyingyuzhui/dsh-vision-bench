@@ -159,29 +159,54 @@ export function toUplotData(cwd, opts = {}) {
 }
 
 // data-layer proto for uPlot view — no runtime dependency, spanGaps:false keeps null gaps as breaks
-// TaskP2/0.20.0: 按组件 pointIds + windowMs 从工作区 trend 存储构造 uPlot 载荷
+// Task2/0.20.1: 按组件 pointIds + windowMs 构造 uPlot ALIGNED data。
+// 输出 [x秒..., s1..., s2...]：合并时间戳升序去重 → 毫秒转秒 → 每点位按统一
+// 时间轴补 null（通信失败本就为 null 断点）→ 所有数组等长，点位顺序稳定。
 export const trendDataForComponents = (trendStore, points, componentIds = [], windowMs = TREND_WINDOW_MS) => {
   const store = trendStore && typeof trendStore === 'object' ? trendStore : {}
   const byId = new Map((Array.isArray(points) ? points : []).map((p) => [p.id, p]))
-  const ids = Array.isArray(componentIds) ? componentIds : []
+  const ids = (Array.isArray(componentIds) ? componentIds : []).slice(0, 8)
   const now = Date.now()
-  const data = [] // uPlot: [xs, v1, v2, ...]
-  const keys = []
-  const meta = []
-  for (const pid of ids.slice(0, 8)) {
+  const cutoff = now - (Number(windowMs) > 0 ? Number(windowMs) : TREND_WINDOW_MS)
+  // 收集每个点位的窗口样本与全局时间戳集合
+  const seriesByPoint = new Map()
+  const timeSet = new Set()
+  for (const pid of ids) {
     const pt = byId.get(pid)
     const list = Array.isArray(store[pid]) ? store[pid] : []
-    const window = list.filter((sv) => Array.isArray(sv) && sv[0] >= now - windowMs)
-    if (!window.length) continue
-    const xs = []
-    const vs = []
-    for (const sv of window) {
-      xs.push(sv[0])
-      vs.push(sv[1] == null ? null : Number(sv[1]))
+    const samples = []
+    for (const sv of list) {
+      if (!Array.isArray(sv)) continue
+      const t = Number(sv[0])
+      if (!Number.isFinite(t) || t <= 0 || t < cutoff) continue
+      samples.push([t, sv[1] == null ? null : Number(sv[1])])
+      timeSet.add(t)
     }
-    keys.push(pid)
-    meta.push({ label: pt ? (pt.name || String(pid)) : pid, unit: pt && pt.unit || '', connectionId: pt && pt.connectionId || '', deviceId: pt && pt.deviceId || '' })
-    data.push(xs, vs)
+    seriesByPoint.set(pid, { samples, pt })
+  }
+  const times = [...timeSet].sort((a, b) => a - b)
+  const data = []
+  const keys = []
+  const meta = []
+  if (times.length) {
+    // 时间轴统一为秒（uPlot time scale）
+    data.push(times.map((t) => t / 1000))
+    for (const pid of ids) {
+      const entry = seriesByPoint.get(pid)
+      const pt = entry && entry.pt
+      const samples = entry ? entry.samples : []
+      const map = new Map(samples.map((sv) => [sv[0], sv[1]]))
+      data.push(times.map((t) => (map.has(t) ? map.get(t) : null)))
+      keys.push(pid)
+      meta.push({ label: pt ? (pt.name || String(pid)) : pid, unit: (pt && pt.unit) || '', connectionId: (pt && pt.connectionId) || '', deviceId: (pt && pt.deviceId) || '' })
+      // 保留点位顺序：即使某点位零样本，也保留其 key/meta 位置，仅数据全 null
+    }
+  } else {
+    for (const pid of ids) {
+      keys.push(pid)
+      const pt = byId.get(pid)
+      meta.push({ label: pt ? (pt.name || String(pid)) : pid, unit: (pt && pt.unit) || '', connectionId: (pt && pt.connectionId) || '', deviceId: (pt && pt.deviceId) || '' })
+    }
   }
   return { data, keys, meta }
 }
