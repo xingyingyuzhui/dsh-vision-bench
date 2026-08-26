@@ -1,6 +1,6 @@
 // Task3/0.19.3: per-workspace trend ring buffers, sampled at COMMIT time.
 //
-// Only points with `trendEnabled === true` produce samples. Read, poll and
+// Only points with `monitorEnabled === true` produce samples. Read, poll and
 // write-readback all flow through bench-modbus-commit's single commit path, so
 // sampling never depends on which sidebar page is open. Communication failures
 // write a `null` breakpoint (the chart does not connect error gaps).
@@ -38,7 +38,7 @@ export const sampleTrendValues = (trendIn, pointValues, pointsById) => {
     const pid = rec && (rec.pointId || rec.key)
     if (!pid) continue
     const pt = pointsById && pointsById[pid]
-    if (!pt || pt.trendEnabled !== true) continue
+    if (!pt || pt.monitorEnabled !== true) continue
     let list = Array.isArray(trend[pid]) ? trend[pid].slice() : []
     // 通信失败 → null 断点；成功 → 数值（回退 raw）
     let val = null
@@ -58,7 +58,7 @@ export const readTrendSeries = (home, cwd, opts = {}) => {
   const trend = pack.trend || {}
   const ids = (Array.isArray(opts.pointIds) && opts.pointIds.length)
     ? opts.pointIds
-    : pack.points.filter((p) => p.trendEnabled === true).slice(0, 8).map((p) => p.id)
+    : pack.points.filter((p) => p.monitorEnabled === true).slice(0, 8).map((p) => p.id)
   const from = Number(opts.start) || 0
   const to = Number(opts.end) || Date.now()
   return ids.map((pid) => {

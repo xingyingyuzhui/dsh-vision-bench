@@ -147,17 +147,17 @@ export function evaluateAlarms({ points, values, prevState, pollingByConnection,
       }
       continue
     }
-    const raw = rec.raw
-    let breachKind = evaluateAlarm(p, raw)
+    const engVal = decodeValue(p, rec.raw)
+    // TaskP3/0.20.0: 阈值/死区/恢复比较统一使用工程值（不再混用 raw）
+    let breachKind = evaluateAlarm(p, engVal)
     if (!breachKind && prevRec && prevRec.condition === COND_ACTIVE && deadband > 0) {
-      const n = Number(raw)
+      const n = Number(engVal)
       if (prevRec.kind === 'max' && p.alarmMax != null && Number.isFinite(n)) {
         if (n > (p.alarmMax - deadband)) breachKind = 'max'
       } else if (prevRec.kind === 'min' && p.alarmMin != null && Number.isFinite(n)) {
         if (n < (p.alarmMin + deadband)) breachKind = 'min'
       }
     }
-    const engVal = decodeValue(p, raw)
     const threshold = breachKind === 'max' ? p.alarmMax : (breachKind === 'min' ? p.alarmMin : null)
     if (breachKind) {
       // delay: need persistent breach for delayMs
@@ -178,7 +178,7 @@ export function evaluateAlarms({ points, values, prevState, pollingByConnection,
         const count = base ? (base.count + 1) : 1
         const firstAt = base ? base.firstAt : now
         next[p.id] = { id: p.id, group: PROCESS, condition: COND_ACTIVE, acknowledged: false, ackedAt: 0, ackedBy: '', suggestedAt: 0, suggestedBy: '', status: ACTIVE, kind: breachKind, pointId: p.id, connectionId: p.connectionId || '', deviceId: p.deviceId || '', frameId: textId(opts && opts.frameId || ''), transactionId: textId(opts && opts.transactionId || ''), taskId: textId(opts && opts.taskId || ''), value: engVal, threshold, quality, firstAt, lastAt: now, recoveredAt: 0, durationMs: 0, count, severity: 'high', suppressUntil: 0, pendingSince: 0 }
-        if (!base || prevRec.condition !== COND_ACTIVE) fired.push({ point: p, raw, kind: breachKind, alarm: next[p.id] })
+        if (!base || prevRec.condition !== COND_ACTIVE) fired.push({ point: p, raw: rec.raw, kind: breachKind, alarm: next[p.id] })
       } else if (prevRec.condition === COND_ACTIVE) {
         // already active: update value/lastAt, handle dedup: if within suppress window, just bump count? For process active, suppress is for recovered; active just update
         // but if repeatedly firing same alarm within window while still active, we merge by counting? We keep count stable and just update time to avoid spam
@@ -193,7 +193,7 @@ export function evaluateAlarms({ points, values, prevState, pollingByConnection,
       if (prevRec && prevRec.condition === COND_ACTIVE) {
         const ra = now
         next[p.id] = { ...prevRec, condition: COND_RECOVERED, status: prevRec.acknowledged ? ACKED : RECOVERED, recoveredAt: ra, durationMs: Math.max(0, ra - prevRec.firstAt), lastAt: now, value: engVal, threshold: null, quality, suppressUntil: now + suppressMs, pendingSince: 0 }
-        recoveredList.push({ point: p, raw, alarm: next[p.id] })
+        recoveredList.push({ point: p, raw: rec.raw ?? null, alarm: next[p.id] })
       } else if (prevRec && prevRec.pendingSince) {
         // breach pending but cleared before delay => drop pending
         next[p.id] = { ...prevRec, pendingSince: 0, lastAt: now, quality }

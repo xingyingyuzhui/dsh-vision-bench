@@ -61,7 +61,7 @@ test('写后回读同样产生曲线样本', async () => {
 })
 
 test('通信失败写入 null 断点（曲线不断连错误区间）', () => {
-  const byId = { p2: { id: 'p2', trendEnabled: true } }
+  const byId = { p2: { id: 'p2', monitorEnabled: true } }
   const trend = sampleTrendValues({}, [
     { pointId: 'p2', value: 10, ok: true, at: 100 },
     { pointId: 'p2', ok: false, error: '超时', at: 200 },
@@ -69,8 +69,20 @@ test('通信失败写入 null 断点（曲线不断连错误区间）', () => {
   assert.deepEqual(trend.p2, [[100, 10], [200, null]], '失败样本为 null 断点')
 })
 
+test('旧字段迁移：trendEnabled 点位 → monitorEnabled 语义（规范化兼容）', async () => {
+  const { home, cwd } = await setup()
+  // 直接以旧字段读趋势存储：readTrendSeries 依赖规范化结果
+  saveWorkspace(home, cwd, { modbus: { ...baseModbus, trend: { p1: [[1000, 1]], p2: [[1001, 2]] } } })
+  const pack = loadWorkspace(home, cwd).modbus
+  assert.equal(pack.points[0].monitorEnabled, false, 'p1 旧 field false')
+  assert.equal(pack.points[1].monitorEnabled, true, 'p2 旧 true → monitorEnabled')
+  const series = readTrendSeries(home, cwd, { pointIds: ['p2'] })
+  assert.equal(series[0].samples.length, 1, '旧点位仍可读趋势样本')
+  await rm(home, { recursive: true, force: true })
+})
+
 test('ring 保留最近 600 个样本', () => {
-  const byId = { p2: { id: 'p2', trendEnabled: true } }
+  const byId = { p2: { id: 'p2', monitorEnabled: true } }
   const incoming = Array.from({ length: 700 }, (_, i) => ({ pointId: 'p2', value: i, ok: true, at: i + 1 }))
   const trend = sampleTrendValues({}, incoming, byId)
   assert.equal(trend.p2.length, TREND_KEEP)
