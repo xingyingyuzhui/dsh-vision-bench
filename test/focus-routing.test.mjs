@@ -98,3 +98,35 @@ test('P4/0.20.0: visualizationId routes to the charts tab (trend bucket)', () =>
   const d2 = shouldRouteFocus({ activeCwd: 'A', changedCwd: 'A', focus: fs, previousRouteKey: d1.routeKey })
   assert.equal(d2.route, false, '同一 visualizationId 去重')
 })
+
+test('Task5/6/0.20.1: visualizationId 聚焦链路 — 仅传组件 ID 即解析（不要求 connectionId）', async () => {
+  const { resolveTarget } = await import('../bench-targets.mjs')
+  const pack = {
+    version: 3,
+    connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }],
+    devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
+    points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, monitorEnabled: true }],
+    visualization: { schemaVersion: 1, components: [{ id: 'viz_a', name: '趋势图', type: 'line', pointIds: ['p1'] }] },
+  }
+  const rt = resolveTarget(pack, { visualizationId: 'viz_a' })
+  assert.equal(rt.ok, true, '仅 visualizationId 解析成功')
+  assert.equal(rt.visualizationId, 'viz_a')
+  assert.equal(rt.visualization.name, '趋势图')
+  const missing = resolveTarget(pack, { visualizationId: 'viz_nope' })
+  assert.equal(missing.ok, false)
+  assert.equal(missing.errorCode, 'VIZ_NOT_FOUND')
+})
+
+test('Task6/0.20.1: 不同工作区相同组件 ID 不串扰（subscribeFocus 按 cwd 订阅）', async () => {
+  const { setFocusState } = await import('../bench-shared.mjs')
+  let gotA = null
+  let gotB = null
+  const unA = (await import('../bench-shared.mjs')).subscribeFocus('wsA', (fs) => { gotA = fs && fs.request })
+  const unB = (await import('../bench-shared.mjs')).subscribeFocus('wsB', (fs) => { gotB = fs && fs.request })
+  setFocusState('wsA', { request: { visualizationId: 'same_viz', kind: 'visualization' } })
+  assert.equal(gotA && gotA.visualizationId, 'same_viz', 'A 收到')
+  assert.equal(gotB, null, 'B 不收 A 的焦点')
+  setFocusState('wsB', { request: { visualizationId: 'same_viz', kind: 'visualization' } })
+  assert.equal(gotB && gotB.visualizationId, 'same_viz')
+  unA(); unB()
+})

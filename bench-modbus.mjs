@@ -1392,6 +1392,7 @@ export const requestFocus = (home, cwd, body) => {
     frameId: rawTarget.frameId,
     trendKey: rawTarget.trendKey,
     alarmId: rawTarget.alarmId,
+    visualizationId: rawTarget.visualizationId,
     kind: rawTarget.kind,
     version: pack.configVersion || 1,
     by: origin.source === 'agent' ? 'agent' : 'user',
@@ -1419,6 +1420,7 @@ export const requestFocus = (home, cwd, body) => {
     frameId: target.frameId || '',
     trendKey: target.trendKey || '',
     alarmId: target.alarmId || '',
+    visualizationId: target.visualizationId || '',
     kind: target.kind || '',
     at: Date.now(),
     by: origin.source === 'agent' ? 'agent' : 'user',
@@ -1444,7 +1446,9 @@ export const requestFocus = (home, cwd, body) => {
     recordBenchEvent(home, room.cwd, {
       action: 'focus',
       ok: true,
-      summary: '聚焦 ' + [nextReq.connectionId, nextReq.deviceId, nextReq.pointId, nextReq.frameId].filter(Boolean).join('/') || '未知目标',
+      summary: '聚焦 ' + (nextReq.visualizationId
+        ? '组件 ' + ((rt.visualization && rt.visualization.name) || nextReq.visualizationId)
+        : ([nextReq.connectionId, nextReq.deviceId, nextReq.pointId, nextReq.frameId].filter(Boolean).join('/') || '未知目标')),
     }, { source: origin.source, sessionId: origin.sessionId })
   } catch {}
   return { ok: true, focus: nextReq, prev, tempWatchIds, badgeOnly, evidence, configVersion: pack.configVersion || 1 }

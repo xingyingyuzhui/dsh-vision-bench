@@ -2963,9 +2963,14 @@ function createVisualizationPage(React, t, post, hooks) {
     const [copied, setCopied] = React.useState('')
     const [note, setNote] = React.useState('')
     const [focusVizId, setFocusVizId] = React.useState('')
-    React.useEffect(() => subscribeFocus('', (fs) => {
-      try { setFocusVizId((fs && fs.request && fs.request.visualizationId) || '') } catch {}
-    }), [])
+    const [chartErrors, setChartErrors] = React.useState({})
+    // Task6/0.20.1: 按工作区订阅聚焦，隔离跨工作区/跨 Session 串扰
+    React.useEffect(() => {
+      setFocusVizId('')
+      return subscribeFocus(cwd, (fs) => {
+        try { setFocusVizId((fs && fs.request && fs.request.visualizationId) || '') } catch {}
+      })
+    }, [cwd])
     const [, setTick] = React.useState(0)
     const uplotRefs = React.useRef({})
     const switchDraft = React.useRef(null)
@@ -3059,44 +3064,54 @@ function createVisualizationPage(React, t, post, hooks) {
       }).catch((err) => setNote(String((err && err.message) || '写入失败')))
     }
 
-    const linePayloadCache = {}
-    const seriesOfComponent = (comp) => {
-      const key = comp.id
-      if (!linePayloadCache[key]) {
-        linePayloadCache[key] = trendDataForComponents(trendStore, points, comp.pointIds, (comp.settings && comp.settings.windowMs) || TREND_WINDOW_MS)
-      }
-      return linePayloadCache[key]
-    }
+    const seriesOfComponent = (comp) =>
+      trendDataForComponents(trendStore, points, comp.pointIds, (comp.settings && comp.settings.windowMs) || TREND_WINDOW_MS)
 
+    // Task1/0.20.1: uPlot 实例生命周期 — 相同组件+相同 DOM 只 setData；
+    // 节点变化/空数据/删除/类型切换销毁；初始化失败显式提示（不静默吞掉）
+    const destroyChart = (id) => {
+      const u = uplotRefs.current[id]
+      if (u) { try { u.destroy() } catch {} }
+      delete uplotRefs.current[id]
+    }
     const ensureUplot = (node, comp) => {
       if (!node) return
       const payload = seriesOfComponent(comp)
       const existing = uplotRefs.current[comp.id]
       if (existing && existing._node === node) {
-        // 组件序列集合不变 → setData 实时更新
-        try { if (payload.keys.length && existing.setData) existing.setData(payload.data) } catch {}
+        if (!payload.keys.length) { destroyChart(comp.id); return }
+        try { existing.setData(payload.data) } catch (err) {
+          setChartErrors((prev) => ({ ...prev, [comp.id]: String((err && err.message) || err) }))
+        }
         return
       }
-      if (payload.keys.length && vendorUPlot()) {
-        try {
-          if (existing) existing.destroy()
-          const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-          const opts = {
-            ...UPLOT_PROTO,
-            width: node.clientWidth || 420,
-            height: 150,
-            pxRatio: (typeof window !== 'undefined' && window.devicePixelRatio) || 1,
-            scales: { x: { time: true }, y: { auto: true } },
-            axes: [
-              { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
-              { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
-            ],
-            series: [{ label: 'time' }].concat(payload.keys.map((k, i) => ({ label: (payload.meta[i] && payload.meta[i].label) || k, stroke: VIZ_COLORS[i % VIZ_COLORS.length], width: 1.5, spanGaps: false, points: { show: false } }))),
-          }
-          const c = new vendorUPlot()(opts, payload.data, node)
-          c._node = node
-          uplotRefs.current[comp.id] = c
-        } catch { /* uPlot 不可用时降级为提示 */ }
+      if (!payload.keys.length) { destroyChart(comp.id); return }
+      const UPlot = vendorUPlot()
+      if (!UPlot) {
+        setChartErrors((prev) => ({ ...prev, [comp.id]: '图表运行时不可用' }))
+        return
+      }
+      try {
+        if (existing) destroyChart(comp.id)
+        const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        const opts = {
+          ...UPLOT_PROTO,
+          width: node.clientWidth || 420,
+          height: 150,
+          pxRatio: (typeof window !== 'undefined' && window.devicePixelRatio) || 1,
+          scales: { x: { time: true }, y: { auto: true } },
+          axes: [
+            { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
+            { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
+          ],
+          series: [{ label: 'time' }].concat(payload.keys.map((k, i) => ({ label: (payload.meta[i] && payload.meta[i].label) || k, stroke: VIZ_COLORS[i % VIZ_COLORS.length], width: 1.5, spanGaps: false, points: { show: false } }))),
+        }
+        const chart = new UPlot(opts, payload.data, node)
+        chart._node = node
+        uplotRefs.current[comp.id] = chart
+        setChartErrors((prev) => { const next = { ...prev }; delete next[comp.id]; return next })
+      } catch (err) {
+        setChartErrors((prev) => ({ ...prev, [comp.id]: '曲线渲染失败: ' + String((err && err.message) || err) }))
       }
     }
 
@@ -3156,10 +3171,16 @@ function createVisualizationPage(React, t, post, hooks) {
       }
       if (comp.type === 'line') {
         const payload = seriesOfComponent(comp)
+        const chartErr = chartErrors[comp.id]
         return el('div', { className: 'dvb-viz-body' },
-          payload.keys.length
-            ? el('div', { ref: (node) => { if (node) ensureUplot(node, comp) }, className: 'dvb-viz-uplot', style: { width: '100%', height: '150px' } })
-            : el('div', { className: 'dvb-hint' }, '暂无历史样本，等待采集…'))
+          chartErr
+            ? el('div', { className: 'dvb-msg dvb-viz-chart-error', 'data-kind': 'err' },
+                el('span', null, chartErr),
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '重试渲染该曲线', onClick() { setChartErrors((prev) => { const next = { ...prev }; delete next[comp.id]; return next }); setTick((n) => n + 1) } }, '重试'),
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openEditor(comp) } }, '编辑'))
+            : payload.keys.length
+              ? el('div', { ref: (node) => { if (node) ensureUplot(node, comp) }, className: 'dvb-viz-uplot', style: { width: '100%', height: '150px' } })
+              : el('div', { className: 'dvb-hint' }, '暂无历史样本，等待采集…'))
       }
       if (comp.type === 'bar') {
         const bd = barDataOf(comp)
@@ -4256,29 +4277,54 @@ function toUplotData(cwd, opts = {}) {
 }
 
 // data-layer proto for uPlot view — no runtime dependency, spanGaps:false keeps null gaps as breaks
-// TaskP2/0.20.0: 按组件 pointIds + windowMs 从工作区 trend 存储构造 uPlot 载荷
+// Task2/0.20.1: 按组件 pointIds + windowMs 构造 uPlot ALIGNED data。
+// 输出 [x秒..., s1..., s2...]：合并时间戳升序去重 → 毫秒转秒 → 每点位按统一
+// 时间轴补 null（通信失败本就为 null 断点）→ 所有数组等长，点位顺序稳定。
 const trendDataForComponents = (trendStore, points, componentIds = [], windowMs = TREND_WINDOW_MS) => {
   const store = trendStore && typeof trendStore === 'object' ? trendStore : {}
   const byId = new Map((Array.isArray(points) ? points : []).map((p) => [p.id, p]))
-  const ids = Array.isArray(componentIds) ? componentIds : []
+  const ids = (Array.isArray(componentIds) ? componentIds : []).slice(0, 8)
   const now = Date.now()
-  const data = [] // uPlot: [xs, v1, v2, ...]
-  const keys = []
-  const meta = []
-  for (const pid of ids.slice(0, 8)) {
+  const cutoff = now - (Number(windowMs) > 0 ? Number(windowMs) : TREND_WINDOW_MS)
+  // 收集每个点位的窗口样本与全局时间戳集合
+  const seriesByPoint = new Map()
+  const timeSet = new Set()
+  for (const pid of ids) {
     const pt = byId.get(pid)
     const list = Array.isArray(store[pid]) ? store[pid] : []
-    const window = list.filter((sv) => Array.isArray(sv) && sv[0] >= now - windowMs)
-    if (!window.length) continue
-    const xs = []
-    const vs = []
-    for (const sv of window) {
-      xs.push(sv[0])
-      vs.push(sv[1] == null ? null : Number(sv[1]))
+    const samples = []
+    for (const sv of list) {
+      if (!Array.isArray(sv)) continue
+      const t = Number(sv[0])
+      if (!Number.isFinite(t) || t <= 0 || t < cutoff) continue
+      samples.push([t, sv[1] == null ? null : Number(sv[1])])
+      timeSet.add(t)
     }
-    keys.push(pid)
-    meta.push({ label: pt ? (pt.name || String(pid)) : pid, unit: pt && pt.unit || '', connectionId: pt && pt.connectionId || '', deviceId: pt && pt.deviceId || '' })
-    data.push(xs, vs)
+    seriesByPoint.set(pid, { samples, pt })
+  }
+  const times = [...timeSet].sort((a, b) => a - b)
+  const data = []
+  const keys = []
+  const meta = []
+  if (times.length) {
+    // 时间轴统一为秒（uPlot time scale）
+    data.push(times.map((t) => t / 1000))
+    for (const pid of ids) {
+      const entry = seriesByPoint.get(pid)
+      const pt = entry && entry.pt
+      const samples = entry ? entry.samples : []
+      const map = new Map(samples.map((sv) => [sv[0], sv[1]]))
+      data.push(times.map((t) => (map.has(t) ? map.get(t) : null)))
+      keys.push(pid)
+      meta.push({ label: pt ? (pt.name || String(pid)) : pid, unit: (pt && pt.unit) || '', connectionId: (pt && pt.connectionId) || '', deviceId: (pt && pt.deviceId) || '' })
+      // 保留点位顺序：即使某点位零样本，也保留其 key/meta 位置，仅数据全 null
+    }
+  } else {
+    for (const pid of ids) {
+      keys.push(pid)
+      const pt = byId.get(pid)
+      meta.push({ label: pt ? (pt.name || String(pid)) : pid, unit: (pt && pt.unit) || '', connectionId: (pt && pt.connectionId) || '', deviceId: (pt && pt.deviceId) || '' })
+    }
   }
   return { data, keys, meta }
 }

@@ -651,3 +651,95 @@ test('P4/0.20.0: 非监视点位不可入库（proposeAdd 被校验拒绝）', a
   assert.equal(res.errorCode, 'VIZ_INVALID')
   await rm(home, { recursive: true, force: true })
 })
+
+test('Task3/0.20.1: 工具 Schema 完整开放 visualization / component / op 全合法值 / 点位字段', async () => {
+  const { visionBenchTool } = await import('../bench-tool.mjs')
+  const tool = visionBenchTool('/tmp')
+  const props = tool.parameters.properties
+  assert.ok(props.action.enum.includes('visualization'), 'action.enum 含 visualization')
+  assert.ok(props.visualizationId, 'visualizationId 顶层参数')
+  const comp = props.component
+  assert.ok(comp, 'component 参数')
+  for (const k of ['id', 'name', 'type', 'pointIds', 'order', 'settings']) assert.ok(k in comp.properties, 'component.' + k)
+  assert.deepEqual(comp.properties.type.enum, ['line', 'bar', 'value', 'switch'])
+  for (const k of ['windowMs', 'confirmWrite']) assert.ok(k in comp.properties.settings.properties, 'settings.' + k)
+  for (const op of ['proposeAdd', 'proposeUpdate', 'proposeRemove']) assert.ok(props.op.enum.includes(op), 'op.enum 含 ' + op)
+  for (const op of ['list', 'get', 'add', 'update', 'remove', 'clear', 'discard']) assert.ok(props.op.enum.includes(op), 'op.enum 含 ' + op)
+  const pointProps = props.point.properties
+  for (const k of ['monitorEnabled', 'alarmEnabled', 'trendEnabled']) assert.ok(k in pointProps, 'point.' + k)
+  const itemsProps = props.points.items.properties
+  for (const k of ['monitorEnabled', 'alarmEnabled', 'trendEnabled']) assert.ok(k in itemsProps, 'points.items.' + k)
+})
+
+test('Task3/0.20.1: status 点位含 runtimeStatus（复用 pointRuntimeStatus）', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { mkdirSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const home = await mkdtemp(join(tmpdir(), 'st-st-'))
+  const cwd = join(home, 'board')
+  mkdirSync(cwd)
+  saveWorkspace(home, cwd, {
+    modbus: {
+      version: 3,
+      connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } }],
+      devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
+      points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, monitorEnabled: true, alarmEnabled: false, alarmMin: null, alarmMax: 100 }],
+      values: [{ key: 'p1', pointId: 'p1', raw: 20, value: 20, ok: true, at: Date.now() }],
+      alarmState: {},
+    },
+  })
+  const res = await runVisionBench(home, { action: 'status' }, cwd, { source: 'agent', sessionId: 's1' })
+  const pt = res.modbus.points.find((x) => x.id === 'p1')
+  assert.equal(pt.monitorEnabled, true)
+  assert.equal(pt.alarmEnabled, false)
+  assert.equal(pt.trendEnabled, true)
+  assert.ok(pt.runtimeStatus, 'runtimeStatus 存在')
+  assert.ok(['正常', '未读取', '告警', '通信异常', '已断开', '连接异常'].includes(pt.runtimeStatus), '状态值合法: ' + pt.runtimeStatus)
+  await rm(home, { recursive: true, force: true })
+})
+
+test('Task4/0.20.1: proposeUpdate 保留 ID/order/settings；ID 冲突拒绝；草稿前后行为', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { mkdirSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const home = await mkdtemp(join(tmpdir(), 'pu-'))
+  const cwd = join(home, 'board')
+  mkdirSync(cwd)
+  saveWorkspace(home, cwd, {
+    modbus: {
+      version: 3,
+      connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } }],
+      devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
+      points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, monitorEnabled: true, alarmEnabled: true }],
+      values: [], alarmState: {},
+      visualization: { schemaVersion: 1, components: [
+        { id: 'viz_a', name: '原趋势', type: 'line', pointIds: ['p1'], order: 3, settings: { windowMs: 120000, confirmWrite: true } },
+      ] },
+    },
+  })
+  const cv0 = loadWorkspace(home, cwd).modbus.configVersion
+  // 只传 visualizationId，component 不带 id → 更新名称
+  let res = await runVisionBench(home, { action: 'visualization', op: 'proposeUpdate', visualizationId: 'viz_a', component: { name: '改名趋势' } }, cwd, { source: 'agent', sessionId: 's1' })
+  assert.equal(res.ok, true)
+  let pack = loadWorkspace(home, cwd).modbus
+  assert.equal(pack.visualization.components[0].name, '原趋势', '草稿批准前组件不变')
+  const { applyConfigDraft } = await import('../bench-store.mjs')
+  const applied = applyConfigDraft(home, cwd, res.draft.id, { source: 'user', sessionId: '' })
+  assert.equal(applied.ok, true)
+  pack = loadWorkspace(home, cwd).modbus
+  const c = pack.visualization.components[0]
+  assert.equal(c.id, 'viz_a', 'ID 不变')
+  assert.equal(c.name, '改名趋势', '名称更新')
+  assert.equal(c.type, 'line', 'type 保留')
+  assert.deepEqual(c.pointIds, ['p1'], 'pointIds 保留')
+  assert.equal(c.order, 3, 'order 保留')
+  assert.deepEqual(c.settings, { windowMs: 120000, confirmWrite: true }, 'settings 保留')
+  assert.ok(pack.configVersion > cv0, '批准后 configVersion 增加')
+  // ID 冲突拒绝
+  res = await runVisionBench(home, { action: 'visualization', op: 'proposeUpdate', visualizationId: 'viz_a', component: { id: 'viz_b', name: 'x' } }, cwd, { source: 'agent', sessionId: 's1' })
+  assert.equal(res.ok, false)
+  assert.equal(res.errorCode, 'VIZ_TARGET_MISMATCH')
+  await rm(home, { recursive: true, force: true })
+})

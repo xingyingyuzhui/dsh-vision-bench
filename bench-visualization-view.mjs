@@ -28,9 +28,13 @@ export function createVisualizationPage(React, t, post, hooks) {
     const [note, setNote] = React.useState('')
     const [focusVizId, setFocusVizId] = React.useState('')
     const [chartErrors, setChartErrors] = React.useState({})
-    React.useEffect(() => subscribeFocus('', (fs) => {
-      try { setFocusVizId((fs && fs.request && fs.request.visualizationId) || '') } catch {}
-    }), [])
+    // Task6/0.20.1: 按工作区订阅聚焦，隔离跨工作区/跨 Session 串扰
+    React.useEffect(() => {
+      setFocusVizId('')
+      return subscribeFocus(cwd, (fs) => {
+        try { setFocusVizId((fs && fs.request && fs.request.visualizationId) || '') } catch {}
+      })
+    }, [cwd])
     const [, setTick] = React.useState(0)
     const uplotRefs = React.useRef({})
     const switchDraft = React.useRef(null)

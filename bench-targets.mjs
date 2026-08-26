@@ -7,8 +7,14 @@ const pOf=(p,x)=>(p.points||[]).find(y=>y.id===x)||null
 export function resolveTarget(pack,target){
  const p=pack&&pack.connections?pack:(()=>{try{return normalizeModbus(pack)}catch{return pack}})()
  const q=target&&typeof target==='object'?target:{}
- const connectionId=t(q.connectionId||q.connId),deviceId=t(q.deviceId),pointId=t(q.pointId||q.id),frameId=t(q.frameId),alarmId=t(q.alarmId),trendKey=t(q.trendKey)
- if(!connectionId&&!deviceId&&!pointId&&!frameId&&!alarmId&&!trendKey)return{ok:false,error:'缺少目标 ID',errorCode:TARGET_CODES.TARGET_REQUIRED}
+ const connectionId=t(q.connectionId||q.connId),deviceId=t(q.deviceId),pointId=t(q.pointId||q.id),frameId=t(q.frameId),alarmId=t(q.alarmId),trendKey=t(q.trendKey),visualizationId=t(q.visualizationId)
+ if(!connectionId&&!deviceId&&!pointId&&!frameId&&!alarmId&&!trendKey&&!visualizationId)return{ok:false,error:'缺少目标 ID',errorCode:TARGET_CODES.TARGET_REQUIRED}
+ // Task5/0.20.1: 组件聚焦不需要 connectionId
+ if(visualizationId){
+  const vizComp=(p.visualization&&p.visualization.components||[]).find(c=>c.id===visualizationId)
+  if(!vizComp)return{ok:false,error:'组件不存在: '+visualizationId,errorCode:'VIZ_NOT_FOUND'}
+  return{ok:true,visualization:vizComp,visualizationId,connection:null,device:null,point:null,frame:null,alarm:null,connectionId:'',deviceId:'',pointId:''}
+ }
  if(trendKey){
   const s=trendKey.split(':');if(s.length!==3||!s[0]||!s[1]||!s[2])return{ok:false,error:'trendKey 格式应为 connectionId:deviceId:pointId',errorCode:TARGET_CODES.TARGET_REQUIRED}
   const[a,b,c]=s.map(x=>x.trim());if(connectionId&&connectionId!==a)return{ok:false,error:'trendKey 与 connectionId 不一致',errorCode:TARGET_CODES.TARGET_MISMATCH}

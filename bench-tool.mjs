@@ -1,6 +1,6 @@
 import { buildEvidenceRefs, connectOp, keilBuild, keilMap, listDir, listFrames, modbusRead, modbusWrite, pointsOp, requestFocus } from './bench-modbus-forward.mjs'
 import { requireKeilProject, requireWorkspaceCwd } from './bench-paths.mjs'
-import { decodeValue } from './bench-points.mjs'
+import { decodeValue, pointRuntimeStatus } from './bench-points.mjs'
 import { connLabel, normalizeModbus } from './bench-devices.mjs'
 import { appendEvidence, applyConfigDraft, createConfigDraft, createManualRequest, discardConfigDraft, getConfigDraft, journalView, listConfigDrafts, loadWorkspace, saveWorkspace } from './bench-store.mjs'
 import { resolveTarget } from './bench-targets.mjs'
@@ -122,11 +122,16 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
             unit: p.unit,
             alarmMin: p.alarmMin,
             alarmMax: p.alarmMax,
+            monitorEnabled: p.monitorEnabled === true,
+            alarmEnabled: p.alarmEnabled === true,
+            trendEnabled: p.monitorEnabled === true,
             writable: [1, 3].includes(p.function),
             raw: rec ? rec.raw : null,
             value: rec ? decodeValue(p, rec.raw) : null,
             ok: rec ? rec.ok : false,
             at: rec ? rec.at : 0,
+            // Task3/0.20.1: 复用 pointRuntimeStatus，不另起一套状态判断
+            runtimeStatus: pointRuntimeStatus(p, rec, pack.alarmState, '').label,
           }
         }),
         values: pack.values,
@@ -279,6 +284,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
       frameId: args.frameId,
       trendKey: args.trendKey,
       alarmId: args.alarmId,
+      visualizationId: args.visualizationId,
       kind: args.kind,
     }
     const ran = requestFocus(home, room.cwd, {
@@ -332,9 +338,15 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
     } else if (op === 'proposeUpdate') {
       const { normalizeVisualizationComponent, validateVisualizationComponent } = await import('./bench-visualization-model.mjs')
       const raw = args.component || {}
-      const idx = (viz.components || []).findIndex((c) => c.id === (raw.id || id))
-      if (idx < 0) return { ok: false, error: '组件不存在: ' + (raw.id || id), errorCode: 'VIZ_NOT_FOUND' }
-      const cand = normalizeVisualizationComponent(raw)
+      const rawId = String(raw.id || '').trim()
+      if (rawId && id && rawId !== id) {
+        return { ok: false, error: 'component.id 与 visualizationId 不一致: ' + rawId + ' vs ' + id, errorCode: 'VIZ_TARGET_MISMATCH' }
+      }
+      const targetId = rawId || id
+      const idx = (viz.components || []).findIndex((c) => c.id === targetId)
+      if (idx < 0) return { ok: false, error: '组件不存在: ' + targetId, errorCode: 'VIZ_NOT_FOUND' }
+      // Task4/0.20.1: 基于原组件合并，保留 id/order/settings/pointIds/type/name
+      const cand = normalizeVisualizationComponent({ ...viz.components[idx], ...raw, id: viz.components[idx].id })
       const v = validateVisualizationComponent(cand, pack.points)
       if (!v.ok) return { ok: false, error: v.error, errorCode: 'VIZ_INVALID' }
       patch = [{ op: 'replace', path: '/visualization/components/' + idx, value: cand }]
@@ -519,7 +531,7 @@ export function visionBenchTool(home) {
       properties: {
         action: {
           type: 'string',
-          enum: ['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual', 'connect', 'points', 'frames', 'focus', 'trend', 'alarm', 'evidence', 'draft'],
+          enum: ['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual', 'connect', 'points', 'frames', 'focus', 'trend', 'visualization', 'alarm', 'evidence', 'draft'],
           description: 'status | ls | select | build | read | write | map | manual | connect | points | frames | focus | trend | visualization | alarm | evidence | draft',
         },
         path: { type: 'string', description: 'ls 的目录或 select/build/map 的工程绝对路径' },
@@ -546,7 +558,7 @@ export function visionBenchTool(home) {
         parity: { type: 'string', enum: ['N', 'E', 'O'], description: 'connect 的校验位' },
         stopbits: { type: 'number', enum: [1, 2], description: 'connect 的停止位' },
         sim: { type: 'boolean', description: 'connect 的仿真开关（不触真机）' },
-        op: { type: 'string', enum: ['list', 'add', 'update', 'remove', 'clear'], description: 'points 的操作' },
+        op: { type: 'string', enum: ['list', 'get', 'add', 'update', 'remove', 'clear', 'discard', 'proposeAdd', 'proposeUpdate', 'proposeRemove'], description: 'points/draft/visualization 的操作（具体 action 各自校验合法 op）' },
         point: {
           type: 'object',
           description: 'points 单个点位：{name, function(1-4), address, scale, offset, unit, alarmMin, alarmMax, connectionId/connId, deviceId}，未指定时按 connectionId/deviceId 定向到目标连接/设备',
@@ -560,6 +572,9 @@ export function visionBenchTool(home) {
             unit: { type: 'string' },
             alarmMin: { type: 'number' },
             alarmMax: { type: 'number' },
+            monitorEnabled: { type: 'boolean', description: '开启后成为可视化数据源' },
+            alarmEnabled: { type: 'boolean', description: '告警开关' },
+            trendEnabled: { type: 'boolean', description: '旧字段兼容；新调用使用 monitorEnabled' },
             connectionId: { type: 'string' },
             connId: { type: 'string' },
             deviceId: { type: 'string' },
@@ -581,6 +596,9 @@ export function visionBenchTool(home) {
               unit: { type: 'string' },
               alarmMin: { type: 'number' },
               alarmMax: { type: 'number' },
+              monitorEnabled: { type: 'boolean' },
+              alarmEnabled: { type: 'boolean' },
+              trendEnabled: { type: 'boolean', description: '旧字段兼容；新调用使用 monitorEnabled' },
               connectionId: { type: 'string' },
               connId: { type: 'string' },
               deviceId: { type: 'string' },
@@ -599,7 +617,28 @@ export function visionBenchTool(home) {
         offset: { type: 'number', description: 'frames 分页偏移' },
         start: { type: 'number', description: 'trend 区间起始时间戳（ms）' },
         end: { type: 'number', description: 'trend 区间结束时间戳（ms）' },
-        pointIds: { type: 'array', items: { type: 'string' }, description: 'trend 的点位 id 集合（显式）' },
+        pointIds: { type: 'array', items: { type: 'string' }, description: 'trend/visualization 的点位 id 集合（显式）' },
+        visualizationId: { type: 'string', description: 'visualization 组件稳定 id（get/proposeUpdate/proposeRemove/focus）' },
+        component: {
+          type: 'object',
+          additionalProperties: false,
+          description: 'visualization 组件：{name, type(line|bar|value|switch), pointIds, order, settings{windowMs,confirmWrite}}；proposeAdd/Update 使用',
+          properties: {
+            id: { type: 'string', description: '组件 id；proposeUpdate 时必须与 visualizationId 一致或省略' },
+            name: { type: 'string' },
+            type: { type: 'string', enum: ['line', 'bar', 'value', 'switch'] },
+            pointIds: { type: 'array', items: { type: 'string' } },
+            order: { type: 'number' },
+            settings: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                windowMs: { type: 'number' },
+                confirmWrite: { type: 'boolean' },
+              },
+            },
+          },
+        },
         tempWatchIds: { type: 'array', items: { type: 'string' }, description: 'focus 的临时监视组点位 id，最多 32，后台任务可带' },
         tempWatch: { type: 'array', items: { type: 'string' }, description: 'tempWatchIds 别名' },
         evidence: {

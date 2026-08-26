@@ -110,13 +110,14 @@ export const normalizeFocusRequest = (input) => {
   const frameId = focusText(input.frameId)
   const trendKey = focusText(input.trendKey)
   const alarmId = focusText(input.alarmId)
+  const visualizationId = focusText(input.visualizationId)
   const kind = typeof input.kind === 'string' ? input.kind.slice(0, 32) : ''
   const at = Number(input.at) > 0 ? Number(input.at) : Date.now()
   const by = input.by === 'agent' ? 'agent' : 'user'
   const version = Number(input.version) > 0 ? Number(input.version) : 0
-  const hasTarget = connectionId || deviceId || pointId || frameId || trendKey || alarmId
+  const hasTarget = connectionId || deviceId || pointId || frameId || trendKey || alarmId || visualizationId
   if (!hasTarget) return null
-  return { connectionId, deviceId, pointId, frameId, trendKey, alarmId, kind, at, by, version }
+  return { connectionId, deviceId, pointId, frameId, trendKey, alarmId, visualizationId, kind, at, by, version }
 }
 
 export const normalizeFocusState = (input) => {
