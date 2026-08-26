@@ -13,8 +13,7 @@
     "types": ["node"]
   },
   "include": [
-    "src/domain/**/*.mjs",
-    "src/application/**/*.mjs",
+    "src/domain/modbus/errors.mjs",
     "src/types/**/*.d.ts"
   ],
   "exclude": [
@@ -22,8 +21,7 @@
     "client.js",
     "test",
     "coverage",
-    "bench-hmi.mjs",
-    "bench-live.mjs",
-    "bench-view.mjs"
+    "src/application/**",
+    "bench-*.mjs"
   ]
 }

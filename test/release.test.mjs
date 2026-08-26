@@ -1,17 +1,22 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { dirname, join, normalize, relative } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 const localImportsOf = (file) => {
-  const text = readFileSync(join(root, file), 'utf8')
+  const abs = join(root, file)
+  const text = readFileSync(abs, 'utf8')
   const out = []
-  const re = /from '(\.\/[^']+\.mjs)'/g
+  const re = /from '(\.[^']+\.mjs)'/g
   let match
-  while ((match = re.exec(text))) out.push(match[1].slice(2))
+  while ((match = re.exec(text))) {
+    const resolved = normalize(join(dirname(abs), match[1]))
+    const rel = relative(root, resolved).replaceAll('\\', '/')
+    if (!rel.startsWith('..')) out.push(rel)
+  }
   return out
 }
 
