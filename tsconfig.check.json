@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "skipLibCheck": true,
+    "maxNodeModuleJsDepth": 0,
+    "types": ["node"]
+  },
+  "include": [
+    "src/domain/**/*.mjs",
+    "src/application/**/*.mjs",
+    "src/types/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "client.js",
+    "test",
+    "coverage",
+    "bench-hmi.mjs",
+    "bench-live.mjs",
+    "bench-view.mjs"
+  ]
+}
