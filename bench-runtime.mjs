@@ -105,7 +105,7 @@ export function apply(ctx) {
       closeTabImpl = function (id) { closeBetterTab(side, id) }
       const FramesPage = createFramesPage(React, t, post, { openHmi })
       const stopLive = registerLive(side, React, t, null, {
-        trend: scopedSidebarPage(React, createTrendPage(React, t, post, { openHmi }), 'trend'),
+        trend: scopedSidebarPage(React, createTrendPage(React, t, post, { openHmi }), 'trend'), // dsh-vision-bench:charts 不变的「可视化」页
         alarm: scopedSidebarPage(React, createAlarmPage(React, t, post, { openHmi }), 'alarm'),
         frames: scopedSidebarPage(React, FramesPage, 'frames'),
         log: scopedSidebarPage(React, createLogPage(React, t, post, { openHmi, openFrames: () => { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} } }), 'log'),

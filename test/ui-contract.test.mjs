@@ -40,13 +40,24 @@ test('页面契约：无绑定 UI、无大块聚焦面板、无完整时间线�
   assert.ok(!/connParticipate/.test(hmi), 'no 参与运行 in HMI source')
   // Task1/0.19.3: 设备卡片层级（点位表挂在设备卡片内部）
   assert.ok(/dvb-dev-card/.test(hmi), 'device cards exist')
-  assert.ok(/openAddPoint\(d\.id\)/.test(hmi), 'add-point opens per device')
+  assert.ok(/addNewPointRow\(d\.id\)/.test(hmi), 'add-point opens per device (inline draft row)')
   assert.ok(/pointsOfDevice/.test(hmi), 'point tables are device-scoped')
   // 阶段四：上位机不再嵌入串口报文卡片
   assert.ok(!/查看全部报文/.test(hmi), 'no frames card in HMI')
   assert.ok(!/serialPanel/.test(hmi), 'no serialPanel in HMI')
   // Task2: 采集按钮（开始采集/停止采集）而不使用“监视”措辞
   assert.ok(/collectStart/.test(hmi) && /collectStop/.test(hmi), 'collection buttons present')
+  // TaskP1/0.20.0: 点位表 — 无 更新时间 列；普通状态无 写入/读取/编辑/删除 文字按钮
+  assert.ok(!/el\('th', null, t\('time'\)\)/.test(hmi), 'no 更新时间 column')
+  assert.ok(!/t\('quickWrite'\)/.test(hmi), 'no 写入 text button')
+  assert.ok(!/t\('readSegment'\)/.test(hmi), 'no 读取 text button per row')
+  assert.ok(!/t\('editing'\)\.slice\(0, 2\)/.test(hmi), 'no 编辑 text button per row')
+  assert.ok(!/t\('deleteSegment'\)/.test(hmi), 'no 删除 text button (edit mode only, icon)')
+  // 行内写入与状态列
+  assert.ok(/openWriteCell/.test(hmi), 'current-value inline write')
+  assert.ok(/pointRuntimeStatus/.test(hmi), 'status column via pointRuntimeStatus')
+  assert.ok(/dvb-switch/.test(hmi), 'monitor/alarm switches')
+  assert.ok(/dvb-btn-danger/.test(hmi), 'edit-mode danger icon')
 })
 
 test('Task10: 一次读取同步进入 点表值/监视/曲线/告警（单一实时值来源）', async () => {

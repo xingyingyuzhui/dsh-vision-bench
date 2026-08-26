@@ -227,6 +227,19 @@ export const decodeValue = (point, raw) => {
   return n * (Number.isFinite(scale) ? scale : 1) + (Number.isFinite(offset) ? offset : 0)
 }
 
+// TaskP1/0.20.0: 点位运行状态 — 优先级：激活告警 > 通信异常 > 连接断开 > 正常 > 未读取
+export const pointRuntimeStatus = (point, valueRec, alarmState, connectionState) => {
+  const alarm = alarmState && typeof alarmState === 'object' ? alarmState[point && point.id] : null
+  if (alarm && (alarm.condition === 'active' || alarm.status === 'active' || alarm.status === 'unacked')) {
+    return { key: 'alarm', label: alarm.kind === 'max' ? '告警·高' : alarm.kind === 'min' ? '告警·低' : '告警' }
+  }
+  if (valueRec && valueRec.ok === false) return { key: 'comm-error', label: '通信异常' }
+  const cs = connectionState || ''
+  if (cs === 'disconnected' || cs === 'error' || cs === 'disconnecting') return { key: 'disconnected', label: cs === 'error' ? '连接异常' : '已断开' }
+  if (valueRec && valueRec.ok === true && (valueRec.value !== null && valueRec.value !== undefined)) return { key: 'ok', label: '正常' }
+  return { key: 'unread', label: '未读取' }
+}
+
 export const evaluateAlarm = (point, value) => {
   const p = point || {}
   // TaskP0/0.20.0: 告警开关独立于上下限；未启用或未配置阈值 → 不判

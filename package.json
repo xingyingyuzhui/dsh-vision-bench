@@ -78,7 +78,8 @@
     "LICENSE",
     "bench-polling-service.mjs",
     "bench-trend-store.mjs",
-    "bench-visualization-model.mjs"
+    "bench-visualization-model.mjs",
+    "bench-visualization-view.mjs"
   ],
   "repository": {
     "type": "git",

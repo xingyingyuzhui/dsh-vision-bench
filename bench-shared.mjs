@@ -541,6 +541,11 @@ export function buildAgentRef(kind, payload, opts) {
       base.alarmId = String(p.alarmId || p.id || (opts && opts.alarmId) || '').slice(0, 64)
       // alarm refs keep explicit point context in its own typed field
       if (p.pointId) base.pointId = String(p.pointId).slice(0, 64)
+    } else if (k === 'visualization') {
+      base.pointId = String((p.pointIds && p.pointIds[0]) || p.pointId || (opts && opts.pointId) || '').slice(0, 64)
+      base.visualizationId = String(p.visualizationId || p.id || '').slice(0, 64)
+      base.componentType = String(p.type || 'line').slice(0, 16)
+      base.pointIds = (Array.isArray(p.pointIds) ? p.pointIds : []).slice(0, 16).map((x) => String(x))
     } else {
       // generic targets (connection/device/focus/…) carry only what was given
       base.pointId = String(p.pointId || p.id || (opts && opts.pointId) || '').slice(0, 64)

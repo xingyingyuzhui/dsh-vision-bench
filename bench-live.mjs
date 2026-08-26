@@ -4,6 +4,7 @@ import { clockOf, decodeValue, functionTag } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { TREND_WINDOW_MS, trendKey, toUplotData, UPLOT_PROTO } from './bench-trend.mjs'
+import { createVisualizationPage } from './bench-visualization-view.mjs'
 import { normalizeAlarmState, groupAlarms, acknowledgeAlarm, ACTIVE, RECOVERED, ACKED, PROCESS, COMM, COND_ACTIVE, COND_RECOVERED } from './bench-alarm.mjs'
 import { vendorUPlot, vendorVirtualizer, vendorAvailable } from './bench-vendor.mjs'
 import { canUseModbus } from './bench-io-capability.mjs'
@@ -13,6 +14,9 @@ const TAB_CHART = 'dsh-vision-bench:charts'
 const TAB_ALARM = 'dsh-vision-bench:alarms'
 const TAB_FRAMES = 'dsh-vision-bench:frames'
 export const TAB_LOG = 'dsh-vision-bench:log'
+export { createVisualizationPage }
+// 兼容期：旧 createTrendPage 名称指向新可视化页（随后测试更新）
+export const createTrendPage = createVisualizationPage
 const INTERVALS = [500, 1000, 2000, 5000]
 
 function normalizePointsSafe(pack) {
@@ -87,216 +91,6 @@ export const drawTrend = (container, cwd = '', now = Date.now(), payload) => {
     },
   }
   try { return new UPlot(opts, data, container) } catch { return null }
-}
-
-export function createTrendPage(React, t, post, hooks) {
-  return function TrendPage(props) {
-    const el = React.createElement
-    const cwd = (props && props.scope && props.scope.cwd) || sessionCwd(props) || ''
-    const wrapRef = React.useRef(null)
-    const uplotRef = React.useRef(null)
-    const mountKeyRef = React.useRef('')
-    const [paused, setPaused] = React.useState(false)
-    const [, setTick] = React.useState(0)
-    const [copied, setCopied] = React.useState('')
-    const [exportNote, setExportNote] = React.useState('')
-    const [configVersion, setConfigVersion] = React.useState(0)
-    const [cvReady, setCvReady] = React.useState(false)
-    const [evNote, setEvNote] = React.useState('')
-
-    // Task4/0.18.3: agent input bridge read at the TOP of the render (no Hooks
-    // inside click handlers); preserves existing draft text, clipboard fallback
-    // when the harness has no writer.
-    const inputDraft = readInputDraft(props && props.useInput)
-    const agentBridge = buildInputBridge(props, inputDraft)
-
-    // Task3/0.19.3: 曲线数据来自工作区 trend 存储（提交阶段采样），页面只消费
-    const [mbStore, setMbStore] = React.useState(null)
-    const applyCv = (data) => {
-      const mb = data && data.workspace && data.workspace.modbus
-      const v = Number(mb && mb.configVersion)
-      setConfigVersion(v > 0 ? v : 0)
-      setCvReady(true)
-      if (mb) setMbStore(mb)
-    }
-    React.useEffect(() => {
-      if (!cwd || !post) { setCvReady(true); return }
-      let stop = false
-      post('/dsh-vision-bench/state', { cwd }).then((data) => {
-        if (!stop) applyCv(data)
-      }).catch(() => { if (!stop) setCvReady(true) })
-      const unsub = subscribeState(post, cwd, (data) => { if (data && !stop) applyCv(data) })
-      return () => { stop = true; if (typeof unsub === 'function') unsub() }
-    }, [cwd, post])
-
-    React.useEffect(() => {
-      if (paused) return
-      const timer = setInterval(() => setTick((n) => n + 1), 500)
-      return () => clearInterval(timer)
-    }, [paused])
-
-    // 从工作区 trend 存储构建显示载荷（只显示 trendEnabled 点位，最多 8 条）
-    const trendPayload = (() => {
-      const mb = mbStore || null
-      if (!mb) return { data: [], keys: [], meta: [], entries: [] }
-      const trend = (mb && mb.trend) || {}
-      const pts = (() => { try { return normalizeModbus(mb).points || [] } catch { return [] } })()
-      const selected = pts.filter((p) => p.trendEnabled === true).slice(0, 8)
-      const data = [], keys = [], meta = [], entries = []
-      selected.forEach((pt, idx) => {
-        const list = Array.isArray(trend[pt.id]) ? trend[pt.id] : []
-        const now = Date.now()
-        const window = list.filter((sv) => Array.isArray(sv) && sv[0] >= now - TREND_WINDOW_MS)
-        if (!window.length) return
-        const xs = [], vs = []
-        let min = Infinity, max = -Infinity, any = false
-        for (const sv of window) {
-          xs.push(sv[0]); vs.push(sv[1] == null ? null : Number(sv[1]))
-          if (sv[1] != null && Number.isFinite(Number(sv[1]))) { any = true; min = Math.min(min, Number(sv[1])); max = Math.max(max, Number(sv[1])) }
-        }
-        const tk = trendKey(pt.connectionId || 'c1', pt.deviceId || 'd1', pt.id)
-        keys.push(tk)
-        meta.push({ label: pt.name || (functionTag(pt.function) + pt.address), unit: pt.unit || '' })
-        data.push(xs, vs)
-        const last = window[window.length - 1]
-        entries.push({ key: tk, label: pt.name || (functionTag(pt.function) + pt.address), unit: pt.unit || '', last: { t: last[0], v: last[1] }, lastValid: any, min: any ? min : null, max: any ? max : null, color: TREND_COLORS[idx % TREND_COLORS.length] })
-      })
-      return { data, keys, meta, entries }
-    })()
-
-    const entries = trendPayload.entries
-    const chartMountKey = entries.map((e) => e.key).join('|')
-
-    // Task5: build uPlot once; rebuild only when the series set changes.
-    React.useEffect(() => {
-      if (!entries.length || !vendorAvailable()) return
-      const c = wrapRef.current
-      if (!c) return
-      if (mountKeyRef.current !== chartMountKey) {
-        if (uplotRef.current) { try { uplotRef.current.destroy() } catch {} uplotRef.current = null }
-        mountKeyRef.current = chartMountKey
-      }
-      if (!uplotRef.current) uplotRef.current = drawTrend(c, cwd, Date.now(), trendPayload)
-      const u = uplotRef.current
-      const onResize = () => { const cc = wrapRef.current; if (u && cc && u.setSize) u.setSize({ width: cc.clientWidth || 560, height: 190 }) }
-      if (typeof window !== 'undefined') window.addEventListener('resize', onResize)
-      return () => {
-        if (typeof window !== 'undefined') window.removeEventListener('resize', onResize)
-        if (uplotRef.current && mountKeyRef.current === chartMountKey) {
-          try { uplotRef.current.destroy() } catch {}
-          uplotRef.current = null
-        }
-      }
-    }, [cwd, chartMountKey, entries.length])
-
-    // live data update via setData; keep instance
-    React.useEffect(() => {
-      if (paused) return
-      const u = uplotRef.current
-      if (!u || !u.setData) return
-      try { if (Array.isArray(trendPayload.data)) u.setData(trendPayload.data) } catch {}
-    })
-
-    const agentAllowed = cvReady && configVersion > 0
-    const sendTrend = (entry) => {
-      if (!agentAllowed) {
-        setCopied('no-version'); setTimeout(() => setCopied(''), 2000)
-        return
-      }
-      const cv = configVersion
-      const start = Date.now() - TREND_WINDOW_MS
-      const end = Date.now()
-      const key = entry ? entry.key : (entries[0] && entries[0].key) || ''
-      if (!key) return
-      const ref = buildAgentRef('trend', {
-        trendKey: key,
-        start,
-        end,
-        label: entry ? entry.label : 'trend-interval',
-      }, { configVersion: cv, start, end })
-      const res = dispatchAgentRef(ref, agentBridge) || { mode: 'copied' }
-      const labelByMode = { input: '已加入输入框', sent: '已发送', copied: '仅复制', failed: '处理失败' }
-      setCopied((entry ? entry.key : 'trend') + ':' + (labelByMode[res.mode] || '仅复制'))
-      setTimeout(() => setCopied(''), 2000)
-      if (post && cwd) {
-        // Task4/0.18.2: typed evidence back-mount — failures surface CONFIG_DRIFT/TARGET_MISMATCH
-        // Task6/0.18.2: on drift, re-pull current state so the reference uses the new version
-        try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => {
-          setEvNote(reason)
-          setTimeout(() => setEvNote(''), 5000)
-          if (/CONFIG_DRIFT/.test(reason)) {
-            post('/dsh-vision-bench/state', { cwd }).then(applyCv).catch(() => {})
-          }
-        }) } catch {}
-      }
-    }
-    const focusTrend = (entry) => {
-      if (!cwd || !post) return
-      const key = entry ? entry.key : (entries[0] && entries[0].key) || ''
-      post('/dsh-vision-bench/focus', { cwd, target: { trendKey: key, kind: 'trend' } }).catch(() => {})
-    }
-    const doExport = () => {
-      const w = wrapRef.current, s = w && w._uplotSel
-      const start = s ? s.start : (Date.now() - TREND_WINDOW_MS)
-      const end = s ? s.end : Date.now()
-      const trend = (mbStore && mbStore.trend) || {}
-      const lines = ['time,point,name,unit,value']
-      const pts = (() => { try { return normalizeModbus(mbStore).points || [] } catch { return [] } })()
-      for (const pt of pts.filter((p) => p.trendEnabled === true).slice(0, 8)) {
-        const list = Array.isArray(trend[pt.id]) ? trend[pt.id] : []
-        for (const sv of list) {
-          if (!Array.isArray(sv) || sv[0] < start || sv[0] > end) continue
-          lines.push([sv[0], pt.id, (pt.name || String(pt.address)).replace(/,/g, '，'), pt.unit || '', sv[1] == null ? '' : sv[1]].join(','))
-        }
-      }
-      try { if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(lines.join('\n')) } catch {}
-      setExportNote(s ? '已导出区间 ' + new Date(start).toLocaleTimeString() + '→' + new Date(end).toLocaleTimeString() : '已导出最近 5 分钟')
-      setTimeout(() => setExportNote(''), 2000)
-    }
-    const resetZoom = () => {
-      const w = wrapRef.current; if (w) w._uplotSel = null
-      const u = uplotRef.current
-      if (u && u.setSelect) try { u.setSelect({ left: 0, width: 0, top: 0, height: 0 }, false) } catch {}
-      if (u && u.setData) try { if (Array.isArray(trendPayload.data)) u.setData(trendPayload.data) } catch {}
-    }
-    return el('div', { className: 'dvb-live' },
-      el('div', { className: 'dvb-live-head' },
-        el('span', { className: 'dvb-live-title' }, t('liveChart')),
-        el('span', { className: 'dvb-map-meta' }, t('chartWindow')),
-        entries.length ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm' + (paused ? ' is-on' : ''), onClick() { setPaused((v) => !v) } }, paused ? '恢复' : '暂停') : null,
-        entries.length ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: doExport }, '导出CSV') : null,
-        entries.length ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: resetZoom }, '重置缩放') : null,
-        entries.length ? el('button', {
-          type: 'button', className: 'dvb-btn dvb-btn-sm' + (agentAllowed ? '' : ' is-on'),
-          title: agentAllowed ? '复制趋势区间结构化引用（稳定 ID+配置版本+时间范围）让 Agent 分析' : '配置版本未就绪，无法生成引用',
-          disabled: !agentAllowed,
-          onClick() { sendTrend(null) },
-        }, copied.split(':')[1] === '已加入输入框' ? '已加入' : (copied.split(':')[1] === '已发送' ? '已发送' : '让 Agent 分析区间')) : null,
-        entries.length ? el('button', {
-          type: 'button', className: 'dvb-btn dvb-btn-sm',
-          onClick() { focusTrend(null) },
-        }, '聚焦区间') : null),
-      copied ? el('div', { className: 'dvb-hint' }, (copied === 'no-version' ? '配置版本未就绪，无法生成证据引用' : (copied.split(':')[1] || '')) + ' · ' + (copied === 'no-version' ? '' : copied.split(':')[0])) : null,
-      exportNote ? el('div', { className: 'dvb-hint' }, exportNote) : null,
-      evNote ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, evNote) : null,
-      entries.length
-        ? el('div', { ref: wrapRef, className: 'dvb-uplot', style: { width: '100%', height: '190px' } })
-        : el('div', { className: 'dvb-empty' },
-            el('div', null, t('trendEmptyPoint') || '暂无曲线点位'),
-            el('div', { className: 'dvb-hint' }, t('trendEmptyHint') || '请在上位机的点位配置中勾选“加入曲线”')),
-      entries.length
-        ? el('div', { className: 'dvb-trend-legend' }, entries.map((item) => el('div', { key: item.key, className: 'dvb-trend-row' },
-          el('span', { className: 'dvb-trend-dot', style: { background: item.color } }),
-          el('span', { className: 'dvb-trend-name', title: item.label }, item.label),
-          el('span', { className: 'dvb-val' }, item.last != null && Number.isFinite(item.last.v) ? String(item.last.v) + (item.unit ? ' ' + item.unit : '') : '—'),
-          el('span', { className: 'dvb-map-meta' }, (item.lastValid ? ('min ' + item.min + ' · max ' + item.max) : '无有效数据')),
-          el('button', {
-            type: 'button', className: 'dvb-btn dvb-btn-sm' + (agentAllowed ? '' : ' is-on'), disabled: !agentAllowed,
-            title: agentAllowed ? '让 Agent 分析此曲线区间' : '配置版本未就绪',
-            onClick() { sendTrend(item) },
-          }, copied === item.key + ':已加入输入框' ? '已加入' : (copied === item.key + ':已发送' ? '已发送' : '让 Agent 分析')),
-          el('span', { className: 'dvb-hint' }, item.key))))        : null)
-  }
 }
 
 export function createAlarmPage(React, t, post, hooks) {

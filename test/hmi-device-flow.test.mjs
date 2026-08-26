@@ -56,7 +56,7 @@ test('设备1与设备2可以分别使用相同功能码和地址（HR0 两设�
   const { home, cwd } = await setup()
   // 服务层允许同地址跨设备；UI 唯一键为 conn+dev+fn+addr（源码断言）
   const src = await readFile(new URL('../bench-hmi.mjs', import.meta.url), 'utf8')
-  assert.ok(/connectionId \+ deviceId \+ function \+ address/.test(src) || /fixedDid.*p\.function === fnNum && p\.address === addrNum/.test(src), '唯一键含 deviceId')
+  assert.ok(/saveNewPointDraft/.test(src) && /\(p\.deviceId \|\| ''\) === d\.deviceId/.test(src), '唯一键含 deviceId（行内草稿）')
   const saved = loadWorkspace(home, cwd).modbus
   assert.equal(saved.points.filter((p) => p.address === 0).length, 2, '两个设备各有 HR0')
   await rm(home, { recursive: true, force: true })

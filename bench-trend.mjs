@@ -159,6 +159,43 @@ export function toUplotData(cwd, opts = {}) {
 }
 
 // data-layer proto for uPlot view — no runtime dependency, spanGaps:false keeps null gaps as breaks
+// TaskP2/0.20.0: 按组件 pointIds + windowMs 从工作区 trend 存储构造 uPlot 载荷
+export const trendDataForComponents = (trendStore, points, componentIds = [], windowMs = TREND_WINDOW_MS) => {
+  const store = trendStore && typeof trendStore === 'object' ? trendStore : {}
+  const byId = new Map((Array.isArray(points) ? points : []).map((p) => [p.id, p]))
+  const ids = Array.isArray(componentIds) ? componentIds : []
+  const now = Date.now()
+  const data = [] // uPlot: [xs, v1, v2, ...]
+  const keys = []
+  const meta = []
+  for (const pid of ids.slice(0, 8)) {
+    const pt = byId.get(pid)
+    const list = Array.isArray(store[pid]) ? store[pid] : []
+    const window = list.filter((sv) => Array.isArray(sv) && sv[0] >= now - windowMs)
+    if (!window.length) continue
+    const xs = []
+    const vs = []
+    for (const sv of window) {
+      xs.push(sv[0])
+      vs.push(sv[1] == null ? null : Number(sv[1]))
+    }
+    keys.push(pid)
+    meta.push({ label: pt ? (pt.name || String(pid)) : pid, unit: pt && pt.unit || '', connectionId: pt && pt.connectionId || '', deviceId: pt && pt.deviceId || '' })
+    data.push(xs, vs)
+  }
+  return { data, keys, meta }
+}
+
+// TaskP2/0.20.0: 组件最新值（bar/value/switch 渲染源）
+export const componentLatestValues = (values, points, componentIds = []) => {
+  const byId = new Map((Array.isArray(values) ? values : []).map((v) => [v.key || v.pointId, v]))
+  const ptsById = new Map((Array.isArray(points) ? points : []).map((p) => [p.id, p]))
+  return (Array.isArray(componentIds) ? componentIds : []).map((pid) => {
+    const pt = ptsById.get(pid)
+    const rec = byId.get(pid)
+    return { pointId: pid, name: pt ? pt.name : pid, unit: pt && pt.unit || '', value: rec && rec.ok ? rec.value : null, ok: !!(rec && rec.ok), at: rec && rec.at || 0 }
+  })
+}
 export const UPLOT_PROTO = {
   width: 560,
   height: 190,

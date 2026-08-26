@@ -9,6 +9,7 @@ test('zh and en tables share keys', () => {
 test('translate falls back and interpolates', () => {
   assert.equal(translate('zh', 'tabDebug'), '调试')
   assert.equal(translate('zh', 'projectMap'), '工程结构')
+  assert.equal(translate('zh', 'liveChart'), '可视化')
   assert.equal(translate('zh', 'mapOpen'), '打开工程结构')
   assert.equal(translate('zh', 'mapFunctions'), '函数')
   assert.equal(translate('zh', 'mapTruncated').includes('截断'), true)
@@ -34,7 +35,7 @@ test('translate falls back and interpolates', () => {
   assert.equal(translate('zh', 'fnHolding'), '03 保持寄存器')
   assert.equal(translate('zh', 'liveClose'), '关闭')
   assert.equal(translate('zh', 'liveTable'), '监视')
-  assert.equal(translate('zh', 'liveChart'), '曲线')
+  assert.equal(translate('zh', 'liveChart'), '可视化')
   assert.equal(translate('zh', 'recipePair'), '主从示例')
   assert.equal(translate('zh', 'roleSlave'), '从机')
   assert.equal(translate('en', 'tasks'), 'Tasks')

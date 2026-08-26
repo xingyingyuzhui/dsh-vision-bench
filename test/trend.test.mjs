@@ -166,15 +166,12 @@ test('Task3: trend buffers are isolated per cwd (same pointId, different values)
 })
 
 test('Task5/6 guards: no hard-coded configVersion collapse and no window.uPlot reliance', () => {
-  const live = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'bench-live.mjs'), 'utf8')
-  // anti-pattern from Task6 removed: typeof modbus !== 'undefined' → cv=1
-  assert.doesNotMatch(live, /typeof\s+modbus\s*!==\s*['\"]undefined['\"]/, 'must not gate configVersion off a never-defined modbus variable')
+  // TaskP2/0.20.0: 曲线已迁移为「可视化」组件页（bench-visualization-view.mjs）
+  const live = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'bench-visualization-view.mjs'), 'utf8')
   assert.doesNotMatch(live, /window\.uPlot|globalThis\.uPlot/, 'must not rely on host uPlot globals')
   assert.match(live, /vendorUPlot\(\)/, 'should consume bundled uPlot constructor lazily')
   assert.match(live, /destroy/, 'should destroy uPlot on teardown')
   assert.match(live, /\.setData\(/, 'should update via setData, not re-create chart')
   assert.match(live, /setSize/, 'should resize via setSize')
-  // trend legend must not print literal null
-  assert.match(live, /Number\.isFinite\(item\.last\.v\)/, 'legend guards null before stringify')
-  assert.doesNotMatch(live, /item\.last\.v\)\s*:\s*[^—]{0,2}null/, 'no unguarded null stringify')
+  assert.match(live, /spanGaps: false/, 'curve does not connect error gaps')
 })

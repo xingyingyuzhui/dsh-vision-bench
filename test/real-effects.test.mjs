@@ -301,12 +301,13 @@ test('Task4: TrendPage 让 Agent 分析区间 uses the input bridge, preserves t
     const evidenceCalls = []
     const evidenceOkFlag = { ok: true, evidence: [] }
     const post = async (path, body) => {
-      if (path === '/dsh-vision-bench/state') return { ok: true, workspace: { modbus: { version: 3, configVersion: 7, trend: { p1: [[wall, 42], [wall + 500, 43]] }, connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }], devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }], points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: 'Temp', function: 3, address: 0, scale: 1, offset: 0, trendEnabled: true }], framesByConnection: {} } }, health: {} }
+      if (path === '/dsh-vision-bench/state') return { ok: true, workspace: { modbus: { version: 3, configVersion: 7, trend: { p1: [[wall, 42], [wall + 500, 43]] }, connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }], devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }], points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: 'Temp', function: 3, address: 0, scale: 1, offset: 0, trendEnabled: true, monitorEnabled: true }], framesByConnection: {}, visualization: { schemaVersion: 1, components: [{ id: 'viz_1', name: '测试趋势', type: 'line', pointIds: ['p1'] }] } } }, health: {} }
       if (path === '/dsh-vision-bench/evidence') { evidenceCalls.push(body.evidence || body.item || [body]); return evidenceOkFlag }
       return { ok: true }
     }
-    const tMap = (k) => ({ liveChart: '曲线', chartWindow: '最近 5 分钟' }[k] || k)
+    const tMap = (k) => ({ liveChart: '可视化' }[k] || k)
     const Trend = createTrendPage(React, tMap, post, {})
+    const copiedNotes = []
     let setDraftCalls = 0
     let submissions = 0
     const props = {
@@ -321,34 +322,26 @@ test('Task4: TrendPage 让 Agent 分析区间 uses the input bridge, preserves t
     }
     const errors = []
     const onError = (e) => errors.push(e)
+    const origWrite = navigator.clipboard && navigator.clipboard.writeText
     window.addEventListener('error', onError)
+    const writeSpy = () => copiedNotes.push('copied')
+    if (origWrite) navigator.clipboard.writeText = writeSpy
     const tree = render(createElement(Trend, props))
     await waitFor(() => {
-      const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '让 Agent 分析区间')
-      assert.ok(btn, 'trend agent button rendered after real effect')
+      const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('复制组件引用'))
+      assert.ok(btn, 'visualization agent button rendered after real effect')
     }, { timeout: 6000 })
     await act(async () => {
-      const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '让 Agent 分析区间')
+      const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('复制组件引用'))
       btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
       await new Promise((r) => setTimeout(r, 120))
     })
     assert.equal(errors.length, 0, 'no uncaught/window errors: ' + JSON.stringify(errors))
-    assert.equal(setDraftCalls, 1, 'setDraft called exactly once')
-    assert.equal(submissions, 0, 'no auto-submit without send option')
-    // original text preserved, reference appended after it
-    assert.ok(draft.startsWith('用户已写好的中文输入'), 'user text preserved')
-    assert.ok(draft.includes('"kind": "trend"'), 'typed trend kind present')
-    assert.ok(draft.includes('"trendKey"'), 'trendKey present')
-    for (const key of ['connectionId', 'deviceId', 'pointId', 'configVersion', 'timeRange']) {
-      assert.ok(draft.includes('"' + key + '"'), key + ' present in serialized ref')
-    }
-    assert.ok(draft.includes('"configVersion": 7'), 'real configVersion 7, not 1')
-    // typed trend evidence posted
-    assert.equal(evidenceCalls.length, 1, 'evidence posted once')
-    const ev = evidenceCalls[0][0]
-    assert.equal(ev.kind, 'trend')
-    assert.ok(ev.trendKey)
-    assert.equal(ev.version, 7)
+    // 可视化页 Agent 图标：复制结构化引用（不进入 input bridge，不自动提交）
+    assert.equal(setDraftCalls, 0, 'no draft mutation via agent icon')
+    assert.equal(submissions, 0, 'no auto-submit')
+    assert.equal(copiedNotes.length, 1, 'reference copied to clipboard')
+    if (origWrite) navigator.clipboard.writeText = origWrite
     tree.unmount()
     window.removeEventListener('error', onError)
   } finally {
@@ -360,7 +353,7 @@ test('Task4: no input writer → clipboard fallback and no crash', async () => {
   const cwdB = '/tmp/trend-agent-cb-' + Math.random()
   const wall = Date.now()
   const post = async (path) => {
-    if (path === '/dsh-vision-bench/state') return { ok: true, workspace: { modbus: { version: 3, configVersion: 3, trend: { p2: [[wall, 1]] }, connections: [{ id: 'c2', name: 'C2', conn: { mode: 'tcp', host: '10.0.0.8', tcpPort: 502 } }], devices: [{ id: 'd2', connectionId: 'c2', name: 'D2', unitId: 1 }], points: [{ id: 'p2', connectionId: 'c2', deviceId: 'd2', name: 'P', function: 3, address: 0, scale: 1, offset: 0, trendEnabled: true }] } }, health: {} }
+    if (path === '/dsh-vision-bench/state') return { ok: true, workspace: { modbus: { version: 3, configVersion: 3, trend: { p2: [[wall, 1]] }, connections: [{ id: 'c2', name: 'C2', conn: { mode: 'tcp', host: '10.0.0.8', tcpPort: 502 } }], devices: [{ id: 'd2', connectionId: 'c2', name: 'D2', unitId: 1 }], points: [{ id: 'p2', connectionId: 'c2', deviceId: 'd2', name: 'P', function: 3, address: 0, scale: 1, offset: 0, trendEnabled: true, monitorEnabled: true }], visualization: { schemaVersion: 1, components: [{ id: 'viz_2', name: '测试', type: 'line', pointIds: ['p2'] }] } } }, health: {} }
     return { ok: true }
   }
   const tMap = (k) => ({ liveChart: '曲线', chartWindow: '最近 5 分钟' }[k] || k)
@@ -370,11 +363,11 @@ test('Task4: no input writer → clipboard fallback and no crash', async () => {
   window.addEventListener('error', onError)
   const tree = render(createElement(Trend, { sessionId: 's1', scope: { cwd: cwdB }, useSessions: noop }))
   await waitFor(() => {
-    const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '让 Agent 分析区间')
+    const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('复制组件引用'))
     assert.ok(btn)
   }, { timeout: 6000 })
   await act(async () => {
-    const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '让 Agent 分析区间')
+    const btn = Array.from(tree.container.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('复制组件引用'))
     btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
     await new Promise((r) => setTimeout(r, 80))
   })

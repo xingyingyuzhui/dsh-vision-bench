@@ -43,6 +43,8 @@ import {
   isWritableFunction,
   normalizeWriteValues,
   pointsToCsv,
+  encodeValue,
+  pointRuntimeStatus,
 } from './bench-points.mjs'
 
 const POLL_INTERVALS = [500, 1000, 2000, 5000]
@@ -74,11 +76,15 @@ export function createHmiView(React, t, post) {
     const [scanning, setScanning] = React.useState(false)
     const [pending, setPending] = React.useState([])
     // Task1/0.19.3: 点位表单打开时固定 connectionId/deviceId，不依赖全局激活状态
-    const [form, setForm] = React.useState({ mode: 'hidden', id: '', connectionId: '', deviceId: '', name: '', function: 3, address: 0, scale: 1, offset: 0, unit: '', trendEnabled: false, alarmOn: false, alarmMin: '', alarmMax: '' })
+    // TaskP1/0.20.0: 行内编辑/行内写入 — 草稿固定携带 connectionId/deviceId/pointId
+    const [editingDeviceId, setEditingDeviceId] = React.useState('')
+    const [deviceDraft, setDeviceDraft] = React.useState(null)
+    const [pointDraftsById, setPointDraftsById] = React.useState({})
+    const [newPointDraft, setNewPointDraft] = React.useState(null)
+    const [inlineWrite, setInlineWrite] = React.useState(null)
     const [batch, setBatch] = React.useState({ open: false, deviceId: '', prefix: '', fc: 3, start: 0, count: 5 })
     const [devForm, setDevForm] = React.useState({ open: false, id: '', name: '', unitId: 1 })
     const [devDeleteId, setDevDeleteId] = React.useState('')
-    const [writeRow, setWriteRow] = React.useState(null)
     const [csvText, setCsvText] = React.useState('')
     const [csvTarget, setCsvTarget] = React.useState({ deviceId: '', open: false, mode: 'merge' })
     const [csvNote, setCsvNote] = React.useState('')
@@ -443,92 +449,6 @@ export function createHmiView(React, t, post) {
     }
 
     // ── point form（Task1/0.19.3：打开表单时固定 connectionId/deviceId）──
-    function openAddPoint(deviceId) {
-      setError('')
-      setBatch((prev) => ({ ...prev, open: false }))
-      setCsvTarget((prev) => ({ ...prev, open: false }))
-      setWriteRow(null)
-      setForm({ mode: 'add', id: '', connectionId: activeConnId, deviceId, name: '', function: 3, address: 0, scale: 1, offset: 0, unit: '', trendEnabled: false, alarmOn: false, alarmMin: '', alarmMax: '' })
-    }
-
-    function openEditPoint(point) {
-      setError('')
-      setWriteRow(null)
-      setForm({
-        mode: 'edit',
-        id: point.id,
-        connectionId: point.connectionId || activeConnId,
-        deviceId: point.deviceId,
-        name: point.name,
-        function: point.function,
-        address: point.address,
-        scale: point.scale,
-        offset: point.offset,
-        unit: point.unit,
-        trendEnabled: point.trendEnabled === true,
-        alarmOn: point.alarmMin != null || point.alarmMax != null,
-        alarmMin: point.alarmMin === null ? '' : String(point.alarmMin),
-        alarmMax: point.alarmMax === null ? '' : String(point.alarmMax),
-      })
-    }
-
-    function closeForm() {
-      setForm((prev) => ({ ...prev, mode: 'hidden' }))
-    }
-
-    function submitPoint() {
-      const pack = normalizePack()
-      // Task1/0.19.3 (P1 修复): 保存目标 = 打开表单时固定的 connectionId/deviceId，
-      // 绝不回落到全局 activeConnectionId/activeDeviceId — 编辑别设备点位不会被移动
-      const fixedCid = form.connectionId
-      const fixedDid = form.deviceId
-      if (!fixedCid || !fixedDid) {
-        setError('请先选择设备再添加点位')
-        return
-      }
-      const fnNum = Number(form.function)
-      const addrNum = Number(form.address)
-      if (!Number.isFinite(addrNum) || addrNum < 0 || addrNum > 65535) {
-        setError(t('ptAddr') + ' 0–65535')
-        return
-      }
-      // 唯一键 = connectionId + deviceId + function + address（不同设备允许同地址）
-      const dup = (pack.points||[]).some((p) => (p.connectionId||p.connId) === fixedCid && (p.deviceId||'') === fixedDid && p.function === fnNum && p.address === addrNum && p.id !== form.id)
-      if (dup) {
-        setError('该设备下已存在相同功能码和地址的点位')
-        return
-      }
-      const alarmOn = !!form.alarmOn
-      const base = {
-        id: form.mode === 'edit' ? form.id : hmiGenId('p'),
-        connectionId: fixedCid,
-        connId: fixedCid,
-        deviceId: fixedDid,
-        name: String(form.name || '').slice(0, 40),
-        function: fnNum,
-        address: addrNum,
-        scale: Number(form.scale) || 1,
-        offset: Number(form.offset) || 0,
-        unit: form.unit,
-        trendEnabled: form.trendEnabled === true,
-        alarmMin: !alarmOn ? null : (form.alarmMin === '' ? null : Number(form.alarmMin)),
-        alarmMax: !alarmOn ? null : (form.alarmMax === '' ? null : Number(form.alarmMax)),
-        area: fnNum===1?'coil': fnNum===2?'discreteInput': fnNum===4?'inputRegister':'holdingRegister',
-      }
-      if (form.mode !== 'edit' && (pack.points||[]).some((p)=> p.id===base.id)) {
-        base.id = hmiGenId('p')
-      }
-      let points
-      if (form.mode === 'edit') {
-        // 编辑只更新内容，归属设备保持不变（移动点位另行设计）
-        points = (pack.points||[]).map((p) => (p.id === form.id ? { ...p, ...base, id: form.id, connectionId: p.connectionId || fixedCid, deviceId: p.deviceId || fixedDid } : p))
-      } else {
-        points = (pack.points||[]).concat([base])
-      }
-      closeForm()
-      persist({ points, version: 3 })
-    }
-
     function generateBatch() {
       const pack = normalizePack()
       const fixedCid = batch.connectionId || pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || ''
@@ -606,38 +526,63 @@ export function createHmiView(React, t, post) {
     }
 
     // ── inline write ──
-    function openWriteRow(point) {
+    // ── TaskP1/0.20.0 行内写入：固定 connectionId/deviceId/pointId，工程值输入 ──
+    function openWriteCell(point) {
       setError('')
-      setForm((prev) => ({ ...prev, mode: 'hidden' }))
-      const rec = ((normalizePack().values) || []).find((item) => (item.key||item.pointId) === point.id)
-      const current = rec && rec.raw !== null && rec.raw !== undefined ? String(rec.raw) : ''
-      setWriteRow({ pointId: point.id, name: point.name, fn: point.function, address: point.address, text: current, busy: false, result: null })
+      setNewPointDraft(null)
+      const pack = normalizePack()
+      const rec = (pack.values || []).find((item) => (item.key || item.pointId) === point.id)
+      // 输入与显示均为工程值
+      const currentEng = rec && rec.ok && rec.value != null ? String(rec.value) : ''
+      setInlineWrite({
+        connectionId: point.connectionId,
+        deviceId: point.deviceId,
+        pointId: point.id,
+        function: point.function,
+        address: point.address,
+        scale: point.scale,
+        offset: point.offset,
+        unit: point.unit || '',
+        text: currentEng,
+        busy: false,
+        result: null,
+      })
     }
 
-    function submitWriteRow() {
-      const row = writeRow
+    function submitWriteCell(rawOverride) {
+      const row = inlineWrite
       if (!row || !cwd) return
-      let values
-      if (row.fn === 1) values = [Number(row.text) ? 1 : 0]
-      else values = Number.isFinite(Number(row.text)) ? [Number(row.text)] : [NaN]
-      const check = normalizeWriteValues(row.fn, values, 1)
+      let raw
+      if (row.function === 1) {
+        // FC01 开/关语义
+        raw = rawOverride === true ? 1 : (rawOverride === false ? 0 : (Number(row.text) ? 1 : 0))
+      } else {
+        const enc = encodeValue({ scale: row.scale, offset: row.offset }, row.text)
+        if (!enc.ok) {
+          setInlineWrite((prev) => ({ ...prev, result: { ok: false, error: enc.error } }))
+          return
+        }
+        raw = enc.raw
+      }
+      const check = normalizeWriteValues(row.function, [raw], 1)
       if (!check.ok) {
-        setWriteRow((prev) => ({ ...prev, result: { ok: false, error: check.error } }))
+        setInlineWrite((prev) => ({ ...prev, result: { ok: false, error: check.error } }))
         return
       }
-      setWriteRow((prev) => ({ ...prev, busy: true, result: null }))
-      const pack = normalizePack()
-      const activeConnId = pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id) || 'c1'
+      setInlineWrite((prev) => ({ ...prev, busy: true, result: null }))
       post('/dsh-vision-bench/modbus/write', {
         cwd,
         source: 'user',
         sessionId,
-        function: row.fn,
+        connectionId: row.connectionId,
+        deviceId: row.deviceId,
+        pointId: row.pointId,
+        function: row.function,
         address: row.address,
-        values,
+        values: [raw],
       }, 60000).then((data) => {
-        setWriteRow((prev) => ({ ...prev, busy: false, result: data }))
-        pushFramesLog(cwd, activeConnId, (data && (data.framesLog||data.frames)) || [])
+        setInlineWrite((prev) => ({ ...prev, busy: false, result: data }))
+        pushFramesLog(cwd, row.connectionId, (data && (data.framesLog || data.frames)) || [])
         if (Array.isArray(data.values)) {
           setWorkspace((prev) => ({ ...prev, modbus: { ...prev.modbus, values: data.values } }))
           workspaceRef.current = { ...workspaceRef.current, modbus: { ...workspaceRef.current.modbus, values: data.values } }
@@ -650,9 +595,143 @@ export function createHmiView(React, t, post) {
           setWorkspace((prev) => ({ ...prev, modbus: { ...prev.modbus, values: data.workspace.modbus.values || prev.modbus.values } }))
         }
       }).catch((err) => {
-        setWriteRow((prev) => ({ ...prev, busy: false, result: { ok: false, error: String((err && err.message) || t('fail')) } }))
+        setInlineWrite((prev) => ({ ...prev, busy: false, result: { ok: false, error: String((err && err.message) || t('fail')) } }))
       })
     }
+
+    // ── TaskP1/0.20.0 行内编辑草稿 ──
+    function enterDeviceEdit(d) {
+      setError('')
+      setNewPointDraft(null)
+      setEditingDeviceId(d.id)
+      setDeviceDraft({ id: d.id, name: d.name, unitId: d.unitId, connectionId: d.connectionId })
+      const drafts = {}
+      for (const pt of pointsOfDevice(d.id)) {
+        drafts[pt.id] = {
+          id: pt.id,
+          connectionId: pt.connectionId,
+          deviceId: pt.deviceId,
+          name: pt.name || '',
+          function: pt.function,
+          address: pt.address,
+          scale: pt.scale,
+          offset: pt.offset,
+          unit: pt.unit || '',
+          monitorEnabled: pt.monitorEnabled === true,
+          alarmEnabled: pt.alarmEnabled === true,
+          alarmMin: pt.alarmMin == null ? '' : String(pt.alarmMin),
+          alarmMax: pt.alarmMax == null ? '' : String(pt.alarmMax),
+        }
+      }
+      setPointDraftsById(drafts)
+    }
+
+    function patchDraft(pointId, patch) {
+      setPointDraftsById((prev) => ({ ...prev, [pointId]: { ...prev[pointId], ...patch } }))
+    }
+
+    function addNewPointRow(deviceId) {
+      setError('')
+      setInlineWrite(null)
+      setBatch((prev) => ({ ...prev, open: false, deviceId: deviceId, connectionId: activeConnId }))
+      setNewPointDraft({
+        connectionId: activeConnId,
+        deviceId,
+        name: '',
+        function: 3,
+        address: 0,
+        scale: 1,
+        offset: 0,
+        unit: '',
+        monitorEnabled: true,
+        alarmEnabled: false,
+        alarmMin: '',
+        alarmMax: '',
+      })
+    }
+
+    function saveNewPointDraft() {
+      const d = newPointDraft
+      if (!d) return
+      const pack = normalizePack()
+      const fnNum = Math.trunc(Number(d.function) || 3)
+      const addrNum = Math.trunc(Number(d.address))
+      if (!Number.isFinite(addrNum) || addrNum < 0 || addrNum > 65535) { setError(t('ptAddr') + ' 0–65535'); return }
+      if ((d.alarmEnabled === true || d.alarmMin !== '' || d.alarmMax !== '') && !d.alarmEnabled) { /* 允许仅阈值但开关未开 → 视为未启用 */ }
+      const dup = (pack.points || []).some((p) => (p.connectionId || p.connId) === d.connectionId && (p.deviceId || '') === d.deviceId && p.function === fnNum && p.address === addrNum)
+      if (dup) { setError('该设备下已存在相同功能码和地址的点位'); return }
+      const alarmOn = d.alarmEnabled === true
+      const min = alarmOn && d.alarmMin !== '' ? Number(d.alarmMin) : null
+      const max = alarmOn && d.alarmMax !== '' ? Number(d.alarmMax) : null
+      if (alarmOn && min != null && max != null && !(min < max)) { setError('下限必须小于上限'); return }
+      const base = {
+        id: hmiGenId('p'),
+        connectionId: d.connectionId,
+        connId: d.connectionId,
+        deviceId: d.deviceId,
+        name: String(d.name || '').slice(0, 40),
+        function: fnNum,
+        address: addrNum,
+        scale: Number(d.scale) || 1,
+        offset: Number(d.offset) || 0,
+        unit: String(d.unit || '').slice(0, 12),
+        monitorEnabled: d.monitorEnabled === true,
+        alarmEnabled: alarmOn,
+        alarmMin: Number.isFinite(min) ? min : null,
+        alarmMax: Number.isFinite(max) ? max : null,
+        trendEnabled: d.monitorEnabled === true,
+        area: fnNum === 1 ? 'coil' : fnNum === 2 ? 'discreteInput' : fnNum === 4 ? 'inputRegister' : 'holdingRegister',
+      }
+      persist({ points: (pack.points || []).concat([base]), version: 3 })
+      setNewPointDraft(null)
+    }
+
+    function saveDeviceEdit(d) {
+      const pack = normalizePack()
+      const meta = deviceDraft
+      if (!meta) return
+      const drafts = pointDraftsById || {}
+      const done = []
+      const persisted = []
+      // 点位唯一键（不含自身 id）+ 阈值校验
+      const keyOf = (p) => (p.connectionId || '') + '|' + (p.deviceId || '') + '|' + p.function + '|' + p.address
+      const seen = new Map()
+      for (const dOf of Object.values(drafts)) {
+        if (seen.has(keyOf(dOf))) { setError('该设备下已存在相同功能码和地址的点位'); return }
+        seen.set(keyOf(dOf), dOf)
+      }
+      const name = String(meta.name || '').trim().slice(0, 40)
+      if (!name) { setError('请填写设备名称'); return }
+      const unitId = Math.trunc(Number(meta.unitId))
+      if (!Number.isFinite(unitId) || unitId < 0 || unitId > 247) { setError('Unit ID 0–247'); return }
+      if ((pack.devices || []).some((x) => x.connectionId === d.connectionId && x.id !== d.id && x.unitId === unitId)) {
+        setError('该连接内 Unit ' + unitId + ' 已存在'); return
+      }
+      const nextPoints = (pack.points || []).map((p) => {
+        const dr = drafts[p.id]
+        if (!dr) return p
+        const alarmOn = dr.alarmEnabled === true
+        const min = alarmOn && dr.alarmMin !== '' ? Number(dr.alarmMin) : null
+        const max = alarmOn && dr.alarmMax !== '' ? Number(dr.alarmMax) : null
+        if (alarmOn && min != null && max != null && !(min < max)) { throw new Error('下限必须小于上限: ' + dr.name) }
+        persisted.push(dr.id)
+        return { ...p, name: String(dr.name || '').slice(0, 40) || p.name, function: Math.trunc(Number(dr.function) || p.function), address: Math.trunc(Number(dr.address)), scale: Number(dr.scale) || 1, offset: Number(dr.offset) || 0, unit: String(dr.unit || '').slice(0, 12), monitorEnabled: dr.monitorEnabled === true, alarmEnabled: alarmOn, alarmMin: Number.isFinite(min) ? min : null, alarmMax: Number.isFinite(max) ? max : null, trendEnabled: dr.monitorEnabled === true }
+      })
+      const nextDevices = (pack.devices || []).map((x) => x.id === d.id ? { ...x, name, unitId } : x)
+      persist({ devices: nextDevices, points: nextPoints, version: 3 })
+      setEditingDeviceId('')
+      setDeviceDraft(null)
+      setPointDraftsById({})
+      void done
+    }
+
+    function cancelDeviceEdit() {
+      setEditingDeviceId('')
+      setDeviceDraft(null)
+      setPointDraftsById({})
+      setNewPointDraft(null)
+    }
+
 
     // ── csv ──
     function exportCsv(deviceId) {
@@ -718,6 +797,7 @@ export function createHmiView(React, t, post) {
       const k = item.key || item.pointId
       if (k) valueMap[k] = item
     }
+    const alarmStateData = (pack.alarmState && typeof pack.alarmState === 'object') ? pack.alarmState : {}
     const sim = conn.sim === true
     const canDevice = canUseModbus(ioRuntime, conn.mode, { simulated: sim })
     const ioStatus = ioRuntimeStatus(ioRuntime, conn.mode)
@@ -1011,45 +1091,143 @@ export function createHmiView(React, t, post) {
     const readRunning = runningOf(journal, 'read')
     const writeRunning = runningOf(journal, 'write')
 
-    const pointRow = (point) => {
+    const pointRow = (point, devId) => {
       const rec = valueMap[point.id]
-      const shown = rec && rec.ok && rec.raw !== null && rec.raw !== undefined
-        ? decodeValue(point, typeof rec.raw === 'boolean' ? (rec.raw ? 1 : 0) : rec.raw)
-        : (rec && rec.ok === false ? rec.error : '—')
+      const eng = rec && rec.ok && rec.value !== null && rec.value !== undefined ? rec.value : null
+      const shown = eng !== null ? eng : (rec && rec.ok === false ? rec.error : '—')
       const writable = isWritableFunction(point.function)
       const isFocused = shouldHighlightFocus(focusState) && focusState.request.pointId === point.id
-      return el('tr', { key: point.id, 'data-kind': 'pt', className: 'dvb-row' + focusHighlightClass(isFocused), 'data-focused': isFocused ? 'true' : 'false' },
-        el('td', null, point.name || functionTag(point.function) + point.address),
-        el('td', null, functionTag(point.function)),
-        el('td', { className: 'dvb-val' }, String(point.address)),
-        el('td', { className: 'dvb-val' }, (point.scale === 1 ? '' : '×' + point.scale) + (point.offset ? (point.offset > 0 ? '+' : '') + point.offset : '') || '—'),
-        el('td', null, point.unit || '—'),
-        el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' }, String(shown)),
-        el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' }, rec && rec.at ? clockOf(rec.at) : '—'),
-        writable
-          ? el('td', null, el('button', { type: 'button', className: 'dvb-btn dvb-btn-write', disabled: !cwd || !canDevice || connMissing || !!busy || writeRunning, onClick() { openWriteRow(point) } }, t('quickWrite')))
-          : el('td', null, '—'),
-        el('td', null, el('button', { type: 'button', className: 'dvb-btn', disabled: !cwd || !!busy, onClick() { readOne(point.id) } }, busy === point.id ? t('reading') : t('readSegment'))),
-        el('td', null, el('button', { type: 'button', className: 'dvb-btn', onClick() { openEditPoint(point) } }, t('editing').slice(0, 2))),
-        el('td', null, el('button', { type: 'button', className: 'dvb-btn', disabled: !!busy, onClick() { removePointRow(point) } }, t('deleteSegment'))),
-        el('td', null, el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '复制结构化引用（稳定 ID+配置版本+时间范围），编辑不会改变所属设备', onClick() { sendToAgent('point', { pointId: point.id, connectionId: point.connectionId, deviceId: point.deviceId, name: point.name }) } }, agentBtnLabel('point', { pointId: point.id }))),
-        el('td', null, point.trendEnabled ? el('span', { className: 'dvb-badge', 'data-kind': 'live' }, '曲线') : null))
+      const editing = editingDeviceId === devId
+      const draft = editing ? (pointDraftsById[point.id] || null) : null
+      const connState = (connectionStates.find((x) => x.connectionId === point.connectionId) || {}).status || ''
+      const st = pointRuntimeStatus(point, rec, alarmStateData, connState)
+      const wCell = inlineWrite && inlineWrite.pointId === point.id
+      // 当前值单元格：可写→可点击；编辑态仍可见不承担配置
+      const valueCell = wCell
+        ? el('span', { className: 'dvb-inline-write' },
+            point.function === 1
+              ? el('span', { className: 'dvb-actions', style: { gap: '4px' } },
+                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm' + (inlineWrite.text === '1' ? ' is-on' : ''), disabled: inlineWrite.busy, onClick() { setInlineWrite((prev) => ({ ...prev, text: '1' })); } }, '开'),
+                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm' + (inlineWrite.text === '0' ? ' is-on' : ''), disabled: inlineWrite.busy, onClick() { setInlineWrite((prev) => ({ ...prev, text: '0' })); } }, '关'),
+                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: inlineWrite.busy, onClick() { submitWriteCell(inlineWrite.text === '1') } }, '确认'),
+                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: inlineWrite.busy, onClick() { setInlineWrite(null) } }, '取消'))
+              : el('span', { className: 'dvb-actions', style: { gap: '4px' } },
+                  el('input', {
+                    className: 'dvb-input dvb-input-mono',
+                    value: inlineWrite.text,
+                    type: 'text',
+                    disabled: inlineWrite.busy,
+                    onChange: (event) => { setInlineWrite((prev) => ({ ...prev, text: event.target.value })) },
+                    onKeyDown: (event) => { if (event.key === 'Enter') submitWriteCell() },
+                  }),
+                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: inlineWrite.busy || !inlineWrite.text.trim(), onClick() { submitWriteCell() } }, '确定'),
+                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: inlineWrite.busy, onClick() { setInlineWrite(null) } }, '取消')),
+            inlineWrite.busy
+              ? el('span', { className: 'dvb-hint' }, t('writing') || '写入中…')
+              : (inlineWrite.result
+                ? el('span', { className: 'dvb-hint ' + (inlineWrite.result.ok === false ? 'dvb-need' : '') },
+                  inlineWrite.result.ok === false ? (inlineWrite.result.error || '写入失败')
+                    : (inlineWrite.result.unknown ? (t('writeUnknown') || '结果未知') : (t('writeDone') || '写入成功')))
+                : null))
+        : el('button', {
+            type: 'button',
+            className: 'dvb-val dvb-cell-value' + (writable ? ' dvb-cell-writable' : ' dvb-cell-readonly'),
+            disabled: !writable || !!busy || writeRunning,
+            title: writable ? '点击写入当前值' : '只读点位，不可写入',
+            style: { padding: 0, border: 'none', background: 'none', cursor: writable ? 'pointer' : 'default', font: 'inherit' },
+            onClick() { if (writable) openWriteCell(point) },
+          }, String(shown))
+      return el('tr', { key: point.id, 'data-kind': 'pt', className: 'dvb-row' + focusHighlightClass(isFocused), 'data-focused': isFocused ? 'true' : 'false', 'data-editing': editing ? 'true' : 'false' },
+        el('td', null, editing
+          ? el('input', { className: 'dvb-input', value: draft ? draft.name : point.name, onChange: (e) => patchDraft(point.id, { name: e.target.value }) })
+          : el('span', { className: 'dvb-cell-name' },
+              el('span', null, point.name || functionTag(point.function) + point.address),
+              el('button', {
+                type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-icon',
+                title: '复制结构化引用（稳定 ID+配置版本）并让 Agent 分析',
+                'aria-label': '让 Agent 分析 ' + (point.name || point.id),
+                onClick() { sendToAgent('point', { pointId: point.id, connectionId: point.connectionId, deviceId: point.deviceId, name: point.name }) },
+              }, 'ⓘ'))),
+        el('td', null, editing
+          ? el('select', { className: 'dvb-input', value: String(draft ? draft.function : point.function), onChange: (e) => patchDraft(point.id, { function: Number(e.target.value) }) },
+              el('option', { value: '1' }, fnOptionLabel(t, 1)),
+              el('option', { value: '2' }, fnOptionLabel(t, 2)),
+              el('option', { value: '3' }, fnOptionLabel(t, 3)),
+              el('option', { value: '4' }, fnOptionLabel(t, 4)))
+          : el('span', { className: 'dvb-val' }, functionTag(point.function))),
+        el('td', null, editing
+          ? el('input', { className: 'dvb-input dvb-input-mono', type: 'number', min: 0, max: 65535, value: draft ? draft.address : point.address, onChange: (e) => patchDraft(point.id, { address: Number(e.target.value) }) })
+          : el('span', { className: 'dvb-val' }, String(point.address))),
+        el('td', null, editing
+          ? el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', value: draft ? draft.scale : point.scale, onChange: (e) => patchDraft(point.id, { scale: Number(e.target.value) }) })
+          : el('span', { className: 'dvb-val' }, (point.scale === 1 ? '' : '×' + point.scale) || '—')),
+        el('td', null, editing
+          ? el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', value: draft ? draft.offset : point.offset, onChange: (e) => patchDraft(point.id, { offset: Number(e.target.value) }) })
+          : el('span', { className: 'dvb-val' }, point.offset ? (point.offset > 0 ? '+' : '') + point.offset : '—')),
+        el('td', null, editing
+          ? el('input', { className: 'dvb-input', value: draft ? draft.unit : point.unit, onChange: (e) => patchDraft(point.id, { unit: e.target.value }) })
+          : el('span', null, point.unit || '—')),
+        el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' }, valueCell),
+        el('td', null,
+          el('span', { className: 'dvb-badge dvb-status', 'data-kind': st.key === 'alarm' ? 'err' : (st.key === 'comm-error' ? 'err' : st.key === 'disconnected' ? 'warn' : st.key === 'ok' ? 'live' : 'idle') }, st.label)),
+        el('td', null,
+          el('label', { className: 'dvb-switch', title: '开启后成为可视化数据源' },
+            el('input', {
+              type: 'checkbox',
+              checked: editing ? (draft ? draft.monitorEnabled : point.monitorEnabled === true) : point.monitorEnabled === true,
+              onChange: (e) => {
+                if (editing) { patchDraft(point.id, { monitorEnabled: e.target.checked }) }
+                else {
+                  const packNow = normalizePack()
+                  persist({ points: (packNow.points || []).map((p) => p.id === point.id ? { ...p, monitorEnabled: e.target.checked, trendEnabled: e.target.checked } : p), version: 3 })
+                }
+              },
+            }),
+            el('span', { className: 'dvb-switch-track' }))),
+        el('td', null,
+          el('label', { className: 'dvb-switch', title: '参与告警判断' },
+            el('input', {
+              type: 'checkbox',
+              checked: editing ? (draft ? draft.alarmEnabled : point.alarmEnabled === true) : point.alarmEnabled === true,
+              onChange: (e) => {
+                if (editing) { patchDraft(point.id, { alarmEnabled: e.target.checked }) }
+                else {
+                  const packNow = normalizePack()
+                  persist({ points: (packNow.points || []).map((p) => p.id === point.id ? { ...p, alarmEnabled: e.target.checked } : p), version: 3 })
+                }
+              },
+            }),
+            el('span', { className: 'dvb-switch-track' }))),
+        el('td', null, editing
+          ? el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', placeholder: '—', value: draft ? draft.alarmMin : (point.alarmMin == null ? '' : point.alarmMin), onChange: (e) => patchDraft(point.id, { alarmMin: e.target.value }) })
+          : el('span', { className: 'dvb-val' }, point.alarmMin == null ? '—' : String(point.alarmMin))),
+        el('td', null, editing
+          ? el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', placeholder: '—', value: draft ? draft.alarmMax : (point.alarmMax == null ? '' : point.alarmMax), onChange: (e) => patchDraft(point.id, { alarmMax: e.target.value }) })
+          : el('span', { className: 'dvb-val' }, point.alarmMax == null ? '—' : String(point.alarmMax))),
+        editing
+          ? el('td', null, el('button', {
+            type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-danger',
+            title: '删除该点位',
+            'aria-label': '删除点位 ' + (point.name || point.id),
+            onClick() { removePointRow(point) },
+          }, '✕'))
+          : null)
     }
 
     const pointThead = el('thead', null, el('tr', null,
       el('th', null, t('colName')),
       el('th', null, t('colFn')),
       el('th', null, t('colAddr')),
-      el('th', null, '×/+'),
+      el('th', null, '倍率'),
+      el('th', null, '偏移'),
       el('th', null, t('ptUnit')),
-      el('th', null, '值'),
-      el('th', null, t('time')),
-      el('th', null, '写入'),
-      el('th', null, '读取'),
-      el('th', null, '编辑'),
-      el('th', null, '删除'),
-      el('th', null, '让 Agent 分析'),
-      el('th', null, '曲线')))
+      el('th', null, '当前值'),
+      el('th', null, '状态'),
+      el('th', null, t('monitorOn') || '监视'),
+      el('th', null, t('alarmOn') || '告警'),
+      el('th', null, t('ptAlarmMin')),
+      el('th', null, t('ptAlarmMax')),
+      editingDeviceId === '' ? null : el('th', null, '')))
 
     const batchPanelFor = (d) => el('div', { className: 'dvb-write-panel' },
       el('div', { className: 'dvb-hint' }, t('batchAdd') + ' · ' + d.name + ' · Unit ' + d.unitId),
@@ -1072,6 +1250,7 @@ export function createHmiView(React, t, post) {
         el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !csvText.trim(), onClick: importCsv }, t('csvApply')),
         el('button', { type: 'button', className: 'dvb-btn', onClick() { setCsvTarget((p) => ({ ...p, open: false })) } }, t('csvCancel'))))
 
+    // ── TaskP1/0.20.0 设备卡片：工具顺序 添加点位/批量添加/读取/编辑/导入CSV/导出CSV/Agent ──
     const deviceCardsPanel = el('div', { className: 'dvb-panel' },
       el('div', { className: 'dvb-panel-head' },
         el('span', { className: 'dvb-panel-title' }, '设备 · ' + (activeConnObj ? activeConnObj.name : '')),
@@ -1083,16 +1262,32 @@ export function createHmiView(React, t, post) {
             const devBusy = busy === d.id
             const pDel = devDeleteId && devDeleteId.split('|')
             const confirmDel = pDel && pDel[0] === d.id
-            return el('div', { key: d.id, className: 'dvb-panel dvb-dev-card' + (shouldHighlightFocus(focusState) && focusState.request.deviceId === d.id ? ' dvb-has-focus' : '') },
+            const editing = editingDeviceId === d.id
+            return el('div', { key: d.id, className: 'dvb-panel dvb-dev-card' + (shouldHighlightFocus(focusState) && focusState.request.deviceId === d.id ? ' dvb-has-focus' : '') + (editing ? ' dvb-dev-editing' : '') },
               el('div', { className: 'dvb-dev-head' },
-                el('span', { className: 'dvb-dev-title' }, d.name),
-                el('span', { className: 'dvb-tag' }, 'Unit ' + d.unitId),
+                editing
+                  ? el('span', { className: 'dvb-dev-title' },
+                      el('input', { className: 'dvb-input', value: (deviceDraft && deviceDraft.name) || d.name, onChange: (e) => setDeviceDraft((prev) => ({ ...prev, name: e.target.value })) }),
+                      el('span', { className: 'dvb-tag' }, 'Unit'),
+                      el('input', { className: 'dvb-input dvb-input-mono', style: { width: '64px' }, type: 'number', min: 0, max: 247, value: (deviceDraft && deviceDraft.unitId) || d.unitId, onChange: (e) => setDeviceDraft((prev) => ({ ...prev, unitId: Number(e.target.value) })) }))
+                  : el('span', { className: 'dvb-dev-title' }, d.name),
+                !editing ? el('span', { className: 'dvb-tag' }, 'Unit ' + d.unitId) : null,
                 el('span', { className: 'dvb-tag' }, devPts.length + ' 个点位'),
                 el('div', { className: 'dvb-actions' },
-                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !cwd || !canDevice || connMissing || !devPts.length || !!busy || readRunning, onClick() { readAll(d.id) } }, devBusy ? t('reading') : t('readAll')),
-                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '复制设备结构化引用并让 Agent 分析', onClick() { sendToAgent('device', { deviceId: d.id, connectionId: d.connectionId, name: d.name }) } }, agentBtnLabel('device', { deviceId: d.id })),
-                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openEditDevice(d) } }, t('editing').slice(0, 2)),
-                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !!devDeleteId, onClick() { requestDeleteDevice(d) } }, t('deleteSegment')))),
+                  !editing ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !cwd || !canDevice || connMissing || !devPts.length || !!busy || readRunning, onClick() { readAll(d.id) } }, devBusy ? t('reading') : t('readAll')) : null,
+                  !editing ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '复制设备结构化引用并让 Agent 分析', onClick() { sendToAgent('device', { deviceId: d.id, connectionId: d.connectionId, name: d.name }) } }, agentBtnLabel('device', { deviceId: d.id })) : null,
+                  editing
+                    ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: !!busy, onClick() { saveDeviceEdit(d) } }, t('savePoint') || '保存')
+                    : null,
+                  editing
+                    ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { cancelDeviceEdit() } }, t('csvCancel') || '取消')
+                    : null,
+                  !editing
+                    ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !!devDeleteId, onClick() { enterDeviceEdit(d) } }, t('devEdit') || '编辑')
+                    : null),
+                editing
+                  ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-danger', title: '删除该设备及全部点位', 'aria-label': '删除设备 ' + d.name, onClick() { requestDeleteDevice(d) } }, '🗑')
+                  : null),
               confirmDel
                 ? el('div', { className: 'dvb-write-panel', style: { marginBottom: '6px' } },
                     el('div', { className: 'dvb-hint dvb-need' }, '将同时删除该设备的 ' + pDel[1] + ' 个点位和 ' + pDel[2] + ' 个当前值'),
@@ -1101,96 +1296,45 @@ export function createHmiView(React, t, post) {
                       el('button', { type: 'button', className: 'dvb-btn', onClick() { setDevDeleteId('') } }, t('csvCancel'))))
                 : null,
               el('div', { className: 'dvb-toolbar', style: { flexWrap: 'wrap' } },
-                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: !cwd, onClick() { openAddPoint(d.id) } }, t('addPoint')),
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: !cwd, onClick() { addNewPointRow(d.id) } }, t('addPoint')),
                 el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { setBatch((prev) => ({ ...prev, open: !prev.open, deviceId: d.id, connectionId: activeConnId })) } }, t('batchAdd')),
                 el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { setCsvTarget((prev) => ({ ...prev, open: !prev.open, deviceId: d.id })) } }, csvNote || t('csvImport')),
                 el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !devPts.length, onClick() { exportCsv(d.id) } }, t('csvExport'))),
               batch.open && batch.deviceId === d.id ? batchPanelFor(d) : null,
               csvTarget.open && csvTarget.deviceId === d.id ? csvPanelFor(d) : null,
-              devPts.length
-                ? el('div', { className: 'dvb-table-wrap' }, el('table', { className: 'dvb-table' }, pointThead, el('tbody', null, devPts.map(pointRow))))
+              devPts.length || newPointDraft && newPointDraft.deviceId === d.id
+                ? el('div', { className: 'dvb-table-wrap' },
+                    el('table', { className: 'dvb-table dvb-point-table' }, pointThead,
+                      el('tbody', null,
+                        newPointDraft && newPointDraft.deviceId === d.id
+                          ? el('tr', { className: 'dvb-row dvb-newpoint-row', 'data-editing': 'true' },
+                              el('td', null, el('input', { className: 'dvb-input', placeholder: t('ptNamePh'), value: newPointDraft.name, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, name: e.target.value })) })),
+                              el('td', null, el('select', { className: 'dvb-input', value: String(newPointDraft.function), onChange: (e) => setNewPointDraft((prev) => ({ ...prev, function: Number(e.target.value) })) },
+                                  el('option', { value: '1' }, fnOptionLabel(t, 1)),
+                                  el('option', { value: '2' }, fnOptionLabel(t, 2)),
+                                  el('option', { value: '3' }, fnOptionLabel(t, 3)),
+                                  el('option', { value: '4' }, fnOptionLabel(t, 4)))),
+                              el('td', null, el('input', { className: 'dvb-input dvb-input-mono', type: 'number', min: 0, max: 65535, value: newPointDraft.address, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, address: Number(e.target.value) })) })),
+                              el('td', null, el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', value: newPointDraft.scale, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, scale: Number(e.target.value) })) })),
+                              el('td', null, el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', value: newPointDraft.offset, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, offset: Number(e.target.value) })) })),
+                              el('td', null, el('input', { className: 'dvb-input', value: newPointDraft.unit, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, unit: e.target.value })) })),
+                              el('td', null, '—'),
+                              el('td', null, '—'),
+                              el('td', null, el('label', { className: 'dvb-switch' }, el('input', { type: 'checkbox', checked: newPointDraft.monitorEnabled === true, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, monitorEnabled: e.target.checked })) }), el('span', { className: 'dvb-switch-track' }))),
+                              el('td', null, el('label', { className: 'dvb-switch' }, el('input', { type: 'checkbox', checked: newPointDraft.alarmEnabled === true, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, alarmEnabled: e.target.checked })) }), el('span', { className: 'dvb-switch-track' }))),
+                              el('td', null, el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', value: newPointDraft.alarmMin, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, alarmMin: e.target.value })) })),
+                              el('td', null, el('input', { className: 'dvb-input dvb-input-mono', type: 'number', step: 'any', value: newPointDraft.alarmMax, onChange: (e) => setNewPointDraft((prev) => ({ ...prev, alarmMax: e.target.value })) })),
+                              el('td', null, el('div', { className: 'dvb-actions' },
+                                el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick: saveNewPointDraft }, t('savePoint') || '保存'),
+                                el('button', { type: 'button', className: 'dvb-btn', onClick() { setNewPointDraft(null) } }, t('csvCancel') || '取消'))))
+                          : null,
+                        devPts.map((point) => pointRow(point, d.id)))))
                 : el('div', { className: 'dvb-empty' }, t('noPoints')))
           }))
         : el('div', { className: 'dvb-empty dvb-dev-empty' },
             el('div', { className: 'dvb-dev-empty-title' }, '连接已创建'),
             el('div', { className: 'dvb-hint' }, '下一步：添加设备'),
             el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick: openAddDevice }, '＋添加设备')))
-    // ── point form ──
-    const formPanel = form.mode !== 'hidden'
-      ? el('div', { className: 'dvb-panel dvb-write-panel' },
-        el('div', { className: 'dvb-panel-head' },
-          el('span', { className: 'dvb-panel-title' }, (form.mode === 'edit' ? t('editing') : t('addPoint'))
-            + (form.mode === 'edit' ? ' · ' + form.id : '') + ' · ' + (activeConnObj ? activeConnObj.name : '')),
-          el('button', {
-            type: 'button', className: 'dvb-btn', onClick: closeForm,
-          }, t('csvCancel'))),
-        el('div', { className: 'dvb-toolbar' },
-          field(t('ptName'), el('input', {
-            className: 'dvb-input',
-            value: form.name,
-            placeholder: t('ptNamePh'),
-            onChange: (event)=>{ setForm((prev) => ({ ...prev, name: event.target.value })) },
-          })),
-          field(t('ptFc'), el('select', {
-            className: 'dvb-input',
-            value: String(form.function),
-            onChange: (event)=>{ setForm((prev) => ({ ...prev, function: Number(event.target.value) })) },
-          },
-            el('option', { value: '1' }, fnOptionLabel(t, 1)),
-            el('option', { value: '2' }, fnOptionLabel(t, 2)),
-            el('option', { value: '3' }, fnOptionLabel(t, 3)),
-            el('option', { value: '4' }, fnOptionLabel(t, 4)))),
-          field(t('ptAddr'), el('input', {
-            className: 'dvb-input dvb-input-mono', type: 'number',
-            value: form.address,
-            min: 0, max: 65535,
-            onChange: (event)=>{ setForm((prev) => ({ ...prev, address: Number(event.target.value) })) },
-          })),
-          field(t('devOwner')||'所属设备', el('span', { className: 'dvb-hint' },
-            (activeDevices.find((d)=> d.id===form.deviceId) && activeDevices.find((d)=> d.id===form.deviceId).name) || form.deviceId || '—'
-            + ' · Unit ' + ((activeDevices.find((d)=> d.id===form.deviceId) || {}).unitId ?? ''))),
-          field(t('ptScale'), el('input', {
-            className: 'dvb-input dvb-input-mono', type: 'number', step: 'any',
-            value: form.scale,
-            onChange: (event)=>{ setForm((prev) => ({ ...prev, scale: Number(event.target.value) })) },
-          })),
-          field(t('ptOffset'), el('input', {
-            className: 'dvb-input dvb-input-mono', type: 'number', step: 'any',
-            value: form.offset,
-            onChange: (event)=>{ setForm((prev) => ({ ...prev, offset: Number(event.target.value) })) },
-          })),
-          field(t('ptUnit'), el('input', {
-            className: 'dvb-input',
-            value: form.unit,
-            onChange: (event)=>{ setForm((prev) => ({ ...prev, unit: event.target.value })) },
-          })),
-          field(t('trendOn')||'加入曲线', el('label', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
-            el('input', { type: 'checkbox', checked: form.trendEnabled === true, onChange: (event)=>{ setForm((prev) => ({ ...prev, trendEnabled: event.target.checked })) } }),
-            el('span', { className: 'dvb-hint' }, t('trendHint')||'勾选后该点位进入曲线缓存'))),
-          field(t('alarmOn')||'启用告警', el('label', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
-            el('input', { type: 'checkbox', checked: form.alarmOn === true, onChange: (event)=>{ setForm((prev) => ({ ...prev, alarmOn: event.target.checked, alarmMin: '', alarmMax: '' })) } }),
-            el('span', { className: 'dvb-hint' }, t('alarmOnHint')||'按上下限告警'))),
-          form.alarmOn
-            ? field(t('ptAlarmMin'), el('input', {
-              className: 'dvb-input dvb-input-mono', type: 'number', step: 'any',
-              value: form.alarmMin,
-              onChange: (event)=>{ setForm((prev) => ({ ...prev, alarmMin: event.target.value })) },
-            }))
-            : null,
-          form.alarmOn
-            ? field(t('ptAlarmMax'), el('input', {
-              className: 'dvb-input dvb-input-mono', type: 'number', step: 'any',
-              value: form.alarmMax,
-              onChange: (event)=>{ setForm((prev) => ({ ...prev, alarmMax: event.target.value })) },
-            }))
-            : null),
-        el('div', { className: 'dvb-actions' },
-          el('button', {
-            type: 'button', className: 'dvb-btn dvb-btn-primary',
-            disabled: !cwd,
-            onClick: submitPoint,
-          }, t('savePoint'))))
-      : null
 
     // ── pending agent approvals ──
     const pendingPanel = pending.length
@@ -1302,55 +1446,6 @@ export function createHmiView(React, t, post) {
         setError(String((err && err.message) || t('fail')))
       })
     }
-
-    // ── inline write strip under table ──
-    const writeStrip = writeRow
-      ? el('div', { className: 'dvb-write-inline' },
-        el('div', { className: 'dvb-write-head' },
-          el('span', { className: 'dvb-write-title' }, t('quickWrite') + ' · '
-            + (writeRow.name || functionTag(writeRow.fn) + writeRow.address)
-            + ' (' + functionTag(writeRow.fn) + '@' + writeRow.address + ')'),
-          el('button', {
-            type: 'button', className: 'dvb-btn',
-            disabled: writeRow.busy,
-            onClick() { setWriteRow(null) },
-          }, t('writeClose'))),
-        el('div', { className: 'dvb-write-form' },
-          writeRow.fn === 1
-            ? el('select', {
-              className: 'dvb-input',
-              value: String(Number(writeRow.text) ? 1 : 0),
-              disabled: writeRow.busy,
-              onChange: (event)=>{ setWriteRow((prev) => ({ ...prev, text: event.target.value })) },
-            },
-              el('option', { value: '0' }, t('coilOff')),
-              el('option', { value: '1' }, t('coilOn')))
-            : el('input', {
-              className: 'dvb-input dvb-input-mono', type: 'number', min: 0, max: 65535,
-              value: writeRow.text,
-              disabled: writeRow.busy,
-              spellCheck: false,
-              onChange: (event)=>{ setWriteRow((prev) => ({ ...prev, text: event.target.value })) },
-              onKeyDown(event) {
-                if (event.key === 'Enter' && !writeRow.busy) submitWriteRow()
-              },
-            }),
-          el('button', {
-            type: 'button',
-            className: 'dvb-btn dvb-btn-primary dvb-btn-write',
-            disabled: !cwd || writeRow.busy,
-            onClick: submitWriteRow,
-          }, writeRow.busy ? t('writing') : t('confirmWrite'))),
-        writeRow.result
-          ? (writeRow.result.ok === false
-            ? el('div', { className: 'dvb-write-result', 'data-kind': 'err' },
-              writeRow.result.summary || writeRow.result.error || t('fail'))
-            : el('div', { className: 'dvb-write-result', 'data-kind': 'ok' },
-              (writeRow.result.before && writeRow.result.before[0] !== null && writeRow.result.before[0] !== undefined ? String(writeRow.result.before[0]) : '—')
-              + ' → ' + String(writeRow.result.target && writeRow.result.target[0])
-              + ' → ' + (writeRow.result.readback && writeRow.result.readback[0] !== undefined ? String(writeRow.result.readback[0]) : '—')))
-          : null)
-      : null
 
     // ── connection tab bar [全部连接] [连接·COM/端点] [更多▼] [+] ──
     function connEndpointLabel(c) {
@@ -1486,8 +1581,6 @@ export function createHmiView(React, t, post) {
       connListPanel,
       devFormPanel,
       deviceCardsPanel,
-      formPanel,
-      writeStrip,
       pendingPanel,
       draftPanel)
   }
