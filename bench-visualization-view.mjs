@@ -2,7 +2,7 @@
 // 组件编辑器：名称/类型/关联点位搜索多选（仅 monitorEnabled，限定路径）。
 // 渲染来源：line → modbus.trend（uPlot）；bar → 最新 values（uPlot bars）；
 // value → 数值卡；switch → FC01 写点（确认后写入并读回）。
-import { subscribeState, buildAgentRef, copyAgentRef, hasHarnessInput } from './bench-shared.mjs'
+import { subscribeState, subscribeFocus, buildAgentRef, copyAgentRef, hasHarnessInput } from './bench-shared.mjs'
 import { sessionCwd } from './bench-live.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { TREND_WINDOW_MS, trendDataForComponents, componentLatestValues, UPLOT_PROTO } from './bench-trend.mjs'
@@ -26,6 +26,10 @@ export function createVisualizationPage(React, t, post, hooks) {
     const [deleteId, setDeleteId] = React.useState('')
     const [copied, setCopied] = React.useState('')
     const [note, setNote] = React.useState('')
+    const [focusVizId, setFocusVizId] = React.useState('')
+    React.useEffect(() => subscribeFocus('', (fs) => {
+      try { setFocusVizId((fs && fs.request && fs.request.visualizationId) || '') } catch {}
+    }), [])
     const [, setTick] = React.useState(0)
     const uplotRefs = React.useRef({})
     const switchDraft = React.useRef(null)
@@ -191,7 +195,7 @@ export function createVisualizationPage(React, t, post, hooks) {
       const byId = new Map(points.map((p) => [p.id, p]))
       const latest = componentLatestValues(values, points, comp.pointIds)
       const degraded = status !== 'ok'
-      return el('div', { key: comp.id, className: 'dvb-panel dvb-viz-card' + (degraded ? ' dvb-viz-degraded' : '') + (deleteId === comp.id ? ' dvb-viz-confirm' : '') },
+      return el('div', { key: comp.id, className: 'dvb-panel dvb-viz-card' + (degraded ? ' dvb-viz-degraded' : '') + (deleteId === comp.id ? ' dvb-viz-confirm' : '') + (focusVizId === comp.id ? ' dvb-viz-focused' : '') },
         el('div', { className: 'dvb-viz-head' },
           el('span', { className: 'dvb-viz-title' }, comp.name),
           el('span', { className: 'dvb-tag' }, vizTypeLabel(comp.type)),

@@ -157,6 +157,7 @@ export const CSS = [
   'body[' + ATTR + '] .dvb-vision-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
   'body[' + ATTR + '] .dvb-vision-meta{display:flex;gap:10px;align-items:center}',
   'body[' + ATTR + '] .dvb-focus-toast{position:fixed;right:14px;bottom:14px;z-index:60;display:flex;gap:8px;align-items:center;max-width:420px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.4));border-radius:8px;background:var(--dsw-alias-bg-layer-1,#1e1e1e);box-shadow:0 4px 16px rgba(0,0,0,.2);font-size:12px}',
+  'body[' + ATTR + '] .dvb-viz-card.dvb-viz-focused{outline:2px solid #4f8ef7;outline-offset:-2px}',
   'body[' + ATTR + '] .dvb-point-table th,.dvb-point-table td{white-space:nowrap}',
   'body[' + ATTR + '] .dvb-point-table .dvb-input{min-width:56px;padding:1px 4px;font-size:11px}',
   'body[' + ATTR + '] .dvb-point-table .dvb-input-mono{width:72px}',

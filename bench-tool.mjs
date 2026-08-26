@@ -6,7 +6,7 @@ import { appendEvidence, applyConfigDraft, createConfigDraft, createManualReques
 import { resolveTarget } from './bench-targets.mjs'
 import { readTrendSeries } from './bench-trend-store.mjs'
 
-const ACTIONS = new Set(['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual', 'connect', 'points', 'frames', 'focus', 'trend', 'alarm', 'evidence', 'draft'])
+const ACTIONS = new Set(['status','ls','select','build','read','write','map','manual','connect','points','frames','focus','trend','visualization','alarm','evidence','draft'])
 
 export const cwdOf = (agent) => {
   const session = agent && agent.session
@@ -79,7 +79,7 @@ const compactLog = (log) => {
 export async function runVisionBench(home, args, cwd, originInput, opts) {
   const action = args && args.action
   if (!ACTIONS.has(action)) {
-    return { ok: false, error: 'action 必须是 status | ls | select | build | read | write | map | manual | connect | points | frames | focus | trend | alarm | evidence | draft' }
+    return { ok: false, error: 'action 必须是 status | ls | select | build | read | write | map | manual | connect | points | frames | focus | trend | visualization | alarm | evidence | draft' }
   }
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, action, error: room.error }
@@ -293,6 +293,68 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
     return { action, ...ran }
   }
 
+  if (action === 'visualization') {
+    // TaskP4/0.20.0: 读取组件与诊断；修改只能生成配置草稿（用户审批）
+    const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+    const cv = pack.configVersion || 1
+    const viz = pack.visualization || { schemaVersion: 1, components: [] }
+    const op = String(args.op || 'list')
+    const id = String(args.visualizationId || args.id || '').trim()
+    const byId = new Map(pack.points.map((x) => [x.id, x]))
+    const degradedFor = (comp) => (comp.pointIds || []).filter((pid) => {
+      const pt = byId.get(pid)
+      return !pt || pt.monitorEnabled !== true
+    })
+    if (op === 'list') {
+      return {
+        ok: true,
+        action,
+        visualization: viz,
+        components: (viz.components || []).map((c) => ({ ...c, degraded: degradedFor(c) })),
+        configVersion: cv,
+      }
+    }
+    if (op === 'get') {
+      const comp = (viz.components || []).find((c) => c.id === id)
+      if (!comp) return { ok: false, error: '组件不存在: ' + id, errorCode: 'VIZ_NOT_FOUND' }
+      const { componentLatestValues } = await import('./bench-trend.mjs')
+      return { ok: true, action, component: comp, values: componentLatestValues(pack.values, pack.points, comp.pointIds), degraded: degradedFor(comp), configVersion: cv }
+    }
+    // propose* → RFC 6902 配置草稿
+    let patch = []
+    if (op === 'proposeAdd') {
+      const { normalizeVisualizationComponent, validateVisualizationComponent } = await import('./bench-visualization-model.mjs')
+      const raw = args.component || {}
+      const cand = normalizeVisualizationComponent({ ...raw, id: '' })
+      const v = validateVisualizationComponent(cand, pack.points)
+      if (!v.ok) return { ok: false, error: v.error, errorCode: 'VIZ_INVALID' }
+      patch = [{ op: 'add', path: '/visualization/components/-', value: cand }]
+    } else if (op === 'proposeUpdate') {
+      const { normalizeVisualizationComponent, validateVisualizationComponent } = await import('./bench-visualization-model.mjs')
+      const raw = args.component || {}
+      const idx = (viz.components || []).findIndex((c) => c.id === (raw.id || id))
+      if (idx < 0) return { ok: false, error: '组件不存在: ' + (raw.id || id), errorCode: 'VIZ_NOT_FOUND' }
+      const cand = normalizeVisualizationComponent(raw)
+      const v = validateVisualizationComponent(cand, pack.points)
+      if (!v.ok) return { ok: false, error: v.error, errorCode: 'VIZ_INVALID' }
+      patch = [{ op: 'replace', path: '/visualization/components/' + idx, value: cand }]
+    } else if (op === 'proposeRemove') {
+      const idx = (viz.components || []).findIndex((c) => c.id === id)
+      if (idx < 0) return { ok: false, error: '组件不存在: ' + id, errorCode: 'VIZ_NOT_FOUND' }
+      patch = [{ op: 'remove', path: '/visualization/components/' + idx }]
+    } else {
+      return { ok: false, error: 'op 必须是 list | get | proposeAdd | proposeUpdate | proposeRemove' }
+    }
+    const { createConfigDraft } = await import('./bench-store.mjs')
+    const ran = createConfigDraft(home, room.cwd, {
+      baseConfigVersion: cv,
+      patch,
+      source: origin.source,
+      sessionId: origin.sessionId,
+    })
+    return { ok: ran.ok, action, draft: ran.ok ? ran.draft : undefined, error: ran.ok ? undefined : ran.error, errorCode: ran.ok ? undefined : ran.errorCode }
+  }
+
   if (action === 'trend') {
     // Require explicit range + point IDs; but allow status-like query with explicit IDs
     const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
@@ -458,7 +520,7 @@ export function visionBenchTool(home) {
         action: {
           type: 'string',
           enum: ['status', 'ls', 'select', 'build', 'read', 'write', 'map', 'manual', 'connect', 'points', 'frames', 'focus', 'trend', 'alarm', 'evidence', 'draft'],
-          description: 'status | ls | select | build | read | write | map | manual | connect | points | frames | focus | trend | alarm | evidence | draft',
+          description: 'status | ls | select | build | read | write | map | manual | connect | points | frames | focus | trend | visualization | alarm | evidence | draft',
         },
         path: { type: 'string', description: 'ls 的目录或 select/build/map 的工程绝对路径' },
         target: { type: 'string', description: 'Keil Target' },

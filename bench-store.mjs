@@ -931,7 +931,7 @@ export const createConfigDraft = (home, cwd, spec) => {
   const validation = validatePatch(patch)
   if (validation) return { ok: false, error: 'patch 校验失败: ' + validation }
   // enforce patch targets only allowed roots (/connections, /devices, /points, /activeConnectionId, /activeDeviceId) for safety
-  const allowedTop = new Set(['connections', 'devices', 'points', 'activeConnectionId', 'activeDeviceId', 'pollingByConnection', 'values'])
+  const allowedTop = new Set(['connections', 'devices', 'points', 'activeConnectionId', 'activeDeviceId', 'pollingByConnection', 'values', 'visualization'])
   for (const op of patch) {
     const top = String(op.path || '').split('/')[1] || ''
     if (top && !allowedTop.has(top) && top !== '') {
@@ -939,7 +939,7 @@ export const createConfigDraft = (home, cwd, spec) => {
     }
   }
   // Try applying to detect obvious shape errors before persisting
-  const baseForPatch = { connections: pack.connections, devices: pack.devices, points: pack.points, activeConnectionId: pack.activeConnectionId, activeDeviceId: pack.activeDeviceId, pollingByConnection: pack.pollingByConnection }
+  const baseForPatch = { connections: pack.connections, devices: pack.devices, points: pack.points, activeConnectionId: pack.activeConnectionId, activeDeviceId: pack.activeDeviceId, pollingByConnection: pack.pollingByConnection, visualization: pack.visualization }
   const applied = applyPatch(baseForPatch, patch)
   if (!applied.ok) return { ok: false, error: 'patch 应用预检失败: ' + applied.error }
   const summary = computeDraftSummary(pack, normalizeModbus({ ...pack, ...applied.result, version: 3 }), patch)
@@ -1015,7 +1015,7 @@ export const applyConfigDraft = (home, cwd, draftId, opts = {}) => {
   // also check that connections referenced in patch still exist? patch path itself will fail on apply if missing, which we map to drift below
 
   // 3) object existence & patch apply
-  const baseForPatch = { connections: pack.connections, devices: pack.devices, points: pack.points, activeConnectionId: pack.activeConnectionId, activeDeviceId: pack.activeDeviceId, pollingByConnection: pack.pollingByConnection }
+  const baseForPatch = { connections: pack.connections, devices: pack.devices, points: pack.points, activeConnectionId: pack.activeConnectionId, activeDeviceId: pack.activeDeviceId, pollingByConnection: pack.pollingByConnection, visualization: pack.visualization }
   const applied = applyPatch(baseForPatch, draft.patch)
   if (!applied.ok) {
     return { ok: false, error: 'patch 应用失败（对象可能已删除）：' + applied.error, errorCode: 'CONFIG_DRIFT' }
@@ -1043,6 +1043,7 @@ export const applyConfigDraft = (home, cwd, draftId, opts = {}) => {
       activeConnectionId: targetPack.activeConnectionId,
       activeDeviceId: targetPack.activeDeviceId,
       pollingByConnection: targetPack.pollingByConnection,
+      visualization: targetPack.visualization,
       version: 3,
     },
     _replaceConfigDrafts: nextDrafts,

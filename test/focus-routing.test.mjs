@@ -90,3 +90,11 @@ test('no activeCwd / no request / foreground=false never route', () => {
   assert.equal(shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: {}, previousRouteKey: '' }).route, false)
   assert.equal(shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: focus({ foreground: false }), previousRouteKey: '' }).route, false)
 })
+test('P4/0.20.0: visualizationId routes to the charts tab (trend bucket)', () => {
+  const fs = { request: { visualizationId: 'viz_1', kind: 'visualization' }, badgeOnly: false }
+  const d1 = shouldRouteFocus({ activeCwd: 'A', changedCwd: 'A', focus: fs, previousRouteKey: '' })
+  assert.equal(d1.route, true)
+  assert.equal(d1.tab, 'trend', 'visualization 路由到 charts tab')
+  const d2 = shouldRouteFocus({ activeCwd: 'A', changedCwd: 'A', focus: fs, previousRouteKey: d1.routeKey })
+  assert.equal(d2.route, false, '同一 visualizationId 去重')
+})

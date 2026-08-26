@@ -4,7 +4,7 @@
 import jsonpatch from 'fast-json-patch'
 
 const ALLOWED_OPS = new Set(['add', 'remove', 'replace'])
-const ALLOWED_TOP = new Set(['/connections', '/devices', '/points', '/activeConnectionId', '/activeDeviceId'])
+const ALLOWED_TOP = new Set(['/connections', '/devices', '/points', '/activeConnectionId', '/activeDeviceId', '/visualization', '/pollingByConnection'])
 const DANGEROUS_TOKENS = new Set(['__proto__', 'prototype', 'constructor'])
 
 function isDangerousToken(tok) {

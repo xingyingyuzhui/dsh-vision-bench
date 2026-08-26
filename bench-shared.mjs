@@ -739,6 +739,7 @@ export function shouldRouteFocus({ activeCwd, changedCwd, focus, previousRouteKe
   // specific target ids win over the generic connection/point bucket
   const kind = (fs.kind || req.kind || '')
     || (req.frameId ? 'frame' : '')
+    || (req.visualizationId ? 'visualization' : '')
     || (req.trendKey ? 'trend' : '')
     || (req.alarmId ? 'alarm' : '')
     || (req.pointId || req.connectionId || req.deviceId ? 'point' : '')
@@ -753,11 +754,12 @@ export function shouldRouteFocus({ activeCwd, changedCwd, focus, previousRouteKe
     String(req.pointId || ''),
     String(req.frameId || ''),
     String(req.trendKey || ''),
+    String(req.visualizationId || ''),
     String(req.alarmId || ''),
   ].join('|')
   if (previousRouteKey && previousRouteKey === routeKey) return { route: false, routeKey, tab: '' }
   let tab = ''
-  if (kind === 'trend') tab = 'trend'
+  if (kind === 'trend' || kind === 'visualization') tab = 'trend'
   else if (kind === 'alarm') tab = 'alarm'
   else if (kind === 'frame') tab = 'frames'
   else tab = 'table'

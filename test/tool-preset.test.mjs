@@ -577,3 +577,77 @@ test('seedVisionBenchPreset fails closed on invalid ownership marker', async () 
     assert.equal(await readFile(join(dir, '.dsh-vision-bench'), 'utf8'), marker, 'invalid marker untouched')
   } finally { await rm(home, { recursive: true, force: true }) }
 })
+
+test('P4/0.20.0: visualization action list/get + proposeAdd draft + apply adds component', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { mkdirSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const home = await mkdtemp(join(tmpdir(), 'viz-tool-'))
+  const cwd = join(home, 'board')
+  mkdirSync(cwd)
+  saveWorkspace(home, cwd, {
+    modbus: {
+      version: 3,
+      connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } }],
+      devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
+      points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, monitorEnabled: true, alarmEnabled: true }],
+      values: [{ key: 'p1', pointId: 'p1', value: 23.5, ok: true, at: Date.now() }],
+      alarmState: {},
+    },
+  })
+  let res = await runVisionBench(home, { action: 'visualization', op: 'list' }, cwd, { source: 'agent', sessionId: 's1' })
+  assert.equal(res.ok, true)
+  assert.ok(Array.isArray(res.components) && res.components.length === 0)
+
+  // proposeAdd → 生成草稿，直接查询看不到组件
+  res = await runVisionBench(home, { action: 'visualization', op: 'proposeAdd', component: { name: '送风趋势', type: 'line', pointIds: ['p1'] } }, cwd, { source: 'agent', sessionId: 's1' })
+  assert.equal(res.ok, true)
+  assert.ok(res.draft && res.draft.id, '生成草稿')
+  let pack = loadWorkspace(home, cwd).modbus
+  assert.equal((pack.visualization && pack.visualization.components || []).length, 0, '草稿未直接应用')
+  // 应用草稿 → 组件出现且 configVersion 递增
+  const cvBefore = pack.configVersion
+  const { applyConfigDraft } = await import('../bench-store.mjs')
+  const applied = applyConfigDraft(home, cwd, res.draft.id, { source: 'user', sessionId: '' })
+  assert.equal(applied.ok, true, '应用草稿: ' + applied.error)
+  pack = loadWorkspace(home, cwd).modbus
+  assert.equal(pack.visualization.components.length, 1)
+  assert.equal(pack.visualization.components[0].name, '送风趋势')
+  assert.ok(pack.configVersion > cvBefore, '组件修改递增 configVersion')
+
+  // get → 组件 + 关联点位当前值
+  res = await runVisionBench(home, { action: 'visualization', op: 'get', visualizationId: pack.visualization.components[0].id }, cwd, { source: 'agent', sessionId: 's1' })
+  assert.equal(res.ok, true)
+  assert.equal(res.component.pointIds[0], 'p1')
+  assert.equal(res.values[0].value, 23.5)
+
+  // proposeRemove → 草稿（仅生成，不直接删除）
+  res = await runVisionBench(home, { action: 'visualization', op: 'proposeRemove', visualizationId: pack.visualization.components[0].id }, cwd, { source: 'agent', sessionId: 's1' })
+  assert.equal(res.ok, true)
+  assert.equal(loadWorkspace(home, cwd).modbus.visualization.components.length, 1, '待审批未删除')
+  await rm(home, { recursive: true, force: true })
+})
+
+test('P4/0.20.0: 非监视点位不可入库（proposeAdd 被校验拒绝）', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { mkdirSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const home = await mkdtemp(join(tmpdir(), 'viz-tool2-'))
+  const cwd = join(home, 'board')
+  mkdirSync(cwd)
+  saveWorkspace(home, cwd, {
+    modbus: {
+      version: 3,
+      connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } }],
+      devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
+      points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '未监视', function: 3, address: 0, monitorEnabled: false }],
+      values: [], alarmState: {},
+    },
+  })
+  const res = await runVisionBench(home, { action: 'visualization', op: 'proposeAdd', component: { name: 'x', type: 'value', pointIds: ['p1'] } }, cwd, { source: 'agent', sessionId: 's1' })
+  assert.equal(res.ok, false)
+  assert.equal(res.errorCode, 'VIZ_INVALID')
+  await rm(home, { recursive: true, force: true })
+})

@@ -922,6 +922,7 @@ const CSS = [
   'body[' + ATTR + '] .dvb-vision-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
   'body[' + ATTR + '] .dvb-vision-meta{display:flex;gap:10px;align-items:center}',
   'body[' + ATTR + '] .dvb-focus-toast{position:fixed;right:14px;bottom:14px;z-index:60;display:flex;gap:8px;align-items:center;max-width:420px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.4));border-radius:8px;background:var(--dsw-alias-bg-layer-1,#1e1e1e);box-shadow:0 4px 16px rgba(0,0,0,.2);font-size:12px}',
+  'body[' + ATTR + '] .dvb-viz-card.dvb-viz-focused{outline:2px solid #4f8ef7;outline-offset:-2px}',
   'body[' + ATTR + '] .dvb-point-table th,.dvb-point-table td{white-space:nowrap}',
   'body[' + ATTR + '] .dvb-point-table .dvb-input{min-width:56px;padding:1px 4px;font-size:11px}',
   'body[' + ATTR + '] .dvb-point-table .dvb-input-mono{width:72px}',
@@ -2961,6 +2962,10 @@ function createVisualizationPage(React, t, post, hooks) {
     const [deleteId, setDeleteId] = React.useState('')
     const [copied, setCopied] = React.useState('')
     const [note, setNote] = React.useState('')
+    const [focusVizId, setFocusVizId] = React.useState('')
+    React.useEffect(() => subscribeFocus('', (fs) => {
+      try { setFocusVizId((fs && fs.request && fs.request.visualizationId) || '') } catch {}
+    }), [])
     const [, setTick] = React.useState(0)
     const uplotRefs = React.useRef({})
     const switchDraft = React.useRef(null)
@@ -3126,7 +3131,7 @@ function createVisualizationPage(React, t, post, hooks) {
       const byId = new Map(points.map((p) => [p.id, p]))
       const latest = componentLatestValues(values, points, comp.pointIds)
       const degraded = status !== 'ok'
-      return el('div', { key: comp.id, className: 'dvb-panel dvb-viz-card' + (degraded ? ' dvb-viz-degraded' : '') + (deleteId === comp.id ? ' dvb-viz-confirm' : '') },
+      return el('div', { key: comp.id, className: 'dvb-panel dvb-viz-card' + (degraded ? ' dvb-viz-degraded' : '') + (deleteId === comp.id ? ' dvb-viz-confirm' : '') + (focusVizId === comp.id ? ' dvb-viz-focused' : '') },
         el('div', { className: 'dvb-viz-head' },
           el('span', { className: 'dvb-viz-title' }, comp.name),
           el('span', { className: 'dvb-tag' }, vizTypeLabel(comp.type)),
@@ -3988,6 +3993,7 @@ function shouldRouteFocus({ activeCwd, changedCwd, focus, previousRouteKey }) {
   // specific target ids win over the generic connection/point bucket
   const kind = (fs.kind || req.kind || '')
     || (req.frameId ? 'frame' : '')
+    || (req.visualizationId ? 'visualization' : '')
     || (req.trendKey ? 'trend' : '')
     || (req.alarmId ? 'alarm' : '')
     || (req.pointId || req.connectionId || req.deviceId ? 'point' : '')
@@ -4002,11 +4008,12 @@ function shouldRouteFocus({ activeCwd, changedCwd, focus, previousRouteKey }) {
     String(req.pointId || ''),
     String(req.frameId || ''),
     String(req.trendKey || ''),
+    String(req.visualizationId || ''),
     String(req.alarmId || ''),
   ].join('|')
   if (previousRouteKey && previousRouteKey === routeKey) return { route: false, routeKey, tab: '' }
   let tab = ''
-  if (kind === 'trend') tab = 'trend'
+  if (kind === 'trend' || kind === 'visualization') tab = 'trend'
   else if (kind === 'alarm') tab = 'alarm'
   else if (kind === 'frame') tab = 'frames'
   else tab = 'table'

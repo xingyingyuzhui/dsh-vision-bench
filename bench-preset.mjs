@@ -41,6 +41,9 @@ export const VISION_GUIDANCE = [
   '- WRITE_OUTCOME_UNKNOWN means the write may have executed; do not retry. Read the address first and wait for the user to re-approve.',
   '- TCP frames are protocol-normalized, not raw MBAP.',
   '- Use an existing HMI serial connection. If it is disconnected, call connect first. Never open a second serial port just to view frames; TX/RX from user, polling and Agent I/O already appear on the frames page.',
+  '- Points have two independent switches: monitorEnabled (visualization data source; enable it then associate the point in a visualization component) and alarmEnabled (threshold alarms). Never conflate them.',
+  '- Visualization components are read via action=visualization (list/get). Creating, editing or removing a component MUST go through proposeAdd/proposeUpdate/proposeRemove — they produce a config draft for the user to approve. Never mutate visualization config directly.',
+  '- Switch component writes are high-impact: they still require user confirmation and readback, exactly like point writes.',
 ].join('\n')
 
 const LEGACY_VISION_PERSONAS = [
