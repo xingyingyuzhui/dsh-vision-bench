@@ -188,6 +188,7 @@ const parts = [
   'bench-points.mjs',
   'bench-alarm.mjs',
   'bench-devices.mjs',
+  'bench-visualization-model.mjs',
   'bench-shared.mjs',
   'bench-io-capability.mjs',
   'bench-trend.mjs',

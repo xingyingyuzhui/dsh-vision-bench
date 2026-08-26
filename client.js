@@ -1128,8 +1128,17 @@ const normalizePoint = (input) => {
     unit: text(input && input.unit, '').slice(0, 12),
     alarmMin: finiteOrNull(input && input.alarmMin),
     alarmMax: finiteOrNull(input && input.alarmMax),
-    // Task3/0.19.3: CSV 往返保留 trendEnabled 列
-    trendEnabled: (input && input.trendEnabled) === true || String(input && input.trendEnabled).toLowerCase() === 'true' || String(input && input.trendEnabled) === '1',
+    // TaskP0/0.20.0: 监视/告警为独立点位属性；旧 trendEnabled 输入迁移为 monitorEnabled
+    monitorEnabled: (input && input.monitorEnabled !== undefined)
+      ? input.monitorEnabled === true
+      : ((input && input.trendEnabled) === true || String(input && input.trendEnabled).toLowerCase() === 'true' || String(input && input.trendEnabled) === '1'),
+    alarmEnabled: (input && input.alarmEnabled !== undefined)
+      ? input.alarmEnabled === true
+      : (finiteOrNull(input && input.alarmMin) != null || finiteOrNull(input && input.alarmMax) != null),
+    // 只读兼容别名：新写入只使用 monitorEnabled
+    trendEnabled: (input && input.monitorEnabled !== undefined)
+      ? input.monitorEnabled === true
+      : ((input && input.trendEnabled) === true || String(input && input.trendEnabled).toLowerCase() === 'true' || String(input && input.trendEnabled) === '1'),
   }
 }
 
@@ -1253,6 +1262,21 @@ const fillSimValues = (values, points, at = Date.now()) => {
 
 // ── decode / alarms ──────────────────────────────────────────────────────
 
+// TaskP1/0.20.0: 工程值 → 寄存器原始值。raw = (engineering - offset) / scale。
+// scale 为 0 拒绝；结果必须为合法整数（区间 0–65535），不得静默四舍五入。
+const encodeValue = (point, engineeringValue) => {
+  const scale = Number(point && point.scale)
+  if (!Number.isFinite(scale) || scale === 0) return { ok: false, error: 'scale 不能为 0' }
+  const offset = Number(point && point.offset) || 0
+  const n = Number(engineeringValue)
+  if (!Number.isFinite(n)) return { ok: false, error: '请输入数值' }
+  const raw = (n - offset) / scale
+  const rounded = Math.round(raw)
+  if (Math.abs(raw - rounded) > 1e-9) return { ok: false, error: '工程值与倍率换算后不是整数寄存器值: ' + raw }
+  if (rounded < 0 || rounded > 65535) return { ok: false, error: '超出寄存器范围 0–65535: ' + rounded }
+  return { ok: true, raw: rounded }
+}
+
 const decodeValue = (point, raw) => {
   if (raw === null || raw === undefined || raw === '') return raw
   if (typeof raw === 'boolean') return raw
@@ -1263,10 +1287,13 @@ const decodeValue = (point, raw) => {
   return n * (Number.isFinite(scale) ? scale : 1) + (Number.isFinite(offset) ? offset : 0)
 }
 
-const evaluateAlarm = (point, raw) => {
+const evaluateAlarm = (point, value) => {
   const p = point || {}
+  // TaskP0/0.20.0: 告警开关独立于上下限；未启用或未配置阈值 → 不判
+  if (p.alarmEnabled === false) return ''
   if (p.alarmMin === null && p.alarmMax === null) return ''
-  const n = typeof raw === 'number' ? raw : Number(raw)
+  // 入参为工程值（调用方先 decodeValue）；阈值比较统一使用工程值
+  const n = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(n)) return ''
   if (p.alarmMax !== null && n > p.alarmMax) return 'max'
   if (p.alarmMin !== null && n < p.alarmMin) return 'min'
@@ -1305,7 +1332,7 @@ const alarmLabelText = (item, kind) => {
 
 // ── CSV round-trip (per-point columns) ───────────────────────────────────
 
-const CSV_HEADER = ['name', 'function', 'address', 'scale', 'offset', 'unit', 'alarmMin', 'alarmMax', 'trendEnabled']
+const CSV_HEADER = ['name', 'function', 'address', 'scale', 'offset', 'unit', 'monitorEnabled', 'alarmEnabled', 'alarmMin', 'alarmMax']
 
 const csvCell = (value) => {
   const s = value === null || value === undefined ? '' : String(value)
@@ -1345,9 +1372,10 @@ const pointsToCsv = (points) =>
       item.scale,
       item.offset,
       item.unit,
+      item.monitorEnabled === true ? 'true' : '',
+      item.alarmEnabled === true ? 'true' : '',
       item.alarmMin,
       item.alarmMax,
-      item.trendEnabled ? 'true' : '',
     ].map(csvCell).join(',')))
     .join('\n') + '\n'
 
@@ -1357,6 +1385,9 @@ const csvToPoints = (input) => {
   const header = csvSplit(lines[0]).map((cell) => cell.trim().toLowerCase())
   const idx = {}
   CSV_HEADER.forEach((key) => { idx[key] = header.indexOf(key.toLowerCase()) })
+  // TaskP0/0.20.0: 旧 trendEnabled 列作为 monitorEnabled 兼容别名
+  if (idx.monitorEnabled < 0) idx.monitorEnabled = header.indexOf('trendenabled')
+  if (idx.trendEnabled < 0) idx.trendEnabled = header.indexOf('trendenabled')
   if (idx.function < 0 || idx.address < 0) {
     return { ok: false, error: 'CSV 缺少 function 或 address 列' }
   }
@@ -1374,7 +1405,8 @@ const csvToPoints = (input) => {
       unit: pick('unit'),
       alarmMin: pick('alarmMin') === '' ? null : Number(pick('alarmMin')),
       alarmMax: pick('alarmMax') === '' ? null : Number(pick('alarmMax')),
-      trendEnabled: pick('trendEnabled') === 'true' || pick('trendEnabled') === '1',
+      monitorEnabled: (pick('monitorEnabled') === 'true' || pick('monitorEnabled') === '1' || pick('trendEnabled') === 'true' || pick('trendEnabled') === '1'),
+      alarmEnabled: (pick('alarmEnabled') === 'true' || pick('alarmEnabled') === '1'),
     })
   }
   const normalized = normalizePoints(points)
@@ -2091,8 +2123,14 @@ const normalizePointV3 = (input) => {
     unit,
     alarmMin: finiteOrNull(raw.alarmMin),
     alarmMax: finiteOrNull(raw.alarmMax),
-    // Task3/0.19.3: 点位级入曲线开关 — 只有勾选的点位进入曲线缓存
-    trendEnabled: raw.trendEnabled === true,
+    // TaskP0/0.20.0: 监视/告警独立；旧 trendEnabled → monitorEnabled 迁移
+    monitorEnabled: (raw.monitorEnabled !== undefined)
+      ? raw.monitorEnabled === true
+      : (raw.trendEnabled === true),
+    alarmEnabled: (raw.alarmEnabled !== undefined)
+      ? raw.alarmEnabled === true
+      : (raw.alarmMin != null || raw.alarmMax != null),
+    trendEnabled: (raw.monitorEnabled !== undefined) ? raw.monitorEnabled === true : (raw.trendEnabled === true),
   }
 }
 
@@ -2487,6 +2525,10 @@ function normalizeModbus(input) {
     }
     let alarmState = normalizeAlarmState(src.alarmState && typeof src.alarmState === 'object' ? src.alarmState : (src.alarmActive && typeof src.alarmActive === 'object' ? src.alarmActive : {}), { pointsById: Object.fromEntries((points||[]).map(p=>[p.id,p])) })
     const trend = normalizeTrendByPoint(src.trend)
+    // TaskP0/0.20.0: 可视化组件（缺失/失效引用只做诊断，不清除用户配置）
+    const visualization = src.visualization && typeof src.visualization === 'object'
+      ? normalizeVisualization(src.visualization, points)
+      : emptyVisualization()
     // active ids
     let activeConnectionId = devText(src.activeConnectionId, '')
     if (!connections.some(c=>c.id===activeConnectionId)) activeConnectionId = connections[0]?.id || 'c1'
@@ -2510,6 +2552,7 @@ function normalizeModbus(input) {
       framesByConnection,
       alarmState,
       trend,
+      visualization,
     }
     // Legacy enumerable:false compat
     Object.defineProperties(ret, {
@@ -2693,6 +2736,161 @@ const patchActiveDevice = (modbus, patch) => {
   return { ...modbus, ...patch }
 }
 
+// TaskP0/0.20.0: 可视化组件纯模型 — 不依赖 React / 插槽 / HTTP。
+//
+// 组件持久化在 modbus.visualization 下：
+//   { schemaVersion: 1, components: [{ id, name, type, pointIds, order, settings }] }
+// 类型：line（1–8 个监视点位）/ bar（1–16）/ value（1）/ switch（1 个可写 FC01 点位）。
+// 组件引用使用稳定 pointId；点位关闭监视或被删除时组件保留并进入 degraded 状态。
+const VISUALIZATION_SCHEMA_VERSION = 1
+const MAX_COMPONENTS = 32
+const MAX_COMPONENT_NAME = 40
+const COMPONENT_TYPES = new Set(['line', 'bar', 'value', 'switch'])
+
+const COMPONENT_LIMITS = {
+  line: { min: 1, max: 8 },
+  bar: { min: 1, max: 16 },
+  value: { min: 1, max: 1 },
+  switch: { min: 1, max: 1 },
+}
+
+const vizGenId = (prefix) => prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+
+const vizIds = (value) => {
+  if (!Array.isArray(value)) return []
+  const seen = new Set()
+  const out = []
+  for (const v of value) {
+    const id = String(v || '').trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    out.push(id)
+    if (out.length >= 32) break
+  }
+  return out
+}
+
+const emptyVisualization = () => ({ schemaVersion: VISUALIZATION_SCHEMA_VERSION, components: [] })
+
+const vizClampInt = (v, fallback, min, max) => {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return fallback
+  const i = Math.trunc(n)
+  if (i < min) return min
+  if (i > max) return max
+  return i
+}
+
+const normalizeVisualizationComponent = (input) => {
+  const raw = input && typeof input === 'object' ? input : {}
+  const type = COMPONENT_TYPES.has(raw.type) ? raw.type : 'line'
+  const id = String(raw.id || '').trim() || vizGenId('viz_')
+  const name = String(raw.name || '').trim().slice(0, MAX_COMPONENT_NAME) || '未命名组件'
+  const settings = (raw.settings && typeof raw.settings === 'object') ? raw.settings : {}
+  const windowMs = vizClampInt(settings.windowMs, 300000, 10000, 3600000)
+  return {
+    id,
+    name,
+    type,
+    pointIds: vizIds(raw.pointIds),
+    order: vizClampInt(raw.order, 0, 0, 1024),
+    settings: {
+      windowMs,
+      confirmWrite: settings.confirmWrite !== false,
+    },
+  }
+}
+
+const normalizeVisualization = (input, points) => {
+  const src = input && typeof input === 'object' ? input : {}
+  const components = Array.isArray(src.components) ? src.components : []
+  const seen = new Set()
+  const out = []
+  for (const raw of components) {
+    const c = normalizeVisualizationComponent(raw)
+    if (seen.has(c.id)) continue
+    seen.add(c.id)
+    out.push(c)
+    if (out.length >= MAX_COMPONENTS) break
+  }
+  void points
+  return { schemaVersion: VISUALIZATION_SCHEMA_VERSION, components: out }
+}
+
+// 校验：类型数量限制、switch 只接受可写 FC01 监视点位、只关联已监视点位。
+const validateVisualizationComponent = (component, points) => {
+  const c = component || {}
+  const type = c.type || 'line'
+  const limit = COMPONENT_LIMITS[type] || COMPONENT_LIMITS.line
+  const ids = vizIds(c.pointIds)
+  if (!ids.length) return { ok: false, error: '请至少关联一个已监视点位' }
+  if (ids.length < limit.min || ids.length > limit.max) {
+    return { ok: false, error: '组件类型 ' + type + ' 需要 ' + limit.min + '–' + limit.max + ' 个点位，当前 ' + ids.length }
+  }
+  const byId = new Map((Array.isArray(points) ? points : []).map((p) => [p.id, p]))
+  const notMonitored = []
+  const notWritable = []
+  for (const pid of ids) {
+    const pt = byId.get(pid)
+    if (!pt) { notMonitored.push(pid); continue }
+    if (pt.monitorEnabled !== true) notMonitored.push(pid)
+    if (type === 'switch' && pt.function !== 1) notWritable.push(pid)
+  }
+  if (notMonitored.length) return { ok: false, error: '以下点位未开启监视: ' + notMonitored.join(', ') }
+  if (notWritable.length) return { ok: false, error: '开关组件只接受 FC01 可写线圈点位: ' + notWritable.join(', ') }
+  return { ok: true }
+}
+
+// 组件运行状态：ok / degraded（缺失点位或点位关闭监视）/ limited
+const visualizationComponentStatus = (component, points) => {
+  const c = component || {}
+  const byId = new Map((Array.isArray(points) ? points : []).map((p) => [p.id, p]))
+  const ids = vizIds(c.pointIds)
+  if (!ids.length) return 'degraded'
+  const dead = ids.filter((pid) => {
+    const pt = byId.get(pid)
+    return !pt || pt.monitorEnabled !== true
+  })
+  if (dead.length) return 'degraded'
+  const missing = ids.filter((pid) => !byId.get(pid))
+  if (missing.length) return 'degraded'
+  return 'ok'
+}
+
+// 组件编辑器的可选数据源：只列 monitorEnabled 点位，限定路径 连接/设备/点位。
+const monitoredPointOptions = (pack) => {
+  const conns = new Map((pack && pack.connections || []).map((c) => [c.id, c]))
+  const devs = new Map((pack && pack.devices || []).map((d) => [d.id, d]))
+  const values = new Map((pack && pack.values || []).map((v) => [v.key || v.pointId, v]))
+  const out = []
+  for (const p of pack && pack.points || []) {
+    if (p.monitorEnabled !== true) continue
+    const conn = conns.get(p.connectionId)
+    const dev = devs.get(p.deviceId)
+    const rec = values.get(p.id)
+    out.push({
+      pointId: p.id,
+      name: p.name || (String(p.id)),
+      connectionId: p.connectionId,
+      deviceId: p.deviceId,
+      path: (conn && conn.name || p.connectionId) + ' / ' + (dev && dev.name || p.deviceId) + ' / ' + (p.name || p.address),
+      function: p.function,
+      address: p.address,
+      unit: p.unit || '',
+      value: rec ? rec.value : null,
+      ok: rec ? rec.ok !== false : false,
+    })
+  }
+  return out
+}
+
+const componentUsesPoint = (component, pointId) =>
+  !!(component && Array.isArray(component.pointIds) && component.pointIds.includes(pointId))
+
+const findComponent = (visualization, id) => {
+  const viz = visualization && typeof visualization === 'object' ? visualization : {}
+  return (Array.isArray(viz.components) ? viz.components : []).find((c) => c && c.id === id) || null
+}
 // Shared client widgets and helpers for every conversation view.
 // Everything here is explicitly imported by its consumers — no hidden
 // strip-concat scope sharing.

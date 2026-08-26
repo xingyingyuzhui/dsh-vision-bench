@@ -265,6 +265,8 @@ const stringifyConfigSlice = (modbus) => {
       connections: pack.connections || [],
       devices: pack.devices || [],
       points: pack.points || [],
+      // TaskP0/0.20.0: 组件配置属于配置版本一部分
+      visualization: pack.visualization || null,
     }
     return JSON.stringify(slice)
   } catch { return '' }
@@ -301,7 +303,21 @@ const computeDraftSummary = (basePack, targetPack, patch) => {
   } catch { /* ignore */ }
   const comConflicts = validateConnections(targetPack.connections, targetPack.devices).filter((m) => /COM|监听地址/.test(m))
   const unitIdConflicts = validateDevices(targetPack.devices, targetPack.connections)
-  return { added, removed, modified, comConflicts: comConflicts.slice(0, 10), unitIdConflicts: unitIdConflicts.slice(0, 10), affectedPoints, details }
+  // TaskP0/0.20.0: 可视化组件草稿统计
+  let vizAdded = 0, vizRemoved = 0, vizModified = 0
+  try {
+    const baseViz = (basePack.visualization && basePack.visualization.components) || []
+    const targetViz = (targetPack.visualization && targetPack.visualization.components) || []
+    const baseById = new Map(baseViz.map((c) => [c.id, JSON.stringify(c)]))
+    const targetById = new Map(targetViz.map((c) => [c.id, JSON.stringify(c)]))
+    for (const [id, json] of targetById) {
+      const b = baseById.get(id)
+      if (b === undefined) vizAdded += 1
+      else if (b !== json) vizModified += 1
+    }
+    for (const id of baseById.keys()) if (!targetById.has(id)) vizRemoved += 1
+  } catch { /* 统计尽力而为 */ }
+  return { added, removed, modified, comConflicts: comConflicts.slice(0, 10), unitIdConflicts: unitIdConflicts.slice(0, 10), affectedPoints, vizAdded, vizRemoved, vizModified, details }
 }
 
 export const emptyWorkspace = () => ({
@@ -383,6 +399,7 @@ const isV3Patch = (incoming) => {
     || incoming.activeConnectionId !== undefined
     || incoming.activeDeviceId !== undefined
     || incoming.alarmState !== undefined
+    || incoming.visualization !== undefined
 }
 
 const isV2Partial = (incoming, looksLegacy) => {
@@ -418,6 +435,8 @@ export const saveWorkspace = (home, cwd, input) => {
     }
     // Task3/0.19.3: 曲线采样存储（提交阶段写入）
     if (incoming.trend !== undefined) mergedModbus.trend = incoming.trend
+    // TaskP0/0.20.0: 可视化组件（由 normalizeWorkspace 统一规范化）
+    if (incoming.visualization !== undefined) mergedModbus.visualization = incoming.visualization
     // Task1/0.18.2: explicit WHOLE-replacement semantics — merge cannot express
     // deletion. normalizeFramesByConnection pre-seeds every connection id, which
     // would resurrect cleared keys as empty arrays; normalize only provided keys.

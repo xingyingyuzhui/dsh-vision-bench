@@ -77,7 +77,8 @@
     "README.md",
     "LICENSE",
     "bench-polling-service.mjs",
-    "bench-trend-store.mjs"
+    "bench-trend-store.mjs",
+    "bench-visualization-model.mjs"
   ],
   "repository": {
     "type": "git",

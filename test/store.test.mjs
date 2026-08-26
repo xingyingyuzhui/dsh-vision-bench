@@ -75,3 +75,54 @@ test('saveBindings writes absolute paths under the home store', async () => {
     await rm(home, { recursive: true, force: true })
   }
 })
+
+test('P0/0.20.0: visualization round-trip, configVersion bump, old workspace migration', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { mkdirSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const home = await mkdtemp(join(tmpdir(), 'store-viz-'))
+  const cwd = join(home, 'board')
+  mkdirSync(cwd)
+  // 旧工作区：trendEnabled 点位 + 无 visualization
+  saveWorkspace(home, cwd, {
+    modbus: {
+      version: 3,
+      connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } }],
+      devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
+      points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '旧', function: 3, address: 0, trendEnabled: true, alarmMin: 10 }],
+      values: [], alarmState: {},
+    },
+  })
+  const w1 = loadWorkspace(home, cwd)
+  assert.equal(w1.modbus.points[0].monitorEnabled, true, '旧 trendEnabled → monitorEnabled')
+  assert.equal(w1.modbus.points[0].alarmEnabled, true, '旧阈值 → alarmEnabled')
+  assert.deepEqual(w1.modbus.visualization, { schemaVersion: 1, components: [] }, '无 visualization 默认空')
+
+  // 保存组件 → configVersion 递增
+  const cv1 = w1.modbus.configVersion
+  const saved = saveWorkspace(home, cwd, {
+    modbus: {
+      visualization: { schemaVersion: 1, components: [{ id: 'viz_1', name: '趋势', type: 'line', pointIds: ['p1'] }] },
+      version: 3,
+    },
+  })
+  assert.equal(saved.ok, true)
+  const w2 = loadWorkspace(home, cwd)
+  assert.equal(w2.modbus.visualization.components.length, 1)
+  assert.equal(w2.modbus.visualization.components[0].name, '趋势')
+  assert.ok(w2.modbus.configVersion > cv1, '组件修改递增 configVersion: ' + cv1 + ' -> ' + w2.modbus.configVersion)
+
+  // 组件编辑再次递增
+  const cv2 = w2.modbus.configVersion
+  saveWorkspace(home, cwd, {
+    modbus: {
+      visualization: { schemaVersion: 1, components: [{ id: 'viz_1', name: '趋势2', type: 'line', pointIds: ['p1'], settings: { windowMs: 120000 } }] },
+      version: 3,
+    },
+  })
+  const w3 = loadWorkspace(home, cwd)
+  assert.ok(w3.modbus.configVersion > cv2, '组件编辑再次递增 configVersion')
+  assert.equal(w3.modbus.visualization.components[0].name, '趋势2')
+  await rm(home, { recursive: true, force: true })
+})

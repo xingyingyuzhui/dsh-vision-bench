@@ -102,9 +102,9 @@ test('evaluateAlarm and evaluatePointAlarms detect breaches with hysteresis', ()
   assert.deepEqual(clear.next, {})
 })
 
-test('CSV round-trip preserves per-point metadata', () => {
+test('CSV round-trip preserves per-point metadata (monitorEnabled/alarmEnabled)', () => {
   const points = [
-    { name: '温度', function: 3, address: 0, scale: 0.1, offset: -40, unit: '℃', alarmMin: -10, alarmMax: 85 },
+    { name: '温度', function: 3, address: 0, scale: 0.1, offset: -40, unit: '℃', monitorEnabled: true, alarmEnabled: true, alarmMin: -10, alarmMax: 85 },
     { name: '开关', function: 1, address: 9 },
   ]
   const back = csvToPoints(pointsToCsv(points))
@@ -113,7 +113,19 @@ test('CSV round-trip preserves per-point metadata', () => {
   assert.equal(back.points[0].scale, 0.1)
   assert.equal(back.points[0].unit, '℃')
   assert.equal(back.points[0].alarmMax, 85)
+  assert.equal(back.points[0].monitorEnabled, true)
+  assert.equal(back.points[0].alarmEnabled, true)
+  assert.equal(back.points[1].monitorEnabled, false)
+  assert.equal(back.points[1].alarmEnabled, false)
   assert.equal(back.points[1].alarmMax, null)
+  // 旧 trendEnabled 列导入兼容
+  const legacy = csvToPoints('name,function,address,trendEnabled\n旧点,3,5,true\n')
+  assert.equal(legacy.ok, true)
+  assert.equal(legacy.points[0].monitorEnabled, true, '旧列迁移为 monitorEnabled')
+  // 导出不再写旧列名
+  const exported = pointsToCsv(points)
+  assert.ok(!/trendEnabled/.test(exported), '导出使用新字段: ' + exported.split('\n')[0])
+  assert.ok(/monitorEnabled/.test(exported), '导出表头含 monitorEnabled')
   assert.equal(csvToPoints('a,b\n1,2').ok, false)
 })
 

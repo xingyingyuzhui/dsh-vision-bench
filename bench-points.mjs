@@ -68,8 +68,17 @@ export const normalizePoint = (input) => {
     unit: text(input && input.unit, '').slice(0, 12),
     alarmMin: finiteOrNull(input && input.alarmMin),
     alarmMax: finiteOrNull(input && input.alarmMax),
-    // Task3/0.19.3: CSV 往返保留 trendEnabled 列
-    trendEnabled: (input && input.trendEnabled) === true || String(input && input.trendEnabled).toLowerCase() === 'true' || String(input && input.trendEnabled) === '1',
+    // TaskP0/0.20.0: 监视/告警为独立点位属性；旧 trendEnabled 输入迁移为 monitorEnabled
+    monitorEnabled: (input && input.monitorEnabled !== undefined)
+      ? input.monitorEnabled === true
+      : ((input && input.trendEnabled) === true || String(input && input.trendEnabled).toLowerCase() === 'true' || String(input && input.trendEnabled) === '1'),
+    alarmEnabled: (input && input.alarmEnabled !== undefined)
+      ? input.alarmEnabled === true
+      : (finiteOrNull(input && input.alarmMin) != null || finiteOrNull(input && input.alarmMax) != null),
+    // 只读兼容别名：新写入只使用 monitorEnabled
+    trendEnabled: (input && input.monitorEnabled !== undefined)
+      ? input.monitorEnabled === true
+      : ((input && input.trendEnabled) === true || String(input && input.trendEnabled).toLowerCase() === 'true' || String(input && input.trendEnabled) === '1'),
   }
 }
 
@@ -193,6 +202,21 @@ export const fillSimValues = (values, points, at = Date.now()) => {
 
 // ── decode / alarms ──────────────────────────────────────────────────────
 
+// TaskP1/0.20.0: 工程值 → 寄存器原始值。raw = (engineering - offset) / scale。
+// scale 为 0 拒绝；结果必须为合法整数（区间 0–65535），不得静默四舍五入。
+export const encodeValue = (point, engineeringValue) => {
+  const scale = Number(point && point.scale)
+  if (!Number.isFinite(scale) || scale === 0) return { ok: false, error: 'scale 不能为 0' }
+  const offset = Number(point && point.offset) || 0
+  const n = Number(engineeringValue)
+  if (!Number.isFinite(n)) return { ok: false, error: '请输入数值' }
+  const raw = (n - offset) / scale
+  const rounded = Math.round(raw)
+  if (Math.abs(raw - rounded) > 1e-9) return { ok: false, error: '工程值与倍率换算后不是整数寄存器值: ' + raw }
+  if (rounded < 0 || rounded > 65535) return { ok: false, error: '超出寄存器范围 0–65535: ' + rounded }
+  return { ok: true, raw: rounded }
+}
+
 export const decodeValue = (point, raw) => {
   if (raw === null || raw === undefined || raw === '') return raw
   if (typeof raw === 'boolean') return raw
@@ -203,10 +227,13 @@ export const decodeValue = (point, raw) => {
   return n * (Number.isFinite(scale) ? scale : 1) + (Number.isFinite(offset) ? offset : 0)
 }
 
-export const evaluateAlarm = (point, raw) => {
+export const evaluateAlarm = (point, value) => {
   const p = point || {}
+  // TaskP0/0.20.0: 告警开关独立于上下限；未启用或未配置阈值 → 不判
+  if (p.alarmEnabled === false) return ''
   if (p.alarmMin === null && p.alarmMax === null) return ''
-  const n = typeof raw === 'number' ? raw : Number(raw)
+  // 入参为工程值（调用方先 decodeValue）；阈值比较统一使用工程值
+  const n = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(n)) return ''
   if (p.alarmMax !== null && n > p.alarmMax) return 'max'
   if (p.alarmMin !== null && n < p.alarmMin) return 'min'
@@ -245,7 +272,7 @@ export const alarmLabelText = (item, kind) => {
 
 // ── CSV round-trip (per-point columns) ───────────────────────────────────
 
-const CSV_HEADER = ['name', 'function', 'address', 'scale', 'offset', 'unit', 'alarmMin', 'alarmMax', 'trendEnabled']
+const CSV_HEADER = ['name', 'function', 'address', 'scale', 'offset', 'unit', 'monitorEnabled', 'alarmEnabled', 'alarmMin', 'alarmMax']
 
 const csvCell = (value) => {
   const s = value === null || value === undefined ? '' : String(value)
@@ -285,9 +312,10 @@ export const pointsToCsv = (points) =>
       item.scale,
       item.offset,
       item.unit,
+      item.monitorEnabled === true ? 'true' : '',
+      item.alarmEnabled === true ? 'true' : '',
       item.alarmMin,
       item.alarmMax,
-      item.trendEnabled ? 'true' : '',
     ].map(csvCell).join(',')))
     .join('\n') + '\n'
 
@@ -297,6 +325,9 @@ export const csvToPoints = (input) => {
   const header = csvSplit(lines[0]).map((cell) => cell.trim().toLowerCase())
   const idx = {}
   CSV_HEADER.forEach((key) => { idx[key] = header.indexOf(key.toLowerCase()) })
+  // TaskP0/0.20.0: 旧 trendEnabled 列作为 monitorEnabled 兼容别名
+  if (idx.monitorEnabled < 0) idx.monitorEnabled = header.indexOf('trendenabled')
+  if (idx.trendEnabled < 0) idx.trendEnabled = header.indexOf('trendenabled')
   if (idx.function < 0 || idx.address < 0) {
     return { ok: false, error: 'CSV 缺少 function 或 address 列' }
   }
@@ -314,7 +345,8 @@ export const csvToPoints = (input) => {
       unit: pick('unit'),
       alarmMin: pick('alarmMin') === '' ? null : Number(pick('alarmMin')),
       alarmMax: pick('alarmMax') === '' ? null : Number(pick('alarmMax')),
-      trendEnabled: pick('trendEnabled') === 'true' || pick('trendEnabled') === '1',
+      monitorEnabled: (pick('monitorEnabled') === 'true' || pick('monitorEnabled') === '1' || pick('trendEnabled') === 'true' || pick('trendEnabled') === '1'),
+      alarmEnabled: (pick('alarmEnabled') === 'true' || pick('alarmEnabled') === '1'),
     })
   }
   const normalized = normalizePoints(points)

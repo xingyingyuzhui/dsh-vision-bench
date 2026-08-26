@@ -3,6 +3,7 @@
 
 import { functionTag, normalizePoints, normalizeValueRec } from './bench-points.mjs'
 import { normalizeAlarmState } from './bench-alarm.mjs'
+import { emptyVisualization, normalizeVisualization } from './bench-visualization-model.mjs'
 const TREND_KEEP_LOCAL = 600
 const normalizeTrendByPoint = (input) => {
   if (!input || typeof input !== 'object') return {}
@@ -194,8 +195,14 @@ export const normalizePointV3 = (input) => {
     unit,
     alarmMin: finiteOrNull(raw.alarmMin),
     alarmMax: finiteOrNull(raw.alarmMax),
-    // Task3/0.19.3: 点位级入曲线开关 — 只有勾选的点位进入曲线缓存
-    trendEnabled: raw.trendEnabled === true,
+    // TaskP0/0.20.0: 监视/告警独立；旧 trendEnabled → monitorEnabled 迁移
+    monitorEnabled: (raw.monitorEnabled !== undefined)
+      ? raw.monitorEnabled === true
+      : (raw.trendEnabled === true),
+    alarmEnabled: (raw.alarmEnabled !== undefined)
+      ? raw.alarmEnabled === true
+      : (raw.alarmMin != null || raw.alarmMax != null),
+    trendEnabled: (raw.monitorEnabled !== undefined) ? raw.monitorEnabled === true : (raw.trendEnabled === true),
   }
 }
 
@@ -590,6 +597,10 @@ export function normalizeModbus(input) {
     }
     let alarmState = normalizeAlarmState(src.alarmState && typeof src.alarmState === 'object' ? src.alarmState : (src.alarmActive && typeof src.alarmActive === 'object' ? src.alarmActive : {}), { pointsById: Object.fromEntries((points||[]).map(p=>[p.id,p])) })
     const trend = normalizeTrendByPoint(src.trend)
+    // TaskP0/0.20.0: 可视化组件（缺失/失效引用只做诊断，不清除用户配置）
+    const visualization = src.visualization && typeof src.visualization === 'object'
+      ? normalizeVisualization(src.visualization, points)
+      : emptyVisualization()
     // active ids
     let activeConnectionId = devText(src.activeConnectionId, '')
     if (!connections.some(c=>c.id===activeConnectionId)) activeConnectionId = connections[0]?.id || 'c1'
@@ -613,6 +624,7 @@ export function normalizeModbus(input) {
       framesByConnection,
       alarmState,
       trend,
+      visualization,
     }
     // Legacy enumerable:false compat
     Object.defineProperties(ret, {

@@ -258,10 +258,16 @@ export const pointsOp = (home, cwd, body) => {
         const existing = points[idx]
         if (!inDid && !didArg) next.deviceId = existing.deviceId
         if (!inCid && !cidArg) next.connectionId = existing.connectionId
-        // 未声明的新字段保留原值（趋势开关/告警上下限），显式 null 才清除
-        if (raw.trendEnabled === undefined) next.trendEnabled = existing.trendEnabled === true
-        if (raw.alarmMin === undefined) next.alarmMin = existing.alarmMin != null ? existing.alarmMin : null
-        if (raw.alarmMax === undefined) next.alarmMax = existing.alarmMax != null ? existing.alarmMax : null
+        // 未声明的新字段保留原值（监视/告警开关与上下限），显式值才修改
+        if (raw.monitorEnabled === undefined && raw.trendEnabled === undefined) next.monitorEnabled = existing.monitorEnabled === true
+        if (raw.alarmEnabled === undefined && raw.alarmMin === undefined && raw.alarmMax === undefined) {
+          next.alarmEnabled = existing.alarmEnabled === true
+          next.alarmMin = existing.alarmMin != null ? existing.alarmMin : null
+          next.alarmMax = existing.alarmMax != null ? existing.alarmMax : null
+        } else {
+          if (raw.alarmMin === undefined) next.alarmMin = existing.alarmMin != null ? existing.alarmMin : null
+          if (raw.alarmMax === undefined) next.alarmMax = existing.alarmMax != null ? existing.alarmMax : null
+        }
         if (points.some((p, i) => i !== idx && p.connectionId === next.connectionId && p.deviceId === next.deviceId && p.function === next.function && p.address === next.address)) {
           return { ok: false, error: '地址冲突: ' + pointLabel(next) }
         }
