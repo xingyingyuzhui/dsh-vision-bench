@@ -8,6 +8,8 @@ import { normalizeConn, normalizeFramesByConnection, normalizeModbus, validateCo
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import { applyPatch, compare as patchCompare, validatePatch } from './bench-patch.mjs'
 import { resolveTarget } from './bench-targets.mjs'
+import { createWorkspaceRepository } from './src/infrastructure/persistence/workspace-repository.mjs'
+import { runExclusiveSync } from './src/infrastructure/persistence/workspace-lock.mjs'
 import {
   MAX_TASKS,
   capTasks,
@@ -391,8 +393,12 @@ export const normalizeWorkspace = (input) => {
 
 export const loadWorkspace = (home, cwd) => {
   try {
-    const raw = JSON.parse(readFileSync(workspacePath(home, cwd), 'utf8'))
-    return normalizeWorkspace(raw)
+    const repo = createWorkspaceRepository({
+      home,
+      keyOf: workspaceKey,
+      normalizeWorkspace,
+    })
+    return repo.load(cwd) || emptyWorkspace()
   } catch {
     return emptyWorkspace()
   }
@@ -639,8 +645,16 @@ export const saveWorkspace = (home, cwd, input) => {
     }
   } catch { /* ignore backup errors */ }
   mkdirSync(join(storeDir(home), 'workspaces'), { recursive: true })
-  writeFileSync(workspacePath(home, cwd), JSON.stringify(workspace, null, 2) + '\n')
-  return { ok: true, workspace, prev }
+  const key = workspaceKey(cwd)
+  return runExclusiveSync(key, () => {
+    const repo = createWorkspaceRepository({
+      home,
+      keyOf: workspaceKey,
+      normalizeWorkspace,
+    })
+    repo.replace(cwd, workspace)
+    return { ok: true, workspace, prev }
+  })
 }
 
 export const recordBenchEvent = (home, cwd, event, extra = {}) => {

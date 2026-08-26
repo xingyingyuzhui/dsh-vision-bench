@@ -129,7 +129,11 @@
     "src/application/modbus/focus-service.mjs",
     "src/application/modbus/evidence-service.mjs",
     "src/infrastructure/modbus/transport-adapter.mjs",
-    "src/infrastructure/modbus/io-broker-adapter.mjs"
+    "src/infrastructure/modbus/io-broker-adapter.mjs",
+    "src/infrastructure/persistence/atomic-json.mjs",
+    "src/infrastructure/persistence/workspace-lock.mjs",
+    "src/infrastructure/persistence/workspace-migration.mjs",
+    "src/infrastructure/persistence/workspace-repository.mjs"
   ],
   "repository": {
     "type": "git",
@@ -144,8 +148,8 @@
     "lint": "biome ci src docs/architecture",
     "typecheck": "tsc -p tsconfig.check.json",
     "deps:check": "depcruise --config dependency-cruiser.config.mjs src bench-*.mjs host.js runtime/io",
-    "test:unit": "node --test test/*.test.mjs",
-    "test:coverage": "c8 --reporter=text-summary --reporter=html node --test test/*.test.mjs",
+    "test:unit": "node --test \"test/**/*.test.mjs\"",
+    "test:coverage": "c8 --reporter=text-summary --reporter=html node --test \"test/**/*.test.mjs\"",
     "pack:check": "node scripts/check-package.mjs",
     "quality": "npm run build:check && npm run lint && npm run typecheck && npm run deps:check && npm run test:unit && npm run pack:check",
     "test": "npm run build:check && npm run test:unit",
@@ -166,6 +170,7 @@
     "modbus-serial": "8.0.25",
     "serialport": "13.0.0",
     "uplot": "1.6.32",
+    "write-file-atomic": "^5.0.1",
     "yaml": "2.9.0"
   },
   "devDependencies": {
