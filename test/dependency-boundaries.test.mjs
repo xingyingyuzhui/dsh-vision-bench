@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import test from 'node:test'
+import { execFileSync } from 'node:child_process'
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+test('bench-visualization-view must not import bench-live', () => {
+  const src = readFileSync(join(root, 'bench-visualization-view.mjs'), 'utf8')
+  assert.doesNotMatch(src, /from\s+['"]\.\/bench-live\.mjs['"]/)
+  assert.match(src, /from\s+['"]\.\/src\/ui\/common\/session-scope\.mjs['"]/)
+})
+
+test('bench-live and bench-map import sessionCwd from session-scope', () => {
+  const live = readFileSync(join(root, 'bench-live.mjs'), 'utf8')
+  const map = readFileSync(join(root, 'bench-map.mjs'), 'utf8')
+  assert.match(live, /from\s+['"]\.\/src\/ui\/common\/session-scope\.mjs['"]/)
+  assert.match(map, /from\s+['"]\.\/src\/ui\/common\/session-scope\.mjs['"]/)
+  assert.doesNotMatch(live, /export function sessionCwd/)
+})
+
+test('bench-shared is a re-export facade only', () => {
+  const src = readFileSync(join(root, 'bench-shared.mjs'), 'utf8')
+  assert.match(src, /Compatibility facade/)
+  assert.doesNotMatch(src, /export function subscribeState/)
+  assert.doesNotMatch(src, /export function buildAgentRef/)
+  assert.match(src, /src\/ui\/common\//)
+})
+
+test('internal runtime uses createVisualizationPage (not createTrendPage)', () => {
+  const runtime = readFileSync(join(root, 'bench-runtime.mjs'), 'utf8')
+  assert.match(runtime, /createVisualizationPage/)
+  assert.doesNotMatch(runtime, /createTrendPage/)
+})
+
+test('dependency-cruiser reports zero circular dependencies for UI graph', () => {
+  const out = execFileSync(
+    process.execPath,
+    [
+      join(root, 'node_modules/dependency-cruiser/bin/dependency-cruise.mjs'),
+      '--config',
+      'dependency-cruiser.config.mjs',
+      '--output-type',
+      'err',
+      'src/ui',
+      'bench-live.mjs',
+      'bench-visualization-view.mjs',
+      'bench-frames-view.mjs',
+      'bench-view.mjs',
+      'bench-hmi.mjs',
+      'bench-map.mjs',
+      'bench-shared.mjs',
+      'bench-runtime.mjs',
+    ],
+    { cwd: root, encoding: 'utf8' },
+  )
+  assert.doesNotMatch(out, /no-circular/)
+  assert.match(out, /no dependency violations|0 errors/)
+})

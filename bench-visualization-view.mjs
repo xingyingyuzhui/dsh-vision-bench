@@ -3,7 +3,7 @@
 // 渲染来源：line → modbus.trend（uPlot）；bar → 最新 values（CSS 条形，非 uPlot bars）；
 // value → 数值卡；switch → FC01 写点（确认后写入并读回）。
 import { subscribeState, subscribeFocus, buildAgentRef, hasHarnessInput, readInputDraft, buildInputBridge, dispatchAgentRef, postEvidence, evidenceFromRef } from './bench-shared.mjs'
-import { sessionCwd } from './bench-live.mjs'
+import { sessionCwd } from './src/ui/common/session-scope.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { TREND_WINDOW_MS, trendDataForComponents, componentLatestValues, UPLOT_PROTO } from './bench-trend.mjs'
 import { vendorUPlot } from './bench-vendor.mjs'

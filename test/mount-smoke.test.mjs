@@ -39,13 +39,13 @@ test('hmi view mounts — the former blind spot of the bundle', async () => {
   assert.ok(tree, 'hmi tree rendered')
 })
 
-test('sidebar pages mount: 操作记录/曲线/告警 (监视已删除，采集由 Host 服务运行)', async () => {
-  const { createLogPage, createTrendPage, createAlarmPage } = await import('../bench-live.mjs')
+test('sidebar pages mount: 操作记录/可视化/告警 (监视已删除，采集由 Host 服务运行)', async () => {
+  const { createLogPage, createVisualizationPage, createAlarmPage } = await import('../bench-live.mjs')
   const postMock = async () => ({ ok: true })
   const Log = createLogPage(makeReact(), () => 'k', postMock, {})
   assert.ok(Log({ tab: {}, scope: { cwd: '/ws' } }))
-  const Trend = createTrendPage(makeReact(), () => 'k', postMock, {})
-  assert.ok(Trend({ tab: {}, scope: { cwd: '/ws' } }))
+  const Viz = createVisualizationPage(makeReact(), () => 'k', postMock, {})
+  assert.ok(Viz({ tab: {}, scope: { cwd: '/ws' } }))
   const Alarm = createAlarmPage(makeReact(), () => 'k', postMock, {})
   assert.ok(Alarm({ tab: {}, scope: { cwd: '/ws' } }))
   const lib = await import('../bench-live.mjs')

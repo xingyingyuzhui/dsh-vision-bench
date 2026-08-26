@@ -71,8 +71,12 @@ test('挂载无错误；默认不展开已监视点位列表（空状态只提�
   await waitFor(() => assert.ok(tree.container.textContent.includes('可视化')), { timeout: 6000 })
   const text = tree.container.textContent
   assert.ok(!text.includes('温度 /'), '未展开监视点位列表')
-  assert.ok(!text.includes('监视点位'), '空状态不打印点位清单文案')
+  assert.ok(!tree.container.querySelector('.dvb-viz-picker-list'), '空状态不展开点位选择器')
   assert.ok(text.includes('新建组件'), '空状态提供新建组件')
+  assert.ok(
+    text.includes('从已监视点位') || text.includes('请先在上位机'),
+    '空状态有引导文案（有监视点位时提示从点位创建，否则提示先开监视）',
+  )
   tree.unmount()
   await new Promise((r) => setTimeout(r, 60))
   assert.equal(errors.length, 0, 'mount/unmount 无错误: ' + JSON.stringify(errors.map((e) => e.message)))

@@ -2,7 +2,7 @@ import { COPY, NS, interpolate, tWith } from './bench-i18n.mjs'
 import { ATTR, CSS } from './bench-styles.mjs'
 import { createSettingsPage, registerSettings } from './bench-settings.mjs'
 import { createHmiView } from './bench-hmi.mjs'
-import { closeBetterTab, createAlarmPage, createLogPage, createTrendPage, registerLive } from './bench-live.mjs'
+import { closeBetterTab, createAlarmPage, createLogPage, createVisualizationPage, registerLive } from './bench-live.mjs'
 import { createMapView, openProjectTab, registerMap } from './bench-map.mjs'
 import { createDebugView, registerView } from './bench-view.mjs'
 import { createFramesPage } from './bench-frames-view.mjs'
@@ -105,7 +105,7 @@ export function apply(ctx) {
       closeTabImpl = function (id) { closeBetterTab(side, id) }
       const FramesPage = createFramesPage(React, t, post, { openHmi })
       const stopLive = registerLive(side, React, t, null, {
-        trend: scopedSidebarPage(React, createTrendPage(React, t, post, { openHmi }), 'trend'), // dsh-vision-bench:charts 不变的「可视化」页
+        trend: scopedSidebarPage(React, createVisualizationPage(React, t, post, { openHmi }), 'trend'), // dsh-vision-bench:charts 不变的「可视化」页
         alarm: scopedSidebarPage(React, createAlarmPage(React, t, post, { openHmi }), 'alarm'),
         frames: scopedSidebarPage(React, FramesPage, 'frames'),
         log: scopedSidebarPage(React, createLogPage(React, t, post, { openHmi, openFrames: () => { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} } }), 'log'),

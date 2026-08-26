@@ -1,5 +1,6 @@
 import { pushFramesLog, subscribeState, getFramesLog, clearFramesLog, resolveSidebarScope, getSidebarPin, setSidebarPin, buildAgentRef, copyAgentRef, dispatchAgentRef, hasHarnessInput, agentRefToText, getFocusState, setFocusState, isFocusTarget, focusHighlightClass, getTempWatch, setTempWatch, clearTempWatch, shouldStealFocus, shouldHighlightFocus } from './bench-shared.mjs'
 import { postEvidence, evidenceFromRef, readInputDraft, buildInputBridge } from './bench-shared.mjs'
+import { sessionCwd } from './src/ui/common/session-scope.mjs'
 import { clockOf, decodeValue, functionTag } from './bench-points.mjs'
 import { NS } from './bench-i18n.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
@@ -15,7 +16,8 @@ const TAB_ALARM = 'dsh-vision-bench:alarms'
 const TAB_FRAMES = 'dsh-vision-bench:frames'
 export const TAB_LOG = 'dsh-vision-bench:log'
 export { createVisualizationPage }
-// 兼容期：旧 createTrendPage 名称指向新可视化页（随后测试更新）
+export { sessionCwd }
+/** @deprecated Use createVisualizationPage. Removed after 0.22.0. */
 export const createTrendPage = createVisualizationPage
 const INTERVALS = [500, 1000, 2000, 5000]
 
@@ -24,18 +26,6 @@ function normalizePointsSafe(pack) {
 }
 
 const TREND_COLORS = ['#4f8ef7', '#2eaf64', '#e0912f', '#c85454', '#8f63d2', '#2fa8a8', '#d27ab0', '#7a8494']
-
-export function sessionCwd(props) {
-  if (props && props.scope && props.scope.cwd) return props.scope.cwd
-  const sessionId = (props && props.scope && props.scope.sessionId) || (props && props.sessionId)
-  return props && props.useSessions
-    ? props.useSessions((s) => {
-      if (sessionId && s.byId && s.byId[sessionId] && s.byId[sessionId].cwd) return s.byId[sessionId].cwd
-      const id = s && s.current
-      return (s && s.byId && id && s.byId[id] && s.byId[id].cwd) || ''
-    })
-    : ''
-}
 
 const displayValue = (rec, point) => {
   if (!rec || rec.value === null || rec.value === undefined) return '—'

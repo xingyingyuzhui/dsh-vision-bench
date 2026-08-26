@@ -9,7 +9,7 @@ import { createElement } from 'react'
 import { render, cleanup, waitFor, act } from '@testing-library/react'
 import { createFramesPage } from '../bench-frames-view.mjs'
 import { pushFramesLog } from '../bench-shared.mjs'
-import { createTrendPage } from '../bench-live.mjs'
+import { createVisualizationPage } from '../bench-live.mjs'
 
 // Task8/0.18.3: tests must exit naturally — every component effect tears down
 // its timers on unmount, so no process.exit() is allowed here.
@@ -309,7 +309,7 @@ test('frames page has no open/close serial buttons in proto or raw', async () =>
 
 test('Task8: TrendPage mounts with real effects without leaking listeners', async () => {
   const { post } = makePost({ frames: {} })
-  const Tabs = createTrendPage(React, t, post, {})
+  const Tabs = createVisualizationPage(React, t, post, {})
   const tree = render(createElement(Tabs, { sessionId: 's1', scope: { cwd: '/tmp/proj' }, useSessions: noop }))
   await waitFor(() => {
     assert.ok(tree.container.querySelector('.dvb-live'), 'trend page rendered')
@@ -337,7 +337,7 @@ test('Task4: VisualizationPage 让 Agent 分析组件 uses the input bridge, pre
       return { ok: true }
     }
     const tMap = (k) => ({ liveChart: '可视化' }[k] || k)
-    const Trend = createTrendPage(React, tMap, post, {})
+    const Trend = createVisualizationPage(React, tMap, post, {})
     const copiedNotes = []
     let setDraftCalls = 0
     let submissions = 0
@@ -392,7 +392,7 @@ test('Task4: no input writer → clipboard fallback and no crash', async () => {
     return { ok: true }
   }
   const tMap = (k) => ({ liveChart: '曲线', chartWindow: '最近 5 分钟' }[k] || k)
-  const Trend = createTrendPage(React, tMap, post, {})
+  const Trend = createVisualizationPage(React, tMap, post, {})
   const errors = []
   const onError = (e) => errors.push(e)
   window.addEventListener('error', onError)

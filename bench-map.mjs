@@ -2,7 +2,7 @@
 // (缺失/不可读/工作区外) + 文件操作（预览源码/复制路径/让Agent分析/Include 关系）+
 // 可折叠的 编译配置（Include 路径、宏、依赖边）。侧栏「工程」→「工程结构」。
 import { subscribeState, buildAgentRef, copyAgentRef, hasHarnessInput, agentRefToText } from './bench-shared.mjs'
-import { sessionCwd } from './bench-live.mjs'
+import { sessionCwd } from './src/ui/common/session-scope.mjs'
 
 export const TAB_MAP = 'dsh-vision-bench:project'
 

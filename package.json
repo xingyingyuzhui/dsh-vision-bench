@@ -79,7 +79,14 @@
     "bench-polling-service.mjs",
     "bench-trend-store.mjs",
     "bench-visualization-model.mjs",
-    "bench-visualization-view.mjs"
+    "bench-visualization-view.mjs",
+    "src/ui/common/ui-format.mjs",
+    "src/ui/common/state-subscription.mjs",
+    "src/ui/common/frame-cache.mjs",
+    "src/ui/common/sidebar-scope.mjs",
+    "src/ui/common/focus-store.mjs",
+    "src/ui/common/agent-reference.mjs",
+    "src/ui/common/session-scope.mjs"
   ],
   "repository": {
     "type": "git",
@@ -93,7 +100,7 @@
     "build:check": "node scripts/build-client.mjs --check",
     "lint": "biome ci src docs/architecture",
     "typecheck": "tsc -p tsconfig.check.json",
-    "deps:check": "depcruise --config dependency-cruiser.config.mjs src bench-io-contract.mjs bench-io-capability.mjs bench-modbus-transport.mjs bench-visualization-model.mjs host.js runtime/io",
+    "deps:check": "depcruise --config dependency-cruiser.config.mjs src bench-*.mjs host.js runtime/io",
     "test:unit": "node --test test/*.test.mjs",
     "test:coverage": "c8 --reporter=text-summary --reporter=html node --test test/*.test.mjs",
     "pack:check": "node scripts/check-package.mjs",

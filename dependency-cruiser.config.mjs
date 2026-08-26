@@ -15,8 +15,8 @@ export default {
   forbidden: [
     {
       name: 'no-circular',
-      severity: 'warn',
-      comment: 'Phase 1: existing cycles warn; phase 2 promotes to error after session-scope extract.',
+      severity: 'error',
+      comment: 'Phase 2: zero circular dependencies required.',
       from: {},
       to: { circular: true },
     },
