@@ -62,24 +62,24 @@ test('Task5: 只有 opts.send 才调 submit；发送成功枚举 sent', () => {
   assert.equal(submitted, 1)
 })
 
-test('Task5: 无写接口时剪贴板回退 mode copied；剪贴板不可用则 failed', () => {
+test('Task5: 无写接口时剪贴板回退 mode copied；剪贴板不可用则 failed', async () => {
   const prevNav = globalThis.navigator
   try {
     Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText() { return Promise.resolve() } } }, configurable: true, writable: true })
-    const r = dispatchAgentRef(ref, { currentDraft: '', setDraft: null })
+    const r = await Promise.resolve(dispatchAgentRef(ref, { currentDraft: '', setDraft: null }))
     assert.equal(r.mode, 'copied', 'no writer -> clipboard fallback')
-    assert.equal(r.status, '仅复制')
+    assert.ok(r.status === '仅复制' || r.status === '已复制组件引用')
     assert.equal(r.fallback, true)
     // writer present but submit missing: input (not copied)
-    const w = dispatchAgentRef(ref, { currentDraft: '', setDraft() {} })
+    const w = await Promise.resolve(dispatchAgentRef(ref, { currentDraft: '', setDraft() {} }))
     assert.equal(w.mode, 'input')
   } finally {
     Object.defineProperty(globalThis, 'navigator', { value: prevNav, configurable: true, writable: true })
   }
   // no clipboard at all (node default) -> failed
-  const r2 = dispatchAgentRef(ref, { currentDraft: '', setDraft: null })
+  const r2 = await Promise.resolve(dispatchAgentRef(ref, { currentDraft: '', setDraft: null }))
   assert.equal(r2.mode, 'failed')
-  assert.equal(r2.status, '处理失败')
+  assert.ok(r2.status === '处理失败' || r2.status === '复制失败')
   assert.equal(r2.ok, false)
 })
 

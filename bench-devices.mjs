@@ -54,7 +54,6 @@ export const emptyConn = () => ({
   stopbits: 1,
   host: '',
   tcpPort: 502,
-  slave: 1,
   sim: false,
 })
 
@@ -73,15 +72,14 @@ export const normalizeConn = (input) => {
   out.host = typeof c.host === 'string' ? c.host.trim() : ''
   const tcp = Number(c.tcpPort)
   out.tcpPort = Number.isFinite(tcp) && tcp > 0 ? Math.trunc(tcp) : 502
-  const slave = Number(c.slave)
-  out.slave = Number.isFinite(slave) && slave >= 0 ? Math.min(247, Math.max(0, Math.trunc(slave))) : 1
+  // Unit ID 只属于设备；连接端点不再持久化 slave
   out.sim = c.sim === true
   return out
 }
 
 export const connLabel = (conn) => conn.mode === 'tcp'
-  ? ((conn.host || '?') + ':' + conn.tcpPort + ' · 站号 ' + conn.slave)
-  : ((conn.port || '?') + ' @ ' + conn.baudrate + ' · 站号 ' + conn.slave)
+  ? ((conn.host || '?') + ':' + conn.tcpPort)
+  : ((conn.port || '?') + ' @ ' + conn.baudrate)
 
 export const emptyConnection = () => ({
   id: 'c1',
@@ -414,9 +412,9 @@ function migrateLegacy(modbusLike) {
     baudrate: pick('baudrate'),
     host: pick('host'),
     tcpPort: pick('tcpPort'),
-    slave: pick('slave'),
     sim: pick('sim'),
   })
+  const legacySlave = pick('slave')
   const segments = Array.isArray(dev.segments) ? dev.segments : (Array.isArray(flat.segments) ? flat.segments : [])
   const oldValues = Array.isArray(dev.values) ? dev.values : (Array.isArray(flat.values) ? flat.values : [])
   if (!segments.length && Number.isFinite(Number(flat.function)) && Number.isFinite(Number(flat.address))) {
@@ -451,12 +449,15 @@ function migrateLegacy(modbusLike) {
       if (rec) valueMap.push(normalizeValueRec({ ...rec, key: id }))
     }
   }
-  return { conn, points, values: valueMap }
+  return { conn, points, values: valueMap, legacySlave }
 }
 
 function migrateV2ToV3(v2) {
   // v2 shape: { version:2, conn, points:[{id:p3_0,function,address...}], values:[{key:p3_0 ...}], polling, alarmActive }
-  const conn = normalizeConn(v2.conn || {})
+  const rawConn = v2.conn || {}
+  // 一次性：旧 conn.slave → 默认设备 unitId；迁移后连接不再保留 slave
+  const unitId = devClampInt(rawConn.slave !== undefined ? rawConn.slave : 1, 1, 0, 247)
+  const conn = normalizeConn(rawConn)
   const connection = {
     id: 'c1',
     name: conn.port ? `连接-${conn.port}` : (conn.host ? `连接-${conn.host}:${conn.tcpPort}` : '连接1'),
@@ -464,8 +465,6 @@ function migrateV2ToV3(v2) {
     enabled: true,
     conn,
   }
-  // device from conn.slave
-  const unitId = devClampInt(conn.slave, 1, 0, 247)
   const device = {
     id: 'd1',
     connectionId: 'c1',
@@ -677,22 +676,23 @@ export function normalizeModbus(input) {
     const m = migrateLegacy(src)
     v2 = {
       version: 2,
-      conn: m.conn,
+      // 临时带回 slave 仅供 migrateV2ToV3 写入默认设备 unitId
+      conn: m.legacySlave !== undefined ? { ...m.conn, slave: m.legacySlave } : m.conn,
       points: normalizePoints(m.points),
       values: filterValues(m.values, new Set(m.points.map(p=>p.id))),
       polling: normalizePolling(src.polling),
       alarmActive: src.alarmActive && typeof src.alarmActive === 'object' ? { ...src.alarmActive } : {},
       frames: src.frames || src.framesLog || src.framesByConnection,
     }
-    // preserve frames if any from legacy flat? not needed
   } else if (src.version === 2 || src.conn !== undefined) {
-    const conn = normalizeConn(src.conn)
+    // 保留原始 conn.slave 供迁移读出；normalizeConn 在 migrateV2ToV3 内执行
+    const rawConn = src.conn && typeof src.conn === 'object' ? src.conn : {}
     const points = normalizePoints(src.points)
     const validKeys = new Set(points.map(p=>p.id))
     const normValues = filterValues(src.values, validKeys)
     v2 = {
       version:2,
-      conn,
+      conn: rawConn,
       points,
       values: normValues,
       polling: normalizePolling(src.polling),
@@ -700,7 +700,6 @@ export function normalizeModbus(input) {
       frames: src.frames || src.framesLog || src.framesByConnection,
       framesByConnection: src.framesByConnection,
     }
-    // also carry over possible framesByConnection from v2 partial?
     if (src.framesByConnection) v2.framesByConnection = src.framesByConnection
   } else {
     // empty or unknown -> treat as v2 empty
@@ -760,17 +759,14 @@ export function normalizeModbus(input) {
 export const patchConn = (modbus, patch) => {
   const normalized = normalizeModbus(modbus)
   const activeId = normalized.activeConnectionId
-  const nextConns = normalized.connections.map(c => c.id===activeId ? { ...c, conn: normalizeConn({ ...c.conn, ...(patch||{}) }) } : c)
-  let nextDevices = normalized.devices
-  if (patch && patch.slave !== undefined) {
-    const devId = normalized.activeDeviceId
-    const unit = Math.min(247, Math.max(0, Math.trunc(Number(patch.slave)||1)))
-    if (devId) nextDevices = normalized.devices.map(d=> d.id===devId ? { ...d, unitId: unit } : d)
-  }
+  // 连接补丁只改端点参数；忽略 legacy slave，不得改写设备 Unit ID
+  const raw = patch && typeof patch === 'object' ? { ...patch } : {}
+  delete raw.slave
+  const nextConns = normalized.connections.map(c => c.id===activeId ? { ...c, conn: normalizeConn({ ...c.conn, ...raw }) } : c)
   return normalizeModbus({
     ...normalized,
     connections: nextConns,
-    devices: nextDevices,
+    devices: normalized.devices,
   })
 }
 

@@ -144,15 +144,18 @@ export const normalizeFocusState = (input) => {
       const frameId = focusText(e.frameId || (kind === 'frame' ? e.id : ''))
       const alarmId = focusText(e.alarmId || (kind === 'alarm' ? e.id : ''))
       const trendKey = focusText(e.trendKey || (kind === 'trend' ? e.id : ''))
+      const visualizationId = focusText(e.visualizationId || (kind === 'visualization' ? e.id : ''))
+      const componentType = typeof e.componentType === 'string' ? e.componentType.slice(0, 16) : ''
+      const pointIds = Array.isArray(e.pointIds) ? e.pointIds.map((x) => focusText(x)).filter(Boolean).slice(0, 16) : []
       const rawRange = e && e.timeRange
       const rangeStart = Number(rawRange && rawRange.start)
       const rangeEnd = Number(rawRange && rawRange.end)
       const timeRange = Number.isFinite(rangeStart) && rangeStart > 0 && Number.isFinite(rangeEnd) && rangeEnd >= rangeStart
         ? { start: rangeStart, end: rangeEnd }
         : { start: at - 5 * 60 * 1000, end: at }
-      return {
+      const row = {
         kind,
-        id: focusText(e.id || pointId || frameId || trendKey || alarmId),
+        id: focusText(e.id || visualizationId || pointId || frameId || trendKey || alarmId),
         connectionId: focusText(e.connectionId || e.connId),
         deviceId: focusText(e.deviceId),
         pointId,
@@ -163,6 +166,12 @@ export const normalizeFocusState = (input) => {
         version: Number(e.version) > 0 ? Number(e.version) : 0,
         timeRange,
       }
+      if (kind === 'visualization' || visualizationId) {
+        row.visualizationId = visualizationId
+        row.componentType = componentType
+        row.pointIds = pointIds
+      }
+      return row
     }).filter(Boolean)
   }
   return out
@@ -247,7 +256,6 @@ const endpointFingerprintOf = (conn) => {
     String(conn.stopbits || 1),
     (conn.host || '').trim().toLowerCase(),
     String(conn.tcpPort || 502),
-    String(conn.slave ?? 1),
   ].join('|')
 }
 
@@ -466,14 +474,9 @@ export const saveWorkspace = (home, cwd, input) => {
     if (incoming.conn && typeof incoming.conn === 'object' && incoming.connections === undefined) {
       const aid = mergedModbus.activeConnectionId || (mergedModbus.connections && mergedModbus.connections[0] && mergedModbus.connections[0].id)
       if (aid) {
-        mergedModbus.connections = (mergedModbus.connections||[]).map(c=> c.id===aid ? { ...c, conn: { ...c.conn, ...incoming.conn } } : c)
-        // slave -> unitId
-        if (incoming.conn.slave !== undefined) {
-          const devId = mergedModbus.activeDeviceId || (mergedModbus.devices && mergedModbus.devices[0] && mergedModbus.devices[0].id)
-          if (devId) {
-            mergedModbus.devices = (mergedModbus.devices||[]).map(d=> d.id===devId ? { ...d, unitId: Math.min(247, Math.max(0, Math.trunc(Number(incoming.conn.slave)||1))) } : d)
-          }
-        }
+        const raw = { ...incoming.conn }
+        delete raw.slave
+        mergedModbus.connections = (mergedModbus.connections||[]).map(c=> c.id===aid ? { ...c, conn: { ...c.conn, ...raw } } : c)
       }
     }
     if (incoming.version !== undefined) mergedModbus.version = incoming.version
@@ -484,13 +487,9 @@ export const saveWorkspace = (home, cwd, input) => {
     // conn patch
     if (incoming.conn && typeof incoming.conn === 'object') {
       const aid = mergedModbus.activeConnectionId || (mergedModbus.connections && mergedModbus.connections[0] && mergedModbus.connections[0].id)
-      mergedModbus.connections = (mergedModbus.connections||[]).map(c=> c.id===aid ? { ...c, conn: normalizeConn({ ...c.conn, ...incoming.conn }) } : c)
-      if (incoming.conn.slave !== undefined) {
-        const devId = mergedModbus.activeDeviceId || (mergedModbus.devices && mergedModbus.devices[0] && mergedModbus.devices[0].id)
-        if (devId) {
-          mergedModbus.devices = (mergedModbus.devices||[]).map(d=> d.id===devId ? { ...d, unitId: Math.min(247, Math.max(0, Math.trunc(Number(incoming.conn.slave)||1))) } : d)
-        }
-      }
+      const raw = { ...incoming.conn }
+      delete raw.slave
+      mergedModbus.connections = (mergedModbus.connections||[]).map(c=> c.id===aid ? { ...c, conn: normalizeConn({ ...c.conn, ...raw }) } : c)
     }
     if (incoming.points !== undefined) {
       const AREA_BY_FN = { 1:'coil', 2:'discreteInput', 3:'holdingRegister', 4:'inputRegister' }
@@ -1102,7 +1101,8 @@ export const appendEvidence = (home, cwd, evidence) => {
     const frameId = kind === 'frame' ? (ev.frameId || ev.id) : ev.frameId
     const alarmId = kind === 'alarm' ? (ev.alarmId || ev.id) : ev.alarmId
     const trendKey = kind === 'trend' ? (ev.trendKey || ev.id) : ev.trendKey
-    const hasId = ev.id || pointId || frameId || alarmId || trendKey || ev.connectionId || ev.deviceId || ev.connId
+    const visualizationId = kind === 'visualization' ? (ev.visualizationId || ev.id) : ev.visualizationId
+    const hasId = ev.id || pointId || frameId || alarmId || trendKey || visualizationId || ev.connectionId || ev.deviceId || ev.connId
     if (!hasId) return { ok: false, error: '证据缺少 ID', errorCode: 'TARGET_REQUIRED' }
     const rt = resolveTarget(pack, {
       connectionId: ev.connectionId || ev.connId,
@@ -1111,11 +1111,15 @@ export const appendEvidence = (home, cwd, evidence) => {
       frameId,
       alarmId,
       trendKey,
+      visualizationId,
     })
     // For evidence that is a generic point/build/log, allow if it has no resolvable target? But if it has id that is not a point, resolveTarget will fail for point not found, which is not desired for build/log evidence.
-    // So only validate if the evidence kind is point/frame/alarm/trend and has those IDs; for build/log, skip strict validation
-    const isStrict = kind === 'point' || kind === 'frame' || kind === 'alarm' || kind === 'trend' || ev.pointId || ev.frameId || ev.alarmId || ev.trendKey
-    if (isStrict && !rt.ok) return { ok: false, error: rt.error, errorCode: rt.errorCode }
+    // So only validate if the evidence kind is point/frame/alarm/trend/visualization and has those IDs; for build/log, skip strict validation
+    const isStrict = kind === 'point' || kind === 'frame' || kind === 'alarm' || kind === 'trend' || kind === 'visualization' || ev.pointId || ev.frameId || ev.alarmId || ev.trendKey || ev.visualizationId
+    if (isStrict && !rt.ok) {
+      // 组件证据保持 VIZ_NOT_FOUND，不退化成 TARGET_MISMATCH
+      return { ok: false, error: rt.error, errorCode: rt.errorCode || (kind === 'visualization' ? 'VIZ_NOT_FOUND' : undefined) }
+    }
     const evVer = Number(ev.version ?? ev.configVersion)
     if (Number.isFinite(evVer) && evVer !== (pack.configVersion || 1)) {
       return { ok: false, error: `版本漂移：证据基于 v${evVer} 当前 v${pack.configVersion || 1}`, errorCode: 'CONFIG_DRIFT' }

@@ -1,10 +1,9 @@
-// Task11+12/0.19.2: the installable package must not ship legacy Python Modbus
-// scripts, and the version must be the v0.19.2 stabilization line.
+// Package contents: no legacy Python Modbus; version tracks current release.
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-test('package.json: version 0.19.2 and no legacy python modbus files', async () => {
+test('package.json: version 0.20.1 and no legacy python modbus files', async () => {
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
   assert.equal(pkg.version, '0.20.1')
   const files = Array.isArray(pkg.files) ? pkg.files : []

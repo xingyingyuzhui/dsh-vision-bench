@@ -107,7 +107,7 @@ const findPointV3 = (points, fn, address, activeConnId, activeDevId) => {
 
 // ── connection profile ───────────────────────────────────────────────────
 
-const CONN_PATCH_KEYS = ['mode', 'port', 'baudrate', 'bytesize', 'parity', 'stopbits', 'host', 'tcpPort', 'slave', 'sim']
+const CONN_PATCH_KEYS = ['mode', 'port', 'baudrate', 'bytesize', 'parity', 'stopbits', 'host', 'tcpPort', 'sim']
 
 export const pickConnPatch = (raw) => {
   const out = {}
@@ -138,18 +138,25 @@ export const connectOp = async (home, cwd, body, opts) => {
       await transport.closeConnection({ cwd: room.cwd, connectionId: cidRaw })
       return { ok: true, action: 'connect', connectionId: cidRaw, connId: cidRaw, configured: !!(body && Object.keys(pickConnPatch(body)).length), connected: false, live: 'disconnected' }
     }
+    // legacy slave/unitId：仅在明确 deviceId 时更新该设备 Unit ID，永不写入 connection.conn
+    const unitArg = body && (body.slave !== undefined ? body.slave : body.unitId)
+    let nextDevices = pack.devices
+    if (unitArg !== undefined) {
+      const devId = String(body && body.deviceId || '').trim()
+      if (!devId) {
+        return { ok: false, error: '修改 Unit ID 需要提供 deviceId', code: 'DEVICE_ID_REQUIRED', connectionId: cidRaw }
+      }
+      const hit = pack.devices.find((d) => d.id === devId && d.connectionId === cidRaw)
+      if (!hit) return { ok: false, error: '设备不存在: ' + devId, code: 'DEVICE_NOT_FOUND', connectionId: cidRaw }
+      const unit = Math.min(247, Math.max(0, Math.trunc(Number(unitArg) || 1)))
+      nextDevices = pack.devices.map((d) => d.id === devId ? { ...d, unitId: unit } : d)
+    }
     const patch = pickConnPatch(body)
     let outConn = target.conn
-    if (Object.keys(patch).length) {
-      const nextConns = pack.connections.map((c) => c.id === cidRaw ? { ...c, conn: { ...c.conn, ...patch } } : c)
-      let nextDevices = pack.devices
-      if (patch.slave !== undefined) {
-        const devId = String(body && body.deviceId || '').trim() || (pack.activeConnectionId === cidRaw ? pack.activeDeviceId : '') || (pack.devices.find((d) => d.connectionId === cidRaw) || {}).id || ''
-        if (devId) {
-          const unit = Math.min(247, Math.max(0, Math.trunc(Number(patch.slave) || 1)))
-          nextDevices = pack.devices.map((d) => d.id === devId ? { ...d, unitId: unit } : d)
-        }
-      }
+    if (Object.keys(patch).length || unitArg !== undefined) {
+      const nextConns = Object.keys(patch).length
+        ? pack.connections.map((c) => c.id === cidRaw ? { ...c, conn: { ...c.conn, ...patch } } : c)
+        : pack.connections
       const saved = saveWorkspace(home, room.cwd, { modbus: { connections: nextConns, devices: nextDevices, version: 3 } })
       if (!saved.ok) return saved
       notifyConnectionRelease(room.cwd, changedConnectionIds(workspace.modbus, saved.workspace.modbus).filter((id) => id !== cidRaw))
@@ -339,15 +346,13 @@ const endpointFingerprint = (conn, dev) => ({
   stopbits: Number(conn.stopbits) || 1,
   host: (conn.host || '').trim(),
   tcpPort: Number(conn.tcpPort) || 0,
-  slave: Number(conn.slave) || 0,
-  // §16.5-32: in v3 the RTU unit id lives on the device, so bind it too —
-  // a Unit ID switch between request and approval must void the old request.
-  unitId: Math.min(247, Math.max(0, Math.trunc(Number(dev && dev.unitId) || Number(conn.slave) || 0))),
+  // Unit ID 只属于设备；审批指纹绑定 device.unitId，不再比较 conn.slave
+  unitId: Math.min(247, Math.max(0, Math.trunc(Number(dev && dev.unitId) || 0))),
 })
 
 const endpointLabelText = (conn) => conn.mode === 'tcp'
-  ? ((conn.host || '?') + ':' + conn.tcpPort + ' · 站号 ' + conn.slave)
-  : ((conn.port || '?') + ' @ ' + conn.baudrate + ' · 站号 ' + conn.slave)
+  ? ((conn.host || '?') + ':' + conn.tcpPort)
+  : ((conn.port || '?') + ' @ ' + conn.baudrate)
 
 const sameEndpoint = (a, b) =>
   !!a && !!b
@@ -359,7 +364,6 @@ const sameEndpoint = (a, b) =>
     && a.stopbits === b.stopbits
     && a.host === b.host
     && a.tcpPort === b.tcpPort
-    && a.slave === b.slave
     && a.unitId === b.unitId
 
 const prunePendingWrites = () => {

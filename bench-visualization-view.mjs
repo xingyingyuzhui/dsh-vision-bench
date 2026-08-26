@@ -1,8 +1,8 @@
 // TaskP2/0.20.0: 侧边栏「可视化」— 以组件为中心（line/bar/value/switch）。
-// 组件编辑器：名称/类型/关联点位搜索多选（仅 monitorEnabled，限定路径）。
-// 渲染来源：line → modbus.trend（uPlot）；bar → 最新 values（uPlot bars）；
+// 组件编辑器：名称/类型/关联点位搜索（仅 monitorEnabled，限定路径）。
+// 渲染来源：line → modbus.trend（uPlot）；bar → 最新 values（CSS 条形，非 uPlot bars）；
 // value → 数值卡；switch → FC01 写点（确认后写入并读回）。
-import { subscribeState, subscribeFocus, buildAgentRef, copyAgentRef, hasHarnessInput, readInputDraft, buildInputBridge, dispatchAgentRef, postEvidence, evidenceFromRef, agentRefToText } from './bench-shared.mjs'
+import { subscribeState, subscribeFocus, buildAgentRef, hasHarnessInput, readInputDraft, buildInputBridge, dispatchAgentRef, postEvidence, evidenceFromRef } from './bench-shared.mjs'
 import { sessionCwd } from './bench-live.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { TREND_WINDOW_MS, trendDataForComponents, componentLatestValues, UPLOT_PROTO } from './bench-trend.mjs'
@@ -16,24 +16,36 @@ import {
 } from './bench-visualization-model.mjs'
 const VIZ_COLORS = ['#4f8ef7', '#2eaf64', '#e0912f', '#c85454', '#8f63d2', '#2fa8a8', '#d27ab0', '#7a8494']
 
+const hasTrendSamples = (payload) => !!(
+  payload
+  && Array.isArray(payload.data)
+  && payload.data.length > 0
+  && Array.isArray(payload.data[0])
+  && payload.data[0].length > 0
+)
+
+const pointCompatible = (type, fn) => {
+  if (type === 'line' || type === 'bar') return fn === 3 || fn === 4
+  if (type === 'switch') return fn === 1
+  return [1, 2, 3, 4].includes(fn)
+}
+
 export function createVisualizationPage(React, t, post, hooks) {
   const openHmi = hooks && hooks.openHmi
+  void openHmi
   const el = React.createElement
   return function VisualizationPage(props) {
-    const el2 = el
-    void el2
     const cwd = (props && props.scope && props.scope.cwd) || sessionCwd(props) || ''
-    // Task7/0.20.1: render 顶层读取输入桥（禁止在事件处理中调用 React Hook）
     const inputDraft = readInputDraft(props && props.useInput)
     const agentBridge = buildInputBridge(props, inputDraft)
     const [mb, setMb] = React.useState(null)
-    const [editor, setEditor] = React.useState(null) // { id, name, type, pointIds, search }
+    const [editor, setEditor] = React.useState(null)
     const [deleteId, setDeleteId] = React.useState('')
     const [copied, setCopied] = React.useState('')
     const [note, setNote] = React.useState('')
     const [focusVizId, setFocusVizId] = React.useState('')
     const [chartErrors, setChartErrors] = React.useState({})
-    // Task6/0.20.1: 按工作区订阅聚焦，隔离跨工作区/跨 Session 串扰
+    const [saving, setSaving] = React.useState(false)
     React.useEffect(() => {
       setFocusVizId('')
       return subscribeFocus(cwd, (fs) => {
@@ -68,58 +80,82 @@ export function createVisualizationPage(React, t, post, hooks) {
     const values = pack ? (pack.values || []) : []
     const trendStore = pack ? (pack.trend || {}) : {}
 
-    // 组件保存（持久化到工作区，递增 configVersion）
+    const destroyChart = (id) => {
+      const u = uplotRefs.current[id]
+      if (u) { try { u.destroy() } catch {} }
+      delete uplotRefs.current[id]
+    }
+
+    function editorValidation(ed) {
+      const cur = ed || editor
+      if (!cur) return { ok: false, reason: '' }
+      if (!String(cur.name || '').trim()) return { ok: false, reason: '请填写组件名称' }
+      const cand = normalizeVisualizationComponent({ ...cur, id: cur.id || '' })
+      const v = validateVisualizationComponent(cand, points)
+      if (!v.ok) return { ok: false, reason: v.error || '配置无效' }
+      return { ok: true, reason: '', cand }
+    }
+
+    function persistViz(next) {
+      return post('/dsh-vision-bench/workspace', { cwd, modbus: { visualization: next, version: 3 } }).then((data) => {
+        if (data && data.ok === false) { setNote(data.error || '保存失败'); return false }
+        return post('/dsh-vision-bench/state', { cwd }).then((data2) => {
+          if (data2 && data2.workspace) setMb(data2.workspace.modbus)
+          return true
+        })
+      }).catch((err) => { setNote(String((err && err.message) || '保存失败')); return false })
+    }
+
     function saveComponent() {
-      if (!editor) return
-      if (!String(editor.name || '').trim()) { setNote('请填写组件名称'); return }
+      if (!editor || saving) return
+      const check = editorValidation()
+      if (!check.ok) { setNote(check.reason); return }
       const existingIndex = editor.id ? components.findIndex((c) => c.id === editor.id) : -1
-      // Task8/0.20.1: 编辑基于原组件合并，保留 id/order/settings/type/pointIds；
-      // 新组件才追加到末尾；禁止 filter+concat 改变排列
       const base = existingIndex >= 0 ? components[existingIndex] : {}
       const cand = normalizeVisualizationComponent({ ...base, ...editor, id: (existingIndex >= 0 ? base.id : '') })
-      const v = validateVisualizationComponent(cand, points)
-      if (!v.ok) { setNote(v.error); return }
       const nextComponents = components.slice()
-      if (existingIndex >= 0) nextComponents[existingIndex] = cand
-      else nextComponents.push(cand)
-      persistViz({ schemaVersion: 1, components: nextComponents })
-      setEditor(null)
-      setNote('')
+      if (existingIndex >= 0) {
+        if (base.type === 'line' && cand.type !== 'line') destroyChart(base.id)
+        nextComponents[existingIndex] = cand
+      } else nextComponents.push(cand)
+      setSaving(true)
+      persistViz({ schemaVersion: 1, components: nextComponents }).then((ok) => {
+        setSaving(false)
+        if (ok) { setEditor(null); setNote('') }
+      }).catch(() => setSaving(false))
     }
-    function persistViz(next) {
-      post('/dsh-vision-bench/workspace', { cwd, modbus: { visualization: next, version: 3 } }).then((data) => {
-        if (data && data.ok === false) setNote(data.error || '保存失败')
-        return post('/dsh-vision-bench/state', { cwd })
-      }).then((data) => {
-        if (data && data.workspace) setMb(data.workspace.modbus)
-      }).catch((err) => setNote(String((err && err.message) || '保存失败')))
-    }
+
     function removeComponent(id) {
-      const next = { schemaVersion: 1, components: components.filter((c) => c.id !== id) }
-      persistViz(next)
+      destroyChart(id)
+      persistViz({ schemaVersion: 1, components: components.filter((c) => c.id !== id) })
       setDeleteId('')
     }
-    function openEditor(comp) {
-      setErrorless()
-      if (comp) {
-        // Task8/0.20.1: 保存完整编辑上下文（id/order/settings 原样保留）
-        setEditor({ ...comp, pointIds: (comp.pointIds || []).slice(), search: '' })
-      } else {
-        setEditor({ id: '', name: ('组件' + (components.length + 1)), type: 'line', pointIds: [], order: components.length, settings: { windowMs: 300000, confirmWrite: true }, search: '' })
-      }
-    }
-    function setErrorless() { setNote('') }
 
-    // 开关写入（确认后写入并读回）
+    function openEditor(comp) {
+      setNote('')
+      if (comp) setEditor({ ...comp, pointIds: (comp.pointIds || []).slice(), search: '' })
+      else setEditor({ id: '', name: ('组件' + (components.length + 1)), type: 'line', pointIds: [], order: components.length, settings: { windowMs: 300000, confirmWrite: true }, search: '' })
+    }
+
     function toggleSwitch(comp, point, wantOn) {
-      if (!cwd) return
+      if (!cwd || (switchDraft.current && switchDraft.current.busy)) return
       const settings = comp.settings || {}
-      if (settings.confirmWrite !== false && switchDraft.current !== comp.id + ':' + point.pointId) {
-        switchDraft.current = comp.id + ':' + point.pointId
-        setNote('再次点击「' + (wantOn ? '开' : '关') + '」确认写入')
+      const desiredValue = wantOn ? 1 : 0
+      const now = Date.now()
+      const pending = switchDraft.current
+      const same = pending
+        && pending.componentId === comp.id
+        && pending.pointId === point.pointId
+        && pending.desiredValue === desiredValue
+        && pending.expiresAt > now
+      if (settings.confirmWrite !== false && !same) {
+        switchDraft.current = { componentId: comp.id, pointId: point.pointId, desiredValue, expiresAt: now + 10000, busy: false }
+        setNote('再次点击「' + (wantOn ? '开' : '关') + '」确认写入（10 秒内有效）')
+        setTick((n) => n + 1)
         return
       }
-      switchDraft.current = null
+      switchDraft.current = { componentId: comp.id, pointId: point.pointId, desiredValue, expiresAt: now + 10000, busy: true }
+      setTick((n) => n + 1)
       post('/dsh-vision-bench/modbus/write', {
         cwd,
         source: 'user',
@@ -129,37 +165,40 @@ export function createVisualizationPage(React, t, post, hooks) {
         pointId: point.pointId,
         function: 1,
         address: point.address,
-        values: [wantOn ? 1 : 0],
+        values: [desiredValue],
       }).then((data) => {
-        setNote(data && data.ok === false ? (data.error || '写入失败') : '写入成功')
+        const target = wantOn ? '开' : '关'
+        if (!data || data.ok === false) setNote(data && data.error ? data.error : '写入失败')
+        else if (data.unknown) setNote('目标 ' + target + ' → 回读未知 → 结果未知')
+        else {
+          const readback = data.readback != null ? data.readback : (data.value != null ? data.value : '—')
+          const consistent = data.consistent === true || data.match === true
+          setNote('目标 ' + target + ' → 回读 ' + String(readback) + ' → ' + (consistent ? '一致' : '不一致'))
+        }
         return post('/dsh-vision-bench/state', { cwd })
       }).then((data) => {
         if (data && data.workspace) setMb(data.workspace.modbus)
-      }).catch((err) => setNote(String((err && err.message) || '写入失败')))
+      }).catch((err) => setNote(String((err && err.message) || '写入失败'))).finally(() => {
+        switchDraft.current = null
+        setTick((n) => n + 1)
+      })
     }
 
     const seriesOfComponent = (comp) =>
       trendDataForComponents(trendStore, points, comp.pointIds, (comp.settings && comp.settings.windowMs) || TREND_WINDOW_MS)
 
-    // Task1/0.20.1: uPlot 实例生命周期 — 相同组件+相同 DOM 只 setData；
-    // 节点变化/空数据/删除/类型切换销毁；初始化失败显式提示（不静默吞掉）
-    const destroyChart = (id) => {
-      const u = uplotRefs.current[id]
-      if (u) { try { u.destroy() } catch {} }
-      delete uplotRefs.current[id]
-    }
     const ensureUplot = (node, comp) => {
       if (!node) return
       const payload = seriesOfComponent(comp)
       const existing = uplotRefs.current[comp.id]
       if (existing && existing._node === node) {
-        if (!payload.keys.length) { destroyChart(comp.id); return }
+        if (!hasTrendSamples(payload)) { destroyChart(comp.id); return }
         try { existing.setData(payload.data) } catch (err) {
           setChartErrors((prev) => ({ ...prev, [comp.id]: String((err && err.message) || err) }))
         }
         return
       }
-      if (!payload.keys.length) { destroyChart(comp.id); return }
+      if (!hasTrendSamples(payload)) { destroyChart(comp.id); return }
       const UPlot = vendorUPlot()
       if (!UPlot) {
         setChartErrors((prev) => ({ ...prev, [comp.id]: '图表运行时不可用' }))
@@ -189,7 +228,6 @@ export function createVisualizationPage(React, t, post, hooks) {
       }
     }
 
-    // 卸载清理 + resize 适配
     React.useEffect(() => {
       const onResize = () => {
         for (const id of Object.keys(uplotRefs.current)) {
@@ -209,14 +247,94 @@ export function createVisualizationPage(React, t, post, hooks) {
 
     const barDataOf = (comp) => {
       const latest = componentLatestValues(values, points, comp.pointIds)
-      const xs = latest.map((_, i) => i)
-      const vs = latest.map((l) => (l.ok && l.value != null) ? Number(l.value) : null)
-      return { xs, vs, latest }
+      return { latest }
+    }
+
+    function copyComponentRef(comp) {
+      const ref = buildAgentRef('visualization', { visualizationId: comp.id, type: comp.type, pointIds: comp.pointIds, name: comp.name }, { configVersion: pack && pack.configVersion || 1, start: Date.now() - TREND_WINDOW_MS, end: Date.now() })
+      Promise.resolve(dispatchAgentRef(ref, agentBridge)).then((res) => {
+        if (!res || !res.ok) { setCopied('复制失败'); return }
+        setCopied((res.mode === 'input' ? '已加入输入框' : res.mode === 'sent' ? '已发送' : '已复制组件引用') + ' · ' + comp.name)
+      }).catch(() => setCopied('复制失败'))
+      try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setNote(reason)) } catch {}
+      setTimeout(() => setCopied(''), 2500)
+    }
+
+    function renderer(comp, latest, byId, degraded) {
+      if (degraded) {
+        return el('div', { className: 'dvb-viz-body' },
+          el('div', { className: 'dvb-hint dvb-need' }, '关联点位已关闭监视或被删除；请编辑组件恢复或选择新的监视点位。'),
+          el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openEditor(comp) } }, '修复'))
+      }
+      if (comp.type === 'line') {
+        const payload = seriesOfComponent(comp)
+        const chartErr = chartErrors[comp.id]
+        return el('div', { className: 'dvb-viz-body' },
+          chartErr
+            ? el('div', { className: 'dvb-msg dvb-viz-chart-error', 'data-kind': 'err' },
+                el('span', null, chartErr),
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '重试渲染该曲线', onClick() { setChartErrors((prev) => { const next = { ...prev }; delete next[comp.id]; return next }); setTick((n) => n + 1) } }, '重试'),
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openEditor(comp) } }, '编辑'))
+            : hasTrendSamples(payload)
+              ? el('div', { ref: (node) => { if (node) ensureUplot(node, comp) }, className: 'dvb-viz-uplot', style: { width: '100%', height: '150px' } })
+              : el('div', { className: 'dvb-hint' }, t('vizWaitingSamples') || '暂无历史样本，等待采集…'))
+      }
+      if (comp.type === 'bar') {
+        // CSS 条形图（非 uPlot bars）：中线为零基线，正右负左
+        const bd = barDataOf(comp)
+        const nums = bd.latest.map((l) => (l.ok && l.value != null && Number.isFinite(Number(l.value))) ? Number(l.value) : null)
+        const maxAbs = Math.max(1, ...nums.filter((v) => v !== null).map((v) => Math.abs(v)))
+        return el('div', { className: 'dvb-viz-body' },
+          el('div', { className: 'dvb-viz-bars' },
+            bd.latest.map((item) => {
+              const v = (item.ok && item.value != null && Number.isFinite(Number(item.value))) ? Number(item.value) : null
+              const percent = v === null ? 0 : (Math.abs(v) / maxAbs) * 50
+              return el('div', { key: item.pointId, className: 'dvb-viz-bar-row' },
+                el('span', { className: 'dvb-viz-bar-name', title: item.name }, item.name),
+                el('div', { className: 'dvb-viz-bar-track' },
+                  el('span', { className: 'dvb-viz-bar-zero-line', 'aria-hidden': 'true' }),
+                  v === null
+                    ? el('span', { className: 'dvb-viz-bar-missing', title: '无有效值' }, '—')
+                    : el('div', {
+                        className: 'dvb-viz-bar-fill' + (v < 0 ? ' dvb-viz-bar-neg' : v === 0 ? ' dvb-viz-bar-zero' : ' dvb-viz-bar-pos'),
+                        'data-sign': v < 0 ? 'neg' : v > 0 ? 'pos' : 'zero',
+                        title: String(v) + (item.unit ? ' ' + item.unit : ''),
+                        style: v === 0 ? { width: '2px' } : { width: Math.max(1, percent) + '%' },
+                      })),
+                el('span', { className: 'dvb-viz-bar-val' }, v === null ? '—' : String(v) + (item.unit ? ' ' + item.unit : '')))
+            })),
+          el('div', { className: 'dvb-hint' }, '柱长按 |值| / 最大绝对值 比例；正值向右、负值向左；通信失败显示 —'))
+      }
+      if (comp.type === 'value') {
+        const item = latest[0] || {}
+        return el('div', { className: 'dvb-viz-body dvb-viz-value-card' },
+          el('span', { className: 'dvb-viz-value-name' }, item.name || ''),
+          el('span', { className: 'dvb-viz-value' + (item.ok ? '' : ' dvb-viz-value-stale') },
+            item.ok && item.value != null ? String(item.value) : '—'),
+          el('span', { className: 'dvb-viz-value-unit' }, (item.ok && item.value != null && item.unit) ? item.unit : ''))
+      }
+      if (comp.type === 'switch') {
+        const item = latest[0] || {}
+        const pt = byId.get(comp.pointIds[0]) || {}
+        const on = item.value === 1 || item.value === true
+        const pending = switchDraft.current
+        const busy = !!(pending && pending.busy && pending.componentId === comp.id)
+        const confirmHint = pending && pending.componentId === comp.id && !pending.busy && pending.expiresAt > Date.now()
+          ? ('确认写入「' + (pending.desiredValue ? '开' : '关') + '」…')
+          : ''
+        return el('div', { className: 'dvb-viz-body dvb-viz-switch-card' },
+          el('span', { className: 'dvb-viz-value-name' }, item.name || ''),
+          el('span', { className: 'dvb-viz-value' }, on ? 'ON' : 'OFF'),
+          confirmHint ? el('div', { className: 'dvb-hint' }, confirmHint) : null,
+          el('div', { className: 'dvb-actions' },
+            el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: !cwd || !pt.function || busy, onClick() { toggleSwitch(comp, { connectionId: pt.connectionId, deviceId: pt.deviceId, pointId: pt.id, address: pt.address }, true) } }, '开'),
+            el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !cwd || !pt.function || busy, onClick() { toggleSwitch(comp, { connectionId: pt.connectionId, deviceId: pt.deviceId, pointId: pt.id, address: pt.address }, false) } }, '关')))
+      }
+      return null
     }
 
     const componentCard = (comp) => {
       const status = visualizationComponentStatus(comp, points)
-      const opts = monitoredPointOptions(pack || {}) // 渲染用元数据（映射到实际点位）
       const byId = new Map(points.map((p) => [p.id, p]))
       const latest = componentLatestValues(values, points, comp.pointIds)
       const degraded = status !== 'ok'
@@ -237,108 +355,44 @@ export function createVisualizationPage(React, t, post, hooks) {
         renderer(comp, latest, byId, degraded))
     }
 
-    function renderer(comp, latest, byId, degraded) {
-      if (degraded) {
-        return el('div', { className: 'dvb-viz-body' },
-          el('div', { className: 'dvb-hint dvb-need' }, '关联点位已关闭监视或被删除；请编辑组件恢复或选择新的监视点位。'),
-          el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openEditor(comp) } }, '修复'))
-      }
-      if (comp.type === 'line') {
-        const payload = seriesOfComponent(comp)
-        const chartErr = chartErrors[comp.id]
-        return el('div', { className: 'dvb-viz-body' },
-          chartErr
-            ? el('div', { className: 'dvb-msg dvb-viz-chart-error', 'data-kind': 'err' },
-                el('span', null, chartErr),
-                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '重试渲染该曲线', onClick() { setChartErrors((prev) => { const next = { ...prev }; delete next[comp.id]; return next }); setTick((n) => n + 1) } }, '重试'),
-                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openEditor(comp) } }, '编辑'))
-            : payload.keys.length
-              ? el('div', { ref: (node) => { if (node) ensureUplot(node, comp) }, className: 'dvb-viz-uplot', style: { width: '100%', height: '150px' } })
-              : el('div', { className: 'dvb-hint' }, '暂无历史样本，等待采集…'))
-      }
-      if (comp.type === 'bar') {
-        const bd = barDataOf(comp)
-        // Task10/0.20.1: 柱长按 maxAbs 比例；正负方向；零值基线；null/非有限 → —
-        const nums = bd.latest.map((l) => (l.ok && l.value != null && Number.isFinite(Number(l.value))) ? Number(l.value) : null)
-        const maxAbs = Math.max(1, ...nums.filter((v) => v !== null).map((v) => Math.abs(v)))
-        return el('div', { className: 'dvb-viz-body' },
-          el('div', { className: 'dvb-viz-bars' },
-            bd.latest.map((item) => {
-              const v = (item.ok && item.value != null && Number.isFinite(Number(item.value))) ? Number(item.value) : null
-              const percent = v === null ? 0 : (Math.abs(v) / maxAbs) * 100
-              return el('div', { key: item.pointId, className: 'dvb-viz-bar-row' },
-                el('span', { className: 'dvb-viz-bar-name', title: item.name }, item.name),
-                el('div', { className: 'dvb-viz-bar-track' },
-                  v === null
-                    ? el('span', { className: 'dvb-viz-bar-missing', title: '无有效值' }, '—')
-                    : el('div', {
-                        className: 'dvb-viz-bar-fill' + (v < 0 ? ' dvb-viz-bar-neg' : v === 0 ? ' dvb-viz-bar-zero' : ''),
-                        'data-sign': v < 0 ? 'neg' : v > 0 ? 'pos' : 'zero',
-                        title: String(v) + (item.unit ? ' ' + item.unit : ''),
-                        style: { width: Math.max(v === 0 ? 0.5 : 1, percent) + '%' },
-                      })),
-                el('span', { className: 'dvb-viz-bar-val' }, v === null ? '—' : String(v) + (item.unit ? ' ' + item.unit : '')))
-            })),
-          el('div', { className: 'dvb-hint' }, '柱长按 |值| / 最大绝对值 比例显示；通信失败显示 —'))
-      }
-      if (comp.type === 'value') {
-        const item = latest[0] || {}
-        return el('div', { className: 'dvb-viz-body dvb-viz-value-card' },
-          el('span', { className: 'dvb-viz-value-name' }, item.name || ''),
-          el('span', { className: 'dvb-viz-value' + (item.ok ? '' : ' dvb-viz-value-stale') },
-            item.ok && item.value != null ? String(item.value) : '—'),
-          el('span', { className: 'dvb-viz-value-unit' }, (item.ok && item.value != null && item.unit) ? item.unit : ''))
-      }
-      if (comp.type === 'switch') {
-        const item = latest[0] || {}
-        const pt = byId.get(comp.pointIds[0]) || {}
-        const on = item.value === 1 || item.value === true
-        return el('div', { className: 'dvb-viz-body dvb-viz-switch-card' },
-          el('span', { className: 'dvb-viz-value-name' }, item.name || ''),
-          el('span', { className: 'dvb-viz-value' }, on ? 'ON' : 'OFF'),
-          el('div', { className: 'dvb-actions' },
-            el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: !cwd || !pt.function, onClick() { toggleSwitch(comp, { connectionId: pt.connectionId, deviceId: pt.deviceId, pointId: pt.id, address: pt.address }, true) } }, '开'),
-            el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !cwd || !pt.function, onClick() { toggleSwitch(comp, { connectionId: pt.connectionId, deviceId: pt.deviceId, pointId: pt.id, address: pt.address }, false) } }, '关')))
-      }
-      return null
-    }
-
-    function copyComponentRef(comp) {
-      const ref = buildAgentRef('visualization', { visualizationId: comp.id, type: comp.type, pointIds: comp.pointIds, name: comp.name }, { configVersion: pack && pack.configVersion || 1, start: Date.now() - TREND_WINDOW_MS, end: Date.now() })
-      const copiedText = agentRefToText(ref)
-      if (agentBridge && typeof agentBridge.setDraft === 'function') {
-        // 追加引用到当前 Session 输入框；不覆盖已有输入；不自动发送
-        const res = dispatchAgentRef(ref, agentBridge)
-        setCopied((res.mode === 'input' ? '已加入输入框' : res.mode === 'sent' ? '已发送' : '仅复制') + ' · ' + comp.name)
-      } else {
-        try {
-          if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copiedText)
-          setCopied('已复制组件引用 · ' + comp.name)
-        } catch { setCopied('复制失败') }
-      }
-      try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setNote(reason)) } catch {}
-      setTimeout(() => setCopied(''), 2500)
-    }
-
     const pointOptions = pack ? monitoredPointOptions(pack) : []
-    const numericOk = (o) => o.function === 3 || o.function === 4
+    const byPointId = new Map(points.map((p) => [p.id, p]))
     const editorOpts = editor
       ? pointOptions.filter((o) => {
-          // Task11/0.20.1: 按当前组件类型过滤可选点位（不静默删除已选不兼容点）
-          if (editor.type === 'line' || editor.type === 'bar') { if (!numericOk(o)) return false }
-          if (editor.type === 'switch' && o.function !== 1) return false
           if (editor.search) {
-            return (o.name + ' ' + o.path + ' ' + o.pointId).toLowerCase().includes(editor.search.toLowerCase())
+            const hit = (o.name + ' ' + o.path + ' ' + o.pointId).toLowerCase().includes(editor.search.toLowerCase())
+            if (!hit) return false
           }
-          return true
+          return pointCompatible(editor.type, o.function) || editor.pointIds.includes(o.pointId)
         })
       : []
+    // 已选但不在 monitored 列表中的不兼容点：仍展示
+    const orphanSelected = editor
+      ? (editor.pointIds || []).filter((pid) => !pointOptions.some((o) => o.pointId === pid)).map((pid) => {
+          const pt = byPointId.get(pid)
+          return {
+            pointId: pid,
+            name: (pt && pt.name) || pid,
+            path: '已选 · 当前不可用',
+            function: pt ? pt.function : 0,
+          }
+        })
+      : []
+    const pickerRows = editorOpts.concat(orphanSelected.filter((o) => !editorOpts.some((x) => x.pointId === o.pointId)))
+    const selectedIncompatible = editor
+      ? (editor.pointIds || []).filter((pid) => {
+          const pt = byPointId.get(pid)
+          return !pt || !pointCompatible(editor.type, pt.function)
+        })
+      : []
+    const editorCheck = editorValidation()
+    const singleSelect = editor && (editor.type === 'value' || editor.type === 'switch')
 
     return el('div', { className: 'dvb-live dvb-viz' },
       el('div', { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('liveChart') || '可视化'),
         el('span', { className: 'dvb-map-meta' }, components.length + ' 组件'),
-        el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick() { openEditor(null) } }, t('vizNew') || '＋新建组件')),
+        !editor ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick() { openEditor(null) } }, t('vizNew') || '＋新建组件') : null),
       copied ? el('div', { className: 'dvb-hint' }, copied) : null,
       note ? el('div', { className: 'dvb-hint' }, note) : null,
       el('div', { className: 'dvb-viz-list' }, components.map(componentCard)),
@@ -349,34 +403,61 @@ export function createVisualizationPage(React, t, post, hooks) {
         : null,
       editor
         ? el('div', { className: 'dvb-panel dvb-write-panel' },
-          el('div', { className: 'dvb-panel-head' },
-            el('span', { className: 'dvb-panel-title' }, (editor.id ? t('vizEdit') || '编辑组件' : t('vizNew') || '新建组件')),
-            el('button', { type: 'button', className: 'dvb-btn', onClick() { setEditor(null) } }, t('csvCancel') || '取消')),
-          el('div', { className: 'dvb-toolbar' },
-            vizFieldOf(el, t('vizName') || '组件名称', el('input', { className: 'dvb-input', value: editor.name, placeholder: '如 送风温度趋势', onChange: (e) => setEditor((prev) => ({ ...prev, name: e.target.value })) })),
-            vizFieldOf(el, t('vizType') || '组件类型', el('select', { className: 'dvb-input', value: editor.type, onChange: (e) => setEditor((prev) => ({ ...prev, type: e.target.value })) },
-              ...[...COMPONENT_TYPES].map((ty) => el('option', { key: ty, value: ty }, vizTypeLabel(ty))))),
-            el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', onClick: saveComponent }, t('savePoint') || '保存')),
-          el('div', { className: 'dvb-viz-picker' },
-            el('input', { className: 'dvb-input dvb-map-search', placeholder: t('vizSearch') || '搜索已监视点位…', value: editor.search, onChange: (e) => setEditor((prev) => ({ ...prev, search: e.target.value })) }),
-            el('div', { className: 'dvb-viz-picker-list' },
-              editorOpts.length
-                ? editorOpts.map((o) => el('label', { key: o.pointId, className: 'dvb-viz-picker-opt', title: o.path },
-                    el('input', {
-                      type: 'checkbox',
-                      checked: editor.pointIds.includes(o.pointId),
-                      onChange: (e) => {
-                        setEditor((prev) => {
-                          const has = prev.pointIds.includes(o.pointId)
-                          return { ...prev, pointIds: has ? prev.pointIds.filter((x) => x !== o.pointId) : prev.pointIds.concat([o.pointId]) }
-                        })
-                      },
-                    }),
-                    el('span', null, o.name),
-                    el('span', { className: 'dvb-hint', style: { marginLeft: '8px' } }, o.path)))
-                : el('div', { className: 'dvb-hint' }, pointOptions.length ? '无匹配点位' : (t('trendEmptyHint') || '请先在上位机点位配置中开启监视'))),
-          editor.pointIds.length ? el('div', { className: 'dvb-hint' }, '已选 ' + editor.pointIds.length + ' 个点位') : null))
-      : null)
+            el('div', { className: 'dvb-panel-head' },
+              el('span', { className: 'dvb-panel-title' }, (editor.id ? t('vizEdit') || '编辑组件' : t('vizNew') || '新建组件'))),
+            el('div', { className: 'dvb-toolbar' },
+              vizFieldOf(el, t('vizName') || '组件名称', el('input', { className: 'dvb-input', value: editor.name, placeholder: '如 送风温度趋势', onChange: (e) => setEditor((prev) => ({ ...prev, name: e.target.value })) })),
+              vizFieldOf(el, t('vizType') || '组件类型', el('select', {
+                className: 'dvb-input',
+                value: editor.type,
+                onChange: (e) => {
+                  const nextType = e.target.value
+                  if (editor.id && editor.type === 'line' && nextType !== 'line') destroyChart(editor.id)
+                  setEditor((prev) => ({ ...prev, type: nextType }))
+                },
+              }, ...[...COMPONENT_TYPES].map((ty) => el('option', { key: ty, value: ty }, vizTypeLabel(ty)))))),
+            el('div', { className: 'dvb-viz-picker' },
+              el('input', { className: 'dvb-input dvb-map-search', placeholder: t('vizSearch') || '搜索已监视点位…', value: editor.search, onChange: (e) => setEditor((prev) => ({ ...prev, search: e.target.value })) }),
+              el('div', { className: 'dvb-viz-picker-list' },
+                pickerRows.length
+                  ? pickerRows.map((o) => {
+                      const incompatible = !pointCompatible(editor.type, o.function)
+                      const checked = editor.pointIds.includes(o.pointId)
+                      return el('label', { key: o.pointId, className: 'dvb-viz-picker-opt', title: o.path },
+                        el('input', {
+                          type: singleSelect ? 'radio' : 'checkbox',
+                          name: singleSelect ? ('viz-point-' + (editor.id || 'new')) : undefined,
+                          checked,
+                          onChange: () => {
+                            setEditor((prev) => {
+                              if (singleSelect) return { ...prev, pointIds: [o.pointId] }
+                              const has = prev.pointIds.includes(o.pointId)
+                              return { ...prev, pointIds: has ? prev.pointIds.filter((x) => x !== o.pointId) : prev.pointIds.concat([o.pointId]) }
+                            })
+                          },
+                        }),
+                        el('span', null, o.name),
+                        incompatible ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, '不兼容') : null,
+                        incompatible ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: (ev) => { ev.preventDefault(); setEditor((prev) => ({ ...prev, pointIds: prev.pointIds.filter((x) => x !== o.pointId) })) } }, '移除') : null,
+                        el('span', { className: 'dvb-hint', style: { marginLeft: '8px' } }, o.path))
+                    })
+                  : el('div', { className: 'dvb-hint' }, pointOptions.length
+                    ? (t('vizNoCompatiblePoints') || '当前组件类型没有可用的已监视点位')
+                    : (t('vizNoMonitoredPoints') || '暂无可用点位，请先在上位机点位表中开启“监视”')))),
+            selectedIncompatible.length
+              ? el('div', { className: 'dvb-hint dvb-need' }, '已选但不兼容的点位：' + selectedIncompatible.join(', ') + '（请移除或改回兼容类型）')
+              : null,
+            editor.pointIds.length ? el('div', { className: 'dvb-hint' }, '已选 ' + editor.pointIds.length + ' 个点位') : null,
+            !editorCheck.ok && editorCheck.reason ? el('div', { className: 'dvb-hint dvb-need' }, editorCheck.reason) : null,
+            el('div', { className: 'dvb-actions' },
+              el('button', { type: 'button', className: 'dvb-btn', disabled: saving, onClick() { setEditor(null) } }, t('csvCancel') || '取消'),
+              el('button', {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-primary',
+                disabled: saving || !editorCheck.ok,
+                onClick: saveComponent,
+              }, saving ? '保存中…' : (editor.id ? (t('vizSave') || '保存修改') : (t('vizCreate') || '创建组件')))))
+        : null)
   }
 }
 

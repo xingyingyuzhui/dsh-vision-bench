@@ -5,6 +5,7 @@ import { connLabel, normalizeModbus } from './bench-devices.mjs'
 import { appendEvidence, applyConfigDraft, createConfigDraft, createManualRequest, discardConfigDraft, getConfigDraft, journalView, listConfigDrafts, loadWorkspace, saveWorkspace } from './bench-store.mjs'
 import { resolveTarget } from './bench-targets.mjs'
 import { readTrendSeries } from './bench-trend-store.mjs'
+import { listConnectionStates } from './bench-serial-monitor.mjs'
 
 const ACTIONS = new Set(['status','ls','select','build','read','write','map','manual','connect','points','frames','focus','trend','visualization','alarm','evidence','draft'])
 
@@ -90,15 +91,19 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
   if (action === 'status') {
     const workspace = loadWorkspace(home, room.cwd)
     const journal = journalView(workspace)
-    const boundId = workspace.session && workspace.session.boundId ? workspace.session.boundId : ''
     const pack = normalizeModbus(workspace.modbus)
+    const states = await listConnectionStates(home, room.cwd, opts)
+    const connectionStates = (states && states.connectionStates) || []
+    const stateByConn = new Map(connectionStates.map((s) => [s.connectionId, s.status || '']))
+    const activeDev = (pack.devices || []).find((d) => d.id === pack.activeDeviceId) || (pack.devices || [])[0]
     return {
       ok: true,
       action,
       cwd: room.cwd,
       session: {
-        boundId,
-        isBound: !!boundId && boundId === origin.sessionId,
+        // Vision 自动服务当前 Session；不再暴露手动绑定语义
+        autoService: true,
+        sessionId: origin.sessionId || '',
       },
       keil: workspace.keil,
       modbus: {
@@ -106,6 +111,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
         configVersion: pack.configVersion || 1,
         connections: pack.connections,
         devices: pack.devices,
+        connectionStates,
         points: (pack.points || []).map((p) => {
           const rec = (pack.values || []).find((item) => item.key === p.id || item.pointId === p.id)
           return {
@@ -130,8 +136,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
             value: rec ? decodeValue(p, rec.raw) : null,
             ok: rec ? rec.ok : false,
             at: rec ? rec.at : 0,
-            // Task3/0.20.1: 复用 pointRuntimeStatus，不另起一套状态判断
-            runtimeStatus: pointRuntimeStatus(p, rec, pack.alarmState, '').label,
+            runtimeStatus: pointRuntimeStatus(p, rec, pack.alarmState, stateByConn.get(p.connectionId) || '').label,
           }
         }),
         values: pack.values,
@@ -151,7 +156,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
           stopbits: pack.conn.stopbits,
           host: pack.conn.host,
           tcpPort: pack.conn.tcpPort,
-          slave: pack.conn.slave,
+          unitId: activeDev ? activeDev.unitId : undefined,
           sim: pack.conn.sim,
           label: connLabel(pack.conn),
         },
@@ -540,10 +545,11 @@ export function visionBenchTool(home) {
         mode: { type: 'string', enum: ['rtu', 'tcp'] },
         port: { type: 'string' },
         host: { type: 'string' },
-        slave: { type: 'number' },
+        slave: { type: 'number', description: '兼容旧参数：修改设备 Unit ID；必须同时提供 deviceId，否则返回 DEVICE_ID_REQUIRED；不会写入 connection.conn' },
+        unitId: { type: 'number', description: '与 slave 相同：仅在提供 deviceId 时更新该设备 Unit ID' },
         connectionId: { type: 'string', description: '多连接的目标连接 id，与 connId 互为别名；缺省用当前激活连接' },
         connId: { type: 'string', description: 'connectionId 的别名' },
-        deviceId: { type: 'string', description: '多连接的目标设备 id，缺省用当前激活设备；points/read/write/connect 均支持' },
+        deviceId: { type: 'string', description: '目标设备 id；修改 Unit ID / points/read/write/connect 时使用；缺省用当前激活设备（改 Unit ID 时必填）' },
         pointId: { type: 'string', description: 'read 的点位 id，校验按 connectionId+deviceId+area+address' },
         function: { type: 'number', description: 'read/write 的功能码；write 只允许 1（线圈）或 3（保持寄存器）' },
         address: { type: 'number' },
@@ -643,17 +649,24 @@ export function visionBenchTool(home) {
         tempWatch: { type: 'array', items: { type: 'string' }, description: 'tempWatchIds 别名' },
         evidence: {
           type: 'array',
-          description: '结论回挂的现场证据数组：{kind,id,connectionId,deviceId,at,version}，关联编译/日志/点值/报文/趋势',
+          description: '结论回挂的现场证据数组：{kind,id,visualizationId,componentType,pointIds,connectionId,deviceId,at,version,timeRange}',
           items: {
             type: 'object',
             properties: {
-              kind: { type: 'string' },
+              kind: { type: 'string', description: 'point|frame|alarm|trend|visualization|…' },
               id: { type: 'string' },
               pointId: { type: 'string' },
               frameId: { type: 'string' },
               connectionId: { type: 'string' },
               connId: { type: 'string' },
               deviceId: { type: 'string' },
+              visualizationId: { type: 'string' },
+              componentType: { type: 'string', enum: ['line', 'bar', 'value', 'switch'] },
+              pointIds: { type: 'array', items: { type: 'string' } },
+              timeRange: {
+                type: 'object',
+                properties: { start: { type: 'number' }, end: { type: 'number' } },
+              },
               at: { type: 'number' },
               version: { type: 'number' },
             },
@@ -661,7 +674,7 @@ export function visionBenchTool(home) {
         },
         target: {
           type: 'object',
-          description: 'focus 的显式目标对象：{connectionId,deviceId,pointId,frameId,trendKey,alarmId,kind}',
+          description: 'focus 的显式目标对象：{connectionId,deviceId,pointId,frameId,trendKey,alarmId,visualizationId,kind}',
           properties: {
             connectionId: { type: 'string' },
             connId: { type: 'string' },
@@ -670,7 +683,8 @@ export function visionBenchTool(home) {
             frameId: { type: 'string' },
             trendKey: { type: 'string' },
             alarmId: { type: 'string' },
-            kind: { type: 'string' },
+            visualizationId: { type: 'string' },
+            kind: { type: 'string', description: 'point|frame|alarm|trend|visualization|…' },
           },
         },
         focus: {
@@ -684,6 +698,7 @@ export function visionBenchTool(home) {
             frameId: { type: 'string' },
             trendKey: { type: 'string' },
             alarmId: { type: 'string' },
+            visualizationId: { type: 'string' },
             kind: { type: 'string' },
           },
         },

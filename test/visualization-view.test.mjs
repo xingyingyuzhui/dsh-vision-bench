@@ -59,7 +59,7 @@ const makePost = (mb = JSON.parse(JSON.stringify(MB))) => {
   return { post, saved, state: () => mb }
 }
 
-const t = (k) => ({ liveChart: '可视化', vizNew: '新建组件', vizEdit: '编辑组件', vizName: '组件名称', vizType: '组件类型', vizSearch: '搜索', savePoint: '保存', csvCancel: '取消' }[k] || k)
+const t = (k) => ({ liveChart: '可视化', vizNew: '新建组件', vizEdit: '编辑组件', vizName: '组件名称', vizType: '组件类型', vizSearch: '搜索', vizCreate: '创建组件', vizSave: '保存修改', savePoint: '保存', csvCancel: '取消' }[k] || k)
 
 test('挂载无错误；默认不展开已监视点位列表（空状态只提示新建）', async () => {
   const { post } = makePost()
@@ -103,7 +103,8 @@ test('新建组件：编辑器勾选监视点位（限定路径）→ 保存后�
   })
   await waitFor(() => assert.ok(tree.container.textContent.includes('已选 1 个点位')), { timeout: 6000 })
   // 保存
-  const saveBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '保存')
+  const saveBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '创建组件' || b.textContent === '保存修改' || b.textContent === '保存')
+  assert.ok(saveBtn, '保存/创建按钮存在')
   await act(async () => { saveBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); await new Promise((r) => setTimeout(r, 60)) })
   assert.ok(saved.length >= 1, '保存提交 visualization')
   const viz = state().visualization
@@ -169,10 +170,14 @@ test('Task10/0.20.1: 柱状图柱长按比例 + 正负方向 + null 显示 —',
   const fills = Array.from(tree.container.querySelectorAll('.dvb-viz-bar-fill'))
   assert.equal(fills.length, 3, '三个有效值柱')
   const widths = fills.map((f) => parseFloat(f.style.width))
-  assert.ok(Math.abs(Math.max(...widths) - 100) < 0.5, '最大绝对值(100) → 100%')
+  // 零基线居中：最大绝对值占半轨 50%
+  assert.ok(Math.abs(Math.max(...widths) - 50) < 0.5, '最大绝对值(100) → 半轨 50%')
   assert.ok(widths[0] < widths[1], '10 < 50')
-  assert.ok(Boolean(fills.find((f) => f.getAttribute('data-sign') === 'neg')), '负值方向')
-  assert.ok(Boolean(fills.find((f) => f.getAttribute('data-sign') === 'pos')), '正值方向')
+  const neg = fills.find((f) => f.getAttribute('data-sign') === 'neg')
+  const pos = fills.find((f) => f.getAttribute('data-sign') === 'pos')
+  assert.ok(neg && neg.className.includes('dvb-viz-bar-neg'), '负值方向 class')
+  assert.ok(pos && pos.className.includes('dvb-viz-bar-pos'), '正值方向 class')
+  assert.ok(tree.container.querySelector('.dvb-viz-bar-zero-line'), '零基线')
   // null 显示 —
   const missing = tree.container.querySelector('.dvb-viz-bar-missing')
   assert.ok(missing && missing.textContent === '—', '通信失败显示 —')
@@ -201,7 +206,8 @@ test('Task8/0.20.1: 编辑保留 ID/order/windowMs/confirmWrite 且排列不变�
   await act(async () => { editFirst.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
   await waitFor(() => assert.ok(tree.container.textContent.includes('编辑组件')), { timeout: 6000 })
   // 保存（名称空不变更时，norm 后同值）→ 索引替换
-  const saveBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '保存')
+  const saveBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '保存修改' || b.textContent === '创建组件' || b.textContent === '保存')
+  assert.ok(saveBtn, '保存修改按钮存在')
   await act(async () => { saveBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); await new Promise((r) => setTimeout(r, 60)) })
   const vizPayload = saved.length && saved[saved.length - 1].modbus.visualization
   assert.ok(vizPayload, '保存提交')

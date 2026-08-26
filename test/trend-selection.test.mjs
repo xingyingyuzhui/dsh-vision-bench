@@ -30,7 +30,7 @@ async function setup() {
   return { home, cwd }
 }
 
-test('未勾选“加入曲线”的点位不产生任何曲线样本', async () => {
+test('未开启监视的点位不产生任何历史样本', async () => {
   const { home, cwd } = await setup()
   const ran = await runVisionBench(home, { action: 'read', connectionId: 'c1', deviceId: 'd1', function: 3, address: 0, count: 1 }, cwd, { source: 'agent', sessionId: 's1' })
   assert.equal(ran.ok, true)
@@ -39,7 +39,7 @@ test('未勾选“加入曲线”的点位不产生任何曲线样本', async ()
   await rm(home, { recursive: true, force: true })
 })
 
-test('勾选“加入曲线”的点位在读取提交后产生样本（页面不开也采样）', async () => {
+test('开启监视的点位在读取提交后产生样本（页面不开也采样）', async () => {
   const { home, cwd } = await setup()
   const ran = await runVisionBench(home, { action: 'read', connectionId: 'c1', deviceId: 'd1', function: 3, address: 1, count: 1 }, cwd, { source: 'agent', sessionId: 's1' })
   assert.equal(ran.ok, true)

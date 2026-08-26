@@ -18,7 +18,7 @@ export function emptyWorkspace() {
     keil: { project: '', target: '', artifact: 'hex' },
     modbus: {
       version: 2,
-      conn: { mode: 'rtu', port: '', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, host: '', tcpPort: 502, slave: 1, sim: false },
+      conn: { mode: 'rtu', port: '', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, host: '', tcpPort: 502, sim: false },
       points: [],
       values: [],
       polling: { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' },
@@ -580,16 +580,22 @@ export function evidenceFromRef(ref) {
   const timeRange = r.timeRange && Number.isFinite(Number(r.timeRange.start))
     ? { start: Number(r.timeRange.start), end: Number(r.timeRange.end) >= Number(r.timeRange.start) ? Number(r.timeRange.end) : Number(r.timeRange.start) }
     : { start: at - 5 * 60 * 1000, end: at }
-  let pointId = '', frameId = '', trendKey = '', alarmId = ''
+  let pointId = '', frameId = '', trendKey = '', alarmId = '', visualizationId = ''
+  let componentType = '', pointIds = []
   if (kind === 'point') pointId = String(r.pointId || '')
   else if (kind === 'frame') frameId = String(r.frameId || '')
   else if (kind === 'alarm') alarmId = String(r.alarmId || '')
   else if (kind === 'trend') {
     trendKey = String(r.trendKey || '')
     pointId = String(r.pointId || '')
+  } else if (kind === 'visualization') {
+    visualizationId = String(r.visualizationId || r.id || '')
+    componentType = String(r.componentType || r.type || '').slice(0, 16)
+    pointIds = (Array.isArray(r.pointIds) ? r.pointIds : []).slice(0, 16).map((x) => String(x))
+    pointId = String(pointIds[0] || r.pointId || '')
   } else pointId = String(r.pointId || '')
-  const id = pointId || frameId || trendKey || alarmId || String(r.connectionId || '') || String(r.deviceId || '')
-  return {
+  const id = visualizationId || pointId || frameId || trendKey || alarmId || String(r.connectionId || '') || String(r.deviceId || '')
+  const out = {
     kind,
     id,
     connectionId: String(r.connectionId || ''),
@@ -602,6 +608,12 @@ export function evidenceFromRef(ref) {
     version: Number(r.configVersion) > 0 ? Number(r.configVersion) : 1,
     timeRange,
   }
+  if (kind === 'visualization') {
+    out.visualizationId = visualizationId
+    out.componentType = componentType
+    out.pointIds = pointIds
+  }
+  return out
 }
 
 // Task4/0.18.2: evidence POST must surface CONFIG_DRIFT / TARGET_MISMATCH reasons,
@@ -626,16 +638,15 @@ export function postEvidence(post, cwd, evidence, onFail) {
 }
 
 export function agentRefToText(ref) {
-  const range = ref && ref.timeRange ? (' [' + new Date(ref.timeRange.start).toISOString() + ' → ' + new Date(ref.timeRange.end).toISOString() + ']') : ''
-  const ids = [ref.connectionId, ref.deviceId, ref.pointId || ref.frameId || ref.alarmId || ref.trendKey].filter(Boolean).join('/')
-  return '[' + (ref.kind || 'ref') + '] ' + (ids || 'unknown') + ' v' + (ref.configVersion || 3) + range
+  // 剪贴板回退也必须是完整 JSON，不能丢 visualizationId / pointIds
+  return JSON.stringify(ref || {}, null, 2)
 }
 
-export function copyAgentRef(ref) {
+export async function copyAgentRef(ref) {
   const text = JSON.stringify(ref, null, 2)
   try {
     if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text)
+      await navigator.clipboard.writeText(text)
       return true
     }
   } catch {}
@@ -687,9 +698,14 @@ export function dispatchAgentRef(ref, bridge, opts) {
       return { mode: 'input', ok: true, status: '已加入输入框', text: t }
     } catch {}
   }
-  // 无写接口 → 剪贴板回退
-  const ok = copyAgentRef(ref)
-  return { mode: ok ? 'copied' : 'failed', ok, status: ok ? '仅复制' : '处理失败', text: t, fallback: true }
+  // 无写接口 → 剪贴板回退（完整 JSON）；权限失败不得提示成功
+  return Promise.resolve(copyAgentRef(ref)).then((ok) => ({
+    mode: ok ? 'copied' : 'failed',
+    ok: !!ok,
+    status: ok ? '已复制组件引用' : '复制失败',
+    text: t,
+    fallback: true,
+  }))
 }
 export const hasHarnessInput = (p) => !!(p && (
   (p.inputActions && typeof p.inputActions.setDraft === 'function')

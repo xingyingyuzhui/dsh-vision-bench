@@ -16,7 +16,8 @@ test('normalizeConn applies defaults and clamps', () => {
   assert.equal(c.bytesize, 8)
   assert.equal(c.parity, 'N')
   assert.equal(c.stopbits, 1)
-  assert.equal(c.slave, 247)
+  assert.equal(c.slave, undefined)
+  assert.ok(!('slave' in c))
   const rtu = normalizeConn({ port: ' COM3 ', parity: 'E', stopbits: 2, bytesize: 7 })
   assert.equal(rtu.mode, 'rtu')
   assert.equal(rtu.port, 'COM3')
@@ -49,7 +50,8 @@ test('legacy devices+segments workspaces migrate into points', async () => {
     assert.equal(mb.version, 3)
     // legacy getters still work
     assert.equal(mb.conn.port, 'COM5')
-    assert.equal(mb.conn.slave, 3)
+    assert.equal(mb.conn.slave, undefined)
+    assert.equal(mb.slave, 3)
     assert.equal(mb.conn.sim, true)
     // v3 structures
     assert.equal(mb.connections.length, 1)
@@ -108,9 +110,10 @@ test('patchConn merges without touching points or values', () => {
   assert.equal(next.values.length, 1)
 })
 
-test('connLabel renders both modes', () => {
-  assert.match(connLabel(normalizeConn({ port: 'COM3', baudrate: 9600, slave: 2 })), /COM3 @ 9600/)
-  assert.match(connLabel(normalizeConn({ mode: 'tcp', host: '10.0.0.8', tcpPort: 1502, slave: 4 })), /10\.0\.0\.8:1502/)
+test('connLabel renders both modes without Unit ID', () => {
+  assert.equal(connLabel(normalizeConn({ port: 'COM3', baudrate: 9600, slave: 2 })), 'COM3 @ 9600')
+  assert.equal(connLabel(normalizeConn({ mode: 'tcp', host: '10.0.0.8', tcpPort: 1502, slave: 4 })), '10.0.0.8:1502')
+  assert.ok(!/站号/.test(connLabel(normalizeConn({ port: 'COM3', baudrate: 9600, slave: 2 }))))
 })
 
 test('modbusPoll reports missing points cleanly', async () => {
@@ -392,7 +395,8 @@ test('v2→v3 迁移：旧 conn+points 正确迁为 c1/d1', async () => {
   assert.equal(migrated.connections.length, 1)
   assert.equal(migrated.connections[0].id, 'c1')
   assert.equal(migrated.connections[0].conn.port, 'COM9')
-  assert.equal(migrated.connections[0].conn.slave, 5)
+  assert.equal(migrated.connections[0].conn.slave, undefined)
+  assert.ok(!('slave' in migrated.connections[0].conn))
   assert.equal(migrated.connections[0].conn.baudrate, 115200)
   assert.equal(migrated.devices.length, 1)
   assert.equal(migrated.devices[0].id, 'd1')
