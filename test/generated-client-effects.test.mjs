@@ -30,10 +30,26 @@ function installDom() {
     unobserve() {} disconnect() {}
   }
   globalThis.Element = win.HTMLElement
-  const RECT = () => ({ width: 400, height: 320, top: 0, left: 0, right: 400, bottom: 320, x: 0, y: 0, toJSON() {} })
-  win.HTMLElement.prototype.getBoundingClientRect = function () { return RECT() }
+  const VIEW_RECT = () => ({ width: 400, height: 320, top: 0, left: 0, right: 400, bottom: 320, x: 0, y: 0, toJSON() {} })
+  const ROW_RECT = () => ({ width: 400, height: 36, top: 0, left: 0, right: 400, bottom: 36, x: 0, y: 0, toJSON() {} })
+  const ZERO_RECT = () => ({ width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} })
+  const rectFor = (el) => {
+    const cls = (el && el.className && String(el.className)) || ''
+    if (cls.includes('dvb-frames-virtual') || cls.includes('dvb-live-list')) return VIEW_RECT()
+    if (cls.includes('dvb-live-row')) return ROW_RECT()
+    return ZERO_RECT()
+  }
+  win.HTMLElement.prototype.getBoundingClientRect = function () { return rectFor(this) }
   for (const k of ['clientWidth', 'clientHeight', 'offsetWidth', 'offsetHeight']) {
-    try { Object.defineProperty(win.HTMLElement.prototype, k, { get() { return k.endsWith('Width') ? 400 : 320 }, configurable: true }) } catch {}
+    try {
+      Object.defineProperty(win.HTMLElement.prototype, k, {
+        configurable: true,
+        get() {
+          const r = rectFor(this)
+          return k.endsWith('Width') ? r.width : r.height
+        },
+      })
+    } catch {}
   }
   globalThis.HTMLElement = win.HTMLElement
   globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0)
@@ -148,6 +164,7 @@ test('Task10: generated client renders the real frames tab with 5000 rows (1–4
   }, { timeout: 6000 })
   assert.ok(Array.from(tree.container.querySelectorAll('.dvb-live-row')).length < 50)
   tree.unmount()
+  await new Promise((r) => setTimeout(r, 50))
 
   // no second React, no hook/scroll retry warnings
   const bad = consoleSpy.filter((line) => /second React|Invalid hook call|Maximum update depth|Failed to scroll|act\(/.test(line))

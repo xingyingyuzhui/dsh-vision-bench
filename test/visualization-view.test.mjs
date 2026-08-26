@@ -125,7 +125,7 @@ test('编辑图标恢复组件草稿；类型与关联点位回显', async () =>
   const Viz = createVisualizationPage(React, t, post, {})
   const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('我的数值卡')), { timeout: 6000 })
-  const editBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('编辑组件'))
+  const editBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '编辑')
   assert.ok(editBtn)
   await act(async () => { editBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
   await waitFor(() => assert.ok(tree.container.textContent.includes('编辑组件')), { timeout: 6000 })
@@ -185,6 +185,25 @@ test('Task10/0.20.1: 柱状图柱长按比例 + 正负方向 + null 显示 —',
   tree.unmount()
 })
 
+test('Task10b/0.20.1: 柱状图小数比例不强制 maxAbs=1', async () => {
+  const mb = JSON.parse(JSON.stringify(MB))
+  mb.values = [
+    { key: 'p1', pointId: 'p1', value: 0.2, ok: true, at: Date.now() },
+    { key: 'p2', pointId: 'p2', value: 0.5, ok: true, at: Date.now() },
+  ]
+  mb.visualization = { schemaVersion: 1, components: [{ id: 'viz_bar_f', name: '小数柱', type: 'bar', pointIds: ['p1', 'p2'] }] }
+  const { post } = makePost(mb)
+  const Viz = createVisualizationPage(React, t, post, {})
+  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  await waitFor(() => assert.ok(tree.container.textContent.includes('小数柱')), { timeout: 6000 })
+  const fills = Array.from(tree.container.querySelectorAll('.dvb-viz-bar-fill'))
+  assert.equal(fills.length, 2)
+  const widths = fills.map((f) => parseFloat(f.style.width))
+  assert.ok(Math.abs(Math.max(...widths) - 50) < 0.5, '0.5 → 半轨 50%')
+  assert.ok(Math.abs(widths.find((w) => w < 50) - 20) < 0.5, '0.2 → 20%')
+  tree.unmount()
+})
+
 test('Task8/0.20.1: 编辑保留 ID/order/windowMs/confirmWrite 且排列不变（索引替换）', async () => {
   const mb = JSON.parse(JSON.stringify(MB))
   mb.visualization = { schemaVersion: 1, components: [
@@ -202,7 +221,7 @@ test('Task8/0.20.1: 编辑保留 ID/order/windowMs/confirmWrite 且排列不变�
   await waitFor(() => assert.ok(tree.container.textContent.includes('第一')), { timeout: 6000 })
   const cards = Array.from(tree.container.querySelectorAll('.dvb-viz-card'))
   assert.equal(cards.length, 2, '两个组件')
-  const editFirst = Array.from(cards[0].querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '').includes('编辑组件'))
+  const editFirst = Array.from(cards[0].querySelectorAll('button')).find((b) => b.textContent === '编辑')
   await act(async () => { editFirst.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
   await waitFor(() => assert.ok(tree.container.textContent.includes('编辑组件')), { timeout: 6000 })
   // 保存（名称空不变更时，norm 后同值）→ 索引替换

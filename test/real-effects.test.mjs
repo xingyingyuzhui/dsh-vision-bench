@@ -57,11 +57,43 @@ beforeEach(async () => {
     unobserve() {}
     disconnect() {}
   }
+  // Fail the suite on unexpected console.warn (virtualizer scroll failures, etc.).
+  const WARN_ALLOW = [
+    /Download the React DevTools/,
+  ]
+  if (!console.warn.__dvbWrapped) {
+    const origWarn = console.warn.bind(console)
+    console.warn = (...args) => {
+      const msg = args.map((x) => (x && x.message) || String(x)).join(' ')
+      if (WARN_ALLOW.some((re) => re.test(msg))) return origWarn(...args)
+      const err = new Error('unexpected console.warn: ' + msg.slice(0, 300))
+      err.name = 'UnexpectedConsoleWarn'
+      throw err
+    }
+    console.warn.__dvbWrapped = true
+    console.warn.__dvbOrig = origWarn
+  }
   globalThis.Element = win.HTMLElement
-  const RECT = () => ({ width: 400, height: 320, top: 0, left: 0, right: 400, bottom: 320, x: 0, y: 0, toJSON() {} })
-  win.HTMLElement.prototype.getBoundingClientRect = function () { return RECT() }
+  const VIEW_RECT = () => ({ width: 400, height: 320, top: 0, left: 0, right: 400, bottom: 320, x: 0, y: 0, toJSON() {} })
+  const ROW_RECT = () => ({ width: 400, height: 36, top: 0, left: 0, right: 400, bottom: 36, x: 0, y: 0, toJSON() {} })
+  const ZERO_RECT = () => ({ width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} })
+  const rectFor = (el) => {
+    const cls = (el && el.className && String(el.className)) || ''
+    if (cls.includes('dvb-frames-virtual') || cls.includes('dvb-live-list')) return VIEW_RECT()
+    if (cls.includes('dvb-live-row')) return ROW_RECT()
+    return ZERO_RECT()
+  }
+  win.HTMLElement.prototype.getBoundingClientRect = function () { return rectFor(this) }
   for (const k of ['clientWidth', 'clientHeight', 'offsetWidth', 'offsetHeight']) {
-    try { Object.defineProperty(win.HTMLElement.prototype, k, { get() { return k.endsWith('Width') ? 400 : 320 }, configurable: true }) } catch {}
+    try {
+      Object.defineProperty(win.HTMLElement.prototype, k, {
+        configurable: true,
+        get() {
+          const r = rectFor(this)
+          return k.endsWith('Width') ? r.width : r.height
+        },
+      })
+    } catch {}
   }
   globalThis.HTMLElement = win.HTMLElement
   globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0)
@@ -74,9 +106,8 @@ beforeEach(async () => {
 })
 afterEach(() => {
   cleanup()
-  for (const k of ['window', 'document', 'navigator', 'ResizeObserver', 'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'devicePixelRatio', 'CustomEvent', 'getComputedStyle']) {
-    delete globalThis[k]
-  }
+  // Do not `delete globalThis.window`: bare `window` in ESM then throws ReferenceError
+  // for late uPlot/rAF callbacks. beforeEach replaces the Window each test.
 })
 
 const makeFrames = (connId, n, startAt = 1000) =>
@@ -287,7 +318,7 @@ test('Task8: TrendPage mounts with real effects without leaking listeners', asyn
   // hard to assert listener count generically; at least unmount must not throw
   assert.ok(true)
 })
-test('Task4: TrendPage 让 Agent 分析区间 uses the input bridge, preserves text, posts typed trend evidence', async () => {
+test('Task4: VisualizationPage 让 Agent 分析组件 uses the input bridge, preserves text, posts typed visualization evidence', async () => {
   // Task3/0.19.3: 曲线数据来自工作区 trend 存储（提交阶段采样）
   const cwdA = '/tmp/trend-agent-' + Math.random()
   const wall = Date.now()
@@ -500,7 +531,7 @@ test('raw feed identity stays on the selected connection; COM4 does not mix in',
   globalThis.DvbVendor = savedVendor
 })
 
-test('empty live sources guide the user to HMI; closing the tab does not unlink', async () => {
+test('empty live sources show no HMI CTA; closing the tab does not unlink', async () => {
   const savedVendor = globalThis.DvbVendor
   globalThis.DvbVendor = null
   const closeCalls = []
@@ -514,12 +545,14 @@ test('empty live sources guide the user to HMI; closing the tab does not unlink'
     }
     return { ok: true }
   }
-  const tmap = (k) => ({ framesNoLink: '暂无已连接串口', framesGoHmi: '前往上位机', framesRaw: '原始数据' }[k] || k)
+  const tmap = (k) => ({ framesRaw: '原始数据', framesEmpty: '暂无报文' }[k] || k)
   const Frames = createFramesPage(React, tmap, post, { useVirtualizer: () => null })
   const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/p4' }, useSessions: noop }))
   await waitFor(() => {
-    assert.ok(tree.container.textContent.includes('暂无已连接串口'))
-    assert.ok(Array.from(tree.container.querySelectorAll('button')).some((b) => b.textContent === '前往上位机'))
+    assert.ok(tree.container.textContent.includes('串口报文') || tree.container.querySelector('.dvb-frames-page'))
+    assert.ok(!tree.container.textContent.includes('暂无已连接串口'))
+    assert.ok(!tree.container.textContent.includes('请先在上位机中创建连接并连接串口'))
+    assert.ok(!Array.from(tree.container.querySelectorAll('button')).some((b) => b.textContent === '前往上位机'))
   }, { timeout: 6000 })
   tree.unmount()
   assert.equal(closeCalls.length, 0)
