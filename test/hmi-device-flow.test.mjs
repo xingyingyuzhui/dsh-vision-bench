@@ -45,11 +45,11 @@ test('创建连接不会自动创建设备（源码契约）', async () => {
   assert.ok(src.includes('下一步：添加设备'), '引导下一步存在')
 })
 
-test('添加设备必须填写名称与唯一 Unit ID（服务端唯一性可被 UI 校验）', async () => {
+test('添加设备必须填写名称与唯一站号（服务端唯一性可被 UI 校验）', async () => {
   const src = await readFile(new URL('../bench-hmi.mjs', import.meta.url), 'utf8')
   assert.ok(src.includes('请填写设备名称'), '设备名必填校验')
-  assert.ok(src.includes('已存在') && src.includes('Unit'), 'Unit ID 连接内唯一校验')
-  assert.ok(src.includes('openAddDevice'), '添加设备入口（非直接生成 Unit 1）')
+  assert.ok(src.includes('已存在') && src.includes('站号'), '站号连接内唯一校验')
+  assert.ok(src.includes('openAddDevice'), '添加设备入口（非直接生成站号 1）')
 })
 
 test('设备1与设备2可以分别使用相同功能码和地址（HR0 两设备并存）', async () => {
