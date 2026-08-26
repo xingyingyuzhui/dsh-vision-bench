@@ -12,10 +12,25 @@ import { modbusPoll } from '../bench-modbus.mjs'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
 
 const src = (name) => readFile(new URL('../' + name, import.meta.url), 'utf8')
+async function hmiBundle() {
+  const { readdir } = await import('node:fs/promises')
+  const { join, dirname } = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+  const dir = join(root, 'src/ui/hmi')
+  const files = await readdir(dir)
+  const parts = await Promise.all(files.filter((f) => f.endsWith('.mjs')).map((f) => readFile(new URL('../src/ui/hmi/' + f, import.meta.url), 'utf8')))
+  return parts.join('\n')
+}
+async function stylesBundle() {
+  const files = ['bench-styles.mjs', 'src/ui/styles/base.mjs', 'src/ui/styles/hmi.mjs', 'src/ui/styles/sidebar.mjs', 'src/ui/styles/visualization.mjs', 'src/ui/styles/frames.mjs']
+  const parts = await Promise.all(files.map((f) => src(f)))
+  return parts.join('\n')
+}
 
 test('页面契约：无绑定 UI、无大块聚焦面板、无完整时间线、无“打开串口”按钮', async () => {
   const [hmi, view, shared, live, frames, styles] = await Promise.all([
-    src('bench-hmi.mjs'), src('bench-view.mjs'), src('bench-shared.mjs'), src('bench-live.mjs'), src('bench-frames-view.mjs'), src('bench-styles.mjs'),
+    hmiBundle(), src('bench-view.mjs'), src('bench-shared.mjs'), src('bench-live.mjs'), src('bench-frames-view.mjs'), stylesBundle(),
   ])
   // Task7: bind UI gone
   for (const f of [hmi, view, shared]) {

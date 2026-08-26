@@ -7,6 +7,14 @@ import React from 'react'
 import { createElement } from 'react'
 import { render, cleanup, waitFor, act } from '@testing-library/react'
 import { createHmiView } from '../bench-hmi.mjs'
+import { readdirSync, readFileSync as rfs } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+function hmiSources() {
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+  const dir = join(root, 'src/ui/hmi')
+  return readdirSync(dir).filter((f) => f.endsWith('.mjs')).map((f) => rfs(join(dir, f), 'utf8')).join('\n')
+}
 
 let win
 beforeEach(async () => {
@@ -78,7 +86,7 @@ async function selectConn(tree) {
 const t = (k) => ({ addPoint: '添加点位', batchAdd: '批量添加', batchGenerate: '生成', batchPrefix: '前缀', batchStart: '起始', batchCount: '数量', ptName: '名称', ptNamePh: '名称', ptFc: '功能码', ptAddr: '地址', ptUnit: '单位', colName: '名称', colFn: '功能码', colAddr: '地址', monitorOn: '监视', alarmOn: '告警', ptAlarmMin: '下限', ptAlarmMax: '上限', savePoint: '保存', csvCancel: '取消', csvImport: '导入 CSV', csvExport: '导出 CSV', readAll: '读取', devEdit: '编辑设备', ptEdit: '编辑点位', ptSave: '保存', devSave: '保存', editing: '编辑', deleteSegment: '删除', noPoints: '暂无点位', writing: '写入中…', quickWrite: '写入' }[k] || k)
 
 test('点位表不存在更新时间与独立写入/读取/编辑/删除文字列（源码契约）', async () => {
-  const src = await readFile(new URL('../bench-hmi.mjs', import.meta.url), 'utf8')
+  const src = hmiSources()
   assert.ok(!/el\('th', null, t\('time'\)\)/.test(src), '无更新时间列')
   assert.ok(!/t\('quickWrite'\)/.test(src), '无写入文字按钮')
   assert.ok(!/t\('readSegment'\)/.test(src), '无读取文字按钮')

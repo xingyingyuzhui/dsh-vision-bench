@@ -24,7 +24,7 @@ test('package.json: version tracks package and no legacy python modbus files', a
     await assert.rejects(access(new URL('../' + bad, import.meta.url)), bad + ' deleted from source')
   }
   // UI 版本 chip 与 package 一致（禁止手改 client.js）
-  const hmi = await readFile(new URL('../bench-hmi.mjs', import.meta.url), 'utf8')
+  const hmi = await readFile(new URL('../src/ui/hmi/device-card.mjs', import.meta.url), 'utf8')
   assert.ok(hmi.includes("'v" + pkg.version + "'") || hmi.includes('"v' + pkg.version + '"'), 'HMI version chip matches package.json')
 })
 

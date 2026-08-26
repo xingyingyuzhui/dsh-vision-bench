@@ -1,0 +1,231 @@
+import { functionCodeOf, isWritableFunction } from '../../../bench-points.mjs'
+import { focusHighlightClass, shouldHighlightFocus } from '../../../bench-shared.mjs'
+import { fnOptionLabel } from './hmi-ids.mjs'
+import { renderInlineWriteCell } from './inline-write.mjs'
+import { renderFlagSwitch } from './point-flags.mjs'
+
+/** One point table row (view or edit). */
+export function renderPointRow(el, t, ctx) {
+  const {
+    point,
+    devId,
+    showOps,
+    valueMap,
+    focusState,
+    editingPointsDeviceId,
+    pointDraftsById,
+    inlineWrite,
+    setInlineWrite,
+    submitWriteCell,
+    openWriteCell,
+    busy,
+    writeRunning,
+    patchDraft,
+    sendToAgent,
+    flagSavingByPoint,
+    persistPointFlags,
+    removePointRow,
+  } = ctx
+  const rec = valueMap[point.id]
+  const eng = rec?.ok && rec.value !== null && rec.value !== undefined ? rec.value : null
+  const shown = eng !== null ? eng : rec && rec.ok === false ? rec.error : '—'
+  const writable = isWritableFunction(point.function)
+  const isFocused = shouldHighlightFocus(focusState) && focusState.request.pointId === point.id
+  const editing = editingPointsDeviceId === devId
+  const draft = editing ? pointDraftsById[point.id] || null : null
+  const valueCell = renderInlineWriteCell(el, t, {
+    point,
+    inlineWrite,
+    setInlineWrite,
+    submitWriteCell,
+    openWriteCell,
+    writable,
+    shown,
+    busy,
+    writeRunning,
+  })
+  return el(
+    'tr',
+    {
+      key: point.id,
+      'data-kind': 'pt',
+      className: 'dvb-pt-row' + focusHighlightClass(isFocused),
+      'data-focused': isFocused ? 'true' : 'false',
+      'data-editing': editing ? 'true' : 'false',
+    },
+    el(
+      'td',
+      null,
+      editing
+        ? el('input', {
+            className: 'dvb-input',
+            value: draft ? draft.name : point.name,
+            onChange: (e) => patchDraft(point.id, { name: e.target.value }),
+          })
+        : el(
+            'span',
+            { className: 'dvb-cell-name' },
+            el('span', null, point.name || functionCodeOf(point.function) + point.address),
+            el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-sm',
+                title: '复制结构化引用（稳定 ID+配置版本）并让 Agent 分析',
+                'aria-label': '让 Agent 分析 ' + (point.name || point.id),
+                onClick() {
+                  sendToAgent('point', {
+                    pointId: point.id,
+                    connectionId: point.connectionId,
+                    deviceId: point.deviceId,
+                    name: point.name,
+                  })
+                },
+              },
+              'AI',
+            ),
+          ),
+    ),
+    el(
+      'td',
+      { className: 'dvb-col-fn' },
+      editing
+        ? el(
+            'select',
+            {
+              className: 'dvb-input',
+              value: String(draft && draft.function != null ? draft.function : point.function),
+              onChange: (e) => patchDraft(point.id, { function: Number(e.target.value) }),
+            },
+            el('option', { value: '1' }, fnOptionLabel(t, 1)),
+            el('option', { value: '2' }, fnOptionLabel(t, 2)),
+            el('option', { value: '3' }, fnOptionLabel(t, 3)),
+            el('option', { value: '4' }, fnOptionLabel(t, 4)),
+          )
+        : el('span', { className: 'dvb-val' }, functionCodeOf(point.function)),
+    ),
+    el(
+      'td',
+      null,
+      editing
+        ? el('input', {
+            className: 'dvb-input dvb-input-mono',
+            type: 'number',
+            min: 0,
+            max: 65535,
+            value: draft ? draft.address : point.address,
+            onChange: (e) => patchDraft(point.id, { address: Number(e.target.value) }),
+          })
+        : el('span', { className: 'dvb-val' }, String(point.address)),
+    ),
+    el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' }, valueCell),
+    el(
+      'td',
+      { className: 'dvb-col-monitor' },
+      renderFlagSwitch(el, t, {
+        checked: point.monitorEnabled === true,
+        title: flagSavingByPoint[point.id + ':monitorEnabled'] ? '监视状态保存中…' : '开启后成为可视化数据源',
+        onToggle: (next) => {
+          persistPointFlags(point.id, { monitorEnabled: next })
+        },
+      }),
+    ),
+    el(
+      'td',
+      { className: 'dvb-col-alarm' },
+      renderFlagSwitch(el, t, {
+        checked: point.alarmEnabled === true,
+        title: flagSavingByPoint[point.id + ':alarmEnabled'] ? '告警状态保存中…' : '参与告警判断',
+        onToggle: (next) => {
+          persistPointFlags(point.id, { alarmEnabled: next })
+        },
+      }),
+    ),
+    el(
+      'td',
+      null,
+      editing
+        ? el('input', {
+            className: 'dvb-input dvb-input-mono',
+            type: 'number',
+            step: 'any',
+            value: draft ? draft.scale : point.scale,
+            onChange: (e) => patchDraft(point.id, { scale: Number(e.target.value) }),
+          })
+        : el('span', { className: 'dvb-val' }, (point.scale === 1 ? '' : '×' + point.scale) || '—'),
+    ),
+    el(
+      'td',
+      null,
+      editing
+        ? el('input', {
+            className: 'dvb-input dvb-input-mono',
+            type: 'number',
+            step: 'any',
+            value: draft ? draft.offset : point.offset,
+            onChange: (e) => patchDraft(point.id, { offset: Number(e.target.value) }),
+          })
+        : el('span', { className: 'dvb-val' }, point.offset ? (point.offset > 0 ? '+' : '') + point.offset : '—'),
+    ),
+    el(
+      'td',
+      null,
+      editing
+        ? el('input', {
+            className: 'dvb-input',
+            value: draft ? draft.unit : point.unit,
+            onChange: (e) => patchDraft(point.id, { unit: e.target.value }),
+          })
+        : el('span', null, point.unit || '—'),
+    ),
+    el(
+      'td',
+      null,
+      editing
+        ? el('input', {
+            className: 'dvb-input dvb-input-mono',
+            type: 'number',
+            step: 'any',
+            placeholder: '—',
+            value: draft ? draft.alarmMin : point.alarmMin == null ? '' : point.alarmMin,
+            onChange: (e) => patchDraft(point.id, { alarmMin: e.target.value }),
+          })
+        : el('span', { className: 'dvb-val' }, point.alarmMin == null ? '—' : String(point.alarmMin)),
+    ),
+    el(
+      'td',
+      null,
+      editing
+        ? el('input', {
+            className: 'dvb-input dvb-input-mono',
+            type: 'number',
+            step: 'any',
+            placeholder: '—',
+            value: draft ? draft.alarmMax : point.alarmMax == null ? '' : point.alarmMax,
+            onChange: (e) => patchDraft(point.id, { alarmMax: e.target.value }),
+          })
+        : el('span', { className: 'dvb-val' }, point.alarmMax == null ? '—' : String(point.alarmMax)),
+    ),
+    editing
+      ? el(
+          'td',
+          { className: 'dvb-col-ops' },
+          el(
+            'button',
+            {
+              type: 'button',
+              className: 'dvb-btn dvb-btn-sm dvb-btn-danger',
+              title: '删除该点位',
+              'aria-label': '删除点位 ' + (point.name || point.id),
+              onClick() {
+                removePointRow(point)
+              },
+            },
+            '✕',
+          ),
+        )
+      : showOps
+        ? el('td', { className: 'dvb-col-ops' }, null)
+        : null,
+  )
+}

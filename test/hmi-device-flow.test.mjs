@@ -1,15 +1,21 @@
 // Task1/0.19.3: 设备流程 — 创建连接不自动造设备；添加设备必须唯一 Unit ID；
 // 点位归属修复（编辑不移动设备）；CSV 设备作用域。
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
-import { mkdirSync } from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdirSync, readdirSync, readFileSync as readFileSyncFs } from 'node:fs'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import test from 'node:test'
-import { runVisionBench } from '../bench-tool.mjs'
-import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
+import { fileURLToPath } from 'node:url'
 import { pointsOp } from '../bench-modbus-forward.mjs'
+import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
+import { runVisionBench } from '../bench-tool.mjs'
+
+function hmiSources() {
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+  const dir = join(root, 'src/ui/hmi')
+  return readdirSync(dir).filter((f) => f.endsWith('.mjs')).map((f) => readFileSyncFs(join(dir, f), 'utf8')).join('\n')
+}
 
 const cfg = (id, port = 'COM3') => ({ id, name: id, role: 'client', enabled: true, conn: { mode: 'rtu', port, baudrate: 9600, slave: 1, sim: true } })
 
@@ -37,7 +43,7 @@ async function setup(over = {}) {
 }
 
 test('创建连接不会自动创建设备（源码契约）', async () => {
-  const src = await readFile(new URL('../bench-hmi.mjs', import.meta.url), 'utf8')
+  const src = hmiSources()
   const addConn = src.slice(src.indexOf('function addConnection'), src.indexOf('function selectConnection'))
   assert.ok(!addConn.includes('newDev'), 'addConnection 不再生成设备')
   // 空状态引导存在
@@ -46,7 +52,7 @@ test('创建连接不会自动创建设备（源码契约）', async () => {
 })
 
 test('添加设备必须填写名称与唯一站号（服务端唯一性可被 UI 校验）', async () => {
-  const src = await readFile(new URL('../bench-hmi.mjs', import.meta.url), 'utf8')
+  const src = hmiSources()
   assert.ok(src.includes('请填写设备名称'), '设备名必填校验')
   assert.ok(src.includes('已存在') && src.includes('站号'), '站号连接内唯一校验')
   assert.ok(src.includes('openAddDevice'), '添加设备入口（非直接生成站号 1）')
@@ -55,7 +61,7 @@ test('添加设备必须填写名称与唯一站号（服务端唯一性可被 U
 test('设备1与设备2可以分别使用相同功能码和地址（HR0 两设备并存）', async () => {
   const { home, cwd } = await setup()
   // 服务层允许同地址跨设备；UI 唯一键为 conn+dev+fn+addr（源码断言）
-  const src = await readFile(new URL('../bench-hmi.mjs', import.meta.url), 'utf8')
+  const src = hmiSources()
   assert.ok(/saveNewPointDraft/.test(src) && /\(p\.deviceId \|\| ''\) === d\.deviceId/.test(src), '唯一键含 deviceId（行内草稿）')
   const saved = loadWorkspace(home, cwd).modbus
   assert.equal(saved.points.filter((p) => p.address === 0).length, 2, '两个设备各有 HR0')
@@ -76,13 +82,13 @@ test('编辑设备2的点位不会移动到设备1（pointsOp update 保持 devi
 })
 
 test('批量添加固定到按钮所在设备（源码契约：generateBatch 用 batch.deviceId）', async () => {
-  const src = await readFile(new URL('../bench-hmi.mjs', import.meta.url), 'utf8')
+  const src = hmiSources()
   assert.ok(/batch\.deviceId/.test(src), 'batch 携带 deviceId')
   assert.ok(/fixedCid/.test(src), 'batch 绑定 connectionId')
 })
 
 test('CSV 只作用于当前设备：合并 vs 替换（源码契约 + 存储验证）', async () => {
-  const src = await readFile(new URL('../bench-hmi.mjs', import.meta.url), 'utf8')
+  const src = hmiSources()
   assert.ok(/CSV 只作用于设备/.test(src), 'CSV 作用域文案')
   assert.ok(/合并导入/.test(src) && /替换当前设备点位/.test(src), '合并/替换二选一')
   assert.ok(/csvTarget\.mode === 'replace'/.test(src), '替换模式按设备清点')
@@ -90,7 +96,7 @@ test('CSV 只作用于当前设备：合并 vs 替换（源码契约 + 存储验
 })
 
 test('删除设备确认包含点位与当前值数量（源码契约）', async () => {
-  const src = await readFile(new URL('../bench-hmi.mjs', import.meta.url), 'utf8')
+  const src = hmiSources()
   assert.ok(src.includes('将同时删除该设备的'), '删除确认文案存在')
   assert.ok(src.includes('conf irmDeleteDevice'.replace(' ', '')) || src.includes('confirmDeleteDevice(d)'), '二次确认删除入口')
 })

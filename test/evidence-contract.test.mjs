@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { buildAgentRef, evidenceFromRef, postEvidence, parseTrendKey } from '../bench-shared.mjs'
 import { loadWorkspace, normalizeFocusState, saveWorkspace, appendEvidence } from '../bench-store.mjs'
@@ -164,7 +166,8 @@ test('Task4: postEvidence surfaces CONFIG_DRIFT / TARGET_MISMATCH instead of sil
 
 test('Task4: UI evidence requests use explicit typed fields and no silent evidence swallow', () => {
   const live = readFileSync(new URL('../bench-live.mjs', import.meta.url), 'utf8')
-  const hmi = readFileSync(new URL('../bench-hmi.mjs', import.meta.url), 'utf8')
+  const hmiRoot = join(dirname(fileURLToPath(import.meta.url)), '../src/ui/hmi')
+  const hmi = readdirSync(hmiRoot).filter((f) => f.endsWith('.mjs')).map((f) => readFileSync(join(hmiRoot, f), 'utf8')).join('\n')
   const frames = readFileSync(new URL('../bench-frames-view.mjs', import.meta.url), 'utf8')
   // all three surfaces must go through the shared typed postEvidence helper
   assert.match(live, /postEvidence\(/)
