@@ -1,9 +1,9 @@
-# dsh-vision-bench · Vision 台架
+# dsh-vision-bench · Vision 模式
 
 日常开发用的会话工作台。跟 Claw 无关。
 
 - 会话区标签：**调试**、**上位机**；侧栏：可视化、告警、串口报文、操作记录、工程结构
-- 设置页 **台架**：Keil 绑定 UV4 与可选 Python；Modbus/串口使用内置 Node 运行时；OpenOCD 仍是外部兼容绑定。一键 **运行自检**
+- 设置页 **Vision**：Keil 绑定 UV4 与可选 Python；Modbus/串口使用内置 Node 运行时；OpenOCD 仍是外部兼容绑定。一键 **运行自检**
 - 安装后写入用户预设 **Vision模式**（从官方 `standard` 复制，再挂上 `vision_bench`，提示规则由插件 `vision-bench:guidance` 区段提供）
 - Agent 需要时自己调用 `vision_bench`，不把现场状态塞进每一轮系统提示
 - 编译 / 读点 / 写点 / 烧录进入共享任务与「操作记录」；Agent 发起的操作实时可见
@@ -62,7 +62,7 @@ dsh plugin --profile web add github:xingyingyuzhui/dsh-vision-bench
 dsh plugin --profile web add link:/abs/path/to/dsh-vision-bench
 ```
 
-装完重启 `dsh web`。打开 **调试** / **上位机**，或 **设置 → 台架**。新会话选 **Vision模式**。
+装完重启 `dsh web`。打开 **调试** / **上位机**，或 **设置 → Vision**。新会话选 **Vision模式**。
 
 ## 卸载
 

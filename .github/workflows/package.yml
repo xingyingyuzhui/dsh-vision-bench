@@ -1,0 +1,23 @@
+name: package
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run quality
+      - run: npm pack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-vision-bench-tgz
+          path: '*.tgz'
