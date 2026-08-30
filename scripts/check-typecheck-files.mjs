@@ -94,7 +94,8 @@ export function checkTypecheckFiles(projectRoot = root) {
   const coreFiles = collectCoreMjs(projectRoot)
   const nocheck = findNocheckFiles(coreFiles).map((file) => relative(projectRoot, file).replaceAll('\\', '/'))
   const unchecked = findUncheckedFiles(coreFiles).map((file) => relative(projectRoot, file).replaceAll('\\', '/'))
-  const out = execFileSync('npx', ['tsc', '-p', 'tsconfig.check.json', '--listFilesOnly'], {
+  const tsc = join(projectRoot, 'node_modules/typescript/bin/tsc')
+  const out = execFileSync(process.execPath, [tsc, '-p', 'tsconfig.check.json', '--listFilesOnly'], {
     encoding: 'utf8',
     cwd: projectRoot,
   })

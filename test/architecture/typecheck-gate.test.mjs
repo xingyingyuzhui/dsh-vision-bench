@@ -40,5 +40,7 @@ test('typecheck gate reads source instead of trusting tsc filenames alone', () =
   assert.match(script, /@ts-nocheck/)
   assert.match(script, /readFileSync/)
   assert.match(script, /listFilesOnly/)
+  assert.match(script, /typescript\/bin\/tsc/)
+  assert.doesNotMatch(script, /\bnpx\b/)
   assert.doesNotMatch(script, /required = \[\s*'config-mutation-service\.mjs'/)
 })
