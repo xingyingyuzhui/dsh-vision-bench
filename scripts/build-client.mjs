@@ -318,6 +318,15 @@ ${bodyParts.join('\n')}
 })
 `
 
+function pluginBodyOf(src) {
+  const marker = '\nvar DvbVendorCss = '
+  const i = src.indexOf(marker)
+  if (i < 0) return src
+  const cssStart = i + marker.length
+  const afterCss = src.indexOf('\n', cssStart)
+  return src.slice(afterCss < 0 ? cssStart : afterCss)
+}
+
 async function main() {
   const vendorBlock = await assembleVendor()
   const next = banner + bodyTpl(vendorBlock, parts)
@@ -325,7 +334,8 @@ async function main() {
   const check = process.argv.includes('--check')
   if (check) {
     const current = readFileSync(dest, 'utf8')
-    if (current !== next) {
+    const hasVendor = current.includes('var DvbVendor =') && current.includes('var DvbVendorCss =')
+    if (!hasVendor || !current.includes('Virtualizer') || pluginBodyOf(current) !== pluginBodyOf(next)) {
       console.error('client.js is stale; run node scripts/build-client.mjs')
       process.exit(1)
     }
