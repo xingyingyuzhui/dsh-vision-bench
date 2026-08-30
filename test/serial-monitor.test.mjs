@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import {
   closeSerialMonitor,
   feedConnectionFrames,
@@ -84,18 +85,20 @@ test('capture feed is read-only and does not require leftover assembly', async (
 test('openocd_flash.py validates inputs before spawning', async () => {
   const pythonBin = findPython()
   if (!pythonBin) return
-  const script = new URL('../runtime/openocd_flash.py', import.meta.url).pathname
+  const script = fileURLToPath(new URL('../runtime/openocd_flash.py', import.meta.url))
+  assert.ok(!script.startsWith('/D:'), script)
+  assert.ok(!script.includes('D:\\D:'), script)
   const run = (args) => {
     try {
       const out = execFileSync(pythonBin, [script, ...args], { encoding: 'utf8', timeout: 15000, windowsHide: true })
       return JSON.parse(out.trim().split('\n').pop())
     } catch (error) {
-      return JSON.parse(
-        String(error.stdout || '{}')
-          .trim()
-          .split('\n')
-          .pop() || '{}',
-      )
+      const stdout = String(error.stdout || '')
+        .trim()
+        .split('\n')
+        .pop()
+      if (!stdout) throw error
+      return JSON.parse(stdout)
     }
   }
   const base = [
