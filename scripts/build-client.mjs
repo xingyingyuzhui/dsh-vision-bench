@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as esbuild from 'esbuild'
 
 // Task1 / 0.18.1: bundle uPlot + @tanstack/virtual-core into `DvbVendor`
@@ -318,13 +318,18 @@ ${bodyParts.join('\n')}
 })
 `
 
-function pluginBodyOf(src) {
+function normalizeNewlines(src) {
+  return String(src).replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
+
+export function pluginBodyOf(src) {
+  const text = normalizeNewlines(src)
   const marker = '\nvar DvbVendorCss = '
-  const i = src.indexOf(marker)
-  if (i < 0) return src
+  const i = text.indexOf(marker)
+  if (i < 0) return text
   const cssStart = i + marker.length
-  const afterCss = src.indexOf('\n', cssStart)
-  return src.slice(afterCss < 0 ? cssStart : afterCss)
+  const afterCss = text.indexOf('\n', cssStart)
+  return text.slice(afterCss < 0 ? cssStart : afterCss)
 }
 
 async function main() {
@@ -335,8 +340,16 @@ async function main() {
   if (check) {
     const current = readFileSync(dest, 'utf8')
     const hasVendor = current.includes('var DvbVendor =') && current.includes('var DvbVendorCss =')
-    if (!hasVendor || !current.includes('Virtualizer') || pluginBodyOf(current) !== pluginBodyOf(next)) {
+    const hasVirtualizer = current.includes('Virtualizer')
+    const currentBody = pluginBodyOf(current)
+    const nextBody = pluginBodyOf(next)
+    if (!hasVendor || !hasVirtualizer || currentBody !== nextBody) {
       console.error('client.js is stale; run node scripts/build-client.mjs')
+      if (!hasVendor) console.error('missing DvbVendor / DvbVendorCss')
+      if (!hasVirtualizer) console.error('missing Virtualizer')
+      if (currentBody !== nextBody) {
+        console.error(`plugin body mismatch: current ${currentBody.length} vs generated ${nextBody.length}`)
+      }
       process.exit(1)
     }
     process.exit(0)
@@ -344,7 +357,9 @@ async function main() {
   writeFileSync(dest, next)
 }
 
-main().catch((e) => {
-  console.error('build-client failed:', e && e.message ? e.message : e)
-  process.exit(1)
-})
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e) => {
+    console.error('build-client failed:', e && e.message ? e.message : e)
+    process.exit(1)
+  })
+}

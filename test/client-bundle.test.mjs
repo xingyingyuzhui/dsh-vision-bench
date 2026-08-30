@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { pluginBodyOf } from '../scripts/build-client.mjs'
 import { installDomStub } from './dom-stub.mjs'
 
 const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'client.js'), 'utf8')
@@ -103,4 +104,11 @@ test('generated client contains exactly one ModuleLoader registration and no sec
   assert.doesNotMatch(src, /from\s+['"]react['"]/, 'should not contain a literal react import')
   assert.doesNotMatch(src, /node_modules\/react/, 'should not bundle React source')
   assert.doesNotMatch(src, /ReactDOM/, 'should not bundle ReactDOM')
+})
+
+test('build:check compares plugin body ignoring CRLF checkouts', () => {
+  const crlf = src.replaceAll('\n', '\r\n')
+  assert.notEqual(src, crlf)
+  assert.equal(pluginBodyOf(src), pluginBodyOf(crlf))
+  assert.match(pluginBodyOf(src), /function apply/)
 })
