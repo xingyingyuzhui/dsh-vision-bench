@@ -20,7 +20,16 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - run: npm run quality
+      - name: Run npm run quality
+        shell: bash
+        run: set -o pipefail && npm run quality 2>&1 | tee quality.log
+      - name: Upload quality log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-${{ matrix.os }}-node${{ matrix.node }}
+          path: quality.log
+          if-no-files-found: ignore
       - run: npm pack --dry-run --json
       - name: serialport load smoke
         shell: bash

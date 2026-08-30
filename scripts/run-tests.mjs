@@ -44,7 +44,7 @@ function walk(dir, acc) {
  * @returns {string[]}
  */
 export function testFileArgs(projectRoot = root) {
-  return collectTestFiles(projectRoot).map((file) => relative(projectRoot, file))
+  return collectTestFiles(projectRoot).map((file) => relative(projectRoot, file).replaceAll('\\', '/'))
 }
 
 function main() {
@@ -58,6 +58,7 @@ function main() {
     cwd: root,
     env: process.env,
     stdio: 'inherit',
+    windowsHide: true,
   })
   if (result.error) {
     console.error(result.error)
