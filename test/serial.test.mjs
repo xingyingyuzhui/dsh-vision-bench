@@ -9,7 +9,7 @@ import {
   serialDevicePath,
 } from '../bench-serial.mjs'
 
-test('serialDevicePath keeps COM1-9 and prefixes COM10+', () => {
+test('serialDevicePath keeps COM1-9 and prefixes COM10+', async () => {
   assert.equal(serialDevicePath('COM3'), 'COM3')
   assert.equal(serialDevicePath('com7'), 'COM7')
   assert.equal(serialDevicePath('COM10'), '\\\\.\\COM10')
@@ -17,7 +17,7 @@ test('serialDevicePath keeps COM1-9 and prefixes COM10+', () => {
   assert.equal(serialDevicePath('/dev/ttyUSB0'), '/dev/ttyUSB0')
 })
 
-test('parseRegSerialComm reads REG_SZ COM values', () => {
+test('parseRegSerialComm reads REG_SZ COM values', async () => {
   const text = [
     'HKEY_LOCAL_MACHINE\\HARDWARE\\DEVICEMAP\\SERIALCOMM',
     '    \\Device\\Serial0    REG_SZ    COM1',
@@ -27,22 +27,19 @@ test('parseRegSerialComm reads REG_SZ COM values', () => {
   assert.deepEqual(parseRegSerialComm(text), ['COM1', 'COM3', 'COM10'])
 })
 
-test('parseJsonStringList accepts one or many COM names', () => {
+test('parseJsonStringList accepts one or many COM names', async () => {
   assert.deepEqual(parseJsonStringList('"COM3"'), ['COM3'])
   assert.deepEqual(parseJsonStringList('["COM5","COM3"]'), ['COM3', 'COM5'])
   assert.deepEqual(parseJsonStringList('COM4\nCOM2'), ['COM2', 'COM4'])
 })
 
-test('parsePnpPortLabels maps (COMx) friendly names', () => {
-  const labels = parsePnpPortLabels(JSON.stringify([
-    { Name: 'USB-SERIAL CH340 (COM3)' },
-    { Name: '通信端口 (COM1)' },
-  ]))
+test('parsePnpPortLabels maps (COMx) friendly names', async () => {
+  const labels = parsePnpPortLabels(JSON.stringify([{ Name: 'USB-SERIAL CH340 (COM3)' }, { Name: '通信端口 (COM1)' }]))
   assert.equal(labels.COM3, 'USB-SERIAL CH340 (COM3)')
   assert.equal(labels.COM1, '通信端口 (COM1)')
 })
 
-test('listUnixPortsFromNames keeps USB serial and drops Bluetooth', () => {
+test('listUnixPortsFromNames keeps USB serial and drops Bluetooth', async () => {
   const ports = listUnixPortsFromNames([
     'cu.Bluetooth-Incoming-Port',
     'cu.usbserial-110',
@@ -50,11 +47,10 @@ test('listUnixPortsFromNames keeps USB serial and drops Bluetooth', () => {
     'ttyUSB0',
     'ttyS0',
   ])
-  assert.deepEqual(ports.map((item) => item.path), [
-    '/dev/cu.usbmodem14101',
-    '/dev/cu.usbserial-110',
-    '/dev/ttyUSB0',
-  ])
+  assert.deepEqual(
+    ports.map((item) => item.path),
+    ['/dev/cu.usbmodem14101', '/dev/cu.usbserial-110', '/dev/ttyUSB0'],
+  )
 })
 
 test('listSerialPorts on win32 uses registry COM names', async () => {

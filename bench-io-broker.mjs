@@ -1,19 +1,19 @@
 import { spawn } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { killProcessTree } from './bench-run.mjs'
+import { capabilitiesFromHealth, idleIoSnapshot } from './bench-io-capability.mjs'
 import {
-  clampTimeoutMs,
-  decodeNdjsonLine,
-  encodeNdjson,
   IO_HANDSHAKE_MS,
   IO_MAX_LINE,
   IO_PROTOCOL_V,
   IO_RUNTIME_PACKAGES,
+  clampTimeoutMs,
+  decodeNdjsonLine,
+  encodeNdjson,
   ioError,
   sanitizeIoError,
 } from './bench-io-contract.mjs'
-import { capabilitiesFromHealth, idleIoSnapshot } from './bench-io-capability.mjs'
+import { killProcessTree } from './bench-run.mjs'
 
 const DEFAULT_WORKER = join(dirname(fileURLToPath(import.meta.url)), 'runtime', 'vision-io-worker.mjs')
 const OUTBOUND_CAP = 32
@@ -55,7 +55,7 @@ export function createVisionIoBroker(options = {}) {
   let healthCache = null
   let stopping = null
 
-  const nextId = () => 'req-' + Date.now().toString(36) + '-' + (++seq)
+  const nextId = () => 'req-' + Date.now().toString(36) + '-' + ++seq
 
   const writeStdin = (obj) => {
     if (!child || !child.stdin || child.stdin.destroyed) return false
@@ -66,7 +66,11 @@ export function createVisionIoBroker(options = {}) {
       return true
     }
     let ok = true
-    try { ok = child.stdin.write(line) } catch { return false }
+    try {
+      ok = child.stdin.write(line)
+    } catch {
+      return false
+    }
     if (!ok) {
       draining = true
       child.stdin.once('drain', () => {
@@ -74,10 +78,16 @@ export function createVisionIoBroker(options = {}) {
         while (outbound.length && child && child.stdin && !child.stdin.destroyed) {
           const next = outbound.shift()
           let more = true
-          try { more = child.stdin.write(next) } catch { break }
+          try {
+            more = child.stdin.write(next)
+          } catch {
+            break
+          }
           if (!more) {
             draining = true
-            child.stdin.once('drain', () => { draining = false })
+            child.stdin.once('drain', () => {
+              draining = false
+            })
             break
           }
         }
@@ -160,102 +170,103 @@ export function createVisionIoBroker(options = {}) {
     healthCache = null
   }
 
-  const spawnWorker = () => new Promise((resolve, reject) => {
-    if (state === 'ready' && child) {
-      resolve(healthCache)
-      return
-    }
-    if (state === 'unhealthy' && Date.now() - lastCrashAt < RESTART_WINDOW_MS) {
-      reject(ioError('IO_RUNTIME_UNAVAILABLE', 'I/O 运行时熔断中'))
-      return
-    }
-    state = 'starting'
-    workerEpoch += 1
-    const epoch = workerEpoch
-    let proc
-    try {
-      proc = spawn(execPath, [workerPath], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true,
-        env,
-      })
-    } catch (error) {
-      state = 'unhealthy'
-      lastCrashAt = Date.now()
-      lastError = ioError('IO_RUNTIME_UNAVAILABLE', String((error && error.message) || error))
-      reject(lastError)
-      return
-    }
-    child = proc
-    stdoutBuf = ''
-    stderrTail = ''
-    draining = false
-    outbound.length = 0
-    proc.stdout.setEncoding('utf8')
-    proc.stdout.on('data', onStdout)
-    proc.stderr.setEncoding('utf8')
-    proc.stderr.on('data', (chunk) => {
-      stderrTail = (stderrTail + String(chunk || '')).slice(-STDERR_CAP)
-    })
-    proc.on('error', (error) => {
-      if (workerEpoch !== epoch) return
-      lastCrashAt = Date.now()
-      lastError = ioError('IO_RUNTIME_UNAVAILABLE', String((error && error.message) || error))
-      killWorker(lastError)
-    })
-    proc.on('exit', () => {
-      if (workerEpoch !== epoch) return
-      lastCrashAt = Date.now()
-      killWorker(ioError('IO_RUNTIME_CRASHED', 'I/O 运行时退出'))
-    })
-    const handshakeId = 'health-' + epoch
-    const timer = setTimeout(() => {
-      pending.delete(handshakeId)
-      lastCrashAt = Date.now()
-      lastError = ioError('IO_RUNTIME_UNAVAILABLE', 'I/O 运行时握手超时')
-      killWorker(lastError)
-      reject(lastError)
-    }, IO_HANDSHAKE_MS)
-    pending.set(handshakeId, {
-      resolve: (msg) => {
-        clearTimeout(timer)
-        const data = msg && msg.data ? msg.data : {}
-        if (Number(data.protocol) !== IO_PROTOCOL_V || Number(msg.v) !== IO_PROTOCOL_V) {
-          lastCrashAt = Date.now()
-          lastError = ioError('PROTOCOL_VIOLATION', '协议版本不符')
-          killWorker(lastError)
-          reject(lastError)
-          return
-        }
-        healthCache = data
-        cachedCaps = capabilitiesFromHealth(data)
-        lastError = null
-        state = 'ready'
-        resolve(data)
-        const queued = startingQueue.splice(0)
-        for (const item of queued) item.resolve()
-      },
-      reject: (error) => {
-        clearTimeout(timer)
-        lastCrashAt = Date.now()
+  const spawnWorker = () =>
+    new Promise((resolve, reject) => {
+      if (state === 'ready' && child) {
+        resolve(healthCache)
+        return
+      }
+      if (state === 'unhealthy' && Date.now() - lastCrashAt < RESTART_WINDOW_MS) {
+        reject(ioError('IO_RUNTIME_UNAVAILABLE', 'I/O 运行时熔断中'))
+        return
+      }
+      state = 'starting'
+      workerEpoch += 1
+      const epoch = workerEpoch
+      let proc
+      try {
+        proc = spawn(execPath, [workerPath], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          windowsHide: true,
+          env,
+        })
+      } catch (error) {
         state = 'unhealthy'
-        lastError = sanitizeIoError(error)
+        lastCrashAt = Date.now()
+        lastError = ioError('IO_RUNTIME_UNAVAILABLE', String((error && error.message) || error))
         reject(lastError)
-      },
-      timer,
-      abortCleanup: () => {},
-      workerEpoch: epoch,
-      settled: false,
+        return
+      }
+      child = proc
+      stdoutBuf = ''
+      stderrTail = ''
+      draining = false
+      outbound.length = 0
+      proc.stdout.setEncoding('utf8')
+      proc.stdout.on('data', onStdout)
+      proc.stderr.setEncoding('utf8')
+      proc.stderr.on('data', (chunk) => {
+        stderrTail = (stderrTail + String(chunk || '')).slice(-STDERR_CAP)
+      })
+      proc.on('error', (error) => {
+        if (workerEpoch !== epoch) return
+        lastCrashAt = Date.now()
+        lastError = ioError('IO_RUNTIME_UNAVAILABLE', String((error && error.message) || error))
+        killWorker(lastError)
+      })
+      proc.on('exit', () => {
+        if (workerEpoch !== epoch) return
+        lastCrashAt = Date.now()
+        killWorker(ioError('IO_RUNTIME_CRASHED', 'I/O 运行时退出'))
+      })
+      const handshakeId = 'health-' + epoch
+      const timer = setTimeout(() => {
+        pending.delete(handshakeId)
+        lastCrashAt = Date.now()
+        lastError = ioError('IO_RUNTIME_UNAVAILABLE', 'I/O 运行时握手超时')
+        killWorker(lastError)
+        reject(lastError)
+      }, IO_HANDSHAKE_MS)
+      pending.set(handshakeId, {
+        resolve: (msg) => {
+          clearTimeout(timer)
+          const data = msg && msg.data ? msg.data : {}
+          if (Number(data.protocol) !== IO_PROTOCOL_V || Number(msg.v) !== IO_PROTOCOL_V) {
+            lastCrashAt = Date.now()
+            lastError = ioError('PROTOCOL_VIOLATION', '协议版本不符')
+            killWorker(lastError)
+            reject(lastError)
+            return
+          }
+          healthCache = data
+          cachedCaps = capabilitiesFromHealth(data)
+          lastError = null
+          state = 'ready'
+          resolve(data)
+          const queued = startingQueue.splice(0)
+          for (const item of queued) item.resolve()
+        },
+        reject: (error) => {
+          clearTimeout(timer)
+          lastCrashAt = Date.now()
+          state = 'unhealthy'
+          lastError = sanitizeIoError(error)
+          reject(lastError)
+        },
+        timer,
+        abortCleanup: () => {},
+        workerEpoch: epoch,
+        settled: false,
+      })
+      if (!writeStdin({ v: IO_PROTOCOL_V, id: handshakeId, op: 'health' })) {
+        clearTimeout(timer)
+        pending.delete(handshakeId)
+        lastCrashAt = Date.now()
+        lastError = ioError('IO_RUNTIME_UNAVAILABLE', '无法写入 I/O 运行时')
+        killWorker(lastError)
+        reject(lastError)
+      }
     })
-    if (!writeStdin({ v: IO_PROTOCOL_V, id: handshakeId, op: 'health' })) {
-      clearTimeout(timer)
-      pending.delete(handshakeId)
-      lastCrashAt = Date.now()
-      lastError = ioError('IO_RUNTIME_UNAVAILABLE', '无法写入 I/O 运行时')
-      killWorker(lastError)
-      reject(lastError)
-    }
-  })
 
   const ensureReady = () => {
     if (state === 'ready' && child) return Promise.resolve(healthCache)

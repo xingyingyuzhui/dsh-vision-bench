@@ -1,8 +1,8 @@
 import { createInterface } from 'node:readline'
 import {
+  IO_PROTOCOL_V,
   decodeNdjsonLine,
   encodeNdjson,
-  IO_PROTOCOL_V,
   sanitizeIoError,
   toEndpoint,
   validateIoRequest,
@@ -14,15 +14,16 @@ const write = (obj) => {
   process.stdout.write(encodeNdjson(obj))
 }
 
-const fail = (id, error) => write({
-  v: IO_PROTOCOL_V,
-  id,
-  ok: false,
-  error: sanitizeIoError(error),
-  frames: error && error.frames ? error.frames : undefined,
-  durationMs: error && error.durationMs,
-  transactionId: error && error.transactionId,
-})
+const fail = (id, error) =>
+  write({
+    v: IO_PROTOCOL_V,
+    id,
+    ok: false,
+    error: sanitizeIoError(error),
+    frames: error && error.frames ? error.frames : undefined,
+    durationMs: error && error.durationMs,
+    transactionId: error && error.transactionId,
+  })
 
 const runtime = await loadModbusRuntime()
 const serial = await loadSerialPort()
@@ -32,23 +33,24 @@ const manager = createConnectionManager({
 
 const pendingAbort = new Map()
 
-const replyHealth = (id) => write({
-  v: IO_PROTOCOL_V,
-  id,
-  ok: true,
-  data: {
-    protocol: IO_PROTOCOL_V,
-    node: process.version,
-    platform: process.platform,
-    arch: process.arch,
-    modbusSerial: runtime.info.modbusSerial,
-    serialport: runtime.info.serialport || serial.error,
-    tcp: runtime.info.tcp,
-    rtu: runtime.info.rtu && !!serial.SerialPort,
-    tcpError: runtime.info.tcpError,
-    rtuError: runtime.info.rtuError || serial.error,
-  },
-})
+const replyHealth = (id) =>
+  write({
+    v: IO_PROTOCOL_V,
+    id,
+    ok: true,
+    data: {
+      protocol: IO_PROTOCOL_V,
+      node: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      modbusSerial: runtime.info.modbusSerial,
+      serialport: runtime.info.serialport || serial.error,
+      tcp: runtime.info.tcp,
+      rtu: runtime.info.rtu && !!serial.SerialPort,
+      tcpError: runtime.info.tcpError,
+      rtuError: runtime.info.rtuError || serial.error,
+    },
+  })
 
 const handle = async (msg) => {
   const checked = validateIoRequest(msg)
@@ -133,8 +135,16 @@ rl.on('line', (line) => {
 })
 
 const shutdown = async () => {
-  try { await manager.stop() } catch { /* ignore */ }
+  try {
+    await manager.stop()
+  } catch {
+    /* ignore */
+  }
   process.exit(0)
 }
-process.on('SIGTERM', () => { void shutdown() })
-process.on('SIGINT', () => { void shutdown() })
+process.on('SIGTERM', () => {
+  void shutdown()
+})
+process.on('SIGINT', () => {
+  void shutdown()
+})

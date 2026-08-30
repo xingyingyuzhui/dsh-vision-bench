@@ -1,3 +1,4 @@
+import { normalizeModbus } from './bench-devices.mjs'
 // Task2/0.19.3: Host-managed background collection service.
 //
 // One Polling Coordinator per workspace. Each connection keeps its own cycle
@@ -5,8 +6,7 @@
 // data even when no sidebar page is open. The plugin unload path stops every
 // timer and in-flight request.
 import { modbusPoll } from './bench-modbus.mjs'
-import { normalizeModbus } from './bench-devices.mjs'
-import { loadWorkspace, saveWorkspace } from './bench-store.mjs'
+import { loadWorkspace, workspaceRepository } from './bench-store.mjs'
 
 const coordinators = new Map() // cwd -> coordinator
 let stopping = false
@@ -74,9 +74,12 @@ const reconcile = (home, cwd, packIn) => {
     clearConnectionTimer(co, cid)
     const entry = { timer: 0, intervalMs: cfg.intervalMs, busy: false }
     co.timers.set(cid, entry)
-    entry.timer = setInterval(() => {
-      void tickConnection(home, cwd, cid, entry)
-    }, Math.max(200, Number(cfg.intervalMs) || 1000))
+    entry.timer = setInterval(
+      () => {
+        void tickConnection(home, cwd, cid, entry)
+      },
+      Math.max(200, Number(cfg.intervalMs) || 1000),
+    )
     if (entry.timer.unref) entry.timer.unref()
     // kick off immediately
     void tickConnection(home, cwd, cid, entry)
@@ -84,31 +87,36 @@ const reconcile = (home, cwd, packIn) => {
   return co
 }
 
-const persistEnable = (home, cwd, connectionId, enabled, intervalMs) => {
+const persistEnable = async (home, cwd, connectionId, enabled, intervalMs) => {
   const ws = loadWorkspace(home, cwd)
   const pack = normalizeModbus(ws.modbus || {})
   const cid = connectionId || pack.activeConnectionId || (pack.connections[0] && pack.connections[0].id)
   if (!cid) return { ok: false, error: '无连接可采集' }
-  const nextPolling = { ...(pack.pollingByConnection || {}) }
-  const cur = nextPolling[cid] || { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' }
-  nextPolling[cid] = {
-    ...cur,
-    enabled: enabled === true,
-    intervalMs: Number.isFinite(Number(intervalMs)) && Number(intervalMs) >= 200 && Number(intervalMs) <= 10000 ? Math.trunc(Number(intervalMs)) : cur.intervalMs,
-  }
-  saveWorkspace(home, cwd, { modbus: { pollingByConnection: nextPolling, version: 3 } })
-  return { ok: true, connectionId: cid, enabled: nextPolling[cid].enabled, intervalMs: nextPolling[cid].intervalMs }
+  const saved = await workspaceRepository(home).mutateRuntime(cwd, (current) => {
+    const curPack = normalizeModbus(current.modbus || {})
+    const nextPolling = { ...(curPack.pollingByConnection || {}) }
+    const cur = nextPolling[cid] || { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' }
+    const interval =
+      Number.isFinite(Number(intervalMs)) && Number(intervalMs) >= 200 && Number(intervalMs) <= 10000
+        ? Math.trunc(Number(intervalMs))
+        : cur.intervalMs
+    nextPolling[cid] = { ...cur, enabled: enabled === true, intervalMs: interval }
+    return { workspace: { ...current, modbus: { ...current.modbus, pollingByConnection: nextPolling, version: 3 } } }
+  })
+  if (!saved.ok) return saved
+  const next = saved.workspace.modbus.pollingByConnection[cid]
+  return { ok: true, connectionId: cid, enabled: next.enabled, intervalMs: next.intervalMs }
 }
 
 export const startPolling = async (home, cwd, opts = {}) => {
-  const saved = persistEnable(home, cwd, opts.connectionId || opts.connId, true, opts.intervalMs)
+  const saved = await persistEnable(home, cwd, opts.connectionId || opts.connId, true, opts.intervalMs)
   if (!saved.ok) return saved
   reconcile(home, cwd)
   return { ...saved, action: 'polling/start', running: true }
 }
 
 export const stopPolling = async (home, cwd, opts = {}) => {
-  const saved = persistEnable(home, cwd, opts.connectionId || opts.connId, false)
+  const saved = await persistEnable(home, cwd, opts.connectionId || opts.connId, false)
   if (!saved.ok) return saved
   const co = coordinators.get(String(cwd))
   if (co) {
@@ -123,9 +131,22 @@ export const pollingStatus = (home, cwd) => {
   const co = coordinators.get(String(cwd))
   const byConnection = {}
   for (const c of pack.connections || []) {
-    const p = (pack.pollingByConnection || {})[c.id] || { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' }
+    const p = (pack.pollingByConnection || {})[c.id] || {
+      enabled: false,
+      intervalMs: 1000,
+      lastAt: 0,
+      lastOk: true,
+      error: '',
+    }
     const active = co ? co.timers.has(c.id) : false
-    byConnection[c.id] = { enabled: p.enabled === true, intervalMs: p.intervalMs, lastAt: p.lastAt || 0, lastOk: p.lastOk !== false, error: p.error || '', running: active }
+    byConnection[c.id] = {
+      enabled: p.enabled === true,
+      intervalMs: p.intervalMs,
+      lastAt: p.lastAt || 0,
+      lastOk: p.lastOk !== false,
+      error: p.error || '',
+      running: active,
+    }
   }
   return { ok: true, action: 'polling/status', active: !!(co && co.timers.size), connections: byConnection }
 }

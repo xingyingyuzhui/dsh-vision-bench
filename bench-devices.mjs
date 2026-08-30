@@ -1,8 +1,8 @@
 // Modbus model v3: multi-connection + device/unit + stable point IDs
 // v2 legacy (single conn) migrates to v3 via c1/d1. Older segment shapes also routed through v2 first.
 
-import { functionTag, normalizePoints, normalizeValueRec } from './bench-points.mjs'
 import { normalizeAlarmState } from './bench-alarm.mjs'
+import { functionTag, normalizePoints, normalizeValueRec } from './bench-points.mjs'
 import { emptyVisualization, normalizeVisualization } from './bench-visualization-model.mjs'
 const TREND_KEEP_LOCAL = 600
 const normalizeTrendByPoint = (input) => {
@@ -14,7 +14,7 @@ const normalizeTrendByPoint = (input) => {
     for (const sample of list) {
       const t = Number(sample && (sample.t ?? sample[0]))
       if (!Number.isFinite(t) || t <= 0) continue
-      const v = sample == null ? null : (sample.v !== undefined ? sample.v : sample[1])
+      const v = sample == null ? null : sample.v !== undefined ? sample.v : sample[1]
       clean.push([t, v === null || v === undefined ? null : Number(v)])
     }
     if (clean.length) out[pid] = clean.slice(-TREND_KEEP_LOCAL)
@@ -31,7 +31,7 @@ const FN_BY_AREA = { coil: 1, discreteInput: 2, holdingRegister: 3, inputRegiste
 const MAX_VALUES_SAFE = 512
 const MAX_FRAMES_PER_CONN = 500
 
-const devText = (v, fb='') => {
+const devText = (v, fb = '') => {
   const s = typeof v === 'string' ? v.trim() : ''
   return s || fb
 }
@@ -83,9 +83,8 @@ export const normalizeConn = (input) => {
   return out
 }
 
-export const connLabel = (conn) => conn.mode === 'tcp'
-  ? ((conn.host || '?') + ':' + conn.tcpPort)
-  : ((conn.port || '?') + ' @ ' + conn.baudrate)
+export const connLabel = (conn) =>
+  conn.mode === 'tcp' ? (conn.host || '?') + ':' + conn.tcpPort : (conn.port || '?') + ' @ ' + conn.baudrate
 
 export const emptyConnection = () => ({
   id: 'c1',
@@ -100,7 +99,13 @@ export const normalizeConnection = (input) => {
   const base = emptyConnection()
   const id = devText(raw.id, '') || genId('c')
   const name = devText(raw.name, '') || base.name
-  const role = VALID_ROLES.has(raw.role) ? raw.role : (raw.role === 'master' ? 'client' : raw.role === 'slave' ? 'server' : 'client')
+  const role = VALID_ROLES.has(raw.role)
+    ? raw.role
+    : raw.role === 'master'
+      ? 'client'
+      : raw.role === 'slave'
+        ? 'server'
+        : 'client'
   // accept legacy master/slave as role
   return {
     id,
@@ -132,7 +137,8 @@ export const normalizeDevice = (input, fallbackConnId) => {
   const connectionId = devText(raw.connectionId, '') || devText(raw.connId, '') || fallbackConnId || 'c1'
   const name = devText(raw.name, '') || '设备1'
   const hasUnit = raw.unitId !== undefined || raw.unit !== undefined || raw.slave !== undefined
-  const unitRaw = raw.unitId !== undefined ? raw.unitId : (raw.unit !== undefined ? raw.unit : (raw.slave !== undefined ? raw.slave : 1))
+  const unitRaw =
+    raw.unitId !== undefined ? raw.unitId : raw.unit !== undefined ? raw.unit : raw.slave !== undefined ? raw.slave : 1
   // 缺省默认 1；显式非法值在 validateDevices 拒绝，加载时钳到 1..247（不保留 0）
   const unitId = hasUnit ? (parseUnitId(unitRaw) ?? 1) : 1
   return {
@@ -149,7 +155,7 @@ export const normalizeDevices = (list, connections) => {
     const first = Array.isArray(connections) && connections[0] ? connections[0].id : 'c1'
     return [normalizeDevice({ id: 'd1', connectionId: first, unitId: 1 }, first)]
   }
-  const validConnIds = new Set((connections || []).map(c => c.id))
+  const validConnIds = new Set((connections || []).map((c) => c.id))
   const seen = new Set()
   const out = []
   for (const raw of list) {
@@ -178,16 +184,17 @@ export const normalizePointV3 = (input) => {
   let area = devText(raw.area, '')
   if (!VALID_AREAS.has(area)) {
     const fn = Number(raw.function ?? raw.fn)
-    if ([1,2,3,4].includes(fn)) area = AREA_BY_FN[fn]
+    if ([1, 2, 3, 4].includes(fn)) area = AREA_BY_FN[fn]
     else area = 'holdingRegister'
   }
   const fnFromArea = FN_BY_AREA[area] || 3
   const address = devClampInt(raw.address, 0, 0, 65535)
   const scale = Number(raw.scale)
   const offset = Number(raw.offset)
-  const name = devText(raw.name, '') .slice(0, 40)
+  const name = devText(raw.name, '').slice(0, 40)
   const unit = devText(raw.unit, '').slice(0, 12)
-  const finiteOrNull = (v) => (v===null||v===undefined||v==='' ? null : (Number.isFinite(Number(v)) ? Number(v) : null))
+  const finiteOrNull = (v) =>
+    v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null
   return {
     id,
     connectionId,
@@ -202,27 +209,24 @@ export const normalizePointV3 = (input) => {
     alarmMin: finiteOrNull(raw.alarmMin),
     alarmMax: finiteOrNull(raw.alarmMax),
     // TaskP0/0.20.0: 监视/告警独立；旧 trendEnabled → monitorEnabled 迁移
-    monitorEnabled: (raw.monitorEnabled !== undefined)
-      ? raw.monitorEnabled === true
-      : (raw.trendEnabled === true),
-    alarmEnabled: (raw.alarmEnabled !== undefined)
-      ? raw.alarmEnabled === true
-      : (raw.alarmMin != null || raw.alarmMax != null),
-    trendEnabled: (raw.monitorEnabled !== undefined) ? raw.monitorEnabled === true : (raw.trendEnabled === true),
+    monitorEnabled: raw.monitorEnabled !== undefined ? raw.monitorEnabled === true : raw.trendEnabled === true,
+    alarmEnabled:
+      raw.alarmEnabled !== undefined ? raw.alarmEnabled === true : raw.alarmMin != null || raw.alarmMax != null,
+    trendEnabled: raw.monitorEnabled !== undefined ? raw.monitorEnabled === true : raw.trendEnabled === true,
   }
 }
 
 export const normalizePointsV3 = (list, connections, devices) => {
   if (!Array.isArray(list)) return []
-  const validConnIds = new Set((connections || []).map(c => c.id))
-  const validDevIds = new Set((devices || []).map(d => d.id))
+  const validConnIds = new Set((connections || []).map((c) => c.id))
+  const validDevIds = new Set((devices || []).map((d) => d.id))
   const seen = new Set()
   const out = []
   for (const raw of list) {
     const p = normalizePointV3(raw)
     // fix refs
-    if (!validConnIds.has(p.connectionId)) p.connectionId = (connections && connections[0] ? connections[0].id : 'c1')
-    if (!validDevIds.has(p.deviceId)) p.deviceId = (devices && devices[0] ? devices[0].id : 'd1')
+    if (!validConnIds.has(p.connectionId)) p.connectionId = connections && connections[0] ? connections[0].id : 'c1'
+    if (!validDevIds.has(p.deviceId)) p.deviceId = devices && devices[0] ? devices[0].id : 'd1'
     if (seen.has(p.id)) continue
     seen.add(p.id)
     out.push(p)
@@ -263,33 +267,40 @@ export const normalizeFramesByConnection = (input, connections) => {
   if (!input || typeof input !== 'object') return out
   for (const [k, v] of Object.entries(input)) {
     const arr = Array.isArray(v) ? v.slice(0, MAX_FRAMES_PER_CONN) : []
-    out[k] = arr.map(f => {
-      const rec = {
-        t: Number(f && (f.t ?? f.at)) || Date.now(),
-        label: typeof (f && f.label) === 'string' ? String(f.label).slice(0, 200) : '',
-        request: typeof (f && f.request) === 'string' ? String(f.request).slice(0, 200) : '',
-        response: typeof (f && f.response) === 'string' ? String(f.response).slice(0, 200) : '',
-        trace: Array.isArray(f && f.trace) ? f.trace.map(s => String(s).slice(0, 200)).slice(0, 8) : [],
-        deviceId: typeof (f && f.deviceId) === 'string' ? f.deviceId : '',
-        connectionId: typeof (f && f.connectionId) === 'string' ? f.connectionId : k,
-      }
-      const rawId = f && (f.id || f.frameId) ? String(f.id || f.frameId).slice(0, 64) : ''
-      if (rawId) { rec.id = rawId; rec.frameId = String(f.frameId || rawId).slice(0, 64) }
-      else if (f && typeof f.frameId === 'string') { rec.frameId = f.frameId.slice(0,64); rec.id = rec.frameId }
-      if (f && typeof f.transactionId === 'string') rec.transactionId = f.transactionId.slice(0, 64)
-      if (f && typeof f.taskId === 'string') rec.taskId = f.taskId.slice(0, 64)
-      if (f && typeof f.source === 'string') rec.source = f.source.slice(0, 16)
-      if (f && typeof f.direction === 'string') rec.direction = f.direction.slice(0, 16)
-      if (f && Number.isFinite(Number(f.unitId))) rec.unitId = Math.trunc(Number(f.unitId))
-      if (f && Number.isFinite(Number(f.functionCode))) rec.functionCode = Math.trunc(Number(f.functionCode))
-      if (f && Number.isFinite(Number(f.durationMs))) rec.durationMs = Math.trunc(Number(f.durationMs))
-      if (f && typeof f.status === 'string') rec.status = f.status.slice(0, 16)
-      if (f && typeof f.error === 'string') rec.error = f.error.slice(0, 200)
-      if (f && typeof f.requestHex === 'string') rec.requestHex = f.requestHex.slice(0, 400)
-      if (f && typeof f.responseHex === 'string') rec.responseHex = f.responseHex.slice(0, 400)
-      if (f && (f.frameFormat === 'tcp-normalized' || f.frameFormat === 'rtu-adu')) rec.frameFormat = f.frameFormat
-      return rec
-    }).slice(-MAX_FRAMES_PER_CONN)
+    out[k] = arr
+      .map((f) => {
+        const rec = {
+          t: Number(f && (f.t ?? f.at)) || Date.now(),
+          label: typeof (f && f.label) === 'string' ? String(f.label).slice(0, 200) : '',
+          request: typeof (f && f.request) === 'string' ? String(f.request).slice(0, 200) : '',
+          response: typeof (f && f.response) === 'string' ? String(f.response).slice(0, 200) : '',
+          trace: Array.isArray(f && f.trace) ? f.trace.map((s) => String(s).slice(0, 200)).slice(0, 8) : [],
+          deviceId: typeof (f && f.deviceId) === 'string' ? f.deviceId : '',
+          connectionId: typeof (f && f.connectionId) === 'string' ? f.connectionId : k,
+        }
+        const rawId = f && (f.id || f.frameId) ? String(f.id || f.frameId).slice(0, 64) : ''
+        if (rawId) {
+          rec.id = rawId
+          rec.frameId = String(f.frameId || rawId).slice(0, 64)
+        } else if (f && typeof f.frameId === 'string') {
+          rec.frameId = f.frameId.slice(0, 64)
+          rec.id = rec.frameId
+        }
+        if (f && typeof f.transactionId === 'string') rec.transactionId = f.transactionId.slice(0, 64)
+        if (f && typeof f.taskId === 'string') rec.taskId = f.taskId.slice(0, 64)
+        if (f && typeof f.source === 'string') rec.source = f.source.slice(0, 16)
+        if (f && typeof f.direction === 'string') rec.direction = f.direction.slice(0, 16)
+        if (f && Number.isFinite(Number(f.unitId))) rec.unitId = Math.trunc(Number(f.unitId))
+        if (f && Number.isFinite(Number(f.functionCode))) rec.functionCode = Math.trunc(Number(f.functionCode))
+        if (f && Number.isFinite(Number(f.durationMs))) rec.durationMs = Math.trunc(Number(f.durationMs))
+        if (f && typeof f.status === 'string') rec.status = f.status.slice(0, 16)
+        if (f && typeof f.error === 'string') rec.error = f.error.slice(0, 200)
+        if (f && typeof f.requestHex === 'string') rec.requestHex = f.requestHex.slice(0, 400)
+        if (f && typeof f.responseHex === 'string') rec.responseHex = f.responseHex.slice(0, 400)
+        if (f && (f.frameFormat === 'tcp-normalized' || f.frameFormat === 'rtu-adu')) rec.frameFormat = f.frameFormat
+        return rec
+      })
+      .slice(-MAX_FRAMES_PER_CONN)
   }
   return out
 }
@@ -338,7 +349,7 @@ const normalizeQualifiedValues = (list, points) => {
 // Validate RTU port uniqueness among enabled connections and TCP listenHost:listenPort for server role
 export const validateConnections = (connections, devices) => {
   const errors = []
-  const enabled = (connections || []).filter(c => c && c.enabled !== false)
+  const enabled = (connections || []).filter((c) => c && c.enabled !== false)
   // RTU port uniqueness
   const portMap = new Map()
   for (const c of enabled) {
@@ -387,7 +398,7 @@ export const validateDevices = (devices, connections) => {
   if (Array.isArray(connections)) {
     for (const c of connections) if (c && c.id) connEnabled.set(c.id, c.enabled !== false)
   }
-  const enabledDevices = devices.filter(d => d && d.enabled !== false)
+  const enabledDevices = devices.filter((d) => d && d.enabled !== false)
   const byConn = new Map()
   for (const d of enabledDevices) {
     const cid = d.connectionId || 'c1'
@@ -427,8 +438,8 @@ function migrateLegacy(modbusLike) {
     sim: pick('sim'),
   })
   const legacySlave = pick('slave')
-  const segments = Array.isArray(dev.segments) ? dev.segments : (Array.isArray(flat.segments) ? flat.segments : [])
-  const oldValues = Array.isArray(dev.values) ? dev.values : (Array.isArray(flat.values) ? flat.values : [])
+  const segments = Array.isArray(dev.segments) ? dev.segments : Array.isArray(flat.segments) ? flat.segments : []
+  const oldValues = Array.isArray(dev.values) ? dev.values : Array.isArray(flat.values) ? flat.values : []
   if (!segments.length && Number.isFinite(Number(flat.function)) && Number.isFinite(Number(flat.address))) {
     const fn = Number(flat.function)
     const addr = Number(flat.address)
@@ -447,7 +458,7 @@ function migrateLegacy(modbusLike) {
       const id = 'p' + fn + '_' + address
       points.push({
         id,
-        name: Number(seg.count) > 1 ? '' : (seg.name || ''),
+        name: Number(seg.count) > 1 ? '' : seg.name || '',
         function: fn,
         address,
         scale: seg.scale,
@@ -472,7 +483,7 @@ function migrateV2ToV3(v2) {
   const conn = normalizeConn(rawConn)
   const connection = {
     id: 'c1',
-    name: conn.port ? `连接-${conn.port}` : (conn.host ? `连接-${conn.host}:${conn.tcpPort}` : '连接1'),
+    name: conn.port ? `连接-${conn.port}` : conn.host ? `连接-${conn.host}:${conn.tcpPort}` : '连接1',
     role: 'client',
     enabled: true,
     conn,
@@ -507,9 +518,19 @@ function migrateV2ToV3(v2) {
       address: devClampInt(p && p.address, 0, 0, 65535),
       scale: Number.isFinite(Number(p && p.scale)) ? Number(p.scale) : 1,
       offset: Number.isFinite(Number(p && p.offset)) ? Number(p.offset) : 0,
-      unit: devText(p && p.unit, '').slice(0,12),
-      alarmMin: (p && (p.alarmMin===null||p.alarmMin===undefined||p.alarmMin==='')?null:(Number.isFinite(Number(p.alarmMin))?Number(p.alarmMin):null)),
-      alarmMax: (p && (p.alarmMax===null||p.alarmMax===undefined||p.alarmMax==='')?null:(Number.isFinite(Number(p.alarmMax))?Number(p.alarmMax):null)),
+      unit: devText(p && p.unit, '').slice(0, 12),
+      alarmMin:
+        p && (p.alarmMin === null || p.alarmMin === undefined || p.alarmMin === '')
+          ? null
+          : Number.isFinite(Number(p.alarmMin))
+            ? Number(p.alarmMin)
+            : null,
+      alarmMax:
+        p && (p.alarmMax === null || p.alarmMax === undefined || p.alarmMax === '')
+          ? null
+          : Number.isFinite(Number(p.alarmMax))
+            ? Number(p.alarmMax)
+            : null,
     })
   }
   const oldValues = Array.isArray(v2.values) ? v2.values : []
@@ -532,12 +553,18 @@ function migrateV2ToV3(v2) {
   // frames: old single-track frames -> framesByConnection[c1]
   let framesByConnection = { c1: [] }
   if (v2.frames && Array.isArray(v2.frames)) framesByConnection.c1 = v2.frames.slice(0, MAX_FRAMES_PER_CONN)
-  else if (v2.framesLog && Array.isArray(v2.framesLog)) framesByConnection.c1 = v2.framesLog.slice(0, MAX_FRAMES_PER_CONN)
+  else if (v2.framesLog && Array.isArray(v2.framesLog))
+    framesByConnection.c1 = v2.framesLog.slice(0, MAX_FRAMES_PER_CONN)
   else if (v2.framesByConnection && typeof v2.framesByConnection === 'object') {
     framesByConnection = normalizeFramesByConnection(v2.framesByConnection, [connection])
     if (!framesByConnection.c1) framesByConnection.c1 = []
   }
-  const alarmState = v2.alarmActive && typeof v2.alarmActive === 'object' ? { ...v2.alarmActive } : (v2.alarmState && typeof v2.alarmState === 'object' ? { ...v2.alarmState } : {})
+  const alarmState =
+    v2.alarmActive && typeof v2.alarmActive === 'object'
+      ? { ...v2.alarmActive }
+      : v2.alarmState && typeof v2.alarmState === 'object'
+        ? { ...v2.alarmState }
+        : {}
   // remap alarmState keys via idMap
   const nextAlarm = {}
   for (const [k, val] of Object.entries(alarmState)) {
@@ -565,14 +592,18 @@ export const normalizeConfigVersion = (input) => {
   return Math.trunc(n)
 }
 
+/** @param {any} input @returns {any} */
 export function normalizeModbus(input) {
   const src = input && typeof input === 'object' ? input : {}
   // Detect v3
-  const isV3 = src.version === 3 || Array.isArray(src.connections) || Array.isArray(src.devices) && src.points && Array.isArray(src.points) && src.points.some(p => p && p.area)
+  const isV3 =
+    src.version === 3 ||
+    Array.isArray(src.connections) ||
+    (Array.isArray(src.devices) && src.points && Array.isArray(src.points) && src.points.some((p) => p && p.area))
   // Detect legacy v2 or older flat
-  const looksLegacy = src.conn === undefined && (
-    Array.isArray(src.devices) || src.mode !== undefined || src.segments !== undefined || src.port !== undefined
-  )
+  const looksLegacy =
+    src.conn === undefined &&
+    (Array.isArray(src.devices) || src.mode !== undefined || src.segments !== undefined || src.port !== undefined)
   // v3 path
   if (isV3) {
     let connections = normalizeConnections(src.connections)
@@ -587,7 +618,7 @@ export function normalizeModbus(input) {
       pollingByConnection = normalizePollingByConnection(src.pollingByConnection, connections)
     } else if (src.polling) {
       // single polling -> assign to active or first
-      const pid = devText(src.activeConnectionId, '') || (connections[0]?.id || 'c1')
+      const pid = devText(src.activeConnectionId, '') || connections[0]?.id || 'c1'
       pollingByConnection = normalizePollingByConnection({ [pid]: src.polling }, connections)
       // fill others
       for (const c of connections) if (!pollingByConnection[c.id]) pollingByConnection[c.id] = normalizePolling(null)
@@ -606,19 +637,27 @@ export function normalizeModbus(input) {
     } else {
       framesByConnection = normalizeFramesByConnection(null, connections)
     }
-    let alarmState = normalizeAlarmState(src.alarmState && typeof src.alarmState === 'object' ? src.alarmState : (src.alarmActive && typeof src.alarmActive === 'object' ? src.alarmActive : {}), { pointsById: Object.fromEntries((points||[]).map(p=>[p.id,p])) })
+    let alarmState = normalizeAlarmState(
+      src.alarmState && typeof src.alarmState === 'object'
+        ? src.alarmState
+        : src.alarmActive && typeof src.alarmActive === 'object'
+          ? src.alarmActive
+          : {},
+      { pointsById: Object.fromEntries((points || []).map((p) => [p.id, p])) },
+    )
     const trend = normalizeTrendByPoint(src.trend)
     // TaskP0/0.20.0: 可视化组件（缺失/失效引用只做诊断，不清除用户配置）
-    const visualization = src.visualization && typeof src.visualization === 'object'
-      ? normalizeVisualization(src.visualization, points)
-      : emptyVisualization()
+    const visualization =
+      src.visualization && typeof src.visualization === 'object'
+        ? normalizeVisualization(src.visualization, points)
+        : emptyVisualization()
     // active ids
     let activeConnectionId = devText(src.activeConnectionId, '')
-    if (!connections.some(c=>c.id===activeConnectionId)) activeConnectionId = connections[0]?.id || 'c1'
+    if (!connections.some((c) => c.id === activeConnectionId)) activeConnectionId = connections[0]?.id || 'c1'
     let activeDeviceId = devText(src.activeDeviceId, '')
-    if (!devices.some(d=>d.id===activeDeviceId)) {
-      const devForConn = devices.find(d=>d.connectionId===activeConnectionId)
-      activeDeviceId = devForConn ? devForConn.id : (devices[0]?.id || 'd1')
+    if (!devices.some((d) => d.id === activeDeviceId)) {
+      const devForConn = devices.find((d) => d.connectionId === activeConnectionId)
+      activeDeviceId = devForConn ? devForConn.id : devices[0]?.id || 'd1'
     }
     const configVersion = normalizeConfigVersion(src.configVersion ?? src.rev ?? src.cfgVersion ?? 1)
     // also need to filter points/values that reference invalid connection/device? already fixed refs but keep check
@@ -641,41 +680,89 @@ export function normalizeModbus(input) {
     Object.defineProperties(ret, {
       conn: {
         get() {
-          const ac = ret.connections.find(c=>c.id===ret.activeConnectionId) || ret.connections[0]
+          const ac = ret.connections.find((c) => c.id === ret.activeConnectionId) || ret.connections[0]
           return ac ? ac.conn : emptyConn()
         },
         enumerable: false,
       },
-      mode: { get(){ return ret.conn.mode }, enumerable:false },
-      port: { get(){ return ret.conn.port }, enumerable:false },
-      host: { get(){ return ret.conn.host }, enumerable:false },
-      baudrate: { get(){ return ret.conn.baudrate }, enumerable:false },
+      mode: {
+        get() {
+          return ret.conn.mode
+        },
+        enumerable: false,
+      },
+      port: {
+        get() {
+          return ret.conn.port
+        },
+        enumerable: false,
+      },
+      host: {
+        get() {
+          return ret.conn.host
+        },
+        enumerable: false,
+      },
+      baudrate: {
+        get() {
+          return ret.conn.baudrate
+        },
+        enumerable: false,
+      },
       slave: {
-        get(){
-          const ad = ret.devices.find(d=>d.id===ret.activeDeviceId) || ret.devices[0]
+        get() {
+          const ad = ret.devices.find((d) => d.id === ret.activeDeviceId) || ret.devices[0]
           return ad ? ad.unitId : 1
         },
-        enumerable:false
+        enumerable: false,
       },
-      sim: { get(){ return ret.conn.sim }, enumerable:false },
+      sim: {
+        get() {
+          return ret.conn.sim
+        },
+        enumerable: false,
+      },
       polling: {
-        get(){ return ret.pollingByConnection[ret.activeConnectionId] || normalizePolling(null) },
-        enumerable:false
+        get() {
+          return ret.pollingByConnection[ret.activeConnectionId] || normalizePolling(null)
+        },
+        enumerable: false,
       },
       alarmActive: {
-        get(){ return ret.alarmState },
-        enumerable:false
+        get() {
+          return ret.alarmState
+        },
+        enumerable: false,
       },
-      pointsLegacy: { get(){ return ret.points }, enumerable:false },
-      function: { get(){ return ret.points[0]?.function }, enumerable:false },
-      address: { get(){ return ret.points[0]?.address }, enumerable:false },
+      pointsLegacy: {
+        get() {
+          return ret.points
+        },
+        enumerable: false,
+      },
+      function: {
+        get() {
+          return ret.points[0]?.function
+        },
+        enumerable: false,
+      },
+      address: {
+        get() {
+          return ret.points[0]?.address
+        },
+        enumerable: false,
+      },
       segments: {
-        get(){ return ret.points.map(p=>({ ...p, count:1, id:p.id })) },
-        enumerable:false
+        get() {
+          return ret.points.map((p) => ({ ...p, count: 1, id: p.id }))
+        },
+        enumerable: false,
       },
       devices_legacy: {
-        get(){ return ret.devices },
-        enumerable:false
+        get() {
+          return ret.devices
+        },
+        enumerable: false,
       },
     })
     // Also provide flat points/values for old code expecting ret.points etc? Already version 3 has new points; keep them enumerable.
@@ -691,7 +778,7 @@ export function normalizeModbus(input) {
       // 临时带回 slave 仅供 migrateV2ToV3 写入默认设备 unitId
       conn: m.legacySlave !== undefined ? { ...m.conn, slave: m.legacySlave } : m.conn,
       points: normalizePoints(m.points),
-      values: filterValues(m.values, new Set(m.points.map(p=>p.id))),
+      values: filterValues(m.values, new Set(m.points.map((p) => p.id))),
       polling: normalizePolling(src.polling),
       alarmActive: src.alarmActive && typeof src.alarmActive === 'object' ? { ...src.alarmActive } : {},
       frames: src.frames || src.framesLog || src.framesByConnection,
@@ -700,10 +787,10 @@ export function normalizeModbus(input) {
     // 保留原始 conn.slave 供迁移读出；normalizeConn 在 migrateV2ToV3 内执行
     const rawConn = src.conn && typeof src.conn === 'object' ? src.conn : {}
     const points = normalizePoints(src.points)
-    const validKeys = new Set(points.map(p=>p.id))
+    const validKeys = new Set(points.map((p) => p.id))
     const normValues = filterValues(src.values, validKeys)
     v2 = {
-      version:2,
+      version: 2,
       conn: rawConn,
       points,
       values: normValues,
@@ -716,7 +803,7 @@ export function normalizeModbus(input) {
   } else {
     // empty or unknown -> treat as v2 empty
     v2 = {
-      version:2,
+      version: 2,
       conn: normalizeConn(null),
       points: [],
       values: [],
@@ -727,7 +814,7 @@ export function normalizeModbus(input) {
   const migrated = migrateV2ToV3(v2)
   const configVersion = normalizeConfigVersion(src.configVersion ?? src.rev ?? 1)
   const ret = {
-    version:3,
+    version: 3,
     configVersion,
     connections: migrated.connections,
     devices: migrated.devices,
@@ -741,28 +828,78 @@ export function normalizeModbus(input) {
   }
   Object.defineProperties(ret, {
     conn: {
-      get(){ const ac = ret.connections.find(c=>c.id===ret.activeConnectionId) || ret.connections[0]; return ac ? ac.conn : emptyConn() },
-      enumerable:false
+      get() {
+        const ac = ret.connections.find((c) => c.id === ret.activeConnectionId) || ret.connections[0]
+        return ac ? ac.conn : emptyConn()
+      },
+      enumerable: false,
     },
-    mode: { get(){ return ret.conn.mode }, enumerable:false },
-    port: { get(){ return ret.conn.port }, enumerable:false },
-    host: { get(){ return ret.conn.host }, enumerable:false },
-    baudrate: { get(){ return ret.conn.baudrate }, enumerable:false },
+    mode: {
+      get() {
+        return ret.conn.mode
+      },
+      enumerable: false,
+    },
+    port: {
+      get() {
+        return ret.conn.port
+      },
+      enumerable: false,
+    },
+    host: {
+      get() {
+        return ret.conn.host
+      },
+      enumerable: false,
+    },
+    baudrate: {
+      get() {
+        return ret.conn.baudrate
+      },
+      enumerable: false,
+    },
     slave: {
-      get(){ const ad = ret.devices.find(d=>d.id===ret.activeDeviceId) || ret.devices[0]; return ad ? ad.unitId : 1 },
-      enumerable:false
+      get() {
+        const ad = ret.devices.find((d) => d.id === ret.activeDeviceId) || ret.devices[0]
+        return ad ? ad.unitId : 1
+      },
+      enumerable: false,
     },
-    sim: { get(){ return ret.conn.sim }, enumerable:false },
+    sim: {
+      get() {
+        return ret.conn.sim
+      },
+      enumerable: false,
+    },
     polling: {
-      get(){ return ret.pollingByConnection[ret.activeConnectionId] || normalizePolling(null) },
-      enumerable:false
+      get() {
+        return ret.pollingByConnection[ret.activeConnectionId] || normalizePolling(null)
+      },
+      enumerable: false,
     },
-    alarmActive: { get(){ return ret.alarmState }, enumerable:false },
-    function: { get(){ return ret.points[0]?.function }, enumerable:false },
-    address: { get(){ return ret.points[0]?.address }, enumerable:false },
+    alarmActive: {
+      get() {
+        return ret.alarmState
+      },
+      enumerable: false,
+    },
+    function: {
+      get() {
+        return ret.points[0]?.function
+      },
+      enumerable: false,
+    },
+    address: {
+      get() {
+        return ret.points[0]?.address
+      },
+      enumerable: false,
+    },
     segments: {
-      get(){ return ret.points.map(p=>({ ...p, count:1, id:p.id })) },
-      enumerable:false
+      get() {
+        return ret.points.map((p) => ({ ...p, count: 1, id: p.id }))
+      },
+      enumerable: false,
     },
   })
   return ret
@@ -774,7 +911,9 @@ export const patchConn = (modbus, patch) => {
   // 连接补丁只改端点参数；忽略 legacy slave，不得改写设备 Unit ID
   const raw = patch && typeof patch === 'object' ? { ...patch } : {}
   delete raw.slave
-  const nextConns = normalized.connections.map(c => c.id===activeId ? { ...c, conn: normalizeConn({ ...c.conn, ...raw }) } : c)
+  const nextConns = normalized.connections.map((c) =>
+    c.id === activeId ? { ...c, conn: normalizeConn({ ...c.conn, ...raw }) } : c,
+  )
   return normalizeModbus({
     ...normalized,
     connections: nextConns,
@@ -785,13 +924,33 @@ export const patchConn = (modbus, patch) => {
 // ── Legacy compat for old tests (recipePair etc.) ─────────────────────
 export const recipePair = () => ({
   devices: [
-    { id: 'd1', name: '主机', role: 'master', mode: 'rtu', port: 'COM1', baudrate: 9600, slave: 1, sim: true, segments: [] },
-    { id: 'd2', name: '从机', role: 'slave', mode: 'rtu', port: 'COM2', baudrate: 9600, slave: 2, sim: true, segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }] },
+    {
+      id: 'd1',
+      name: '主机',
+      role: 'master',
+      mode: 'rtu',
+      port: 'COM1',
+      baudrate: 9600,
+      slave: 1,
+      sim: true,
+      segments: [],
+    },
+    {
+      id: 'd2',
+      name: '从机',
+      role: 'slave',
+      mode: 'rtu',
+      port: 'COM2',
+      baudrate: 9600,
+      slave: 2,
+      sim: true,
+      segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }],
+    },
   ],
   activeId: 'd1',
 })
 
-export const emptyDevice = (input={}) => ({
+export const emptyDevice = (input = {}) => ({
   id: input.id || 'd-legacy',
   name: input.name || '设备',
   role: input.role || 'master',
@@ -804,12 +963,12 @@ export const emptyDevice = (input={}) => ({
 
 export const addDevice = (modbus, spec) => {
   const pack = normalizeModbus(modbus)
-  return { devices: [...(modbus.devices||[]), { id: 'd-new', ...spec }], activeId: pack.conn ? 'd-new' : '' }
+  return { devices: [...(modbus.devices || []), { id: 'd-new', ...spec }], activeId: pack.conn ? 'd-new' : '' }
 }
 
 export const removeDevice = (modbus, id) => {
   const pack = normalizeModbus(modbus)
-  return { devices: (modbus.devices||[]).filter(d=>d.id!==id) }
+  return { devices: (modbus.devices || []).filter((d) => d.id !== id) }
 }
 
 export const patchActiveDevice = (modbus, patch) => {

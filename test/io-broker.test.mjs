@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { readFileSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { createVisionIoBroker } from '../bench-io-broker.mjs'
 
 const fakeWorker = fileURLToPath(new URL('./fixtures/fake-io-worker.mjs', import.meta.url))
@@ -14,8 +14,28 @@ test('broker correlates concurrent requests by id', async () => {
     const health = await broker.health()
     assert.equal(health.ok, true)
     const [a, b] = await Promise.all([
-      broker.request({ op: 'modbus.read', cwd: '/tmp/a', connectionId: 'c1', deviceId: 'd1', unitId: 1, functionCode: 3, address: 0, count: 1, endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 } }),
-      broker.request({ op: 'modbus.read', cwd: '/tmp/a', connectionId: 'c1', deviceId: 'd2', unitId: 2, functionCode: 3, address: 0, count: 1, endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 } }),
+      broker.request({
+        op: 'modbus.read',
+        cwd: '/tmp/a',
+        connectionId: 'c1',
+        deviceId: 'd1',
+        unitId: 1,
+        functionCode: 3,
+        address: 0,
+        count: 1,
+        endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 },
+      }),
+      broker.request({
+        op: 'modbus.read',
+        cwd: '/tmp/a',
+        connectionId: 'c1',
+        deviceId: 'd2',
+        unitId: 2,
+        functionCode: 3,
+        address: 0,
+        count: 1,
+        endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 },
+      }),
     ])
     assert.equal(a.ok, true)
     assert.equal(b.ok, true)
@@ -33,11 +53,21 @@ test('broker abort cleans pending map', async () => {
     await broker.health()
     const ac = new AbortController()
     ac.abort()
-    await assert.rejects(
-      () => broker.request({
-        op: 'modbus.read', cwd: '/tmp/a', connectionId: 'c1', deviceId: 'd1', unitId: 1,
-        functionCode: 3, address: 0, count: 1, endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 },
-      }, { signal: ac.signal }),
+    await assert.rejects(() =>
+      broker.request(
+        {
+          op: 'modbus.read',
+          cwd: '/tmp/a',
+          connectionId: 'c1',
+          deviceId: 'd1',
+          unitId: 1,
+          functionCode: 3,
+          address: 0,
+          count: 1,
+          endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 },
+        },
+        { signal: ac.signal },
+      ),
     )
     assert.equal(broker.pendingSize(), 0)
   } finally {
@@ -54,17 +84,33 @@ test('broker timeout sends cancel and ignores late response', async () => {
   })
   try {
     await broker.health()
-    await assert.rejects(() => broker.request({
-      op: 'modbus.read', cwd: '/tmp/a', connectionId: 'c1', deviceId: 'd1', unitId: 1,
-      functionCode: 3, address: 0, count: 1, endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 },
-    }, { timeoutMs: 50 }))
+    await assert.rejects(() =>
+      broker.request(
+        {
+          op: 'modbus.read',
+          cwd: '/tmp/a',
+          connectionId: 'c1',
+          deviceId: 'd1',
+          unitId: 1,
+          functionCode: 3,
+          address: 0,
+          count: 1,
+          endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 },
+        },
+        { timeoutMs: 50 },
+      ),
+    )
     assert.equal(broker.pendingSize(), 0)
     await new Promise((resolve) => setTimeout(resolve, 120))
     const text = readFileSync(log, 'utf8')
     assert.match(text, /"op":"cancel"/)
   } finally {
     await broker.stop()
-    try { unlinkSync(log) } catch { /* ignore */ }
+    try {
+      unlinkSync(log)
+    } catch {
+      /* ignore */
+    }
   }
 })
 
@@ -77,21 +123,47 @@ test('queued write that times out is cancelled before exec', async () => {
   })
   try {
     await broker.health()
-    const first = broker.request({
-      op: 'modbus.read', cwd: '/tmp/a', connectionId: 'c1', deviceId: 'd1', unitId: 1,
-      functionCode: 3, address: 0, count: 1, timeoutMs: 2000, endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 },
-    }, { timeoutMs: 2000 })
-    const second = broker.request({
-      op: 'modbus.write', cwd: '/tmp/a', connectionId: 'c1', deviceId: 'd1', unitId: 1,
-      functionCode: 6, address: 0, values: [9], timeoutMs: 40, endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 },
-    }, { timeoutMs: 40 })
+    const first = broker.request(
+      {
+        op: 'modbus.read',
+        cwd: '/tmp/a',
+        connectionId: 'c1',
+        deviceId: 'd1',
+        unitId: 1,
+        functionCode: 3,
+        address: 0,
+        count: 1,
+        timeoutMs: 2000,
+        endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 },
+      },
+      { timeoutMs: 2000 },
+    )
+    const second = broker.request(
+      {
+        op: 'modbus.write',
+        cwd: '/tmp/a',
+        connectionId: 'c1',
+        deviceId: 'd1',
+        unitId: 1,
+        functionCode: 6,
+        address: 0,
+        values: [9],
+        timeoutMs: 40,
+        endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 },
+      },
+      { timeoutMs: 40 },
+    )
     await assert.rejects(() => second)
     await first.catch(() => {})
     const text = readFileSync(log, 'utf8')
     assert.doesNotMatch(text, /"phase":"exec"/)
   } finally {
     await broker.stop()
-    try { unlinkSync(log) } catch { /* ignore */ }
+    try {
+      unlinkSync(log)
+    } catch {
+      /* ignore */
+    }
   }
 })
 
@@ -103,10 +175,20 @@ test('stop leaves pending map empty', async () => {
   })
   try {
     await broker.health()
-    const pending = broker.request({
-      op: 'modbus.read', cwd: '/tmp/a', connectionId: 'c1', deviceId: 'd1', unitId: 1,
-      functionCode: 3, address: 0, count: 1, endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 },
-    }, { timeoutMs: 5000 })
+    const pending = broker.request(
+      {
+        op: 'modbus.read',
+        cwd: '/tmp/a',
+        connectionId: 'c1',
+        deviceId: 'd1',
+        unitId: 1,
+        functionCode: 3,
+        address: 0,
+        count: 1,
+        endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: 1502 },
+      },
+      { timeoutMs: 5000 },
+    )
     pending.catch(() => {})
     await broker.stop()
     assert.equal(broker.pendingSize(), 0)

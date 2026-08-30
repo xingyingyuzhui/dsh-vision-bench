@@ -1,3 +1,4 @@
+// @ts-check
 /** Unified Modbus / Vision Bench error codes (HTTP + Agent share these). */
 export const ERROR_CODES = {
   PORT_IN_USE: 'PORT_IN_USE',

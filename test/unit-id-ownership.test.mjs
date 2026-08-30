@@ -7,7 +7,7 @@ import { connLabel, normalizeConn, normalizeModbus, patchConn } from '../bench-d
 import { connectOp, pickConnPatch } from '../bench-modbus.mjs'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
 
-test('连接端点不再持久化 slave；connLabel 不含站号', () => {
+test('连接端点不再持久化 slave；connLabel 不含站号', async () => {
   const c = normalizeConn({ port: 'COM3', baudrate: 9600, slave: 9 })
   assert.equal(c.slave, undefined)
   assert.ok(!('slave' in c))
@@ -15,7 +15,7 @@ test('连接端点不再持久化 slave；connLabel 不含站号', () => {
   assert.ok(!/站号/.test(connLabel(c)))
 })
 
-test('patchConn / pickConnPatch 忽略 slave，不改设备 Unit ID', () => {
+test('patchConn / pickConnPatch 忽略 slave，不改设备 Unit ID', async () => {
   const base = normalizeModbus({
     version: 3,
     connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', baudrate: 9600 } }],
@@ -87,7 +87,15 @@ test('connect 带 slave 必须提供 deviceId；只更新该设备 unitId', asyn
     saveWorkspace(home, cwd, {
       modbus: {
         version: 3,
-        connections: [{ id: 'c1', name: 'C1', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM3', baudrate: 9600, sim: true } }],
+        connections: [
+          {
+            id: 'c1',
+            name: 'C1',
+            role: 'client',
+            enabled: true,
+            conn: { mode: 'rtu', port: 'COM3', baudrate: 9600, sim: true },
+          },
+        ],
         devices: [
           { id: 'd1', connectionId: 'c1', name: 'A', unitId: 1 },
           { id: 'd2', connectionId: 'c1', name: 'B', unitId: 2 },
@@ -123,8 +131,9 @@ test('parseUnitId / validateDevices 拒绝 0 与越界', async () => {
   assert.equal(parseUnitId(1), 1)
   assert.equal(parseUnitId(247), 247)
   assert.equal(parseUnitId(248), null)
-  const errs = validateDevices([
-    { id: 'd1', connectionId: 'c1', name: 'A', unitId: 0, enabled: true },
-  ], [{ id: 'c1', enabled: true }])
+  const errs = validateDevices(
+    [{ id: 'd1', connectionId: 'c1', name: 'A', unitId: 0, enabled: true }],
+    [{ id: 'c1', enabled: true }],
+  )
   assert.ok(errs.some((e) => /1\.\.247/.test(e)))
 })

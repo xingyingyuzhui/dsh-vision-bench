@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, writeFile, rm, symlink } from 'node:fs/promises'
+import { mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -19,7 +19,10 @@ test('listWorkspaceDir stays inside the workspace and lists Keil files', async (
     await writeFile(join(root, 'src', 'suite.uvmpw'), '<Workspace/>')
     const again = listWorkspaceDir(root, join(root, 'src'))
     assert.equal(again.ok, true)
-    assert.equal(again.files.some((item) => item.name === 'suite.uvmpw'), false)
+    assert.equal(
+      again.files.some((item) => item.name === 'suite.uvmpw'),
+      false,
+    )
     const escaped = listWorkspaceDir(root, join(root, '..'))
     assert.equal(escaped.ok, false)
   } finally {
@@ -39,7 +42,10 @@ test('listWorkspaceDir does not follow a symlink out of the workspace', async ()
     await symlink(outside, join(cwd, 'escape'), type)
     const listed = listWorkspaceDir(cwd, cwd)
     assert.equal(listed.ok, true)
-    assert.equal((listed.dirs || []).some((item) => item.name === 'escape'), false)
+    assert.equal(
+      (listed.dirs || []).some((item) => item.name === 'escape'),
+      false,
+    )
     const inside = listWorkspaceDir(cwd, join(cwd, 'escape'))
     assert.equal(inside.ok, false)
   } finally {
@@ -47,7 +53,7 @@ test('listWorkspaceDir does not follow a symlink out of the workspace', async ()
   }
 })
 
-test('pickArtifact prefers the requested download format', () => {
+test('pickArtifact prefers the requested download format', async () => {
   const details = { hex_file: '/a.hex', axf_file: '/a.axf' }
   const hex = pickArtifact(details, 'hex')
   assert.equal(hex.path, '/a.hex')

@@ -22,7 +22,8 @@ export function clearTrendState(cwd) {
 // New code must use getTrendState(cwd) / the cwd-explicit helpers below.
 export const TREND = { cwd: '', series: new Map(), meta: new Map() }
 
-export const trendKey = (connectionId, deviceId, pointId) => String(connectionId) + ':' + String(deviceId) + ':' + String(pointId)
+export const trendKey = (connectionId, deviceId, pointId) =>
+  String(connectionId) + ':' + String(deviceId) + ':' + String(pointId)
 
 export const sampleTrend = (cwd, pack) => {
   if (!cwd) return
@@ -37,14 +38,17 @@ export const sampleTrend = (cwd, pack) => {
     const pt = pointsById[pid]
     const key = trendKey(pt.connectionId || '', pt.deviceId || '', pid)
     state.meta.set(key, {
-      label: (pt.name || pid),
+      label: pt.name || pid,
       unit: pt.unit || '',
       connectionId: pt.connectionId,
       deviceId: pt.deviceId,
       pointId: pid,
     })
     let list = state.series.get(key)
-    if (!list) { list = []; state.series.set(key, list) }
+    if (!list) {
+      list = []
+      state.series.set(key, list)
+    }
     // quality breakpoint: bad quality writes explicit null gap for uPlot spanGaps:false
     if (rec.ok !== true) {
       list.push({ t: now, v: null })
@@ -77,7 +81,9 @@ export function computeStats(cwd, keyOrList, opts = {}) {
   const now = opts.now != null ? Number(opts.now) : Date.now()
   const windowMs = opts.windowMs != null ? Number(opts.windowMs) : TREND_WINDOW_MS
   const cutoff = now - windowMs
-  const win = list.filter((item) => item && item.t >= cutoff && item.v !== null && item.v !== undefined && Number.isFinite(Number(item.v)))
+  const win = list.filter(
+    (item) => item && item.t >= cutoff && item.v !== null && item.v !== undefined && Number.isFinite(Number(item.v)),
+  )
   const valid = win.length
   if (!valid) {
     return { count: list.length, valid: 0, min: null, max: null, avg: null, last: null, first: null }
@@ -109,7 +115,9 @@ export function exportRangeCsv(cwd, opts = {}) {
   const cutoff = now - windowMs
   const start = opts.start != null ? Number(opts.start) : cutoff
   const end = opts.end != null ? Number(opts.end) : now
-  const keys = Array.isArray(opts.keys) ? opts.keys.filter((k) => state.series.has(k)) : Array.from(state.series.keys()).slice(0, 8)
+  const keys = Array.isArray(opts.keys)
+    ? opts.keys.filter((k) => state.series.has(k))
+    : Array.from(state.series.keys()).slice(0, 8)
   const header = ['time', 'connectionId', 'deviceId', 'pointId', 'label', 'unit', 'value']
   const rows = [header.join(',')]
   const esc = (s) => {
@@ -124,7 +132,17 @@ export function exportRangeCsv(cwd, opts = {}) {
       if (item.t < start || item.t > end) continue
       const iso = new Date(item.t).toISOString()
       const v = item.v === null || item.v === undefined ? '' : String(item.v)
-      rows.push([iso, esc(meta.connectionId || ''), esc(meta.deviceId || ''), esc(meta.pointId || ''), esc(meta.label || key), esc(meta.unit || ''), v].join(','))
+      rows.push(
+        [
+          iso,
+          esc(meta.connectionId || ''),
+          esc(meta.deviceId || ''),
+          esc(meta.pointId || ''),
+          esc(meta.label || key),
+          esc(meta.unit || ''),
+          v,
+        ].join(','),
+      )
     }
   }
   return rows.join('\n')
@@ -198,14 +216,24 @@ export const trendDataForComponents = (trendStore, points, componentIds = [], wi
       const map = new Map(samples.map((sv) => [sv[0], sv[1]]))
       data.push(times.map((t) => (map.has(t) ? map.get(t) : null)))
       keys.push(pid)
-      meta.push({ label: pt ? (pt.name || String(pid)) : pid, unit: (pt && pt.unit) || '', connectionId: (pt && pt.connectionId) || '', deviceId: (pt && pt.deviceId) || '' })
+      meta.push({
+        label: pt ? pt.name || String(pid) : pid,
+        unit: (pt && pt.unit) || '',
+        connectionId: (pt && pt.connectionId) || '',
+        deviceId: (pt && pt.deviceId) || '',
+      })
       // 保留点位顺序：即使某点位零样本，也保留其 key/meta 位置，仅数据全 null
     }
   } else {
     for (const pid of ids) {
       keys.push(pid)
       const pt = byId.get(pid)
-      meta.push({ label: pt ? (pt.name || String(pid)) : pid, unit: (pt && pt.unit) || '', connectionId: (pt && pt.connectionId) || '', deviceId: (pt && pt.deviceId) || '' })
+      meta.push({
+        label: pt ? pt.name || String(pid) : pid,
+        unit: (pt && pt.unit) || '',
+        connectionId: (pt && pt.connectionId) || '',
+        deviceId: (pt && pt.deviceId) || '',
+      })
     }
   }
   return { data, keys, meta }
@@ -218,7 +246,14 @@ export const componentLatestValues = (values, points, componentIds = []) => {
   return (Array.isArray(componentIds) ? componentIds : []).map((pid) => {
     const pt = ptsById.get(pid)
     const rec = byId.get(pid)
-    return { pointId: pid, name: pt ? pt.name : pid, unit: pt && pt.unit || '', value: rec && rec.ok ? rec.value : null, ok: !!(rec && rec.ok), at: rec && rec.at || 0 }
+    return {
+      pointId: pid,
+      name: pt ? pt.name : pid,
+      unit: (pt && pt.unit) || '',
+      value: rec && rec.ok ? rec.value : null,
+      ok: !!(rec && rec.ok),
+      at: (rec && rec.at) || 0,
+    }
   })
 }
 export const UPLOT_PROTO = {

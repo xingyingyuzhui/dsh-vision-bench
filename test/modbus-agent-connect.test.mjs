@@ -10,8 +10,20 @@ import { connectOp } from '../bench-modbus.mjs'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
 import { runVisionBench } from '../bench-tool.mjs'
 
-const c1 = { id: 'c1', name: 'C1', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM3', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, slave: 1, sim: false } }
-const sv = { id: 's1', name: 'S1', role: 'server', enabled: true, conn: { mode: 'rtu', port: 'COM5', baudrate: 9600, slave: 1 } }
+const c1 = {
+  id: 'c1',
+  name: 'C1',
+  role: 'client',
+  enabled: true,
+  conn: { mode: 'rtu', port: 'COM3', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1, slave: 1, sim: false },
+}
+const sv = {
+  id: 's1',
+  name: 'S1',
+  role: 'server',
+  enabled: true,
+  conn: { mode: 'rtu', port: 'COM5', baudrate: 9600, slave: 1 },
+}
 
 function fakeTransport() {
   const opened = []
@@ -19,9 +31,19 @@ function fakeTransport() {
   return {
     opened,
     closed,
-    openConnection: async (req) => { opened.push(req); if (req.endpoint && req.endpoint.port === 'COM3') return { ok: true, data: { state: 'connected' } }; return { ok: false, error: { code: 'CONNECT_FAILED', message: '连接失败' } } },
-    closeConnection: async (req) => { closed.push(req); return { ok: true } },
-    releaseConnection: async (req) => { closed.push(req); return { ok: true } },
+    openConnection: async (req) => {
+      opened.push(req)
+      if (req.endpoint && req.endpoint.port === 'COM3') return { ok: true, data: { state: 'connected' } }
+      return { ok: false, error: { code: 'CONNECT_FAILED', message: '连接失败' } }
+    },
+    closeConnection: async (req) => {
+      closed.push(req)
+      return { ok: true }
+    },
+    releaseConnection: async (req) => {
+      closed.push(req)
+      return { ok: true }
+    },
     listConnections: async () => ({ ok: true, data: { connections: [] } }),
     captureFeed: async () => ({ ok: true, data: { lines: [] } }),
   }
@@ -81,7 +103,10 @@ test('server/slave role is rejected with ROLE_NOT_SUPPORTED (UI + Agent)', async
   assert.equal(ran.code, 'ROLE_NOT_SUPPORTED')
   assert.equal(t.opened.length, 0, 'never opened a client for a server role')
   // Agent tool path also rejects
-  const viaTool = await runVisionBench(home, { action: 'connect', connectionId: 's1' }, cwd, { source: 'agent', sessionId: 's1' })
+  const viaTool = await runVisionBench(home, { action: 'connect', connectionId: 's1' }, cwd, {
+    source: 'agent',
+    sessionId: 's1',
+  })
   assert.equal(viaTool.ok, false)
   assert.equal(viaTool.code, 'ROLE_NOT_SUPPORTED')
   await rm(home, { recursive: true, force: true })
@@ -94,12 +119,30 @@ test('agent connect keeps an agent source identity in the request payload', asyn
   // transport-level source mapping lives in toReadRequest/toWriteRequest; verify
   // read requests built by runVisionBench carry the agent source
   const { toReadRequest } = await import('../bench-modbus-transport.mjs')
-  const req = toReadRequest({ cwd, connection: c1, device: { id: 'd1', unitId: 1 }, batch: { fc: 3, address: 0, count: 1 }, source: 'agent' })
+  const req = toReadRequest({
+    cwd,
+    connection: c1,
+    device: { id: 'd1', unitId: 1 },
+    batch: { fc: 3, address: 0, count: 1 },
+    source: 'agent',
+  })
   assert.equal(req.source, 'agent')
-  const poll = toReadRequest({ cwd, connection: c1, device: { id: 'd1', unitId: 1 }, batch: { fc: 3, address: 0, count: 1 }, source: 'polling' })
+  const poll = toReadRequest({
+    cwd,
+    connection: c1,
+    device: { id: 'd1', unitId: 1 },
+    batch: { fc: 3, address: 0, count: 1 },
+    source: 'polling',
+  })
   assert.equal(poll.source, 'polling')
   // legacy 'user' degrades to manual
-  const manual = toReadRequest({ cwd, connection: c1, device: { id: 'd1', unitId: 1 }, batch: { fc: 3, address: 0, count: 1 }, source: 'user' })
+  const manual = toReadRequest({
+    cwd,
+    connection: c1,
+    device: { id: 'd1', unitId: 1 },
+    batch: { fc: 3, address: 0, count: 1 },
+    source: 'user',
+  })
   assert.equal(manual.source, 'manual')
   await rm(home, { recursive: true, force: true })
 })

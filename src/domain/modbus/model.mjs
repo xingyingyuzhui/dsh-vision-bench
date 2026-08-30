@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-check
 export { ERROR_CODES, fail } from './errors.mjs'
 export { endpointFingerprint, endpointLabelText, sameEndpoint } from './endpoint.mjs'
 export { clampUnitId, stampPoints } from './unit-id.mjs'

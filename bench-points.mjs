@@ -1,6 +1,9 @@
 // Point-first Modbus model. A point is one fully configured register/coil;
 // polling batches are derived (bench-pollplan.mjs), never hand-built.
 
+import { decodeValue, isWritableFunction, pointIdOf } from './src/domain/modbus/point-math.mjs'
+export { pointIdOf, isWritableFunction, decodeValue }
+
 export const MAX_POINTS = 256
 export const MAX_VALUES = 512
 const FUNCTIONS = new Set([1, 2, 3, 4])
@@ -46,15 +49,11 @@ export const writeTargetOf = (fn) => {
   return target ? { writable: true, ...target } : { writable: false, single: 0, multi: 0, kind: '', maxMulti: 0 }
 }
 
-export const isWritableFunction = (fn) => !!WRITE_TARGET_OF[Number(fn)]
-
 const finiteOrNull = (value) => {
   if (value === null || value === undefined || value === '') return null
   const n = Number(value)
   return Number.isFinite(n) ? n : null
 }
-
-export const pointIdOf = (fn, address) => 'p' + Number(fn) + '_' + Number(address)
 
 const FALLBACK_NAME_TAG = { 1: '线圈', 2: '离散量', 3: '寄存器', 4: '输入' }
 
@@ -76,16 +75,23 @@ export const normalizePoint = (input) => {
     alarmMin: finiteOrNull(input && input.alarmMin),
     alarmMax: finiteOrNull(input && input.alarmMax),
     // TaskP0/0.20.0: 监视/告警为独立点位属性；旧 trendEnabled 输入迁移为 monitorEnabled
-    monitorEnabled: (input && input.monitorEnabled !== undefined)
-      ? input.monitorEnabled === true
-      : ((input && input.trendEnabled) === true || String(input && input.trendEnabled).toLowerCase() === 'true' || String(input && input.trendEnabled) === '1'),
-    alarmEnabled: (input && input.alarmEnabled !== undefined)
-      ? input.alarmEnabled === true
-      : (finiteOrNull(input && input.alarmMin) != null || finiteOrNull(input && input.alarmMax) != null),
+    monitorEnabled:
+      input && input.monitorEnabled !== undefined
+        ? input.monitorEnabled === true
+        : (input && input.trendEnabled) === true ||
+          String(input && input.trendEnabled).toLowerCase() === 'true' ||
+          String(input && input.trendEnabled) === '1',
+    alarmEnabled:
+      input && input.alarmEnabled !== undefined
+        ? input.alarmEnabled === true
+        : finiteOrNull(input && input.alarmMin) != null || finiteOrNull(input && input.alarmMax) != null,
     // 只读兼容别名：新写入只使用 monitorEnabled
-    trendEnabled: (input && input.monitorEnabled !== undefined)
-      ? input.monitorEnabled === true
-      : ((input && input.trendEnabled) === true || String(input && input.trendEnabled).toLowerCase() === 'true' || String(input && input.trendEnabled) === '1'),
+    trendEnabled:
+      input && input.monitorEnabled !== undefined
+        ? input.monitorEnabled === true
+        : (input && input.trendEnabled) === true ||
+          String(input && input.trendEnabled).toLowerCase() === 'true' ||
+          String(input && input.trendEnabled) === '1',
   }
 }
 
@@ -162,14 +168,17 @@ const putValueRec = (values, rec) => {
 export const setPointValue = (values, point, raw, opts = {}) => {
   const list = (Array.isArray(values) ? values : []).map(normalizeValueRec).filter((r) => r.key)
   const hasRaw = raw !== null && raw !== undefined
-  putValueRec(list, normalizeValueRec({
-    key: point.id,
-    raw: hasRaw ? raw : null,
-    value: hasRaw ? decodeValue(point, typeof raw === 'boolean' ? (raw ? 1 : 0) : raw) : null,
-    ok: opts.ok !== false,
-    error: opts.error || '',
-    at: opts.at || Date.now(),
-  }))
+  putValueRec(
+    list,
+    normalizeValueRec({
+      key: point.id,
+      raw: hasRaw ? raw : null,
+      value: hasRaw ? decodeValue(point, typeof raw === 'boolean' ? (raw ? 1 : 0) : raw) : null,
+      ok: opts.ok !== false,
+      error: opts.error || '',
+      at: opts.at || Date.now(),
+    }),
+  )
   return list.slice(-MAX_VALUES)
 }
 
@@ -183,14 +192,17 @@ export const scatterBatch = (values, points, batch, raw, ok, error, at = Date.no
     if (p.address < batch.address || p.address >= batch.address + batch.count) continue
     const idx = p.address - batch.address
     const has = ok && Array.isArray(raw) && raw[idx] !== undefined
-    putValueRec(list, normalizeValueRec({
-      key: p.id,
-      raw: has ? raw[idx] : null,
-      value: has ? decodeValue(p, typeof raw[idx] === 'boolean' ? (raw[idx] ? 1 : 0) : raw[idx]) : null,
-      ok: !!ok,
-      error: ok ? '' : String(error || ''),
-      at,
-    }))
+    putValueRec(
+      list,
+      normalizeValueRec({
+        key: p.id,
+        raw: has ? raw[idx] : null,
+        value: has ? decodeValue(p, typeof raw[idx] === 'boolean' ? (raw[idx] ? 1 : 0) : raw[idx]) : null,
+        ok: !!ok,
+        error: ok ? '' : String(error || ''),
+        at,
+      }),
+    )
   }
   return list.slice(-MAX_VALUES)
 }
@@ -224,16 +236,6 @@ export const encodeValue = (point, engineeringValue) => {
   return { ok: true, raw: rounded }
 }
 
-export const decodeValue = (point, raw) => {
-  if (raw === null || raw === undefined || raw === '') return raw
-  if (typeof raw === 'boolean') return raw
-  const n = Number(raw)
-  if (!Number.isFinite(n)) return raw
-  const scale = Number(point && point.scale)
-  const offset = Number(point && point.offset)
-  return n * (Number.isFinite(scale) ? scale : 1) + (Number.isFinite(offset) ? offset : 0)
-}
-
 // TaskP1/0.20.0: 点位运行状态 — 优先级：激活告警 > 通信异常 > 连接断开 > 正常 > 未读取
 export const pointRuntimeStatus = (point, valueRec, alarmState, connectionState) => {
   const alarm = alarmState && typeof alarmState === 'object' ? alarmState[point && point.id] : null
@@ -242,8 +244,10 @@ export const pointRuntimeStatus = (point, valueRec, alarmState, connectionState)
   }
   if (valueRec && valueRec.ok === false) return { key: 'comm-error', label: '通信异常' }
   const cs = connectionState || ''
-  if (cs === 'disconnected' || cs === 'error' || cs === 'disconnecting') return { key: 'disconnected', label: cs === 'error' ? '连接异常' : '已断开' }
-  if (valueRec && valueRec.ok === true && (valueRec.value !== null && valueRec.value !== undefined)) return { key: 'ok', label: '正常' }
+  if (cs === 'disconnected' || cs === 'error' || cs === 'disconnecting')
+    return { key: 'disconnected', label: cs === 'error' ? '连接异常' : '已断开' }
+  if (valueRec && valueRec.ok === true && valueRec.value !== null && valueRec.value !== undefined)
+    return { key: 'ok', label: '正常' }
   return { key: 'unread', label: '未读取' }
 }
 
@@ -292,7 +296,18 @@ export const alarmLabelText = (item, kind) => {
 
 // ── CSV round-trip (per-point columns) ───────────────────────────────────
 
-const CSV_HEADER = ['name', 'function', 'address', 'scale', 'offset', 'unit', 'monitorEnabled', 'alarmEnabled', 'alarmMin', 'alarmMax']
+const CSV_HEADER = [
+  'name',
+  'function',
+  'address',
+  'scale',
+  'offset',
+  'unit',
+  'monitorEnabled',
+  'alarmEnabled',
+  'alarmMin',
+  'alarmMax',
+]
 
 const csvCell = (value) => {
   const s = value === null || value === undefined ? '' : String(value)
@@ -325,26 +340,36 @@ const csvSplit = (line) => {
 
 export const pointsToCsv = (points) =>
   [CSV_HEADER.join(',')]
-    .concat(normalizePoints(points).map((item) => [
-      item.name || functionTag(item.function) + item.address,
-      item.function,
-      item.address,
-      item.scale,
-      item.offset,
-      item.unit,
-      item.monitorEnabled === true ? 'true' : '',
-      item.alarmEnabled === true ? 'true' : '',
-      item.alarmMin,
-      item.alarmMax,
-    ].map(csvCell).join(',')))
+    .concat(
+      normalizePoints(points).map((item) =>
+        [
+          item.name || functionTag(item.function) + item.address,
+          item.function,
+          item.address,
+          item.scale,
+          item.offset,
+          item.unit,
+          item.monitorEnabled === true ? 'true' : '',
+          item.alarmEnabled === true ? 'true' : '',
+          item.alarmMin,
+          item.alarmMax,
+        ]
+          .map(csvCell)
+          .join(','),
+      ),
+    )
     .join('\n') + '\n'
 
 export const csvToPoints = (input) => {
-  const lines = String(input || '').split(/\r?\n/).filter((line) => line.trim())
+  const lines = String(input || '')
+    .split(/\r?\n/)
+    .filter((line) => line.trim())
   if (!lines.length) return { ok: false, error: 'CSV 为空' }
   const header = csvSplit(lines[0]).map((cell) => cell.trim().toLowerCase())
   const idx = {}
-  CSV_HEADER.forEach((key) => { idx[key] = header.indexOf(key.toLowerCase()) })
+  CSV_HEADER.forEach((key) => {
+    idx[key] = header.indexOf(key.toLowerCase())
+  })
   // TaskP0/0.20.0: 旧 trendEnabled 列作为 monitorEnabled 兼容别名
   if (idx.monitorEnabled < 0) idx.monitorEnabled = header.indexOf('trendenabled')
   if (idx.trendEnabled < 0) idx.trendEnabled = header.indexOf('trendenabled')
@@ -355,7 +380,7 @@ export const csvToPoints = (input) => {
   for (let i = 1; i < lines.length; i++) {
     const cells = csvSplit(lines[i])
     const pick = (key) => (idx[key] >= 0 ? cells[idx[key]] : '')
-    if (pick('address') === '' ) continue
+    if (pick('address') === '') continue
     points.push({
       name: pick('name'),
       function: Number(pick('function')),
@@ -365,8 +390,12 @@ export const csvToPoints = (input) => {
       unit: pick('unit'),
       alarmMin: pick('alarmMin') === '' ? null : Number(pick('alarmMin')),
       alarmMax: pick('alarmMax') === '' ? null : Number(pick('alarmMax')),
-      monitorEnabled: (pick('monitorEnabled') === 'true' || pick('monitorEnabled') === '1' || pick('trendEnabled') === 'true' || pick('trendEnabled') === '1'),
-      alarmEnabled: (pick('alarmEnabled') === 'true' || pick('alarmEnabled') === '1'),
+      monitorEnabled:
+        pick('monitorEnabled') === 'true' ||
+        pick('monitorEnabled') === '1' ||
+        pick('trendEnabled') === 'true' ||
+        pick('trendEnabled') === '1',
+      alarmEnabled: pick('alarmEnabled') === 'true' || pick('alarmEnabled') === '1',
     })
   }
   const normalized = normalizePoints(points)
@@ -374,15 +403,13 @@ export const csvToPoints = (input) => {
   return { ok: true, points: normalized }
 }
 
-
 // ── Legacy compatibility shims (pre-v0.18 segment model) ─────────────────
 // Kept for bench-slave and old tests until they migrate.
 
 export const MAX_SEGMENTS = 256
 export const MAX_COUNT = 125
 
-export const newSegmentId = () =>
-  's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+export const newSegmentId = () => 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 
 export const defaultSegmentName = (segment) => {
   const tag = functionTag(segment.function)
@@ -397,17 +424,17 @@ export const pointName = (segment, index) => {
   return functionTag(segment.function) + addr
 }
 
-export const pointKey = (segmentId, address, fn) =>
-  String(segmentId || '') + ':' + String(fn) + '@' + String(address)
+export const pointKey = (segmentId, address, fn) => String(segmentId || '') + ':' + String(fn) + '@' + String(address)
 
 export const normalizeSegment = (input) => {
   const address = clampInt(input && input.address, 0, 0, 65535)
-  const fn = new Set([1,2,3,4]).has(Number(input && input.function)) ? Number(input.function) : 3
+  const fn = new Set([1, 2, 3, 4]).has(Number(input && input.function)) ? Number(input.function) : 3
   const maxCount = Math.min(MAX_COUNT, 65536 - address)
   const count = clampInt(input && input.count, 1, 1, maxCount || 1)
   const scale = Number(input && input.scale)
   const offset = Number(input && input.offset)
-  const finiteOrNullLocal = (v) => (v===null||v===undefined||v===''?null:(Number.isFinite(Number(v))?Number(v):null))
+  const finiteOrNullLocal = (v) =>
+    v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null
   return {
     id: text(input && input.id, newSegmentId()),
     name: text(input && input.name, '').slice(0, 40),
@@ -432,7 +459,7 @@ export const normalizeValue = (input) => {
   return {
     key: text(input && input.key, ''),
     segmentId: text(input && input.segmentId, ''),
-    function: new Set([1,2,3,4]).has(Number(input && input.function)) ? Number(input.function) : 3,
+    function: new Set([1, 2, 3, 4]).has(Number(input && input.function)) ? Number(input.function) : 3,
     address: clampInt(input && input.address, 0, 0, 65535),
     name: text(input && input.name, '').slice(0, 48),
     value: input && Object.prototype.hasOwnProperty.call(input, 'value') ? input.value : null,
@@ -444,11 +471,13 @@ export const normalizeValue = (input) => {
 
 export const normalizeValues = (list) => {
   if (!Array.isArray(list)) return []
-  return list.map(normalizeValue).filter((item) => item.key).slice(0, MAX_VALUES)
+  return list
+    .map(normalizeValue)
+    .filter((item) => item.key)
+    .slice(0, MAX_VALUES)
 }
 
-export const sameRange = (a, b) =>
-  a.function === b.function && a.address === b.address && a.count === b.count
+export const sameRange = (a, b) => a.function === b.function && a.address === b.address && a.count === b.count
 
 export const addSegment = (list, spec) => {
   const current = normalizeSegments(list)
@@ -504,9 +533,10 @@ export const expandPoints = (segments) => {
 export const applySegmentRead = (values, segment, ran) => {
   const byKey = {}
   for (const item of normalizeValues(values)) byKey[item.key] = item
-  const raw = ran && ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw)
-    ? ran.result.details.raw
-    : []
+  const raw =
+    ran && ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw)
+      ? ran.result.details.raw
+      : []
   const at = Date.now()
   const ok = !!(ran && ran.ok)
   const error = ok ? '' : String((ran && ran.error) || '')
@@ -526,13 +556,16 @@ export const applySegmentRead = (values, segment, ran) => {
       at,
     })
   }
-  return Object.keys(byKey).map((key) => byKey[key]).slice(0, MAX_VALUES)
+  return Object.keys(byKey)
+    .map((key) => byKey[key])
+    .slice(0, MAX_VALUES)
 }
 
 export const segmentCovering = (segments, fn, address) =>
-  normalizeSegments(segments).find((segment) => segment.function === Number(fn)
-    && address >= segment.address
-    && address < segment.address + segment.count) || null
+  normalizeSegments(segments).find(
+    (segment) =>
+      segment.function === Number(fn) && address >= segment.address && address < segment.address + segment.count,
+  ) || null
 
 export const applyPointWrite = (values, segment, address, value, at = Date.now()) => {
   const seg = normalizeSegment(segment)
@@ -550,7 +583,9 @@ export const applyPointWrite = (values, segment, address, value, at = Date.now()
     error: '',
     at,
   })
-  return Object.keys(byKey).map((k) => byKey[k]).slice(0, MAX_VALUES)
+  return Object.keys(byKey)
+    .map((k) => byKey[k])
+    .slice(0, MAX_VALUES)
 }
 
 export const compactSegments = (segments) =>
@@ -570,18 +605,20 @@ export const compactSegments = (segments) =>
 export const compactValues = (values, segments) => {
   const byId = {}
   for (const seg of normalizeSegments(segments)) byId[seg.id] = seg
-  return normalizeValues(values).slice(0, 32).map((item) => {
-    const seg = byId[item.segmentId]
-    return {
-      name: item.name,
-      function: item.function,
-      address: item.address,
-      value: seg ? decodeValue(seg, item.value) : item.value,
-      raw: item.value,
-      ok: item.ok,
-      unit: seg ? seg.unit : '',
-    }
-  })
+  return normalizeValues(values)
+    .slice(0, 32)
+    .map((item) => {
+      const seg = byId[item.segmentId]
+      return {
+        name: item.name,
+        function: item.function,
+        address: item.address,
+        value: seg ? decodeValue(seg, item.value) : item.value,
+        raw: item.value,
+        ok: item.ok,
+        unit: seg ? seg.unit : '',
+      }
+    })
 }
 
 export const simulateRaw = (segment, at = Date.now()) => {
@@ -604,35 +641,45 @@ export const simulateSegmentRan = (segment, at) => ({
 })
 
 export const segmentsToCsv = (segments) =>
-  [['name','function','address','count','scale','offset','unit','alarmMin','alarmMax'].join(',')]
-    .concat(normalizeSegments(segments).map((item) => [
-      item.name || defaultSegmentName(item),
-      item.function,
-      item.address,
-      item.count,
-      item.scale,
-      item.offset,
-      item.unit,
-      item.alarmMin,
-      item.alarmMax,
-    ].map((v) => {
-      const s = v === null || v === undefined ? '' : String(v)
-      return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
-    }).join(',')))
+  [['name', 'function', 'address', 'count', 'scale', 'offset', 'unit', 'alarmMin', 'alarmMax'].join(',')]
+    .concat(
+      normalizeSegments(segments).map((item) =>
+        [
+          item.name || defaultSegmentName(item),
+          item.function,
+          item.address,
+          item.count,
+          item.scale,
+          item.offset,
+          item.unit,
+          item.alarmMin,
+          item.alarmMax,
+        ]
+          .map((v) => {
+            const s = v === null || v === undefined ? '' : String(v)
+            return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+          })
+          .join(','),
+      ),
+    )
     .join('\n') + '\n'
 
 export const csvToSegments = (input) => {
-  const lines = String(input || '').split(/\r?\n/).filter((line) => line.trim())
+  const lines = String(input || '')
+    .split(/\r?\n/)
+    .filter((line) => line.trim())
   if (!lines.length) return { ok: false, error: 'CSV 为空' }
-  const header = lines[0].split(',').map((cell) => cell.trim().replace(/^"|"$/g,'').toLowerCase())
+  const header = lines[0].split(',').map((cell) => cell.trim().replace(/^"|"$/g, '').toLowerCase())
   const idx = {}
-  ;['name','function','address','count','scale','offset','unit','alarmMin','alarmMax'].forEach((key) => { idx[key] = header.indexOf(key.toLowerCase()) })
+  ;['name', 'function', 'address', 'count', 'scale', 'offset', 'unit', 'alarmMin', 'alarmMax'].forEach((key) => {
+    idx[key] = header.indexOf(key.toLowerCase())
+  })
   if (idx.function < 0 || idx.address < 0) {
     return { ok: false, error: 'CSV 缺少 function 或 address 列' }
   }
   const segments = []
   for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split(',').map(c=>c.trim().replace(/^"|"$/g,''))
+    const cells = lines[i].split(',').map((c) => c.trim().replace(/^"|"$/g, ''))
     const pick = (key) => (idx[key] >= 0 ? cells[idx[key]] : '')
     segments.push({
       name: pick('name'),

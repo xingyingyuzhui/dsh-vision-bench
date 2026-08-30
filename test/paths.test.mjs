@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
-import { join } from 'node:path'
-import test from 'node:test'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import test from 'node:test'
 import { isBroadCwd, pathInside, requireKeilProject, requireWorkspaceCwd } from '../bench-paths.mjs'
-import { runExecFile, _internal } from '../bench-run.mjs'
+import { _internal, runExecFile } from '../bench-run.mjs'
 
-test('pathInside rejects parents and relatives', () => {
+test('pathInside rejects parents and relatives', async () => {
   const root = join('/tmp', 'ws')
   assert.equal(pathInside(root, join(root, 'src', 'a.uvprojx')), true)
   assert.equal(pathInside(root, root), true)
@@ -14,7 +14,7 @@ test('pathInside rejects parents and relatives', () => {
   assert.equal(pathInside(root, 'a.uvprojx'), false)
 })
 
-test('requireWorkspaceCwd rejects home and relatives', () => {
+test('requireWorkspaceCwd rejects home and relatives', async () => {
   assert.match(requireWorkspaceCwd('proj').error, /工作区/)
   assert.match(requireWorkspaceCwd('/').error, /盘根|主目录/)
   const room = requireWorkspaceCwd(join('/tmp', 'vision-proj-' + Date.now()))
@@ -22,11 +22,11 @@ test('requireWorkspaceCwd rejects home and relatives', () => {
   assert.ok(room.cwd)
 })
 
-test('isBroadCwd treats user home as too wide', () => {
+test('isBroadCwd treats user home as too wide', async () => {
   assert.equal(isBroadCwd('/Users/qin', '/Users/qin'), true)
 })
 
-test('pythonArgv inserts -3 for the Windows launcher', () => {
+test('pythonArgv inserts -3 for the Windows launcher', async () => {
   assert.deepEqual(_internal.pythonArgv('/usr/bin/python3', ['a.py']), ['a.py'])
   assert.deepEqual(_internal.pythonArgv('C:\\Windows\\py.exe', ['a.py', '--json']), ['-3', 'a.py', '--json'])
 })
@@ -38,7 +38,7 @@ test('runExecFile honours an already-aborted signal', async () => {
   assert.equal(ran.cancelled, true)
 })
 
-test('parseJsonStdout reads trailing JSON after noise', () => {
+test('parseJsonStdout reads trailing JSON after noise', async () => {
   const hit = _internal.parseJsonStdout('noise\n{"status":"ok","action":"scan"}\n')
   assert.equal(hit.data.status, 'ok')
   assert.equal(_internal.parseJsonStdout('').error, '脚本没有输出')

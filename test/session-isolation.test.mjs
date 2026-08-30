@@ -1,15 +1,15 @@
+import assert from 'node:assert/strict'
 // Task1+2 / 0.18.3: state bus, frame logs and agent focus must be isolated per
 // workspace (cwd). No singleton cross-talk, no timer leaks on final unsubscribe.
 import { afterEach, before, test } from 'node:test'
-import assert from 'node:assert/strict'
 import {
-  subscribeState,
-  pushFramesLog,
-  getFramesLog,
   clearFramesLog,
   getFocusState,
+  getFramesLog,
+  pushFramesLog,
   setFocusState,
   subscribeFocus,
+  subscribeState,
 } from '../bench-shared.mjs'
 
 const POLL = 2000 // POLL_MS used by the bus
@@ -31,9 +31,16 @@ function makePost(dataByCwd) {
 
 // clean slate between tests: unsubscribe everything tracked
 const unsubs = []
-function track(fn) { unsubs.push(fn); return fn }
+function track(fn) {
+  unsubs.push(fn)
+  return fn
+}
 afterEach(() => {
-  for (const u of unsubs.splice(0)) { try { u() } catch {} }
+  for (const u of unsubs.splice(0)) {
+    try {
+      u()
+    } catch {}
+  }
 })
 
 test('A and B subscribe different cwds; each only receives its own data', async () => {
@@ -57,7 +64,10 @@ test('A and B subscribe different cwds; each only receives its own data', async 
 
 test('same cwd multiple subscribers share ONE poller', async () => {
   let pulls = 0
-  const post = async (path, body) => { pulls++; return { workspace: { id: body.cwd }, byCwd: body.cwd } }
+  const post = async (path, body) => {
+    pulls++
+    return { workspace: { id: body.cwd }, byCwd: body.cwd }
+  }
   const a = []
   const b = []
   track(subscribeState(post, '/work/x', (d) => a.push(d)))
@@ -72,7 +82,10 @@ test('same cwd multiple subscribers share ONE poller', async () => {
 
 test('unsubscribing one subscriber does not affect the other; final unsubscribe stops delivery', async () => {
   let pulls = 0
-  const post = async (path, body) => { pulls++; return { workspace: { id: body.cwd }, byCwd: body.cwd } }
+  const post = async (path, body) => {
+    pulls++
+    return { workspace: { id: body.cwd }, byCwd: body.cwd }
+  }
   const a = []
   const b = []
   const unA = track(subscribeState(post, '/work/y', (d) => a.push(d)))
@@ -92,8 +105,13 @@ test('unsubscribing one subscriber does not affect the other; final unsubscribe 
 
 test('in-flight response after final unsubscribe must not invoke callbacks', async () => {
   let release
-  const gate = new Promise((r) => { release = r })
-  const post = async () => { await gate; return { byCwd: 'late', workspace: {} } }
+  const gate = new Promise((r) => {
+    release = r
+  })
+  const post = async () => {
+    await gate
+    return { byCwd: 'late', workspace: {} }
+  }
   const got = []
   const un = track(subscribeState(post, '/work/z', (d) => got.push(d)))
   // let the first pull start (blocked on gate) then unsubscribe
@@ -104,7 +122,7 @@ test('in-flight response after final unsubscribe must not invoke callbacks', asy
   assert.equal(got.length, 0, 'in-flight response must be dropped after unsubscribe')
 })
 
-test('frame logs are isolated per cwd and clear only affects its own cwd', () => {
+test('frame logs are isolated per cwd and clear only affects its own cwd', async () => {
   pushFramesLog('/work/a', 'c1', [{ frameId: 'a1', t: 1, label: 'A1' }])
   pushFramesLog('/work/b', 'c1', [{ frameId: 'b1', t: 1, label: 'B1' }])
   assert.equal(getFramesLog('/work/a', 'c1').length, 1)
@@ -116,10 +134,14 @@ test('frame logs are isolated per cwd and clear only affects its own cwd', () =>
   assert.equal(getFramesLog('/work/b', 'c1').length, 1, 'B untouched')
 })
 
-test('agent focus is per cwd; local subscribers isolated; wildcard sees cwd', () => {
+test('agent focus is per cwd; local subscribers isolated; wildcard sees cwd', async () => {
   const eventsB = []
   const wild = []
-  track(subscribeFocus('/work/a', (fs) => { assert.equal(fs.request && fs.request.pointId, 'pa', 'A sub only sees A') }))
+  track(
+    subscribeFocus('/work/a', (fs) => {
+      assert.equal(fs.request && fs.request.pointId, 'pa', 'A sub only sees A')
+    }),
+  )
   track(subscribeFocus('/work/b', (fs) => eventsB.push(fs)))
   track(subscribeFocus('', (fs, cwd) => wild.push({ fs, cwd }))) // wildcard
   setFocusState('/work/a', { request: { pointId: 'pa', connectionId: 'c1' } })

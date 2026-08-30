@@ -11,15 +11,20 @@ function makeReact(t, hooks = {}) {
   const ReactStub = { createElement: el }
   const useState = (init) => {
     let v = typeof init === 'function' ? init() : init
-    return [v, (next) => {
-      v = typeof next === 'function' ? next(v) : next
-      if (hooks.onUpdate) hooks.onUpdate(v)
-    }]
+    return [
+      v,
+      (next) => {
+        v = typeof next === 'function' ? next(v) : next
+        if (hooks.onUpdate) hooks.onUpdate(v)
+      },
+    ]
   }
   const useRef = (init) => ({ current: init })
   ReactStub.useState = useState
   ReactStub.useRef = useRef
-  ReactStub.useEffect = (fn) => { /* register-only: no timer loops in smoke */ }
+  ReactStub.useEffect = (fn) => {
+    /* register-only: no timer loops in smoke */
+  }
   return ReactStub
 }
 

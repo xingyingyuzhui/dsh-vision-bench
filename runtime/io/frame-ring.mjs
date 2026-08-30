@@ -11,7 +11,9 @@ export function createFrameRing() {
   let epoch = Date.now().toString(36)
 
   return {
-    get epoch() { return epoch },
+    get epoch() {
+      return epoch
+    },
     bumpEpoch() {
       epoch = Date.now().toString(36) + ':' + nextId
       return epoch
@@ -63,7 +65,11 @@ export function createFrameRing() {
         bufferCount: buffer.length,
       }
     },
-    all() { return buffer.slice() },
-    clear() { buffer.length = 0 },
+    all() {
+      return buffer.slice()
+    },
+    clear() {
+      buffer.length = 0
+    },
   }
 }

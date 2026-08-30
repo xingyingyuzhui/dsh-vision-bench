@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { ERROR_CODES, fail } from '../src/domain/modbus/errors.mjs'
 import { ERROR_CODES as appCodes } from '../bench-modbus.mjs'
+import { ERROR_CODES, fail } from '../src/domain/modbus/errors.mjs'
 
-test('ERROR_CODES covers the Stage 4 unified set and is shared via facade', () => {
+test('ERROR_CODES covers the Stage 4 unified set and is shared via facade', async () => {
   const required = [
     'UNIT_ID_INVALID',
     'CONNECTION_NOT_FOUND',
@@ -23,7 +23,7 @@ test('ERROR_CODES covers the Stage 4 unified set and is shared via facade', () =
   }
 })
 
-test('fail() returns the shared error envelope', () => {
+test('fail() returns the shared error envelope', async () => {
   const err = fail(ERROR_CODES.UNIT_ID_INVALID, 'Unit ID 必须为 1..247', { unitId: 0 }, false)
   assert.deepEqual(err, {
     ok: false,

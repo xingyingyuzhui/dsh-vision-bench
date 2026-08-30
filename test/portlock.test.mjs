@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { normalizeTask } from '../bench-journal.mjs'
 import { isPortBusy, portKey, withPortLock } from '../bench-portlock.mjs'
 import { findMonitoredPort, openSerialMonitor } from '../bench-serial-monitor.mjs'
-import { normalizeTask } from '../bench-journal.mjs'
 
-test('portKey normalizes device prefixes and case', () => {
+test('portKey normalizes device prefixes and case', async () => {
   assert.equal(portKey('\\\\.\\COM3'), 'COM3')
   assert.equal(portKey('com3'), 'COM3')
   assert.equal(portKey(' COM10 '), 'COM10')
@@ -14,17 +14,15 @@ test('portKey normalizes device prefixes and case', () => {
 
 test('withPortLock serializes concurrent transactions on one port', async () => {
   const order = []
-  const job = (name, ms) => () => new Promise((resolve) => {
-    order.push(name + '-start')
-    setTimeout(() => {
-      order.push(name + '-end')
-      resolve(name)
-    }, ms)
-  })
-  const [a, b] = await Promise.all([
-    withPortLock('COM4', job('a', 40)),
-    withPortLock('\\\\.\\com4', job('b', 5)),
-  ])
+  const job = (name, ms) => () =>
+    new Promise((resolve) => {
+      order.push(name + '-start')
+      setTimeout(() => {
+        order.push(name + '-end')
+        resolve(name)
+      }, ms)
+    })
+  const [a, b] = await Promise.all([withPortLock('COM4', job('a', 40)), withPortLock('\\\\.\\com4', job('b', 5))])
   assert.equal(a, 'a')
   assert.equal(b, 'b')
   assert.deepEqual(order, ['a-start', 'a-end', 'b-start', 'b-end'])
@@ -32,7 +30,9 @@ test('withPortLock serializes concurrent transactions on one port', async () => 
 
 test('isPortBusy reflects in-flight transactions only', async () => {
   let release
-  const gate = new Promise((resolve) => { release = resolve })
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
   const running = withPortLock('COM5', () => gate)
   await new Promise((resolve) => setTimeout(resolve, 20))
   assert.equal(isPortBusy('com5'), true)
@@ -49,7 +49,7 @@ test('frames layer cannot open a SerialPort; findMonitoredPort is retired', asyn
   assert.equal(findMonitoredPort('COM7'), null)
 })
 
-test('normalizeTask caps frame payloads', () => {
+test('normalizeTask caps frame payloads', async () => {
   const task = normalizeTask({
     type: 'read',
     status: 'ok',

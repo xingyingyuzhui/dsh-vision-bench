@@ -21,14 +21,7 @@ export const taskTypeLabel = (type) => {
 export const isTaskType = (type) => TASK_TYPE_KEYS.has(type)
 
 // Timeline kinds marked major survive minor-trimming when the list runs over budget.
-const MAJOR_KINDS = new Set([
-  'select-project',
-  'sweep',
-  'build-end',
-  'write-end',
-  'download-end',
-  'verify-end',
-])
+const MAJOR_KINDS = new Set(['select-project', 'sweep', 'build-end', 'write-end', 'download-end', 'verify-end'])
 
 export const isMajorKind = (kind) => MAJOR_KINDS.has(String(kind || ''))
 
@@ -58,8 +51,7 @@ export const trimTimeline = (list, max = MAX_TIMELINE, minorBudget = MAX_TIMELIN
   return out
 }
 
-export const newId = (prefix) =>
-  prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+export const newId = (prefix) => prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 
 // ── task pipeline helpers shared by every action domain ──────────────────
 
@@ -88,7 +80,10 @@ export const normalizeOrigin = (input) => ({
 const normalizeFrames = (input) => {
   if (!input || typeof input !== 'object') return null
   const trace = Array.isArray(input.trace)
-    ? input.trace.map((line) => text(line, '').slice(0, 200)).filter(Boolean).slice(0, 8)
+    ? input.trace
+        .map((line) => text(line, '').slice(0, 200))
+        .filter(Boolean)
+        .slice(0, 8)
     : []
   const request = text(input.request, '').slice(0, 200)
   const response = text(input.response, '').slice(0, 200)
@@ -116,7 +111,10 @@ export const normalizeTask = (input) => {
     progress: Number.isFinite(progress) && progress >= 0 && progress <= 100 ? Math.trunc(progress) : null,
     frames: normalizeFrames(input && input.frames),
     errors: Array.isArray(input && input.errors)
-      ? input.errors.map((item) => String(item || '').slice(0, 240)).filter(Boolean).slice(0, 8)
+      ? input.errors
+          .map((item) => String(item || '').slice(0, 240))
+          .filter(Boolean)
+          .slice(0, 8)
       : [],
   }
 }

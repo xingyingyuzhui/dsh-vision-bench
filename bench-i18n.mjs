@@ -138,7 +138,6 @@ export const COPY = {
     framesAll: '全部串口',
     framesPortInUse: '串口被占用',
     framesUnconfigured: '未配置COM',
-    framesClearView: '清空显示',
     framesClearCache: '清除缓存',
     framesDetail: '事务详情',
     framesCopyHex: '复制 Hex',
@@ -324,26 +323,6 @@ export const COPY = {
     needOpenocd: '请先在设置 → 台架 绑定 OpenOCD',
     flashDone: '烧录完成',
     flashFail: '烧录失败',
-    draftTitle: '配置草稿（RFC 6902）',
-    draftSubtitle: 'Agent 建议的配置差异，需用户批准后写入',
-    draftEmpty: '暂无草稿',
-    draftBaseVersion: '基线版本',
-    draftCurrentVersion: '当前版本',
-    draftPatchCount: '补丁数',
-    draftAffectedPoints: '影响点位',
-    draftAdded: '新增',
-    draftRemoved: '删除',
-    draftModified: '修改',
-    draftComConflict: 'COM 冲突',
-    draftUnitConflict: 'Unit ID 冲突',
-    draftDetails: '差异详情',
-    draftApprove: '批准并应用',
-    draftDiscard: '丢弃',
-    draftApplying: '应用中…',
-    draftDrift: '基线漂移，需重新生成',
-    draftApplied: '已应用',
-    draftDiscarded: '已丢弃',
-    draftApproveHint: '批准时将校验基线版本、端点指纹和对象存在性',
     configDrift: '配置已漂移（CONFIG_DRIFT）',
   },
   en: {
@@ -351,7 +330,8 @@ export const COPY = {
     tabDebug: 'Debug',
     tabHmi: 'HMI',
     settingsTitle: 'Local programs',
-    settingsHint: 'Keil still binds local UV4/Python. Modbus and serial monitoring use the bundled Node runtime; pymodbus is not required.',
+    settingsHint:
+      'Keil still binds local UV4/Python. Modbus and serial monitoring use the bundled Node runtime; pymodbus is not required.',
     python: 'Python (optional Keil scripts)',
     uv4: 'Keil UV4',
     openocd: 'OpenOCD (legacy flash binding, removed in 0.20.0)',
@@ -483,7 +463,6 @@ export const COPY = {
     framesAll: 'All ports',
     framesPortInUse: 'Port in use',
     framesUnconfigured: 'Unconfigured COM',
-    framesClearView: 'Clear view',
     framesClearCache: 'Clear cache',
     framesDetail: 'Transaction detail',
     framesCopyHex: 'Copy Hex',
@@ -669,35 +648,15 @@ export const COPY = {
     needOpenocd: 'Bind OpenOCD in Settings → Bench first',
     flashDone: 'Flash done',
     flashFail: 'Flash failed',
-    draftTitle: 'Config draft (RFC 6902)',
-    draftSubtitle: 'Agent-proposed config diff, needs user approval',
-    draftEmpty: 'No drafts',
-    draftBaseVersion: 'Base version',
-    draftCurrentVersion: 'Current version',
-    draftPatchCount: 'Patches',
-    draftAffectedPoints: 'Affected points',
-    draftAdded: 'Added',
-    draftRemoved: 'Removed',
-    draftModified: 'Modified',
-    draftComConflict: 'COM conflict',
-    draftUnitConflict: 'Unit ID conflict',
-    draftDetails: 'Diff details',
-    draftApprove: 'Approve & Apply',
-    draftDiscard: 'Discard',
-    draftApplying: 'Applying…',
-    draftDrift: 'Base drifted — regenerate',
-    draftApplied: 'Applied',
-    draftDiscarded: 'Discarded',
-    draftApproveHint: 'Approval re-validates baseline, endpoint fingerprint and object existence',
     configDrift: 'Config drift (CONFIG_DRIFT)',
   },
 }
 
 export function interpolate(template, params) {
   if (params == null) return template
-  return String(template).replace(/\{(\w+)\}/g, (match, name) => (
-    Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match
-  ))
+  return String(template).replace(/\{(\w+)\}/g, (match, name) =>
+    Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match,
+  )
 }
 
 export function activeLocaleId(ctx) {
@@ -705,7 +664,9 @@ export function activeLocaleId(ctx) {
     const locale = ctx && ctx.locale
     const snap = locale && (locale.getLocale ? locale.getLocale() : locale.getSnapshot && locale.getSnapshot())
     if (snap && typeof snap.active === 'string' && snap.active) return snap.active
-  } catch { /* inject miss */ }
+  } catch {
+    /* inject miss */
+  }
   const tag = (typeof document !== 'undefined' && document.documentElement && document.documentElement.lang) || 'zh'
   return tag
 }
@@ -726,6 +687,8 @@ export function tWith(ctx, key, params) {
       const translated = locale.bind(NS)(key, params)
       if (translated && translated !== key) return interpolate(translated, params)
     }
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
   return translate(isZh(ctx) ? 'zh' : 'en', key, params)
 }

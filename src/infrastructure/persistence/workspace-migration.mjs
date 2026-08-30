@@ -1,17 +1,21 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+// @ts-check
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { backupFileSync, readJsonSync, writeJsonAtomicSync } from './atomic-json.mjs'
+import { backupFileSync, readJsonSync, writeJsonAtomicSync, writeTextAtomicSync } from './atomic-json.mjs'
 
 export const WORKSPACE_LAYOUT_VERSION = 4
 
 /** Split a normalized workspace into config vs recoverable runtime. */
+/**
+ * @param {any} workspace
+ * @returns {any}
+ */
 export function splitWorkspaceParts(workspace) {
   const modbus = workspace?.modbus || {}
   const config = {
     layoutVersion: WORKSPACE_LAYOUT_VERSION,
     keil: workspace?.keil || {},
     session: workspace?.session || { boundId: '' },
-    configDrafts: workspace?.configDrafts || [],
     modbus: {
       version: modbus.version || 3,
       configVersion: modbus.configVersion || 1,
@@ -42,13 +46,17 @@ export function splitWorkspaceParts(workspace) {
   return { config, runtime }
 }
 
+/**
+ * @param {any} config
+ * @param {any} runtime
+ * @returns {any}
+ */
 export function mergeWorkspaceParts(config, runtime) {
   const cfgMb = config?.modbus || {}
   const rtMb = runtime?.modbus || {}
   return {
     keil: config?.keil || {},
     session: config?.session || { boundId: '' },
-    configDrafts: config?.configDrafts || [],
     focus: runtime?.focus || null,
     tasks: runtime?.tasks || [],
     log: runtime?.log || [],
@@ -73,14 +81,28 @@ export function mergeWorkspaceParts(config, runtime) {
   }
 }
 
+/**
+ * @param {any} home
+ * @param {any} key
+ * @returns {any}
+ */
 export function workspaceDir(home, key) {
   return join(home, 'vision-bench', 'workspaces', key)
 }
 
+/**
+ * @param {any} home
+ * @param {any} key
+ * @returns {any}
+ */
 export function legacyWorkspaceFile(home, key) {
   return join(home, 'vision-bench', 'workspaces', `${key}.json`)
 }
 
+/**
+ * @param {any} dir
+ * @returns {any}
+ */
 export function migrationMarkerPath(dir) {
   return join(dir, 'migration.json')
 }
@@ -88,6 +110,12 @@ export function migrationMarkerPath(dir) {
 /**
  * Migrate legacy single-file workspace to v4 directory layout.
  * On failure, leaves the legacy file untouched.
+ */
+/**
+ * @param {any} home
+ * @param {any} key
+ * @param {any} normalizeWorkspace
+ * @returns {any}
  */
 export function migrateLegacyWorkspace(home, key, normalizeWorkspace) {
   const legacy = legacyWorkspaceFile(home, key)
@@ -105,7 +133,7 @@ export function migrateLegacyWorkspace(home, key, normalizeWorkspace) {
   try {
     raw = JSON.parse(readFileSync(legacy, 'utf8'))
   } catch (e) {
-    return { ok: false, error: `legacy workspace JSON invalid: ${e?.message}` }
+    return { ok: false, error: `legacy workspace JSON invalid: ${e instanceof Error ? e.message : String(e)}` }
   }
 
   const normalized = normalizeWorkspace(raw)
@@ -116,8 +144,7 @@ export function migrateLegacyWorkspace(home, key, normalizeWorkspace) {
     const { config, runtime } = splitWorkspaceParts(normalized)
     writeJsonAtomicSync(join(dir, 'config.json'), config)
     writeJsonAtomicSync(join(dir, 'runtime.json'), runtime)
-    writeFileSync(join(dir, 'journal.jsonl'), '', 'utf8')
-    // verify
+    writeTextAtomicSync(join(dir, 'journal.jsonl'), '')
     const cfg2 = readJsonSync(join(dir, 'config.json'), null)
     const rt2 = readJsonSync(join(dir, 'runtime.json'), null)
     if (!cfg2 || !rt2) throw new Error('v4 verify read failed')
@@ -129,11 +156,15 @@ export function migrateLegacyWorkspace(home, key, normalizeWorkspace) {
     })
     return { ok: true, dir, backup: bak }
   } catch (e) {
-    // leave legacy intact; best-effort cleanup of partial dir contents is intentional soft
-    return { ok: false, error: String(e?.message || e), rollback: 'legacy-kept' }
+    return { ok: false, error: e instanceof Error ? e.message : String(e), rollback: 'legacy-kept' }
   }
 }
 
+/**
+ * @param {any} dir
+ * @param {any} normalizeWorkspace
+ * @returns {any}
+ */
 export function loadV4Workspace(dir, normalizeWorkspace) {
   const marker = readJsonSync(migrationMarkerPath(dir), null)
   if (!marker || marker.layoutVersion !== WORKSPACE_LAYOUT_VERSION) return null
@@ -143,6 +174,11 @@ export function loadV4Workspace(dir, normalizeWorkspace) {
   return normalizeWorkspace(mergeWorkspaceParts(config, runtime))
 }
 
+/**
+ * @param {any} dir
+ * @param {any} workspace
+ * @returns {any}
+ */
 export function saveV4Workspace(dir, workspace) {
   mkdirSync(dir, { recursive: true })
   const { config, runtime } = splitWorkspaceParts(workspace)
@@ -155,11 +191,14 @@ export function saveV4Workspace(dir, workspace) {
       from: 'direct-save',
     })
   }
-  // keep journal file present
   const journal = join(dir, 'journal.jsonl')
-  if (!existsSync(journal)) writeFileSync(journal, '', 'utf8')
+  if (!existsSync(journal)) writeTextAtomicSync(journal, '')
 }
 
+/**
+ * @param {any} home
+ * @returns {any}
+ */
 export function listWorkspaceKeys(home) {
   const root = join(home, 'vision-bench', 'workspaces')
   if (!existsSync(root)) return []

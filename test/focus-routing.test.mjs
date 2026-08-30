@@ -14,7 +14,7 @@ const focus = (over = {}) => ({
   ...over,
 })
 
-test('active=A, A foreground frame → opens frames once', () => {
+test('active=A, A foreground frame → opens frames once', async () => {
   const f = focus({ request: { frameId: 'f1', connectionId: 'c1' } })
   const d1 = shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: f, previousRouteKey: '' })
   assert.equal(d1.route, true)
@@ -26,20 +26,20 @@ test('active=A, A foreground frame → opens frames once', () => {
   assert.equal(d2.routeKey, d1.routeKey)
 })
 
-test('active=A, a B foreground alarm → no route', () => {
+test('active=A, a B foreground alarm → no route', async () => {
   const f = focus({ request: { alarmId: 'a1', connectionId: 'c2' } })
   const d = shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/b', focus: f, previousRouteKey: '' })
   assert.equal(d.route, false)
   assert.equal(d.tab, '')
 })
 
-test('active=A, A badgeOnly → no route', () => {
+test('active=A, A badgeOnly → no route', async () => {
   const f = focus({ badgeOnly: true, request: { frameId: 'f1', connectionId: 'c1' } })
   const d = shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: f, previousRouteKey: '' })
   assert.equal(d.route, false)
 })
 
-test('active=A, A same focus repeated 10× → routes exactly once', () => {
+test('active=A, A same focus repeated 10× → routes exactly once', async () => {
   const f = focus({ request: { trendKey: 'c1:d1:p1' } })
   let prev = ''
   let routed = 0
@@ -54,7 +54,7 @@ test('active=A, A same focus repeated 10× → routes exactly once', () => {
   assert.equal(first.tab, 'trend')
 })
 
-test('active switches A→B: A events ignored, B events take effect', () => {
+test('active switches A→B: A events ignored, B events take effect', async () => {
   const fA = focus({ request: { frameId: 'fA', connectionId: 'c1' } })
   const fB = focus({ request: { alarmId: 'aB', connectionId: 'c2' } })
   const dA = shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: fA, previousRouteKey: '' })
@@ -68,7 +68,7 @@ test('active switches A→B: A events ignored, B events take effect', () => {
   assert.equal(dB.tab, 'alarm')
 })
 
-test('A and B sharing the same pointId never cross-judge', () => {
+test('A and B sharing the same pointId never cross-judge', async () => {
   const f = focus({ request: { pointId: 'p1', connectionId: 'c1', deviceId: 'd1' } })
   const dA = shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: f, previousRouteKey: '' })
   const keyA = dA.routeKey
@@ -77,20 +77,74 @@ test('A and B sharing the same pointId never cross-judge', () => {
   assert.equal(dB.tab, 'table')
 })
 
-test('kind mapping: point/connection/device→table, trend→trend, alarm→alarm, frame→frames', () => {
-  assert.equal(shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: focus({ request: { pointId: 'p' } }), previousRouteKey: '' }).tab, 'table')
-  assert.equal(shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: focus({ request: { connectionId: 'c' } }), previousRouteKey: '' }).tab, 'table')
-  assert.equal(shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: focus({ request: { trendKey: 'c:d:p' } }), previousRouteKey: '' }).tab, 'trend')
-  assert.equal(shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: focus({ request: { alarmId: 'a' } }), previousRouteKey: '' }).tab, 'alarm')
-  assert.equal(shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: focus({ request: { frameId: 'f' } }), previousRouteKey: '' }).tab, 'frames')
+test('kind mapping: point/connection/device→table, trend→trend, alarm→alarm, frame→frames', async () => {
+  assert.equal(
+    shouldRouteFocus({
+      activeCwd: '/w/a',
+      changedCwd: '/w/a',
+      focus: focus({ request: { pointId: 'p' } }),
+      previousRouteKey: '',
+    }).tab,
+    'table',
+  )
+  assert.equal(
+    shouldRouteFocus({
+      activeCwd: '/w/a',
+      changedCwd: '/w/a',
+      focus: focus({ request: { connectionId: 'c' } }),
+      previousRouteKey: '',
+    }).tab,
+    'table',
+  )
+  assert.equal(
+    shouldRouteFocus({
+      activeCwd: '/w/a',
+      changedCwd: '/w/a',
+      focus: focus({ request: { trendKey: 'c:d:p' } }),
+      previousRouteKey: '',
+    }).tab,
+    'trend',
+  )
+  assert.equal(
+    shouldRouteFocus({
+      activeCwd: '/w/a',
+      changedCwd: '/w/a',
+      focus: focus({ request: { alarmId: 'a' } }),
+      previousRouteKey: '',
+    }).tab,
+    'alarm',
+  )
+  assert.equal(
+    shouldRouteFocus({
+      activeCwd: '/w/a',
+      changedCwd: '/w/a',
+      focus: focus({ request: { frameId: 'f' } }),
+      previousRouteKey: '',
+    }).tab,
+    'frames',
+  )
 })
 
-test('no activeCwd / no request / foreground=false never route', () => {
-  assert.equal(shouldRouteFocus({ activeCwd: '', changedCwd: '/w/a', focus: focus({}), previousRouteKey: '' }).route, false)
-  assert.equal(shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: {}, previousRouteKey: '' }).route, false)
-  assert.equal(shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: focus({ foreground: false }), previousRouteKey: '' }).route, false)
+test('no activeCwd / no request / foreground=false never route', async () => {
+  assert.equal(
+    shouldRouteFocus({ activeCwd: '', changedCwd: '/w/a', focus: focus({}), previousRouteKey: '' }).route,
+    false,
+  )
+  assert.equal(
+    shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: {}, previousRouteKey: '' }).route,
+    false,
+  )
+  assert.equal(
+    shouldRouteFocus({
+      activeCwd: '/w/a',
+      changedCwd: '/w/a',
+      focus: focus({ foreground: false }),
+      previousRouteKey: '',
+    }).route,
+    false,
+  )
 })
-test('P4/0.20.0: visualizationId routes to the charts tab (trend bucket)', () => {
+test('P4/0.20.0: visualizationId routes to the charts tab (trend bucket)', async () => {
   const fs = { request: { visualizationId: 'viz_1', kind: 'visualization' }, badgeOnly: false }
   const d1 = shouldRouteFocus({ activeCwd: 'A', changedCwd: 'A', focus: fs, previousRouteKey: '' })
   assert.equal(d1.route, true)
@@ -105,7 +159,9 @@ test('Task5/6/0.20.1: visualizationId 聚焦链路 — 仅传组件 ID 即解析
     version: 3,
     connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }],
     devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
-    points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, monitorEnabled: true }],
+    points: [
+      { id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, monitorEnabled: true },
+    ],
     visualization: { schemaVersion: 1, components: [{ id: 'viz_a', name: '趋势图', type: 'line', pointIds: ['p1'] }] },
   }
   const rt = resolveTarget(pack, { visualizationId: 'viz_a' })
@@ -136,7 +192,7 @@ test('requestFocus 缺失组件保留 VIZ_NOT_FOUND（不退化 TARGET_MISMATCH�
         visualization: { schemaVersion: 1, components: [] },
       },
     })
-    const miss = requestFocus(home, cwd, { visualizationId: 'viz_gone', kind: 'visualization' })
+    const miss = await requestFocus(home, cwd, { visualizationId: 'viz_gone', kind: 'visualization' })
     assert.equal(miss.ok, false)
     assert.equal(miss.errorCode, 'VIZ_NOT_FOUND')
   } finally {
@@ -148,12 +204,17 @@ test('Task6/0.20.1: 不同工作区相同组件 ID 不串扰（subscribeFocus �
   const { setFocusState } = await import('../bench-shared.mjs')
   let gotA = null
   let gotB = null
-  const unA = (await import('../bench-shared.mjs')).subscribeFocus('wsA', (fs) => { gotA = fs && fs.request })
-  const unB = (await import('../bench-shared.mjs')).subscribeFocus('wsB', (fs) => { gotB = fs && fs.request })
+  const unA = (await import('../bench-shared.mjs')).subscribeFocus('wsA', (fs) => {
+    gotA = fs && fs.request
+  })
+  const unB = (await import('../bench-shared.mjs')).subscribeFocus('wsB', (fs) => {
+    gotB = fs && fs.request
+  })
   setFocusState('wsA', { request: { visualizationId: 'same_viz', kind: 'visualization' } })
   assert.equal(gotA && gotA.visualizationId, 'same_viz', 'A 收到')
   assert.equal(gotB, null, 'B 不收 A 的焦点')
   setFocusState('wsB', { request: { visualizationId: 'same_viz', kind: 'visualization' } })
   assert.equal(gotB && gotB.visualizationId, 'same_viz')
-  unA(); unB()
+  unA()
+  unB()
 })

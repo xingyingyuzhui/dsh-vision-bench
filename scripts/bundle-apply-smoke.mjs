@@ -2,7 +2,7 @@
 // window.__ModuleLoader__.load -> factory(require) -> exports.apply(ctx).
 // Then mount every registered page with a stub React and report any throw.
 import { readFileSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 // The bundle now embeds browser-only vendor libs (uPlot / virtual-core) that
 // read document/window at init — install a minimal DOM stub like a real browser.
@@ -15,15 +15,27 @@ const restore = installDomStub()
 let loaded = null
 const sandboxWindow = {
   __ModuleLoader__: {
-    load(mod) { loaded = mod },
+    load(mod) {
+      loaded = mod
+    },
   },
   dispatchEvent: () => true,
-  addEventListener() {}, removeEventListener() {},
-  CustomEvent: class { constructor(type) { this.type = type } },
+  addEventListener() {},
+  removeEventListener() {},
+  CustomEvent: class {
+    constructor(type) {
+      this.type = type
+    }
+  },
   matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
   devicePixelRatio: 1,
-  ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
-  requestAnimationFrame: (cb) => setTimeout(cb, 0), cancelAnimationFrame: (id) => clearTimeout(id),
+  ResizeObserver: class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  },
+  requestAnimationFrame: (cb) => setTimeout(cb, 0),
+  cancelAnimationFrame: (id) => clearTimeout(id),
   navigator: { userAgent: 'node' },
 }
 // Keep DOM globals installed for the whole script (factory + component mount run
@@ -72,10 +84,16 @@ const slots = {
   },
 }
 const sidebar = {
-  registerTab(def) { pages['tab:' + def.id] = def; return () => {} },
+  registerTab(def) {
+    pages['tab:' + def.id] = def
+    return () => {}
+  },
   openTab() {},
   closeTab() {},
-  effect(fn) { const d = typeof fn === 'function' ? fn() : null; return d },
+  effect(fn) {
+    const d = typeof fn === 'function' ? fn() : null
+    return d
+  },
 }
 
 const ctx = {
@@ -85,17 +103,25 @@ const ctx = {
   },
   locale: { register: () => () => {} },
   inject(deps, fn) {
-    fn({ betterSidebar: sidebar, effect(fn2) { return fn2 && fn2() } })
+    fn({
+      betterSidebar: sidebar,
+      effect(fn2) {
+        return fn2 && fn2()
+      },
+    })
     return () => {}
   },
-  effect(fn) { const d = fn(); void d },
+  effect(fn) {
+    const d = fn()
+    void d
+  },
 }
 
 mod.apply(ctx)
 
 const results = []
 for (const [id, entry] of Object.entries(pages)) {
-  const comp = entry.comp || entry.def && null
+  const comp = entry.comp || (entry.def && null)
   if (typeof comp !== 'function') {
     results.push([id, 'registered (non-component)'])
     continue
@@ -110,7 +136,7 @@ for (const [id, entry] of Object.entries(pages)) {
     const tree = comp(props)
     results.push([id, typeof tree === 'object' ? 'rendered' : 'returned ' + typeof tree])
   } catch (error) {
-    results.push([id, 'THROW: ' + (error && error.stack || error).split('\n').slice(0, 4).join(' | ')])
+    results.push([id, 'THROW: ' + ((error && error.stack) || error).split('\n').slice(0, 4).join(' | ')])
   }
 }
 for (const [id, status] of results) console.log(id.padEnd(40), status)

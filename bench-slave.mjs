@@ -135,7 +135,9 @@ export const startDeviceSlave = (cwd, device, getDevice, onWrite = null) => {
   }
   const server = createServer((socket) => {
     server.dshSockets.add(socket)
-    socket.on('close', () => { server.dshSockets.delete(socket) })
+    socket.on('close', () => {
+      server.dshSockets.delete(socket)
+    })
     let buf = Buffer.alloc(0)
     socket.on('data', (chunk) => {
       buf = Buffer.concat([buf, chunk])
@@ -158,7 +160,9 @@ export const startDeviceSlave = (cwd, device, getDevice, onWrite = null) => {
         socket.write(frameResponse(trans, unit, resp))
       }
     })
-    socket.on('error', () => { /* drop */ })
+    socket.on('error', () => {
+      /* drop */
+    })
   })
   server.dshHost = host
   server.dshPort = port
@@ -176,9 +180,17 @@ export const startDeviceSlave = (cwd, device, getDevice, onWrite = null) => {
 }
 
 const closeServer = (server) => {
-  try { server.close() } catch { /* already closed */ }
+  try {
+    server.close()
+  } catch {
+    /* already closed */
+  }
   for (const socket of server.dshSockets || []) {
-    try { socket.destroy() } catch { /* ignore */ }
+    try {
+      socket.destroy()
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -201,14 +213,16 @@ export const stopAllSlaves = () => {
 
 export const withListenRuntime = (cwd, workspace) => {
   const modbus = workspace && workspace.modbus && typeof workspace.modbus === 'object' ? workspace.modbus : {}
-  const devices = Array.isArray(modbus.devices) ? modbus.devices.map((item) => {
-    if (item.role !== 'slave' || !item.listen) return { ...item, listening: false, listenError: '' }
-    const id = keyOf(cwd, item.id)
-    const server = servers.get(id)
-    const listening = !!(server && server.listening)
-    const err = listenErrors.get(id) || ''
-    return { ...item, listening, listenError: listening ? '' : (err || '未监听') }
-  }) : []
+  const devices = Array.isArray(modbus.devices)
+    ? modbus.devices.map((item) => {
+        if (item.role !== 'slave' || !item.listen) return { ...item, listening: false, listenError: '' }
+        const id = keyOf(cwd, item.id)
+        const server = servers.get(id)
+        const listening = !!(server && server.listening)
+        const err = listenErrors.get(id) || ''
+        return { ...item, listening, listenError: listening ? '' : err || '未监听' }
+      })
+    : []
   const active = devices.find((item) => item.id === modbus.activeId) || devices[0]
   return {
     ...workspace,
@@ -222,18 +236,23 @@ export const withListenRuntime = (cwd, workspace) => {
 }
 
 export const syncDeviceSlaves = async (cwd, modbus, getModbus, onWrite = null) => {
-  const devices = (modbus && Array.isArray(modbus.devices)) ? modbus.devices : []
+  const devices = modbus && Array.isArray(modbus.devices) ? modbus.devices : []
   const want = new Set()
   const errors = []
   for (const device of devices) {
     if (device.role !== 'slave' || !device.listen || device.mode !== 'tcp') continue
     want.add(device.id)
     try {
-      await startDeviceSlave(cwd, device, () => {
-        const live = getModbus ? getModbus() : modbus
-        const list = live && Array.isArray(live.devices) ? live.devices : []
-        return list.find((item) => item.id === device.id) || device
-      }, onWrite ? (fn, address, values, at) => onWrite(device.id, fn, address, values, at) : null)
+      await startDeviceSlave(
+        cwd,
+        device,
+        () => {
+          const live = getModbus ? getModbus() : modbus
+          const list = live && Array.isArray(live.devices) ? live.devices : []
+          return list.find((item) => item.id === device.id) || device
+        },
+        onWrite ? (fn, address, values, at) => onWrite(device.id, fn, address, values, at) : null,
+      )
       listenErrors.delete(keyOf(cwd, device.id))
     } catch (error) {
       const message = String((error && error.message) || error).slice(0, 180)

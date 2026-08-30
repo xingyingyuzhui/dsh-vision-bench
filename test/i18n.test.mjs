@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { COPY, interpolate, translate } from '../bench-i18n.mjs'
 
-test('zh and en tables share keys', () => {
+test('zh and en tables share keys', async () => {
   assert.deepEqual(Object.keys(COPY.zh).sort(), Object.keys(COPY.en).sort())
 })
 
-test('translate falls back and interpolates', () => {
+test('translate falls back and interpolates', async () => {
   assert.equal(translate('zh', 'tabDebug'), '调试')
   assert.equal(translate('zh', 'projectMap'), '工程结构')
   assert.equal(translate('zh', 'liveChart'), '可视化')

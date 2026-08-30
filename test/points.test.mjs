@@ -13,10 +13,19 @@ import {
   scatterBatch,
   setPointValue,
 } from '../bench-points.mjs'
-import { planReadBatches, MAX_READ_REGS } from '../bench-pollplan.mjs'
+import { MAX_READ_REGS, planReadBatches } from '../bench-pollplan.mjs'
 
-test('normalizePoint derives deterministic ids and clamps fields', () => {
-  const p = normalizePoint({ name: '温度', function: 3, address: 100, scale: 0.1, offset: -40, unit: '℃', alarmMin: -10, alarmMax: 85 })
+test('normalizePoint derives deterministic ids and clamps fields', async () => {
+  const p = normalizePoint({
+    name: '温度',
+    function: 3,
+    address: 100,
+    scale: 0.1,
+    offset: -40,
+    unit: '℃',
+    alarmMin: -10,
+    alarmMax: 85,
+  })
   assert.equal(p.id, 'p3_100')
   assert.equal(p.scale, 0.1)
   assert.equal(p.offset, -40)
@@ -24,10 +33,16 @@ test('normalizePoint derives deterministic ids and clamps fields', () => {
   const bare = normalizePoint({ function: 9, address: -5 })
   assert.equal(bare.function, 3)
   assert.equal(bare.address, 0)
-  assert.equal(normalizePoints([{ function: 3, address: 1 }, { function: 3, address: 1 }]).length, 1)
+  assert.equal(
+    normalizePoints([
+      { function: 3, address: 1 },
+      { function: 3, address: 1 },
+    ]).length,
+    1,
+  )
 })
 
-test('planReadBatches merges contiguous runs and splits per fc', () => {
+test('planReadBatches merges contiguous runs and splits per fc', async () => {
   const batches = planReadBatches([
     { function: 3, address: 8 },
     { function: 3, address: 6 },
@@ -43,7 +58,7 @@ test('planReadBatches merges contiguous runs and splits per fc', () => {
   ])
 })
 
-test('planReadBatches respects the register span limit', () => {
+test('planReadBatches respects the register span limit', async () => {
   const pts = []
   for (let i = 0; i < MAX_READ_REGS + 1; i++) pts.push({ function: 3, address: i })
   const batches = planReadBatches(pts)
@@ -52,7 +67,7 @@ test('planReadBatches respects the register span limit', () => {
   assert.equal(batches[1].count, 1)
 })
 
-test('scatterBatch distributes raw values to covered points only', () => {
+test('scatterBatch distributes raw values to covered points only', async () => {
   const points = [
     { id: 'a', function: 3, address: 10 },
     { id: 'b', function: 3, address: 11 },
@@ -71,14 +86,14 @@ test('scatterBatch distributes raw values to covered points only', () => {
   assert.match(failed.find((v) => v.key === 'a').error, /timeout/)
 })
 
-test('setPointValue decodes with the point config', () => {
+test('setPointValue decodes with the point config', async () => {
   const p = { id: 'x', function: 3, address: 1, scale: 0.1, offset: 2 }
   const values = setPointValue([], p, 255, { ok: true })
   assert.equal(values[0].value, 27.5)
   assert.equal(values[0].raw, 255)
 })
 
-test('fillSimValues produces plausible raw values for every point', () => {
+test('fillSimValues produces plausible raw values for every point', async () => {
   const points = [
     { id: 'c', function: 1, address: 0 },
     { id: 'r', function: 3, address: 4 },
@@ -89,7 +104,7 @@ test('fillSimValues produces plausible raw values for every point', () => {
   assert.ok(Number.isFinite(values.find((v) => v.key === 'r').raw))
 })
 
-test('evaluateAlarm and evaluatePointAlarms detect breaches with hysteresis', () => {
+test('evaluateAlarm and evaluatePointAlarms detect breaches with hysteresis', async () => {
   const p = { id: 's1', name: '压力', function: 3, address: 0, alarmEnabled: true, alarmMax: 100 }
   assert.equal(evaluateAlarm(p, 120), 'max')
   assert.equal(evaluateAlarm(p, 50), '')
@@ -104,9 +119,20 @@ test('evaluateAlarm and evaluatePointAlarms detect breaches with hysteresis', ()
   assert.deepEqual(clear.next, {})
 })
 
-test('CSV round-trip preserves per-point metadata (monitorEnabled/alarmEnabled)', () => {
+test('CSV round-trip preserves per-point metadata (monitorEnabled/alarmEnabled)', async () => {
   const points = [
-    { name: '温度', function: 3, address: 0, scale: 0.1, offset: -40, unit: '℃', monitorEnabled: true, alarmEnabled: true, alarmMin: -10, alarmMax: 85 },
+    {
+      name: '温度',
+      function: 3,
+      address: 0,
+      scale: 0.1,
+      offset: -40,
+      unit: '℃',
+      monitorEnabled: true,
+      alarmEnabled: true,
+      alarmMin: -10,
+      alarmMax: 85,
+    },
     { name: '开关', function: 1, address: 9 },
   ]
   const back = csvToPoints(pointsToCsv(points))
@@ -131,6 +157,6 @@ test('CSV round-trip preserves per-point metadata (monitorEnabled/alarmEnabled)'
   assert.equal(csvToPoints('a,b\n1,2').ok, false)
 })
 
-test('pointIdOf is stable for write lookups', () => {
+test('pointIdOf is stable for write lookups', async () => {
   assert.equal(pointIdOf(3, 42), normalizePoint({ function: 3, address: 42 }).id)
 })

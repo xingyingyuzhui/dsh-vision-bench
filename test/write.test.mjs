@@ -4,19 +4,14 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import {
-  isWritableFunction,
-  normalizeWriteValues,
-  segmentCovering,
-  writeTargetOf,
-} from '../bench-points.mjs'
-import { handlePdu, _internal } from '../bench-slave.mjs'
-import { recipePair } from '../bench-devices.mjs'
 import { modbusRead, modbusWrite, resolvePendingWrite } from '../bench-actions.mjs'
-import { runVisionBench } from '../bench-tool.mjs'
+import { recipePair } from '../bench-devices.mjs'
+import { isWritableFunction, normalizeWriteValues, segmentCovering, writeTargetOf } from '../bench-points.mjs'
+import { _internal, handlePdu } from '../bench-slave.mjs'
 import { journalView, loadWorkspace, saveBindings, saveWorkspace } from '../bench-store.mjs'
+import { runVisionBench } from '../bench-tool.mjs'
 
-test('writeTargetOf marks coils and holding registers writable', () => {
+test('writeTargetOf marks coils and holding registers writable', async () => {
   assert.equal(writeTargetOf(1).writable, true)
   assert.equal(writeTargetOf(1).single, 5)
   assert.equal(writeTargetOf(1).multi, 15)
@@ -29,7 +24,7 @@ test('writeTargetOf marks coils and holding registers writable', () => {
   assert.equal(isWritableFunction(4), false)
 })
 
-test('normalizeWriteValues validates kinds, ranges and batch caps', () => {
+test('normalizeWriteValues validates kinds, ranges and batch caps', async () => {
   assert.deepEqual(normalizeWriteValues(3, [12], 10), {
     ok: true,
     kind: 'register',
@@ -53,7 +48,7 @@ test('normalizeWriteValues validates kinds, ranges and batch caps', () => {
   assert.equal(normalizeWriteValues(3, tooMany, 1968).ok, false)
 })
 
-test('segmentCovering finds the owning segment only inside its range', () => {
+test('segmentCovering finds the owning segment only inside its range', async () => {
   const segments = [
     { id: 'a', function: 3, address: 0, count: 10 },
     { id: 'b', function: 1, address: 20, count: 4 },
@@ -64,7 +59,7 @@ test('segmentCovering finds the owning segment only inside its range', () => {
   assert.equal(segmentCovering(segments, 3, 23), null)
 })
 
-test('slave handlePdu echoes single writes and reports them', () => {
+test('slave handlePdu echoes single writes and reports them', async () => {
   const device = {
     ...recipePair().devices[1],
     segments: [
@@ -85,7 +80,7 @@ test('slave handlePdu echoes single writes and reports them', () => {
   assert.deepEqual(seen, [{ fn: 1, address: 2, values: [1] }])
 })
 
-test('slave handlePdu applies batch writes FC15/FC16', () => {
+test('slave handlePdu applies batch writes FC15/FC16', async () => {
   const device = {
     ...recipePair().devices[1],
     segments: [
@@ -115,7 +110,7 @@ test('slave handlePdu applies batch writes FC15/FC16', () => {
   assert.deepEqual(seen, [{ fn: 1, address: 20, values: [1, 0, 1] }])
 })
 
-test('slave handlePdu rejects writes outside declared segments', () => {
+test('slave handlePdu rejects writes outside declared segments', async () => {
   const device = recipePair().devices[1]
   const outside = Buffer.from([6, 0, 50, 0, 7])
   const resp = handlePdu(device, outside, 1_000_000, () => {
@@ -135,7 +130,18 @@ test('modbusWrite local path persists values, exits sim and records a task', asy
     saveWorkspace(home, cwd, {
       modbus: {
         conn: { sim: true },
-        points: [{ name: '保持', function: 3, address: 0 }, { name: '保持1', function: 3, address: 1 }, { name: '保持2', function: 3, address: 2 }, { name: '保持3', function: 3, address: 3 }, { name: '保持4', function: 3, address: 4 }, { name: '保持5', function: 3, address: 5 }, { name: '保持6', function: 3, address: 6 }, { name: '保持7', function: 3, address: 7 }, { name: '保持8', function: 3, address: 8 }, { name: '保持9', function: 3, address: 9 }],
+        points: [
+          { name: '保持', function: 3, address: 0 },
+          { name: '保持1', function: 3, address: 1 },
+          { name: '保持2', function: 3, address: 2 },
+          { name: '保持3', function: 3, address: 3 },
+          { name: '保持4', function: 3, address: 4 },
+          { name: '保持5', function: 3, address: 5 },
+          { name: '保持6', function: 3, address: 6 },
+          { name: '保持7', function: 3, address: 7 },
+          { name: '保持8', function: 3, address: 8 },
+          { name: '保持9', function: 3, address: 9 },
+        ],
       },
     })
     const ran = await modbusWrite(home, cwd, {
@@ -150,7 +156,7 @@ test('modbusWrite local path persists values, exits sim and records a task', asy
     assert.deepEqual(ran.readback, [1234])
     const ws = loadWorkspace(home, cwd)
     assert.equal(ws.modbus.conn.sim, false)
-    const pt = ws.modbus.points.find(p=> (p.function===3 || p.area==='holdingRegister') && p.address===2)
+    const pt = ws.modbus.points.find((p) => (p.function === 3 || p.area === 'holdingRegister') && p.address === 2)
     const rec = ws.modbus.values.find((item) => item.key === pt.id || item.pointId === pt.id)
     assert.ok(pt && rec, 'point and value should exist for HR2')
     assert.equal(rec.value, 1234)
@@ -171,7 +177,12 @@ test('modbusWrite rejects addresses outside segments without opening a task', as
     saveWorkspace(home, cwd, {
       modbus: {
         conn: { sim: true },
-        points: [{ name: '保持', function: 3, address: 0 }, { name: '保持1', function: 3, address: 1 }, { name: '保持2', function: 3, address: 2 }, { name: '保持3', function: 3, address: 3 }],
+        points: [
+          { name: '保持', function: 3, address: 0 },
+          { name: '保持1', function: 3, address: 1 },
+          { name: '保持2', function: 3, address: 2 },
+          { name: '保持3', function: 3, address: 3 },
+        ],
       },
     })
     const ran = await modbusWrite(home, cwd, {
@@ -200,13 +211,15 @@ test('modbusWrite blocks a second write while one is running', async () => {
       },
     })
     saveWorkspace(home, cwd, {
-      tasks: [{
-        id: 't-running',
-        type: 'write',
-        status: 'running',
-        startedAt: Date.now(),
-        summary: '旧写入',
-      }],
+      tasks: [
+        {
+          id: 't-running',
+          type: 'write',
+          status: 'running',
+          startedAt: Date.now(),
+          summary: '旧写入',
+        },
+      ],
     })
     const ran = await modbusWrite(home, cwd, {
       function: 3,
@@ -254,12 +267,17 @@ test('runVisionBench write action requires user approval then executes', async (
         points: Array.from({ length: 10 }, (_, i) => ({ name: '保持' + i, function: 3, address: i })),
       },
     })
-    const first = await runVisionBench(home, {
-      action: 'write',
-      function: 3,
-      address: 5,
-      values: [42, 43],
-    }, cwd, { source: 'agent', sessionId: 's1' })
+    const first = await runVisionBench(
+      home,
+      {
+        action: 'write',
+        function: 3,
+        address: 5,
+        values: [42, 43],
+      },
+      cwd,
+      { source: 'agent', sessionId: 's1' },
+    )
     assert.equal(first.ok, false)
     assert.equal(first.needsConfirm, true)
     assert.ok(first.requestId)
@@ -275,9 +293,11 @@ test('runVisionBench write action requires user approval then executes', async (
     const task = journalView(ws).tasks.find((item) => item.type === 'write')
     assert.equal(task.source, 'agent')
     assert.equal(task.sessionId, 's1')
-    const pts = ws.modbus.points.filter(p=> (p.function===3 || p.area==='holdingRegister') && (p.address===5 || p.address===6))
+    const pts = ws.modbus.points.filter(
+      (p) => (p.function === 3 || p.area === 'holdingRegister') && (p.address === 5 || p.address === 6),
+    )
     assert.equal(pts.length, 2)
-    const ptIds = new Set(pts.map(p=>p.id))
+    const ptIds = new Set(pts.map((p) => p.id))
     const rec = ws.modbus.values.filter((item) => ptIds.has(item.key) || ptIds.has(item.pointId))
     assert.equal(rec.length, 2)
 
@@ -299,18 +319,23 @@ test('rejecting a pending agent write leaves the device untouched', async () => 
         segments: [{ name: '保持', function: 3, address: 0, count: 10 }],
       },
     })
-    const first = await runVisionBench(home, {
-      action: 'write',
-      function: 3,
-      address: 1,
-      values: [7],
-    }, cwd, { source: 'agent', sessionId: 's1' })
+    const first = await runVisionBench(
+      home,
+      {
+        action: 'write',
+        function: 3,
+        address: 1,
+        values: [7],
+      },
+      cwd,
+      { source: 'agent', sessionId: 's1' },
+    )
     assert.equal(first.needsConfirm, true)
     const ran = await resolvePendingWrite(home, cwd, first.requestId, false)
     assert.equal(ran.ok, true)
     assert.equal(ran.rejected, true)
     const ws = loadWorkspace(home, cwd)
-    assert.equal(((ws.modbus.devices[0].values) || []).length, 0)
+    assert.equal((ws.modbus.devices[0].values || []).length, 0)
     assert.ok(ws.timeline.some((item) => item.kind === 'write-reject' && item.ok === false))
     assert.equal(journalView(ws).tasks.filter((item) => item.type === 'write').length, 0)
   } finally {
@@ -326,17 +351,28 @@ test('approving a pending write whose device vanished fails cleanly', async () =
     saveWorkspace(home, cwd, {
       modbus: {
         devices: [
-          { id: 'm1', name: '主机', role: 'master', sim: true, segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }] },
+          {
+            id: 'm1',
+            name: '主机',
+            role: 'master',
+            sim: true,
+            segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }],
+          },
         ],
         activeId: 'm1',
       },
     })
-    const first = await runVisionBench(home, {
-      action: 'write',
-      function: 3,
-      address: 0,
-      values: [9],
-    }, cwd, { source: 'agent', sessionId: 's1' })
+    const first = await runVisionBench(
+      home,
+      {
+        action: 'write',
+        function: 3,
+        address: 0,
+        values: [9],
+      },
+      cwd,
+      { source: 'agent', sessionId: 's1' },
+    )
     assert.equal(first.needsConfirm, true)
     // Simulate the connection drifting between request and approval.
     saveWorkspace(home, cwd, {
@@ -364,23 +400,46 @@ test('approval refuses when the device endpoint drifted', async () => {
     saveWorkspace(home, cwd, {
       modbus: {
         devices: [
-          { id: 'm1', name: '主板', role: 'master', mode: 'tcp', host: '10.0.0.8', tcpPort: 502, slave: 1, segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }] },
+          {
+            id: 'm1',
+            name: '主板',
+            role: 'master',
+            mode: 'tcp',
+            host: '10.0.0.8',
+            tcpPort: 502,
+            slave: 1,
+            segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }],
+          },
         ],
         activeId: 'm1',
       },
     })
-    const first = await runVisionBench(home, {
-      action: 'write',
-      function: 3,
-      address: 0,
-      values: [5],
-    }, cwd, { source: 'agent', sessionId: 's-origin' })
+    const first = await runVisionBench(
+      home,
+      {
+        action: 'write',
+        function: 3,
+        address: 0,
+        values: [5],
+      },
+      cwd,
+      { source: 'agent', sessionId: 's-origin' },
+    )
     assert.equal(first.needsConfirm, true)
     // User repoints the device at another controller before approving.
     saveWorkspace(home, cwd, {
       modbus: {
         devices: [
-          { id: 'm1', name: '主板', role: 'master', mode: 'tcp', host: '10.9.9.9', tcpPort: 502, slave: 1, segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }] },
+          {
+            id: 'm1',
+            name: '主板',
+            role: 'master',
+            mode: 'tcp',
+            host: '10.9.9.9',
+            tcpPort: 502,
+            slave: 1,
+            segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }],
+          },
         ],
         activeId: 'm1',
       },
@@ -389,7 +448,7 @@ test('approval refuses when the device endpoint drifted', async () => {
     assert.equal(ran.ok, false)
     assert.match(ran.error, /设备连接已变更/)
     const ws = loadWorkspace(home, cwd)
-    assert.equal(((ws.modbus.devices[0].values) || []).length, 0)
+    assert.equal((ws.modbus.devices[0].values || []).length, 0)
     assert.ok(ws.timeline.some((item) => item.kind === 'write-stale'))
   } finally {
     await rm(home, { recursive: true, force: true })
@@ -404,17 +463,28 @@ test('same-endpoint approval still executes', async () => {
     saveWorkspace(home, cwd, {
       modbus: {
         devices: [
-          { id: 'm1', name: '主板', role: 'master', sim: true, segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }] },
+          {
+            id: 'm1',
+            name: '主板',
+            role: 'master',
+            sim: true,
+            segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }],
+          },
         ],
         activeId: 'm1',
       },
     })
-    const first = await runVisionBench(home, {
-      action: 'write',
-      function: 3,
-      address: 1,
-      values: [6],
-    }, cwd, { source: 'agent', sessionId: 's-origin' })
+    const first = await runVisionBench(
+      home,
+      {
+        action: 'write',
+        function: 3,
+        address: 1,
+        values: [6],
+      },
+      cwd,
+      { source: 'agent', sessionId: 's-origin' },
+    )
     assert.equal(first.needsConfirm, true)
     // Touch unrelated workspace state; the endpoint fingerprint must not care.
     saveWorkspace(home, cwd, { keil: { target: 'Debug' } })
@@ -434,24 +504,35 @@ test('missing approved field fails closed instead of approving', async () => {
     saveWorkspace(home, cwd, {
       modbus: {
         devices: [
-          { id: 'm1', name: '主板', role: 'master', sim: true, segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }] },
+          {
+            id: 'm1',
+            name: '主板',
+            role: 'master',
+            sim: true,
+            segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }],
+          },
         ],
         activeId: 'm1',
       },
     })
-    const first = await runVisionBench(home, {
-      action: 'write',
-      function: 3,
-      address: 0,
-      values: [1],
-    }, cwd, { source: 'agent', sessionId: 's1' })
+    const first = await runVisionBench(
+      home,
+      {
+        action: 'write',
+        function: 3,
+        address: 0,
+        values: [1],
+      },
+      cwd,
+      { source: 'agent', sessionId: 's1' },
+    )
     assert.equal(first.needsConfirm, true)
     // Route-level semantics: resolvePendingWrite treats anything but exactly
     // true as a rejection.
     const ran = await resolvePendingWrite(home, cwd, first.requestId, undefined)
     assert.equal(ran.rejected, true)
     const ws = loadWorkspace(home, cwd)
-    assert.equal(((ws.modbus.devices[0].values) || []).length, 0)
+    assert.equal((ws.modbus.devices[0].values || []).length, 0)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

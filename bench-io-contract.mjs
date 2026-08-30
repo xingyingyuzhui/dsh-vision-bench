@@ -59,14 +59,21 @@ export const ioError = (code, message, extra = {}) => ({
 
 export const sanitizeIoError = (error) => {
   if (!error || typeof error !== 'object') return ioError('IO_RUNTIME_UNAVAILABLE', String(error || ''))
-  return ioError(error.code, error.message, error.exceptionCode != null ? { exceptionCode: Number(error.exceptionCode) } : {})
+  return ioError(
+    error.code,
+    error.message,
+    error.exceptionCode != null ? { exceptionCode: Number(error.exceptionCode) } : {},
+  )
 }
 
 export const normalizeCom = (port) =>
-  String(port || '').replace(/^\\\\\.\\/, '').trim().toUpperCase()
+  String(port || '')
+    .replace(/^\\\\\.\\/, '')
+    .trim()
+    .toUpperCase()
 
 export const toEndpoint = (connection) => {
-  const conn = connection && connection.conn ? connection.conn : (connection || {})
+  const conn = connection && connection.conn ? connection.conn : connection || {}
   const mode = conn.mode === 'tcp' ? 'tcp' : 'rtu'
   if (mode === 'tcp') {
     return {
@@ -75,7 +82,9 @@ export const toEndpoint = (connection) => {
       tcpPort: Math.min(65535, Math.max(1, Math.trunc(Number(conn.tcpPort) || 502))),
     }
   }
-  const parityRaw = String(conn.parity || 'N').toUpperCase().slice(0, 1)
+  const parityRaw = String(conn.parity || 'N')
+    .toUpperCase()
+    .slice(0, 1)
   const parity = parityRaw === 'E' || parityRaw === 'O' ? parityRaw : 'N'
   return {
     mode: 'rtu',
@@ -90,7 +99,14 @@ export const toEndpoint = (connection) => {
 export const endpointFingerprint = (endpoint) => {
   const e = endpoint || {}
   if (e.mode === 'tcp') return ['tcp', String(e.host || ''), String(e.tcpPort || '')].join('|')
-  return ['rtu', normalizeCom(e.port), String(e.baudrate || ''), String(e.bytesize || ''), String(e.parity || ''), String(e.stopbits || '')].join('|')
+  return [
+    'rtu',
+    normalizeCom(e.port),
+    String(e.baudrate || ''),
+    String(e.bytesize || ''),
+    String(e.parity || ''),
+    String(e.stopbits || ''),
+  ].join('|')
 }
 
 export const rtuParityName = (parity) => {
@@ -113,9 +129,12 @@ export const normalizeFrames = (frames, mode) => {
   return {
     requestHex,
     responseHex,
-    frameFormat: src.frameFormat === 'tcp-normalized' || src.frameFormat === 'rtu-adu'
-      ? src.frameFormat
-      : (mode === 'tcp' ? 'tcp-normalized' : 'rtu-adu'),
+    frameFormat:
+      src.frameFormat === 'tcp-normalized' || src.frameFormat === 'rtu-adu'
+        ? src.frameFormat
+        : mode === 'tcp'
+          ? 'tcp-normalized'
+          : 'rtu-adu',
   }
 }
 
@@ -152,7 +171,8 @@ export const validateIoRequest = (msg) => {
   if (msg.op === 'connection.open') {
     const endpoint = toEndpoint({ conn: msg.endpoint || msg })
     if (endpoint.mode === 'rtu' && !endpoint.port) return { ok: false, error: ioError('PORT_NOT_FOUND', '缺少串口') }
-    if (endpoint.mode === 'tcp' && !endpoint.host) return { ok: false, error: ioError('PORT_NOT_FOUND', '缺少 TCP 主机') }
+    if (endpoint.mode === 'tcp' && !endpoint.host)
+      return { ok: false, error: ioError('PORT_NOT_FOUND', '缺少 TCP 主机') }
     return { ok: true, request: msg }
   }
   const deviceId = String(msg.deviceId || '')

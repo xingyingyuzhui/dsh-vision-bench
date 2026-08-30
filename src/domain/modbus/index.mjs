@@ -1,2 +1,2 @@
-// @ts-nocheck
+// @ts-check
 export * from './model.mjs'

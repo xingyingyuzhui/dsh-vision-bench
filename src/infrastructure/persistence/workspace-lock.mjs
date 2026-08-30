@@ -1,3 +1,4 @@
+// @ts-check
 /** Per-workspace exclusive run queue (Host process). Different keys may run in parallel. */
 
 /** @type {Map<string, Promise<unknown>>} */
@@ -21,7 +22,7 @@ export function runExclusive(key, fn) {
   return /** @type {Promise<T>} */ (next)
 }
 
-/** Sync re-entrancy guard for in-process nested saveWorkspace calls. */
+/** Sync re-entrancy guard for migration / test seed only. Not visible to runExclusive. */
 const syncBusy = new Set()
 
 /**

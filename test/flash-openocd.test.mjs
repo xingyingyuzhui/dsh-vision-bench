@@ -16,7 +16,12 @@ test('unapproved flash only returns needsConfirm and opens no download task', as
     const fw = join(cwd, 'app.hex')
     await writeFile(fw, ':020000040800F2\n')
     saveWorkspace(home, cwd, { keil: { download: fw } })
-    const first = await openocdDownload(home, cwd, { interface: 'stlink', target: 'stm32f4x', source: 'agent', sessionId: 's1' })
+    const first = await openocdDownload(home, cwd, {
+      interface: 'stlink',
+      target: 'stm32f4x',
+      source: 'agent',
+      sessionId: 's1',
+    })
     assert.equal(first.needsConfirm, true)
     assert.equal(first.ok, false)
     assert.ok(first.request.sha256)
@@ -35,7 +40,12 @@ test('openocdDownload refuses when firmware changed after confirmation', async (
     const fw = join(cwd, 'app.hex')
     await writeFile(fw, ':020000040800F2\n')
     saveWorkspace(home, cwd, { keil: { download: fw } })
-    const first = await openocdDownload(home, cwd, { interface: 'stlink', target: 'stm32f4x', source: 'agent', sessionId: 's1' })
+    const first = await openocdDownload(home, cwd, {
+      interface: 'stlink',
+      target: 'stm32f4x',
+      source: 'agent',
+      sessionId: 's1',
+    })
     assert.equal(first.needsConfirm, true)
     await writeFile(fw, ':020000040800F2\n:00000001FF\n')
     const second = await openocdDownload(home, cwd, {

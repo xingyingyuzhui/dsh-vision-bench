@@ -8,7 +8,7 @@ const push = (ring, n) => {
   for (let i = 0; i < n; i++) ring.push({ direction: 'tx', hex: '00', byteLength: 1 })
 }
 
-test('page of 500 out of 600: next read returns the remaining 100 (no silent skip)', () => {
+test('page of 500 out of 600: next read returns the remaining 100 (no silent skip)', async () => {
   const ring = createFrameRing()
   push(ring, 600)
   const page1 = ring.feed(0, 500)
@@ -19,10 +19,13 @@ test('page of 500 out of 600: next read returns the remaining 100 (no silent ski
   const page2 = ring.feed(page1.cursor, 500)
   assert.equal(page2.items.length, 100, 'exactly the remaining 100 records')
   assert.equal(page2.hasMore, false)
-  assert.deepEqual(page2.items.map((i) => i.id), Array.from({ length: 100 }, (_, i) => 501 + i))
+  assert.deepEqual(
+    page2.items.map((i) => i.id),
+    Array.from({ length: 100 }, (_, i) => 501 + i),
+  )
 })
 
-test('1500 continuous records are never lost across pages', () => {
+test('1500 continuous records are never lost across pages', async () => {
   const ring = createFrameRing()
   push(ring, 1500)
   let cursor = 0
@@ -34,10 +37,13 @@ test('1500 continuous records are never lost across pages', () => {
     if (!page.hasMore) break
   }
   assert.equal(seen.length, 1500, 'all 1500 records read')
-  assert.ok(seen.every((id, idx) => idx === 0 || id === seen[idx - 1] + 1), 'no duplicates, no gaps')
+  assert.ok(
+    seen.every((id, idx) => idx === 0 || id === seen[idx - 1] + 1),
+    'no duplicates, no gaps',
+  )
 })
 
-test('same-timestamp records survive pagination (id order is categorical)', () => {
+test('same-timestamp records survive pagination (id order is categorical)', async () => {
   const ring = createFrameRing()
   push(ring, 1200)
   const p1 = ring.feed(0, 500)
@@ -48,7 +54,7 @@ test('same-timestamp records survive pagination (id order is categorical)', () =
   assert.equal(new Set(all).size, 1200, 'no duplicate record ids')
 })
 
-test('ring overwrite reports dropped instead of silent skip', () => {
+test('ring overwrite reports dropped instead of silent skip', async () => {
   const ring = createFrameRing()
   // 2100 pushed → ring holds ids 101..2100
   push(ring, 2100)
@@ -64,7 +70,7 @@ test('ring overwrite reports dropped instead of silent skip', () => {
   assert.ok(late.items.length === 500)
 })
 
-test('cursor never exceeds the last returned record (empty page keeps cursor)', () => {
+test('cursor never exceeds the last returned record (empty page keeps cursor)', async () => {
   const ring = createFrameRing()
   push(ring, 10)
   const p1 = ring.feed(0, 500)

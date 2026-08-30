@@ -25,9 +25,12 @@ if (!client.includes(chipSingle) && !client.includes(chipDouble)) {
   fail(`client.js version chip does not match package.json ${pkg.version}`)
 }
 
-const banned = ['__pycache__', '.pyc', 'coverage/', 'node_modules/']
+const banned = ['__pycache__', '.pyc', 'coverage/', 'node_modules/', 'annotate-jsdoc', 'split-modbus-context']
 for (const b of banned) {
   if ((pkg.files || []).some((f) => String(f).includes(b))) fail(`files[] must not include ${b}`)
+}
+for (const temp of ['scripts/annotate-jsdoc.mjs', 'scripts/split-modbus-context.mjs']) {
+  if (existsSync(join(root, temp))) fail(`temporary migration script must not ship: ${temp}`)
 }
 
 console.log('pack:check ok', `${pkg.name}@${pkg.version}`)

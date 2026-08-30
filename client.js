@@ -9,12 +9,12 @@ window.__ModuleLoader__.load({
     var name = 'dsh-vision-bench'
     var inject = ['slots']
 
-var DvbVendor = "use strict";var DvbVendor=(()=>{var pr=Object.create;var sn=Object.defineProperty;var mr=Object.getOwnPropertyDescriptor;var gr=Object.getOwnPropertyNames;var wr=Object.getPrototypeOf,Sr=Object.prototype.hasOwnProperty;var vr=(e=>typeof require<"u"?require:typeof Proxy<"u"?new Proxy(e,{get:(s,n)=>(typeof require<"u"?require:s)[n]}):e)(function(e){if(typeof require<"u")return require.apply(this,arguments);throw Error('Dynamic require of "'+e+'" is not supported')});var br=(e,s)=>{for(var n in s)sn(e,n,{get:s[n],enumerable:!0})},ti=(e,s,n,t)=>{if(s&&typeof s=="object"||typeof s=="function")for(let i of gr(s))!Sr.call(e,i)&&i!==n&&sn(e,i,{get:()=>s[i],enumerable:!(t=mr(s,i))||t.enumerable});return e};var yr=(e,s,n)=>(n=e!=null?pr(wr(e)):{},ti(s||!e||!e.__esModule?sn(n,"default",{value:e,enumerable:!0}):n,e)),_r=e=>ti(sn({},"__esModule",{value:!0}),e);var xu={};br(xu,{Virtualizer:()=>Ol,elementScroll:()=>xn,observeElementOffset:()=>_n,observeElementRect:()=>yn,uPlot:()=>Ve,useVirtualizer:()=>Vo});var xr="uplot",Er="u-hz",Mr="u-vt",kr="u-title",Tr="u-wrap",Ar="u-under",Dr="u-over",zr="u-axis",Qt="u-off",Cr="u-select",Or="u-cursor-x",Lr="u-cursor-y",Pr="u-cursor-pt",Rr="u-legend",Fr="u-live",Vr="u-inline",Ir="u-series",Nr="u-marker",li="u-label",Wr="u-value",Gl="width",Bl="height";var ni="bottom",_l="left",Kn="right",cs="#000",si=cs+"0",$n="mousemove",ii="mousedown",qn="mouseup",oi="mouseenter",ri="mouseleave",fi="dblclick",Hr="resize",Gr="scroll",ui="change",cn="dppxchange",as="--",Dl=typeof window<"u",es=Dl?document:null,El=Dl?window:null,Br=Dl?navigator:null,ie,on;function ts(){let e=devicePixelRatio;ie!=e&&(ie=e,on&&ns(ui,on,ts),on=matchMedia(`(min-resolution: ${ie-.001}dppx) and (max-resolution: ${ie+.001}dppx)`),Xt(ui,on,ts),El.dispatchEvent(new CustomEvent(cn)))}function Xe(e,s){if(s!=null){let n=e.classList;!n.contains(s)&&n.add(s)}}function ls(e,s){let n=e.classList;n.contains(s)&&n.remove(s)}function ge(e,s,n){e.style[s]=n+"px"}function mt(e,s,n,t){let i=es.createElement(e);return s!=null&&Xe(i,s),n?.insertBefore(i,t),i}function ft(e,s){return mt("div",e,s)}var ci=new WeakMap;function Mt(e,s,n,t,i){let c="translate("+s+"px,"+n+"px)",f=ci.get(e);c!=f&&(e.style.transform=c,ci.set(e,c),s<0||n<0||s>t||n>i?Xe(e,Qt):ls(e,Qt))}var ai=new WeakMap;function hi(e,s,n){let t=s+n,i=ai.get(e);t!=i&&(ai.set(e,t),e.style.background=s,e.style.borderColor=n)}var di=new WeakMap;function pi(e,s,n,t){let i=s+""+n,c=di.get(e);i!=c&&(di.set(e,i),e.style.height=n+"px",e.style.width=s+"px",e.style.marginLeft=t?-s/2+"px":0,e.style.marginTop=t?-n/2+"px":0)}var hs={passive:!0},Yr={...hs,capture:!0};function Xt(e,s,n,t){s.addEventListener(e,n,t?Yr:hs)}function ns(e,s,n,t){s.removeEventListener(e,n,hs)}Dl&&ts();function gt(e,s,n,t){let i;n=n||0,t=t||s.length-1;let c=t<=2147483647;for(;t-n>1;)i=c?n+t>>1:et((n+t)/2),s[i]<e?n=i:t=i;return e-s[n]<=s[t]-e?n:t}function Gi(e){return(n,t,i)=>{let c=-1,f=-1;for(let a=t;a<=i;a++)if(e(n[a])){c=a;break}for(let a=i;a>=t;a--)if(e(n[a])){f=a;break}return[c,f]}}var Bi=e=>e!=null,Yi=e=>e!=null&&e>0,dn=Gi(Bi),Ur=Gi(Yi);function jr(e,s,n,t=0,i=!1){let c=i?Ur:dn,f=i?Yi:Bi;[s,n]=c(e,s,n);let a=e[s],d=e[s];if(s>-1)if(t==1)a=e[s],d=e[n];else if(t==-1)a=e[n],d=e[s];else for(let p=s;p<=n;p++){let S=e[p];f(S)&&(S<a?a=S:S>d&&(d=S))}return[a??ce,d??-ce]}function pn(e,s,n,t){let i=wi(e),c=wi(s);e==s&&(i==-1?(e*=n,s/=n):(e/=n,s*=n));let f=n==10?Dt:Ui,a=i==1?et:ut,d=c==1?ut:et,p=a(f(Ae(e))),S=d(f(Ae(s))),g=Ml(n,p),w=Ml(n,S);return n==10&&(p<0&&(g=ae(g,-p)),S<0&&(w=ae(w,-S))),t||n==2?(e=g*i,s=w*c):(e=qi(e,g),s=mn(s,w)),[e,s]}function ds(e,s,n,t){let i=pn(e,s,n,t);return e==0&&(i[0]=0),s==0&&(i[1]=0),i}var ps=.1,mi={mode:3,pad:ps},Ul={pad:0,soft:null,mode:0},Kr={min:Ul,max:Ul};function an(e,s,n,t){return gn(n)?gi(e,s,n):(Ul.pad=n,Ul.soft=t?0:null,Ul.mode=t?3:0,gi(e,s,Kr))}function ne(e,s){return e??s}function $r(e,s,n){for(s=ne(s,0),n=ne(n,e.length-1);s<=n;){if(e[s]!=null)return!0;s++}return!1}function gi(e,s,n){let t=n.min,i=n.max,c=ne(t.pad,0),f=ne(i.pad,0),a=ne(t.hard,-ce),d=ne(i.hard,ce),p=ne(t.soft,ce),S=ne(i.soft,-ce),g=ne(t.mode,0),w=ne(i.mode,0),A=s-e,M=Dt(A),O=Ye(Ae(e),Ae(s)),N=Dt(O),W=Ae(N-M);(A<1e-24||W>10)&&(A=0,(e==0||s==0)&&(A=1e-24,g==2&&p!=ce&&(c=0),w==2&&S!=-ce&&(f=0)));let y=A||O||1e3,F=Dt(y),x=Ml(10,et(F)),$=y*(A==0?e==0?.1:1:c),C=ae(qi(e-$,x/10),24),q=e>=p&&(g==1||g==3&&C<=p||g==2&&C>=p)?p:ce,U=Ye(a,C<q&&e>=q?q:wt(q,C)),Q=y*(A==0?s==0?.1:1:f),Y=ae(mn(s+Q,x/10),24),E=s<=S&&(w==1||w==3&&Y>=S||w==2&&Y<=S)?S:-ce,K=wt(d,Y>E&&s<=E?E:Ye(E,Y));return U==K&&U==0&&(K=100),[U,K]}var qr=new Intl.NumberFormat(Dl?Br.language:"en-US"),ms=e=>qr.format(e),tt=Math,un=tt.PI,Ae=tt.abs,et=tt.floor,Te=tt.round,ut=tt.ceil,wt=tt.min,Ye=tt.max,Ml=tt.pow,wi=tt.sign,Dt=tt.log10,Ui=tt.log2,Jr=(e,s=1)=>tt.sinh(e)*s,Jn=(e,s=1)=>tt.asinh(e/s),ce=1/0;function Si(e){return(Dt((e^e>>31)-(e>>31))|0)+1}function ss(e,s,n){return wt(Ye(e,s),n)}function ji(e){return typeof e=="function"}function X(e){return ji(e)?e:()=>e}var Zr=()=>{},Ki=e=>e,$i=(e,s)=>s,Qr=e=>null,vi=e=>!0,bi=(e,s)=>e==s,Xr=/\.\d*?(?=9{6,}|0{6,})/gm,el=e=>{if(Zi(e)||It.has(e))return e;let s=`${e}`,n=s.match(Xr);if(n==null)return e;let t=n[0].length-1;if(s.indexOf("e-")!=-1){let[i,c]=s.split("e");return+`${el(i)}e${c}`}return ae(e,t)};function Jt(e,s){return el(ae(el(e/s))*s)}function mn(e,s){return el(ut(el(e/s))*s)}function qi(e,s){return el(et(el(e/s))*s)}function ae(e,s=0){if(Zi(e))return e;let n=10**s,t=e*n*(1+Number.EPSILON);return Te(t)/n}var It=new Map;function Ji(e){return((""+e).split(".")[1]||"").length}function Kl(e,s,n,t){let i=[],c=t.map(Ji);for(let f=s;f<n;f++){let a=Ae(f),d=ae(Ml(e,f),a);for(let p=0;p<t.length;p++){let S=e==10?+`${t[p]}e${f}`:t[p]*d,g=(f>=0?0:a)+(f>=c[p]?0:c[p]),w=e==10?S:ae(S,g);i.push(w),It.set(w,g)}}return i}var jl={},gs=[],kl=[null,null],Vt=Array.isArray,Zi=Number.isInteger,ef=e=>e===void 0;function yi(e){return typeof e=="string"}function gn(e){let s=!1;if(e!=null){let n=e.constructor;s=n==null||n==Object}return s}function tf(e){return e!=null&&typeof e=="object"}var lf=Object.getPrototypeOf(Uint8Array),Qi="__proto__";function Tl(e,s=gn){let n;if(Vt(e)){let t=e.find(i=>i!=null);if(Vt(t)||s(t)){n=Array(e.length);for(let i=0;i<e.length;i++)n[i]=Tl(e[i],s)}else n=e.slice()}else if(e instanceof lf)n=e.slice();else if(s(e)){n={};for(let t in e)t!=Qi&&(n[t]=Tl(e[t],s))}else n=e;return n}function Ee(e){let s=arguments;for(let n=1;n<s.length;n++){let t=s[n];for(let i in t)i!=Qi&&(gn(e[i])?Ee(e[i],Tl(t[i])):e[i]=Tl(t[i]))}return e}var nf=0,sf=1,of=2;function rf(e,s,n){for(let t=0,i,c=-1;t<s.length;t++){let f=s[t];if(f>c){for(i=f-1;i>=0&&e[i]==null;)e[i--]=null;for(i=f+1;i<n&&e[i]==null;)e[c=i++]=null}}}function ff(e,s){if(af(e)){let f=e[0].slice();for(let a=1;a<e.length;a++)f.push(...e[a].slice(1));return hf(f[0])||(f=cf(f)),f}let n=new Set;for(let f=0;f<e.length;f++){let d=e[f][0],p=d.length;for(let S=0;S<p;S++)n.add(d[S])}let t=[Array.from(n).sort((f,a)=>f-a)],i=t[0].length,c=new Map;for(let f=0;f<i;f++)c.set(t[0][f],f);for(let f=0;f<e.length;f++){let a=e[f],d=a[0];for(let p=1;p<a.length;p++){let S=a[p],g=Array(i).fill(void 0),w=s?s[f][p]:sf,A=[];for(let M=0;M<S.length;M++){let O=S[M],N=c.get(d[M]);O===null?w!=nf&&(g[N]=O,w==of&&A.push(N)):g[N]=O}rf(g,A,i),t.push(g)}}return t}var uf=typeof queueMicrotask>"u"?e=>Promise.resolve().then(e):queueMicrotask;function cf(e){let s=e[0],n=s.length,t=Array(n);for(let c=0;c<t.length;c++)t[c]=c;t.sort((c,f)=>s[c]-s[f]);let i=[];for(let c=0;c<e.length;c++){let f=e[c],a=Array(n);for(let d=0;d<n;d++)a[d]=f[t[d]];i.push(a)}return i}function af(e){let s=e[0][0],n=s.length;for(let t=1;t<e.length;t++){let i=e[t][0];if(i.length!=n)return!1;if(i!=s){for(let c=0;c<n;c++)if(i[c]!=s[c])return!1}}return!0}function hf(e,s=100){let n=e.length;if(n<=1)return!0;let t=0,i=n-1;for(;t<=i&&e[t]==null;)t++;for(;i>=t&&e[i]==null;)i--;if(i<=t)return!0;let c=Ye(1,et((i-t+1)/s));for(let f=e[t],a=t+c;a<=i;a+=c){let d=e[a];if(d!=null){if(d<=f)return!1;f=d}}return!0}var Xi=["January","February","March","April","May","June","July","August","September","October","November","December"],eo=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];function to(e){return e.slice(0,3)}var df=eo.map(to),pf=Xi.map(to),mf={MMMM:Xi,MMM:pf,WWWW:eo,WWW:df};function Hl(e){return(e<10?"0":"")+e}function gf(e){return(e<10?"00":e<100?"0":"")+e}var wf={YYYY:e=>e.getFullYear(),YY:e=>(e.getFullYear()+"").slice(2),MMMM:(e,s)=>s.MMMM[e.getMonth()],MMM:(e,s)=>s.MMM[e.getMonth()],MM:e=>Hl(e.getMonth()+1),M:e=>e.getMonth()+1,DD:e=>Hl(e.getDate()),D:e=>e.getDate(),WWWW:(e,s)=>s.WWWW[e.getDay()],WWW:(e,s)=>s.WWW[e.getDay()],HH:e=>Hl(e.getHours()),H:e=>e.getHours(),h:e=>{let s=e.getHours();return s==0?12:s>12?s-12:s},AA:e=>e.getHours()>=12?"PM":"AM",aa:e=>e.getHours()>=12?"pm":"am",a:e=>e.getHours()>=12?"p":"a",mm:e=>Hl(e.getMinutes()),m:e=>e.getMinutes(),ss:e=>Hl(e.getSeconds()),s:e=>e.getSeconds(),fff:e=>gf(e.getMilliseconds())};function ws(e,s){s=s||mf;let n=[],t=/\{([a-z]+)\}|[^{]+/gi,i;for(;i=t.exec(e);)n.push(i[0][0]=="{"?wf[i[1]]:i[0]);return c=>{let f="";for(let a=0;a<n.length;a++)f+=typeof n[a]=="string"?n[a]:n[a](c,s);return f}}var Sf=new Intl.DateTimeFormat().resolvedOptions().timeZone;function vf(e,s){let n;return s=="UTC"||s=="Etc/UTC"?n=new Date(+e+e.getTimezoneOffset()*6e4):s==Sf?n=e:(n=new Date(e.toLocaleString("en-US",{timeZone:s})),n.setMilliseconds(e.getMilliseconds())),n}var lo=e=>e%1==0,hn=[1,2,2.5,5],bf=Kl(10,-32,0,hn),no=Kl(10,0,32,hn),yf=no.filter(lo),Zt=bf.concat(no),Ss=`
-`,so="{YYYY}",_i=Ss+so,io="{M}/{D}",Yl=Ss+io,rn=Yl+"/{YY}",oo="{aa}",_f="{h}:{mm}",xl=_f+oo,xi=Ss+xl,Ei=":{ss}",re=null;function ro(e){let s=e*1e3,n=s*60,t=n*60,i=t*24,c=i*30,f=i*365,d=(e==1?Kl(10,0,3,hn).filter(lo):Kl(10,-3,0,hn)).concat([s,s*5,s*10,s*15,s*30,n,n*5,n*10,n*15,n*30,t,t*2,t*3,t*4,t*6,t*8,t*12,i,i*2,i*3,i*4,i*5,i*6,i*7,i*8,i*9,i*10,i*15,c,c*2,c*3,c*4,c*6,f,f*2,f*5,f*10,f*25,f*50,f*100]),p=[[f,so,re,re,re,re,re,re,1],[i*28,"{MMM}",_i,re,re,re,re,re,1],[i,io,_i,re,re,re,re,re,1],[t,"{h}"+oo,rn,re,Yl,re,re,re,1],[n,xl,rn,re,Yl,re,re,re,1],[s,Ei,rn+" "+xl,re,Yl+" "+xl,re,xi,re,1],[e,Ei+".{fff}",rn+" "+xl,re,Yl+" "+xl,re,xi,re,1]];function S(g){return(w,A,M,O,N,W)=>{let y=[],F=N>=f,x=N>=c&&N<f,$=g(M),C=ae($*e,3),q=Zn($.getFullYear(),F?0:$.getMonth(),x||F?1:$.getDate()),U=ae(q*e,3);if(x||F){let Q=x?N/c:0,Y=F?N/f:0,E=C==U?C:ae(Zn(q.getFullYear()+Y,q.getMonth()+Q,1)*e,3),K=new Date(Te(E/e)),L=K.getFullYear(),G=K.getMonth();for(let I=0;E<=O;I++){let ee=Zn(L+Y*I,G+Q*I,1),V=ee-g(ae(ee*e,3));E=ae((+ee+V)*e,3),E<=O&&y.push(E)}}else{let Q=N>=i?i:N,Y=et(M)-et(C),E=U+Y+mn(C-U,Q);y.push(E);let K=g(E),L=K.getHours()+K.getMinutes()/n+K.getSeconds()/t,G=N/t,I=w.axes[A]._space,ee=W/I;for(;E=ae(E+N,e==1?0:3),!(E>O);)if(G>1){let V=et(ae(L+G,6))%24,te=g(E).getHours()-V;te>1&&(te=-1),E-=te*t,L=(L+G)%24;let fe=y[y.length-1];ae((E-fe)/N,3)*ee>=.7&&y.push(E)}else y.push(E)}return y}}return[d,p,S]}var[xf,Ef,Mf]=ro(1),[kf,Tf,Af]=ro(.001);Kl(2,-53,53,[1]);function Mi(e,s){return e.map(n=>n.map((t,i)=>i==0||i==8||t==null?t:s(i==1||n[8]==0?t:n[1]+t)))}function ki(e,s){return(n,t,i,c,f)=>{let a=s.find(M=>f>=M[0])||s[s.length-1],d,p,S,g,w,A;return t.map(M=>{let O=e(M),N=O.getFullYear(),W=O.getMonth(),y=O.getDate(),F=O.getHours(),x=O.getMinutes(),$=O.getSeconds(),C=N!=d&&a[2]||W!=p&&a[3]||y!=S&&a[4]||F!=g&&a[5]||x!=w&&a[6]||$!=A&&a[7]||a[1];return d=N,p=W,S=y,g=F,w=x,A=$,C(O)})}}function Df(e,s){let n=ws(s);return(t,i,c,f,a)=>i.map(d=>n(e(d)))}function Zn(e,s,n){return new Date(e,s,n)}function Ti(e,s){return s(e)}var zf="{YYYY}-{MM}-{DD} {h}:{mm}{aa}";function Ai(e,s){return(n,t,i,c)=>c==null?as:s(e(t))}function Cf(e,s){let n=e.series[s];return n.width?n.stroke(e,s):n.points.width?n.points.stroke(e,s):null}function Of(e,s){return e.series[s].fill(e,s)}var Lf={show:!0,live:!0,isolate:!1,mount:Zr,markers:{show:!0,width:2,stroke:Cf,fill:Of,dash:"solid"},idx:null,idxs:null,values:[]};function Pf(e,s){let n=e.cursor.points,t=ft(),i=n.size(e,s);ge(t,Gl,i),ge(t,Bl,i);let c=i/-2;ge(t,"marginLeft",c),ge(t,"marginTop",c);let f=n.width(e,s,i);return f&&ge(t,"borderWidth",f),t}function Rf(e,s){let n=e.series[s].points;return n._fill||n._stroke}function Ff(e,s){let n=e.series[s].points;return n._stroke||n._fill}function Vf(e,s){return e.series[s].points.size}var Qn=[0,0];function If(e,s,n){return Qn[0]=s,Qn[1]=n,Qn}function fn(e,s,n,t=!0){return i=>{i.button==0&&(!t||i.target==s)&&n(i)}}function Xn(e,s,n,t=!0){return i=>{(!t||i.target==s)&&n(i)}}var Nf={show:!0,x:!0,y:!0,lock:!1,move:If,points:{one:!1,show:Pf,size:Vf,width:0,stroke:Ff,fill:Rf},bind:{mousedown:fn,mouseup:fn,click:fn,dblclick:fn,mousemove:Xn,mouseleave:Xn,mouseenter:Xn},drag:{setScale:!0,x:!0,y:!1,dist:0,uni:null,click:(e,s)=>{s.stopPropagation(),s.stopImmediatePropagation()},_x:!1,_y:!1},focus:{dist:(e,s,n,t,i)=>t-i,prox:-1,bias:0},hover:{skip:[void 0],prox:null,bias:0},left:-10,top:-10,idx:null,dataIdx:null,idxs:null,event:null},fo={show:!0,stroke:"rgba(0,0,0,0.07)",width:2},vs=Ee({},fo,{filter:$i}),uo=Ee({},vs,{size:10}),co=Ee({},fo,{show:!1}),bs='12px system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"',ao="bold "+bs,ho=1.5,Di={show:!0,scale:"x",stroke:cs,space:50,gap:5,alignTo:1,size:50,labelGap:0,labelSize:30,labelFont:ao,side:2,grid:vs,ticks:uo,border:co,font:bs,lineGap:ho,rotate:0},Wf="Value",Hf="Time",zi={show:!0,scale:"x",auto:!1,sorted:1,min:ce,max:-ce,idxs:[]};function Gf(e,s,n,t,i){return s.map(c=>c==null?"":ms(c))}function Bf(e,s,n,t,i,c,f){let a=[],d=It.get(i)||0;n=f?n:ae(mn(n,i),d);for(let p=n;p<=t;p=ae(p+i,d))a.push(Object.is(p,-0)?0:p);return a}function is(e,s,n,t,i,c,f){let a=[],d=e.scales[e.axes[s].scale].log,p=d==10?Dt:Ui,S=et(p(n));i=Ml(d,S),d==10&&(i=Zt[gt(i,Zt)]);let g=n,w=i*d;d==10&&(w=Zt[gt(w,Zt)]);do a.push(g),g=g+i,d==10&&!It.has(g)&&(g=ae(g,It.get(i))),g>=w&&(i=g,w=i*d,d==10&&(w=Zt[gt(w,Zt)]));while(g<=t);return a}function Yf(e,s,n,t,i,c,f){let d=e.scales[e.axes[s].scale].asinh,p=t>d?is(e,s,Ye(d,n),t,i):[d],S=t>=0&&n<=0?[0]:[];return(n<-d?is(e,s,Ye(d,-t),-n,i):[d]).reverse().map(w=>-w).concat(S,p)}var po=/./,Uf=/[12357]/,jf=/[125]/,Ci=/1/,os=(e,s,n,t)=>e.map((i,c)=>s==4&&i==0||c%t==0&&n.test(i.toExponential()[i<0?1:0])?i:null);function Kf(e,s,n,t,i){let c=e.axes[n],f=c.scale,a=e.scales[f],d=e.valToPos,p=c._space,S=d(10,f),g=d(9,f)-S>=p?po:d(7,f)-S>=p?Uf:d(5,f)-S>=p?jf:Ci;if(g==Ci){let w=Ae(d(1,f)-S);if(w<p)return os(s.slice().reverse(),a.distr,g,ut(p/w)).reverse()}return os(s,a.distr,g,1)}function $f(e,s,n,t,i){let c=e.axes[n],f=c.scale,a=c._space,d=e.valToPos,p=Ae(d(1,f)-d(2,f));return p<a?os(s.slice().reverse(),3,po,ut(a/p)).reverse():s}function qf(e,s,n,t){return t==null?as:s==null?"":ms(s)}var Oi={show:!0,scale:"y",stroke:cs,space:30,gap:5,alignTo:1,size:50,labelGap:0,labelSize:30,labelFont:ao,side:3,grid:vs,ticks:uo,border:co,font:bs,lineGap:ho,rotate:0};function Jf(e,s){let n=3+(e||1)*2;return ae(n*s,3)}function Zf(e,s){let{scale:n,idxs:t}=e.series[0],i=e._data[0],c=e.valToPos(i[t[0]],n,!0),f=e.valToPos(i[t[1]],n,!0),a=Ae(f-c),d=e.series[s],p=a/(d.points.space*ie);return t[1]-t[0]<=p}var Li={scale:null,auto:!0,sorted:0,min:ce,max:-ce},mo=(e,s,n,t,i)=>i,Pi={show:!0,auto:!0,sorted:0,gaps:mo,alpha:1,facets:[Ee({},Li,{scale:"x"}),Ee({},Li,{scale:"y"})]},Ri={scale:"y",auto:!0,sorted:0,show:!0,spanGaps:!1,gaps:mo,alpha:1,points:{show:Zf,filter:null},values:null,min:ce,max:-ce,idxs:[],path:null,clip:null};function Qf(e,s,n,t,i){return n/10}var go={time:!0,auto:!0,distr:1,log:10,asinh:1,min:null,max:null,dir:1,ori:0},Xf=Ee({},go,{time:!1,ori:1}),Fi={};function wo(e,s){let n=Fi[e];return n||(n={key:e,plots:[],sub(t){n.plots.push(t)},unsub(t){n.plots=n.plots.filter(i=>i!=t)},pub(t,i,c,f,a,d,p){for(let S=0;S<n.plots.length;S++)n.plots[S]!=i&&n.plots[S].pub(t,i,c,f,a,d,p)}},e!=null&&(Fi[e]=n)),n}var Al=1,rs=2;function tl(e,s,n){let t=e.mode,i=e.series[s],c=t==2?e._data[s]:e._data,f=e.scales,a=e.bbox,d=c[0],p=t==2?c[1]:c[s],S=t==2?f[i.facets[0].scale]:f[e.series[0].scale],g=t==2?f[i.facets[1].scale]:f[i.scale],w=a.left,A=a.top,M=a.width,O=a.height,N=e.valToPosH,W=e.valToPosV;return S.ori==0?n(i,d,p,S,g,N,W,w,A,M,O,Sn,zl,bn,vo,yo):n(i,d,p,S,g,W,N,A,w,O,M,vn,Cl,xs,bo,_o)}function ys(e,s){let n=0,t=0,i=ne(e.bands,gs);for(let c=0;c<i.length;c++){let f=i[c];f.series[0]==s?n=f.dir:f.series[1]==s&&(f.dir==1?t|=1:t|=2)}return[n,t==1?-1:t==2?1:t==3?2:0]}function eu(e,s,n,t,i){let c=e.mode,f=e.series[s],a=c==2?f.facets[1].scale:f.scale,d=e.scales[a];return i==-1?d.min:i==1?d.max:d.distr==3?d.dir==1?d.min:d.max:0}function zt(e,s,n,t,i,c){return tl(e,s,(f,a,d,p,S,g,w,A,M,O,N)=>{let W=f.pxRound,y=p.dir*(p.ori==0?1:-1),F=p.ori==0?zl:Cl,x,$;y==1?(x=n,$=t):(x=t,$=n);let C=W(g(a[x],p,O,A)),q=W(w(d[x],S,N,M)),U=W(g(a[$],p,O,A)),Q=W(w(c==1?S.max:S.min,S,N,M)),Y=new Path2D(i);return F(Y,U,Q),F(Y,C,Q),F(Y,C,q),Y})}function wn(e,s,n,t,i,c){let f=null;if(e.length>0){f=new Path2D;let a=s==0?bn:xs,d=n;for(let g=0;g<e.length;g++){let w=e[g];if(w[1]>w[0]){let A=w[0]-d;A>0&&a(f,d,t,A,t+c),d=w[1]}}let p=n+i-d,S=10;p>0&&a(f,d,t-S/2,p,t+c+S)}return f}function tu(e,s,n){let t=e[e.length-1];t&&t[0]==s?t[1]=n:e.push([s,n])}function _s(e,s,n,t,i,c,f){let a=[],d=e.length;for(let p=i==1?n:t;p>=n&&p<=t;p+=i)if(s[p]===null){let g=p,w=p;if(i==1)for(;++p<=t&&s[p]===null;)w=p;else for(;--p>=n&&s[p]===null;)w=p;let A=c(e[g]),M=w==g?A:c(e[w]),O=g-i;A=f<=0&&O>=0&&O<d?c(e[O]):A;let W=w+i;M=f>=0&&W>=0&&W<d?c(e[W]):M,M>=A&&a.push([A,M])}return a}function Vi(e){return e==0?Ki:e==1?Te:s=>Jt(s,e)}function So(e){let s=e==0?Sn:vn,n=e==0?(i,c,f,a,d,p)=>{i.arcTo(c,f,a,d,p)}:(i,c,f,a,d,p)=>{i.arcTo(f,c,d,a,p)},t=e==0?(i,c,f,a,d)=>{i.rect(c,f,a,d)}:(i,c,f,a,d)=>{i.rect(f,c,d,a)};return(i,c,f,a,d,p=0,S=0)=>{p==0&&S==0?t(i,c,f,a,d):(p=wt(p,a/2,d/2),S=wt(S,a/2,d/2),s(i,c+p,f),n(i,c+a,f,c+a,f+d,p),n(i,c+a,f+d,c,f+d,S),n(i,c,f+d,c,f,S),n(i,c,f,c+a,f,p),i.closePath())}}var Sn=(e,s,n)=>{e.moveTo(s,n)},vn=(e,s,n)=>{e.moveTo(n,s)},zl=(e,s,n)=>{e.lineTo(s,n)},Cl=(e,s,n)=>{e.lineTo(n,s)},bn=So(0),xs=So(1),vo=(e,s,n,t,i,c)=>{e.arc(s,n,t,i,c)},bo=(e,s,n,t,i,c)=>{e.arc(n,s,t,i,c)},yo=(e,s,n,t,i,c,f)=>{e.bezierCurveTo(s,n,t,i,c,f)},_o=(e,s,n,t,i,c,f)=>{e.bezierCurveTo(n,s,i,t,f,c)};function xo(e){return(s,n,t,i,c)=>tl(s,n,(f,a,d,p,S,g,w,A,M,O,N)=>{let{pxRound:W,points:y}=f,F,x;p.ori==0?(F=Sn,x=vo):(F=vn,x=bo);let $=ae(y.width*ie,3),C=(y.size-y.width)/2*ie,q=ae(C*2,3),U=new Path2D,Q=new Path2D,{left:Y,top:E,width:K,height:L}=s.bbox;bn(Q,Y-q,E-q,K+q*2,L+q*2);let G=I=>{if(d[I]!=null){let ee=W(g(a[I],p,O,A)),V=W(w(d[I],S,N,M));F(U,ee+C,V),x(U,ee,V,C,0,un*2)}};if(c)c.forEach(G);else for(let I=t;I<=i;I++)G(I);return{stroke:$>0?U:null,fill:U,clip:Q,flags:Al|rs}})}function Eo(e){return(s,n,t,i,c,f)=>{t!=i&&(c!=t&&f!=t&&e(s,n,t),c!=i&&f!=i&&e(s,n,i),e(s,n,f))}}var lu=Eo(zl),nu=Eo(Cl);function Mo(e){let s=ne(e?.alignGaps,0);return(n,t,i,c)=>tl(n,t,(f,a,d,p,S,g,w,A,M,O,N)=>{[i,c]=dn(d,i,c);let W=f.pxRound,y=L=>W(g(L,p,O,A)),F=L=>W(w(L,S,N,M)),x,$;p.ori==0?(x=zl,$=lu):(x=Cl,$=nu);let C=p.dir*(p.ori==0?1:-1),q={stroke:new Path2D,fill:null,clip:null,band:null,gaps:null,flags:Al},U=q.stroke,Q=!1;if(c-i>=O*4){let L=P=>n.posToVal(P,p.key,!0),G=null,I=null,ee,V,Ue,we=y(a[C==1?i:c]),te=y(a[i]),fe=y(a[c]),J=L(C==1?te+1:fe-1);for(let P=C==1?i:c;P>=i&&P<=c;P+=C){let Me=a[P],Se=(C==1?Me<J:Me>J)?we:y(Me),oe=d[P];Se==we?oe!=null?(V=oe,G==null?(x(U,Se,F(V)),ee=G=I=V):V<G?G=V:V>I&&(I=V)):oe===null&&(Q=!0):(G!=null&&$(U,we,F(G),F(I),F(ee),F(V)),oe!=null?(V=oe,x(U,Se,F(V)),G=I=ee=V):(G=I=null,oe===null&&(Q=!0)),we=Se,J=L(we+C))}G!=null&&G!=I&&Ue!=we&&$(U,we,F(G),F(I),F(ee),F(V))}else for(let L=C==1?i:c;L>=i&&L<=c;L+=C){let G=d[L];G===null?Q=!0:G!=null&&x(U,y(a[L]),F(G))}let[E,K]=ys(n,t);if(f.fill!=null||E!=0){let L=q.fill=new Path2D(U),G=f.fillTo(n,t,f.min,f.max,E),I=F(G),ee=y(a[i]),V=y(a[c]);C==-1&&([V,ee]=[ee,V]),x(L,V,I),x(L,ee,I)}if(!f.spanGaps){let L=[];Q&&L.push(..._s(a,d,i,c,C,y,s)),q.gaps=L=f.gaps(n,t,i,c,L),q.clip=wn(L,p.ori,A,M,O,N)}return K!=0&&(q.band=K==2?[zt(n,t,i,c,U,-1),zt(n,t,i,c,U,1)]:zt(n,t,i,c,U,K)),q})}function su(e){let s=ne(e.align,1),n=ne(e.ascDesc,!1),t=ne(e.alignGaps,0),i=ne(e.extend,!1);return(c,f,a,d)=>tl(c,f,(p,S,g,w,A,M,O,N,W,y,F)=>{[a,d]=dn(g,a,d);let x=p.pxRound,{left:$,width:C}=c.bbox,q=te=>x(M(te,w,y,N)),U=te=>x(O(te,A,F,W)),Q=w.ori==0?zl:Cl,Y={stroke:new Path2D,fill:null,clip:null,band:null,gaps:null,flags:Al},E=Y.stroke,K=w.dir*(w.ori==0?1:-1),L=U(g[K==1?a:d]),G=q(S[K==1?a:d]),I=G,ee=G;i&&s==-1&&(ee=$,Q(E,ee,L)),Q(E,G,L);for(let te=K==1?a:d;te>=a&&te<=d;te+=K){let fe=g[te];if(fe==null)continue;let J=q(S[te]),P=U(fe);s==1?Q(E,J,L):Q(E,I,P),Q(E,J,P),L=P,I=J}let V=I;i&&s==1&&(V=$+C,Q(E,V,L));let[Ue,we]=ys(c,f);if(p.fill!=null||Ue!=0){let te=Y.fill=new Path2D(E),fe=p.fillTo(c,f,p.min,p.max,Ue),J=U(fe);Q(te,V,J),Q(te,ee,J)}if(!p.spanGaps){let te=[];te.push(..._s(S,g,a,d,K,q,t));let fe=p.width*ie/2,J=n||s==1?fe:-fe,P=n||s==-1?-fe:fe;te.forEach(Me=>{Me[0]+=J,Me[1]+=P}),Y.gaps=te=p.gaps(c,f,a,d,te),Y.clip=wn(te,w.ori,N,W,y,F)}return we!=0&&(Y.band=we==2?[zt(c,f,a,d,E,-1),zt(c,f,a,d,E,1)]:zt(c,f,a,d,E,we)),Y})}function Ii(e,s,n,t,i,c,f=ce){if(e.length>1){let a=null;for(let d=0,p=1/0;d<e.length;d++)if(s[d]!==void 0){if(a!=null){let S=Ae(e[d]-e[a]);S<p&&(p=S,f=Ae(n(e[d],t,i,c)-n(e[a],t,i,c)))}a=d}}return f}function iu(e){e=e||jl;let s=ne(e.size,[.6,ce,1]),n=e.align||0,t=e.gap||0,i=e.radius;i=i==null?[0,0]:typeof i=="number"?[i,0]:i;let c=X(i),f=1-s[0],a=ne(s[1],ce),d=ne(s[2],1),p=ne(e.disp,jl),S=ne(e.each,A=>{}),{fill:g,stroke:w}=p;return(A,M,O,N)=>tl(A,M,(W,y,F,x,$,C,q,U,Q,Y,E)=>{let K=W.pxRound,L=n,G=t*ie,I=a*ie,ee=d*ie,V,Ue;x.ori==0?[V,Ue]=c(A,M):[Ue,V]=c(A,M);let we=x.dir*(x.ori==0?1:-1),te=x.ori==0?bn:xs,fe=x.ori==0?S:(D,he,ke,ol,Gt,vt,Bt)=>{S(D,he,ke,Gt,ol,Bt,vt)},J=ne(A.bands,gs).find(D=>D.series[0]==M),P=J!=null?J.dir:0,Me=W.fillTo(A,M,W.min,W.max,P),Ne=K(q(Me,$,E,Q)),Se,oe,ct,$e=Y,be=K(W.width*ie),St=!1,kt=null,lt=null,Ct=null,nl=null;g!=null&&(be==0||w!=null)&&(St=!0,kt=g.values(A,M,O,N),lt=new Map,new Set(kt).forEach(D=>{D!=null&&lt.set(D,new Path2D)}),be>0&&(Ct=w.values(A,M,O,N),nl=new Map,new Set(Ct).forEach(D=>{D!=null&&nl.set(D,new Path2D)})));let{x0:sl,size:Ll}=p;if(sl!=null&&Ll!=null){L=1,y=sl.values(A,M,O,N),sl.unit==2&&(y=y.map(ke=>A.posToVal(U+ke*Y,x.key,!0)));let D=Ll.values(A,M,O,N);Ll.unit==2?oe=D[0]*Y:oe=C(D[0],x,Y,U)-C(0,x,Y,U),$e=Ii(y,F,C,x,Y,U,$e),ct=$e-oe+G}else $e=Ii(y,F,C,x,Y,U,$e),ct=$e*f+G,oe=$e-ct;ct<1&&(ct=0),be>=oe/2&&(be=0),ct<5&&(K=Ki);let $l=ct>0,Wt=$e-ct-($l?be:0);oe=K(ss(Wt,ee,I)),Se=(L==0?oe/2:L==we?0:oe)-L*we*((L==0?G/2:0)+($l?be/2:0));let We={stroke:null,fill:null,clip:null,band:null,gaps:null,flags:0},il=St?null:new Path2D,Tt=null;if(J!=null)Tt=A.data[J.series[1]];else{let{y0:D,y1:he}=p;D!=null&&he!=null&&(F=he.values(A,M,O,N),Tt=D.values(A,M,O,N))}let Ht=V*oe,j=Ue*oe;for(let D=we==1?O:N;D>=O&&D<=N;D+=we){let he=F[D];if(he==null)continue;if(Tt!=null){let je=Tt[D]??0;if(he-je==0)continue;Ne=q(je,$,E,Q)}let ke=x.distr!=2||p!=null?y[D]:D,ol=C(ke,x,Y,U),Gt=q(ne(he,Me),$,E,Q),vt=K(ol-Se),Bt=K(Ye(Gt,Ne)),qe=K(wt(Gt,Ne)),nt=Bt-qe;if(he!=null){let je=he<0?j:Ht,at=he<0?Ht:j;St?(be>0&&Ct[D]!=null&&te(nl.get(Ct[D]),vt,qe+et(be/2),oe,Ye(0,nt-be),je,at),kt[D]!=null&&te(lt.get(kt[D]),vt,qe+et(be/2),oe,Ye(0,nt-be),je,at)):te(il,vt,qe+et(be/2),oe,Ye(0,nt-be),je,at),fe(A,M,D,vt-be/2,qe,oe+be,nt)}}return be>0?We.stroke=St?nl:il:St||(We._fill=W.width==0?W._fill:W._stroke??W._fill,We.width=0),We.fill=St?lt:il,We})}function ou(e,s){let n=ne(s?.alignGaps,0);return(t,i,c,f)=>tl(t,i,(a,d,p,S,g,w,A,M,O,N,W)=>{[c,f]=dn(p,c,f);let y=a.pxRound,F=V=>y(w(V,S,N,M)),x=V=>y(A(V,g,W,O)),$,C,q;S.ori==0?($=Sn,q=zl,C=yo):($=vn,q=Cl,C=_o);let U=S.dir*(S.ori==0?1:-1),Q=F(d[U==1?c:f]),Y=Q,E=[],K=[];for(let V=U==1?c:f;V>=c&&V<=f;V+=U)if(p[V]!=null){let we=d[V],te=F(we);E.push(Y=te),K.push(x(p[V]))}let L={stroke:e(E,K,$,q,C,y),fill:null,clip:null,band:null,gaps:null,flags:Al},G=L.stroke,[I,ee]=ys(t,i);if(a.fill!=null||I!=0){let V=L.fill=new Path2D(G),Ue=a.fillTo(t,i,a.min,a.max,I),we=x(Ue);q(V,Y,we),q(V,Q,we)}if(!a.spanGaps){let V=[];V.push(..._s(d,p,c,f,U,F,n)),L.gaps=V=a.gaps(t,i,c,f,V),L.clip=wn(V,S.ori,M,O,N,W)}return ee!=0&&(L.band=ee==2?[zt(t,i,c,f,G,-1),zt(t,i,c,f,G,1)]:zt(t,i,c,f,G,ee)),L})}function ru(e){return ou(fu,e)}function fu(e,s,n,t,i,c){let f=e.length;if(f<2)return null;let a=new Path2D;if(n(a,e[0],s[0]),f==2)t(a,e[1],s[1]);else{let d=Array(f),p=Array(f-1),S=Array(f-1),g=Array(f-1);for(let w=0;w<f-1;w++)S[w]=s[w+1]-s[w],g[w]=e[w+1]-e[w],p[w]=S[w]/g[w];d[0]=p[0];for(let w=1;w<f-1;w++)p[w]===0||p[w-1]===0||p[w-1]>0!=p[w]>0?d[w]=0:(d[w]=3*(g[w-1]+g[w])/((2*g[w]+g[w-1])/p[w-1]+(g[w]+2*g[w-1])/p[w]),isFinite(d[w])||(d[w]=0));d[f-1]=p[f-2];for(let w=0;w<f-1;w++)i(a,e[w]+g[w]/3,s[w]+d[w]*g[w]/3,e[w+1]-g[w]/3,s[w+1]-d[w+1]*g[w]/3,e[w+1],s[w+1])}return a}var fs=new Set;function Ni(){for(let e of fs)e.syncRect(!0)}Dl&&(Xt(Hr,El,Ni),Xt(Gr,El,Ni,!0),Xt(cn,El,()=>{Ve.pxRatio=ie}));var uu=Mo(),cu=xo();function Wi(e,s,n,t){return(t?[e[0],e[1]].concat(e.slice(2)):[e[0]].concat(e.slice(1))).map((c,f)=>us(c,f,s,n))}function au(e,s){return e.map((n,t)=>t==0?{}:Ee({},s,n))}function us(e,s,n,t){return Ee({},s==0?n:t,e)}function ko(e,s,n){return s==null?kl:[s,n]}var hu=ko;function du(e,s,n){return s==null?kl:an(s,n,ps,!0)}function To(e,s,n,t){return s==null?kl:pn(s,n,e.scales[t].log,!1)}var pu=To;function Ao(e,s,n,t){return s==null?kl:ds(s,n,e.scales[t].log,!1)}var mu=Ao;function gu(e,s,n,t,i){let c=Ye(Si(e),Si(s)),f=s-e,a=gt(i/t*f,n);do{let d=n[a],p=t*d/f;if(p>=i&&c+(d<5?It.get(d):0)<=17)return[d,p]}while(++a<n.length);return[0,0]}function Hi(e){let s,n;return e=e.replace(/(\d+)px/,(t,i)=>(s=Te((n=+i)*ie))+"px"),[e,s,n]}function wu(e){e.show&&[e.font,e.labelFont].forEach(s=>{let n=ae(s[2]*ie,1);s[0]=s[0].replace(/[0-9.]+px/,n+"px"),s[1]=n})}function Ve(e,s,n){let t={mode:ne(e.mode,1)},i=t.mode;function c(l,o,r,u){let h=o.valToPct(l);return u+r*(o.dir==-1?1-h:h)}function f(l,o,r,u){let h=o.valToPct(l);return u+r*(o.dir==-1?h:1-h)}function a(l,o,r,u){return o.ori==0?c(l,o,r,u):f(l,o,r,u)}t.valToPosH=c,t.valToPosV=f;let d=!1;t.status=0;let p=t.root=ft(xr);if(e.id!=null&&(p.id=e.id),Xe(p,e.class),e.title){let l=ft(kr,p);l.textContent=e.title}let S=mt("canvas"),g=t.ctx=S.getContext("2d"),w=ft(Tr,p);Xt("click",w,l=>{l.target===M&&(de!=wl||ve!=Sl)&&Fe.click(t,l)},!0);let A=t.under=ft(Ar,w);w.appendChild(S);let M=t.over=ft(Dr,w);e=Tl(e);let O=+ne(e.pxAlign,1),N=Vi(O);(e.plugins||[]).forEach(l=>{l.opts&&(e=l.opts(t,e)||e)});let W=e.ms||.001,y=t.series=i==1?Wi(e.series||[],zi,Ri,!1):au(e.series||[null],Pi),F=t.axes=Wi(e.axes||[],Di,Oi,!0),x=t.scales={},$=t.bands=e.bands||[];$.forEach(l=>{l.fill=X(l.fill||null),l.dir=ne(l.dir,-1)});let C=i==2?y[1].facets[0].scale:y[0].scale,q={axes:Xo,series:$o},U=(e.drawOrder||["axes","series"]).map(l=>q[l]);function Q(l){let o=l.distr==3?r=>Dt(r>0?r:l.clamp(t,r,l.min,l.max,l.key)):l.distr==4?r=>Jn(r,l.asinh):l.distr==100?r=>l.fwd(r):r=>r;return r=>{let u=o(r),{_min:h,_max:m}=l,v=m-h;return(u-h)/v}}function Y(l){let o=x[l];if(o==null){let r=(e.scales||jl)[l]||jl;if(r.from!=null){Y(r.from);let u=Ee({},x[r.from],r,{key:l});u.valToPct=Q(u),x[l]=u}else{o=x[l]=Ee({},l==C?go:Xf,r),o.key=l;let u=o.time,h=o.range,m=Vt(h);if((l!=C||i==2&&!u)&&(m&&(h[0]==null||h[1]==null)&&(h={min:h[0]==null?mi:{mode:1,hard:h[0],soft:h[0]},max:h[1]==null?mi:{mode:1,hard:h[1],soft:h[1]}},m=!1),!m&&gn(h))){let v=h;h=(b,_,k)=>_==null?kl:an(_,k,v)}o.range=X(h||(u?hu:l==C?o.distr==3?pu:o.distr==4?mu:ko:o.distr==3?To:o.distr==4?Ao:du)),o.auto=X(m?!1:o.auto),o.clamp=X(o.clamp||Qf),o._min=o._max=null,o.valToPct=Q(o)}}}Y("x"),Y("y"),i==1&&y.forEach(l=>{Y(l.scale)}),F.forEach(l=>{Y(l.scale)});for(let l in e.scales)Y(l);let E=x[C],K=E.distr,L,G;E.ori==0?(Xe(p,Er),L=c,G=f):(Xe(p,Mr),L=f,G=c);let I={};for(let l in x){let o=x[l];(o.min!=null||o.max!=null)&&(I[l]={min:o.min,max:o.max},o.min=o.max=null)}let ee=e.tzDate||(l=>new Date(Te(l/W))),V=e.fmtDate||ws,Ue=W==1?Mf(ee):Af(ee),we=ki(ee,Mi(W==1?Ef:Tf,V)),te=Ai(ee,Ti(zf,V)),fe=[],J=t.legend=Ee({},Lf,e.legend),P=t.cursor=Ee({},Nf,{drag:{y:i==2}},e.cursor),Me=J.show,Ne=P.show,Se=J.markers;J.idxs=fe,Se.width=X(Se.width),Se.dash=X(Se.dash),Se.stroke=X(Se.stroke),Se.fill=X(Se.fill);let oe,ct,$e,be=[],St=[],kt,lt=!1,Ct={};if(J.live){let l=y[1]?y[1].values:null;lt=l!=null,kt=lt?l(t,1,0):{_:0};for(let o in kt)Ct[o]=as}if(Me)if(oe=mt("table",Rr,p),$e=mt("tbody",null,oe),J.mount(t,oe),lt){ct=mt("thead",null,oe,$e);let l=mt("tr",null,ct);mt("th",null,l);for(var nl in kt)mt("th",li,l).textContent=nl}else Xe(oe,Vr),J.live&&Xe(oe,Fr);let sl={show:!0},Ll={show:!1};function $l(l,o){if(o==0&&(lt||!J.live||i==2))return kl;let r=[],u=mt("tr",Ir,$e,$e.childNodes[o]);Xe(u,l.class),l.show||Xe(u,Qt);let h=mt("th",null,u);if(Se.show){let b=ft(Nr,h);if(o>0){let _=Se.width(t,o);_&&(b.style.border=_+"px "+Se.dash(t,o)+" "+Se.stroke(t,o)),b.style.background=Se.fill(t,o)}}let m=ft(li,h);l.label instanceof HTMLElement?m.appendChild(l.label):m.textContent=l.label,o>0&&(Se.show||(m.style.color=l.width>0?Se.stroke(t,o):Se.fill(t,o)),We("click",h,b=>{if(P._lock)return;Ut(b);let _=y.indexOf(l);if((b.ctrlKey||b.metaKey)!=J.isolate){let k=y.some((T,z)=>z>0&&z!=_&&T.show);y.forEach((T,z)=>{z>0&&yt(z,k?z==_?sl:Ll:sl,!0,xe.setSeries)})}else yt(_,{show:!l.show},!0,xe.setSeries)},!1),fl&&We(oi,h,b=>{P._lock||(Ut(b),yt(y.indexOf(l),bl,!0,xe.setSeries))},!1));for(var v in kt){let b=mt("td",Wr,u);b.textContent="--",r.push(b)}return[u,r]}let Wt=new Map;function We(l,o,r,u=!0){let h=Wt.get(o)||{},m=P.bind[l](t,o,r,u);m&&(Xt(l,o,h[l]=m),Wt.set(o,h))}function il(l,o,r){let u=Wt.get(o)||{};for(let h in u)(l==null||h==l)&&(ns(h,o,u[h]),delete u[h]);l==null&&Wt.delete(o)}let Tt=0,Ht=0,j=0,D=0,he=0,ke=0,ol=he,Gt=ke,vt=j,Bt=D,qe=0,nt=0,je=0,at=0;t.bbox={};let En=!1,ql=!1,rl=!1,Yt=!1,Jl=!1,st=!1;function Mn(l,o,r){(r||l!=t.width||o!=t.height)&&Ms(l,o),dl(!1),rl=!0,ql=!0,pl()}function Ms(l,o){t.width=Tt=j=l,t.height=Ht=D=o,he=ke=0,Ho(),Go();let r=t.bbox;qe=r.left=Jt(he*ie,.5),nt=r.top=Jt(ke*ie,.5),je=r.width=Jt(j*ie,.5),at=r.height=Jt(D*ie,.5)}let Io=3;function No(){let l=!1,o=0;for(;!l;){o++;let r=Zo(o),u=Qo(o);l=o==Io||r&&u,l||(Ms(t.width,t.height),ql=!0)}}function Wo({width:l,height:o}){Mn(l,o)}t.setSize=Wo;function Ho(){let l=!1,o=!1,r=!1,u=!1;F.forEach((h,m)=>{if(h.show&&h._show){let{side:v,_size:b}=h,_=v%2,k=h.label!=null?h.labelSize:0,T=b+k;T>0&&(_?(j-=T,v==3?(he+=T,u=!0):r=!0):(D-=T,v==0?(ke+=T,l=!0):o=!0))}}),jt[0]=l,jt[1]=r,jt[2]=o,jt[3]=u,j-=Ot[1]+Ot[3],he+=Ot[3],D-=Ot[2]+Ot[0],ke+=Ot[0]}function Go(){let l=he+j,o=ke+D,r=he,u=ke;function h(m,v){switch(m){case 1:return l+=v,l-v;case 2:return o+=v,o-v;case 3:return r-=v,r+v;case 0:return u-=v,u+v}}F.forEach((m,v)=>{if(m.show&&m._show){let b=m.side;m._pos=h(b,m._size),m.label!=null&&(m._lpos=h(b,m.labelSize))}})}if(P.dataIdx==null){let l=P.hover,o=l.skip=new Set(l.skip??[]);o.add(void 0);let r=l.prox=X(l.prox),u=l.bias??(l.bias=0);P.dataIdx=(h,m,v,b)=>{if(m==0)return v;let _=v,k=r(h,m,v,b)??ce,T=k>=0&&k<ce,z=E.ori==0?j:D,B=P.left,se=s[0],le=s[m];if(o.has(le[v])){_=null;let Z=null,H=null,R;if(u==0||u==-1)for(R=v;Z==null&&R-- >0;)o.has(le[R])||(Z=R);if(u==0||u==1)for(R=v;H==null&&R++<le.length;)o.has(le[R])||(H=R);if(Z!=null||H!=null)if(T){let me=Z==null?-1/0:L(se[Z],E,z,0),ye=H==null?1/0:L(se[H],E,z,0),Pe=B-me,ue=ye-B;Pe<=ue?Pe<=k&&(_=Z):ue<=k&&(_=H)}else _=H==null?Z:Z==null?H:v-Z<=H-v?Z:H}else T&&Ae(B-L(se[v],E,z,0))>k&&(_=null);return _}}let Ut=l=>{P.event=l};P.idxs=fe,P._lock=!1;let Ie=P.points;Ie.show=X(Ie.show),Ie.size=X(Ie.size),Ie.stroke=X(Ie.stroke),Ie.width=X(Ie.width),Ie.fill=X(Ie.fill);let bt=t.focus=Ee({},e.focus||{alpha:.3},P.focus),fl=bt.prox>=0,ul=fl&&Ie.one,it=[],cl=[],al=[];function ks(l,o){let r=Ie.show(t,o);if(r instanceof HTMLElement)return Xe(r,Pr),Xe(r,l.class),Mt(r,-10,-10,j,D),M.insertBefore(r,it[o]),r}function Ts(l,o){if(i==1||o>0){let r=i==1&&x[l.scale].time,u=l.value;l.value=r?yi(u)?Ai(ee,Ti(u,V)):u||te:u||qf,l.label=l.label||(r?Hf:Wf)}if(ul||o>0){l.width=l.width==null?1:l.width,l.paths=l.paths||uu||Qr,l.fillTo=X(l.fillTo||eu),l.pxAlign=+ne(l.pxAlign,O),l.pxRound=Vi(l.pxAlign),l.stroke=X(l.stroke||null),l.fill=X(l.fill||null),l._stroke=l._fill=l._paths=l._focus=null;let r=Jf(Ye(1,l.width),1),u=l.points=Ee({},{size:r,width:Ye(1,r*.2),stroke:l.stroke,space:r*2,paths:cu,_stroke:null,_fill:null},l.points);u.show=X(u.show),u.filter=X(u.filter),u.fill=X(u.fill),u.stroke=X(u.stroke),u.paths=X(u.paths),u.pxAlign=l.pxAlign}if(Me){let r=$l(l,o);be.splice(o,0,r[0]),St.splice(o,0,r[1]),J.values.push(null)}if(Ne){fe.splice(o,0,null);let r=null;ul?o==0&&(r=ks(l,o)):o>0&&(r=ks(l,o)),it.splice(o,0,r),cl.splice(o,0,0),al.splice(o,0,0)}Le("addSeries",o)}function Bo(l,o){o=o??y.length,l=i==1?us(l,o,zi,Ri):us(l,o,{},Pi),y.splice(o,0,l),Ts(y[o],o)}t.addSeries=Bo;function Yo(l){if(y.splice(l,1),Me){J.values.splice(l,1),St.splice(l,1);let o=be.splice(l,1)[0];il(null,o.firstChild),o.remove()}Ne&&(fe.splice(l,1),it.splice(l,1)[0].remove(),cl.splice(l,1),al.splice(l,1)),Le("delSeries",l)}t.delSeries=Yo;let jt=[!1,!1,!1,!1];function Uo(l,o){if(l._show=l.show,l.show){let r=l.side%2,u=x[l.scale];u==null&&(l.scale=r?y[1].scale:C,u=x[l.scale]);let h=u.time;l.size=X(l.size),l.space=X(l.space),l.rotate=X(l.rotate),Vt(l.incrs)&&l.incrs.forEach(v=>{!It.has(v)&&It.set(v,Ji(v))}),l.incrs=X(l.incrs||(u.distr==2?yf:h?W==1?xf:kf:Zt)),l.splits=X(l.splits||(h&&u.distr==1?Ue:u.distr==3?is:u.distr==4?Yf:Bf)),l.stroke=X(l.stroke),l.grid.stroke=X(l.grid.stroke),l.ticks.stroke=X(l.ticks.stroke),l.border.stroke=X(l.border.stroke);let m=l.values;l.values=Vt(m)&&!Vt(m[0])?X(m):h?Vt(m)?ki(ee,Mi(m,V)):yi(m)?Df(ee,m):m||we:m||Gf,l.filter=X(l.filter||(u.distr>=3&&u.log==10?Kf:u.distr==3&&u.log==2?$f:$i)),l.font=Hi(l.font),l.labelFont=Hi(l.labelFont),l._size=l.size(t,null,o,0),l._space=l._rotate=l._incrs=l._found=l._splits=l._values=null,l._size>0&&(jt[o]=!0,l._el=ft(zr,w))}}function Pl(l,o,r,u){let[h,m,v,b]=r,_=o%2,k=0;return _==0&&(b||m)&&(k=o==0&&!h||o==2&&!v?Te(Di.size/3):0),_==1&&(h||v)&&(k=o==1&&!m||o==3&&!b?Te(Oi.size/2):0),k}let As=t.padding=(e.padding||[Pl,Pl,Pl,Pl]).map(l=>X(ne(l,Pl))),Ot=t._padding=As.map((l,o)=>l(t,o,jt,0)),Re,De=null,ze=null,Zl=i==1?y[0].idxs:null,ht=null,Rl=!1;function Ds(l,o){if(s=l??[],t.data=t._data=s,i==2){Re=0;for(let r=1;r<y.length;r++)Re+=s[r][0].length}else{s.length==0&&(t.data=t._data=s=[[]]),ht=s[0],Re=ht.length;let r=s;if(K==2){r=s.slice();let u=r[0]=Array(Re);for(let h=0;h<Re;h++)u[h]=h}t._data=s=r}if(dl(!0),Le("setData"),K==2&&(rl=!0),o!==!1){let r=E;r.auto(t,Rl)?kn():Pt(C,r.min,r.max),Yt=Yt||P.left>=0,st=!0,pl()}}t.setData=Ds;function kn(){Rl=!0;let l,o;i==1&&(Re>0?(De=Zl[0]=0,ze=Zl[1]=Re-1,l=s[0][De],o=s[0][ze],K==2?(l=De,o=ze):l==o&&(K==3?[l,o]=pn(l,l,E.log,!1):K==4?[l,o]=ds(l,l,E.log,!1):E.time?o=l+Te(86400/W):[l,o]=an(l,o,ps,!0))):(De=Zl[0]=l=null,ze=Zl[1]=o=null)),Pt(C,l,o)}let Ql,hl,Tn,An,Dn,zn,Cn,On,Ln,Ke;function zs(l,o,r,u,h,m){l??(l=si),r??(r=gs),u??(u="butt"),h??(h=si),m??(m="round"),l!=Ql&&(g.strokeStyle=Ql=l),h!=hl&&(g.fillStyle=hl=h),o!=Tn&&(g.lineWidth=Tn=o),m!=Dn&&(g.lineJoin=Dn=m),u!=zn&&(g.lineCap=zn=u),r!=An&&g.setLineDash(An=r)}function Cs(l,o,r,u){o!=hl&&(g.fillStyle=hl=o),l!=Cn&&(g.font=Cn=l),r!=On&&(g.textAlign=On=r),u!=Ln&&(g.textBaseline=Ln=u)}function Pn(l,o,r,u,h=0){if(u.length>0&&l.auto(t,Rl)&&(o==null||o.min==null)){let m=ne(De,0),v=ne(ze,u.length-1),b=r.min==null?jr(u,m,v,h,l.distr==3):[r.min,r.max];l.min=wt(l.min,r.min=b[0]),l.max=Ye(l.max,r.max=b[1])}}let Os={min:null,max:null};function jo(){for(let u in x){let h=x[u];I[u]==null&&(h.min==null||I[C]!=null&&h.auto(t,Rl))&&(I[u]=Os)}for(let u in x){let h=x[u];I[u]==null&&h.from!=null&&I[h.from]!=null&&(I[u]=Os)}I[C]!=null&&dl(!0);let l={};for(let u in I){let h=I[u];if(h!=null){let m=l[u]=Tl(x[u],tf);if(h.min!=null)Ee(m,h);else if(u!=C||i==2)if(Re==0&&m.from==null){let v=m.range(t,null,null,u);m.min=v[0],m.max=v[1]}else m.min=ce,m.max=-ce}}if(Re>0){y.forEach((u,h)=>{if(i==1){let m=u.scale,v=I[m];if(v==null)return;let b=l[m];if(h==0){let _=b.range(t,b.min,b.max,m);b.min=_[0],b.max=_[1],De=gt(b.min,s[0]),ze=gt(b.max,s[0]),ze-De>1&&(s[0][De]<b.min&&De++,s[0][ze]>b.max&&ze--),u.min=ht[De],u.max=ht[ze]}else u.show&&u.auto&&Pn(b,v,u,s[h],u.sorted);u.idxs[0]=De,u.idxs[1]=ze}else if(h>0&&u.show&&u.auto){let[m,v]=u.facets,b=m.scale,_=v.scale,[k,T]=s[h],z=l[b],B=l[_];z!=null&&Pn(z,I[b],m,k,m.sorted),B!=null&&Pn(B,I[_],v,T,v.sorted),u.min=v.min,u.max=v.max}});for(let u in l){let h=l[u],m=I[u];if(h.from==null&&(m==null||m.min==null)){let v=h.range(t,h.min==ce?null:h.min,h.max==-ce?null:h.max,u);h.min=v[0],h.max=v[1]}}}for(let u in l){let h=l[u];if(h.from!=null){let m=l[h.from];if(m.min==null)h.min=h.max=null;else{let v=h.range(t,m.min,m.max,u);h.min=v[0],h.max=v[1]}}}let o={},r=!1;for(let u in l){let h=l[u],m=x[u];if(m.min!=h.min||m.max!=h.max){m.min=h.min,m.max=h.max;let v=m.distr;m._min=v==3?Dt(m.min):v==4?Jn(m.min,m.asinh):v==100?m.fwd(m.min):m.min,m._max=v==3?Dt(m.max):v==4?Jn(m.max,m.asinh):v==100?m.fwd(m.max):m.max,o[u]=r=!0}}if(r){y.forEach((u,h)=>{i==2?h>0&&o.y&&(u._paths=null):o[u.scale]&&(u._paths=null)});for(let u in o)rl=!0,Le("setScale",u);Ne&&P.left>=0&&(Yt=st=!0)}for(let u in I)I[u]=null}function Ko(l){let o=ss(De-1,0,Re-1),r=ss(ze+1,0,Re-1);for(;l[o]==null&&o>0;)o--;for(;l[r]==null&&r<Re-1;)r++;return[o,r]}function $o(){if(Re>0){let l=y.some(o=>o._focus)&&Ke!=bt.alpha;l&&(g.globalAlpha=Ke=bt.alpha),y.forEach((o,r)=>{if(r>0&&o.show&&(Ls(r,!1),Ls(r,!0),o._paths==null)){let u=Ke;Ke!=o.alpha&&(g.globalAlpha=Ke=o.alpha);let h=i==2?[0,s[r][0].length-1]:Ko(s[r]);o._paths=o.paths(t,r,h[0],h[1]),Ke!=u&&(g.globalAlpha=Ke=u)}}),y.forEach((o,r)=>{if(r>0&&o.show){let u=Ke;Ke!=o.alpha&&(g.globalAlpha=Ke=o.alpha),o._paths!=null&&Ps(r,!1);{let h=o._paths!=null?o._paths.gaps:null,m=o.points.show(t,r,De,ze,h),v=o.points.filter(t,r,m,h);(m||v)&&(o.points._paths=o.points.paths(t,r,De,ze,v),Ps(r,!0))}Ke!=u&&(g.globalAlpha=Ke=u),Le("drawSeries",r)}}),l&&(g.globalAlpha=Ke=1)}}function Ls(l,o){let r=o?y[l].points:y[l];r._stroke=r.stroke(t,l),r._fill=r.fill(t,l)}function Ps(l,o){let r=o?y[l].points:y[l],{stroke:u,fill:h,clip:m,flags:v,_stroke:b=r._stroke,_fill:_=r._fill,_width:k=r.width}=r._paths;k=ae(k*ie,3);let T=null,z=k%2/2;o&&_==null&&(_=k>0?"#fff":b);let B=r.pxAlign==1&&z>0;if(B&&g.translate(z,z),!o){let se=qe-k/2,le=nt-k/2,Z=je+k,H=at+k;T=new Path2D,T.rect(se,le,Z,H)}o?Rn(b,k,r.dash,r.cap,_,u,h,v,m):qo(l,b,k,r.dash,r.cap,_,u,h,v,T,m),B&&g.translate(-z,-z)}function qo(l,o,r,u,h,m,v,b,_,k,T){let z=!1;_!=0&&$.forEach((B,se)=>{if(B.series[0]==l){let le=y[B.series[1]],Z=s[B.series[1]],H=(le._paths||jl).band;Vt(H)&&(H=B.dir==1?H[0]:H[1]);let R,me=null;le.show&&H&&$r(Z,De,ze)?(me=B.fill(t,se)||m,R=le._paths.clip):H=null,Rn(o,r,u,h,me,v,b,_,k,T,R,H),z=!0}}),z||Rn(o,r,u,h,m,v,b,_,k,T)}let Rs=Al|rs;function Rn(l,o,r,u,h,m,v,b,_,k,T,z){zs(l,o,r,u,h),(_||k||z)&&(g.save(),_&&g.clip(_),k&&g.clip(k)),z?(b&Rs)==Rs?(g.clip(z),T&&g.clip(T),en(h,v),Xl(l,m,o)):b&rs?(en(h,v),g.clip(z),Xl(l,m,o)):b&Al&&(g.save(),g.clip(z),T&&g.clip(T),en(h,v),g.restore(),Xl(l,m,o)):(en(h,v),Xl(l,m,o)),(_||k||z)&&g.restore()}function Xl(l,o,r){r>0&&(o instanceof Map?o.forEach((u,h)=>{g.strokeStyle=Ql=h,g.stroke(u)}):o!=null&&l&&g.stroke(o))}function en(l,o){o instanceof Map?o.forEach((r,u)=>{g.fillStyle=hl=u,g.fill(r)}):o!=null&&l&&g.fill(o)}function Jo(l,o,r,u){let h=F[l],m;if(u<=0)m=[0,0];else{let v=h._space=h.space(t,l,o,r,u),b=h._incrs=h.incrs(t,l,o,r,u,v);m=gu(o,r,b,u,v)}return h._found=m}function Fn(l,o,r,u,h,m,v,b,_,k){let T=v%2/2;O==1&&g.translate(T,T),zs(b,v,_,k,b),g.beginPath();let z,B,se,le,Z=h+(u==0||u==3?-m:m);r==0?(B=h,le=Z):(z=h,se=Z);for(let H=0;H<l.length;H++)o[H]!=null&&(r==0?z=se=l[H]:B=le=l[H],g.moveTo(z,B),g.lineTo(se,le));g.stroke(),O==1&&g.translate(-T,-T)}function Zo(l){let o=!0;return F.forEach((r,u)=>{if(!r.show)return;let h=x[r.scale];if(h.min==null){r._show&&(o=!1,r._show=!1,dl(!1));return}else r._show||(o=!1,r._show=!0,dl(!1));let m=r.side,v=m%2,{min:b,max:_}=h,[k,T]=Jo(u,b,_,v==0?j:D);if(T==0)return;let z=h.distr==2,B=r._splits=r.splits(t,u,b,_,k,T,z),se=h.distr==2?B.map(R=>ht[R]):B,le=h.distr==2?ht[B[1]]-ht[B[0]]:k,Z=r._values=r.values(t,r.filter(t,se,u,T,le),u,T,le);r._rotate=m==2?r.rotate(t,Z,u,T):0;let H=r._size;r._size=ut(r.size(t,Z,u,l)),H!=null&&r._size!=H&&(o=!1)}),o}function Qo(l){let o=!0;return As.forEach((r,u)=>{let h=r(t,u,jt,l);h!=Ot[u]&&(o=!1),Ot[u]=h}),o}function Xo(){for(let l=0;l<F.length;l++){let o=F[l];if(!o.show||!o._show)continue;let r=o.side,u=r%2,h,m,v=o.stroke(t,l),b=r==0||r==3?-1:1,[_,k]=o._found;if(o.label!=null){let Ge=o.labelGap*b,Qe=Te((o._lpos+Ge)*ie);Cs(o.labelFont[0],v,"center",r==2?"top":ni),g.save(),u==1?(h=m=0,g.translate(Qe,Te(nt+at/2)),g.rotate((r==3?-un:un)/2)):(h=Te(qe+je/2),m=Qe);let qt=ji(o.label)?o.label(t,l,_,k):o.label;g.fillText(qt,h,m),g.restore()}if(k==0)continue;let T=x[o.scale],z=u==0?je:at,B=u==0?qe:nt,se=o._splits,le=T.distr==2?se.map(Ge=>ht[Ge]):se,Z=T.distr==2?ht[se[1]]-ht[se[0]]:_,H=o.ticks,R=o.border,me=H.show?H.size:0,ye=Te(me*ie),Pe=Te((o.alignTo==2?o._size-me-o.gap:o.gap)*ie),ue=o._rotate*-un/180,_e=N(o._pos*ie),Je=(ye+Pe)*b,He=_e+Je;m=u==0?He:0,h=u==1?He:0;let ot=o.font[0],dt=o.align==1?_l:o.align==2?Kn:ue>0?_l:ue<0?Kn:u==0?"center":r==3?Kn:_l,xt=ue||u==1?"middle":r==2?"top":ni;Cs(ot,v,dt,xt);let Ze=o.font[1]*o.lineGap,rt=se.map(Ge=>N(a(Ge,T,z,B))),pt=o._values;for(let Ge=0;Ge<pt.length;Ge++){let Qe=pt[Ge];if(Qe!=null){u==0?h=rt[Ge]:m=rt[Ge],Qe=""+Qe;let qt=Qe.indexOf(`
-`)==-1?[Qe]:Qe.split(/\n/gm);for(let Be=0;Be<qt.length;Be++){let ei=qt[Be];ue?(g.save(),g.translate(h,m+Be*Ze),g.rotate(ue),g.fillText(ei,0,0),g.restore()):g.fillText(ei,h,m+Be*Ze)}}}H.show&&Fn(rt,H.filter(t,le,l,k,Z),u,r,_e,ye,ae(H.width*ie,3),H.stroke(t,l),H.dash,H.cap);let Et=o.grid;Et.show&&Fn(rt,Et.filter(t,le,l,k,Z),u,u==0?2:1,u==0?nt:qe,u==0?at:je,ae(Et.width*ie,3),Et.stroke(t,l),Et.dash,Et.cap),R.show&&Fn([_e],[1],u==0?1:0,u==0?1:2,u==1?nt:qe,u==1?at:je,ae(R.width*ie,3),R.stroke(t,l),R.dash,R.cap)}Le("drawAxes")}function dl(l){y.forEach((o,r)=>{r>0&&(o._paths=null,l&&(i==1?(o.min=null,o.max=null):o.facets.forEach(u=>{u.min=null,u.max=null})))})}let tn=!1,Vn=!1,Fl=[];function er(){Vn=!1;for(let l=0;l<Fl.length;l++)Le(...Fl[l]);Fl.length=0}function pl(){tn||(uf(Fs),tn=!0)}function tr(l,o=!1){tn=!0,Vn=o,l(t),Fs(),o&&Fl.length>0&&queueMicrotask(er)}t.batch=tr;function Fs(){if(En&&(jo(),En=!1),rl&&(No(),rl=!1),ql){if(ge(A,_l,he),ge(A,"top",ke),ge(A,Gl,j),ge(A,Bl,D),ge(M,_l,he),ge(M,"top",ke),ge(M,Gl,j),ge(M,Bl,D),ge(w,Gl,Tt),ge(w,Bl,Ht),S.width=Te(Tt*ie),S.height=Te(Ht*ie),F.forEach(({_el:l,_show:o,_size:r,_pos:u,side:h})=>{if(l!=null)if(o){let m=h===3||h===0?r:0,v=h%2==1;ge(l,v?"left":"top",u-m),ge(l,v?"width":"height",r),ge(l,v?"top":"left",v?ke:he),ge(l,v?"height":"width",v?D:j),ls(l,Qt)}else Xe(l,Qt)}),Ql=hl=Tn=Dn=zn=Cn=On=Ln=An=null,Ke=1,Nl(!0),he!=ol||ke!=Gt||j!=vt||D!=Bt){dl(!1);let l=j/vt,o=D/Bt;if(Ne&&!Yt&&P.left>=0){P.left*=l,P.top*=o,ml&&Mt(ml,Te(P.left),0,j,D),gl&&Mt(gl,0,Te(P.top),j,D);for(let r=0;r<it.length;r++){let u=it[r];u!=null&&(cl[r]*=l,al[r]*=o,Mt(u,ut(cl[r]),ut(al[r]),j,D))}}if(pe.show&&!Jl&&pe.left>=0&&pe.width>0){pe.left*=l,pe.width*=l,pe.top*=o,pe.height*=o;for(let r in Bn)ge(vl,r,pe[r])}ol=he,Gt=ke,vt=j,Bt=D}Le("setSize"),ql=!1}Tt>0&&Ht>0&&(g.clearRect(0,0,S.width,S.height),Le("drawClear"),U.forEach(l=>l()),Le("draw")),pe.show&&Jl&&(ln(pe),Jl=!1),Ne&&Yt&&($t(null,!0,!1),Yt=!1),J.show&&J.live&&st&&(Hn(),st=!1),d||(d=!0,t.status=1,Le("ready")),Rl=!1,tn=!1}t.redraw=(l,o)=>{rl=o||!1,l!==!1?Pt(C,E.min,E.max):pl()};function In(l,o){let r=x[l];if(r.from==null){if(Re==0){let u=r.range(t,o.min,o.max,l);o.min=u[0],o.max=u[1]}if(o.min>o.max){let u=o.min;o.min=o.max,o.max=u}if(Re>1&&o.min!=null&&o.max!=null&&o.max-o.min<1e-16)return;l==C&&r.distr==2&&Re>0&&(o.min=gt(o.min,s[0]),o.max=gt(o.max,s[0]),o.min==o.max&&o.max++),I[l]=o,En=!0,pl()}}t.setScale=In;let Nn,Wn,ml,gl,Vs,Is,wl,Sl,Ns,Ws,de,ve,Lt=!1,Fe=P.drag,Ce=Fe.x,Oe=Fe.y;Ne&&(P.x&&(Nn=ft(Or,M)),P.y&&(Wn=ft(Lr,M)),E.ori==0?(ml=Nn,gl=Wn):(ml=Wn,gl=Nn),de=P.left,ve=P.top);let pe=t.select=Ee({show:!0,over:!0,left:0,width:0,top:0,height:0},e.select),vl=pe.show?ft(Cr,pe.over?M:A):null;function ln(l,o){if(pe.show){for(let r in l)pe[r]=l[r],r in Bn&&ge(vl,r,l[r]);o!==!1&&Le("setSelect")}}t.setSelect=ln;function lr(l){if(y[l].show)Me&&ls(be[l],Qt);else if(Me&&Xe(be[l],Qt),Ne){let r=ul?it[0]:it[l];r!=null&&Mt(r,-10,-10,j,D)}}function Pt(l,o,r){In(l,{min:o,max:r})}function yt(l,o,r,u){o.focus!=null&&rr(l),o.show!=null&&y.forEach((h,m)=>{m>0&&(l==m||l==null)&&(h.show=o.show,lr(m),i==2?(Pt(h.facets[0].scale,null,null),Pt(h.facets[1].scale,null,null)):Pt(h.scale,null,null),pl())}),r!==!1&&Le("setSeries",l,o),u&&Wl("setSeries",t,l,o)}t.setSeries=yt;function nr(l,o){Ee($[l],o)}function sr(l,o){l.fill=X(l.fill||null),l.dir=ne(l.dir,-1),o=o??$.length,$.splice(o,0,l)}function ir(l){l==null?$.length=0:$.splice(l,1)}t.addBand=sr,t.setBand=nr,t.delBand=ir;function or(l,o){y[l].alpha=o,Ne&&it[l]!=null&&(it[l].style.opacity=o),Me&&be[l]&&(be[l].style.opacity=o)}let At,Rt,Kt,bl={focus:!0};function rr(l){if(l!=Kt){let o=l==null,r=bt.alpha!=1;y.forEach((u,h)=>{if(i==1||h>0){let m=o||h==0||h==l;u._focus=o?null:m,r&&or(h,m?1:bt.alpha)}}),Kt=l,r&&pl()}}Me&&fl&&We(ri,oe,l=>{P._lock||(Ut(l),Kt!=null&&yt(null,bl,!0,xe.setSeries))});function _t(l,o,r){let u=x[o];r&&(l=l/ie-(u.ori==1?ke:he));let h=j;u.ori==1&&(h=D,l=h-l),u.dir==-1&&(l=h-l);let m=u._min,v=u._max,b=l/h,_=m+(v-m)*b,k=u.distr;return k==3?Ml(10,_):k==4?Jr(_,u.asinh):k==100?u.bwd(_):_}function fr(l,o){let r=_t(l,C,o);return gt(r,s[0],De,ze)}t.valToIdx=l=>gt(l,s[0]),t.posToIdx=fr,t.posToVal=_t,t.valToPos=(l,o,r)=>x[o].ori==0?c(l,x[o],r?je:j,r?qe:0):f(l,x[o],r?at:D,r?nt:0),t.setCursor=(l,o,r)=>{de=l.left,ve=l.top,$t(null,o,r)};function Hs(l,o){ge(vl,_l,pe.left=l),ge(vl,Gl,pe.width=o)}function Gs(l,o){ge(vl,"top",pe.top=l),ge(vl,Bl,pe.height=o)}let Vl=E.ori==0?Hs:Gs,Il=E.ori==1?Hs:Gs;function ur(){if(Me&&J.live)for(let l=i==2?1:0;l<y.length;l++){if(l==0&&lt)continue;let o=J.values[l],r=0;for(let u in o)St[l][r++].firstChild.nodeValue=o[u]}}function Hn(l,o){if(l!=null&&(l.idxs?l.idxs.forEach((r,u)=>{fe[u]=r}):ef(l.idx)||fe.fill(l.idx),J.idx=fe[0]),Me&&J.live){for(let r=0;r<y.length;r++)(r>0||i==1&&!lt)&&cr(r,fe[r]);ur()}st=!1,o!==!1&&Le("setLegend")}t.setLegend=Hn;function cr(l,o){let r=y[l],u=l==0&&K==2?ht:s[l],h;lt?h=r.values(t,l,o)??Ct:(h=r.value(t,o==null?null:u[o],l,o),h=h==null?Ct:{_:h}),J.values[l]=h}function $t(l,o,r){Ns=de,Ws=ve,[de,ve]=P.move(t,de,ve),P.left=de,P.top=ve,Ne&&(ml&&Mt(ml,Te(de),0,j,D),gl&&Mt(gl,0,Te(ve),j,D));let u,h=De>ze;At=ce,Rt=null;let m=E.ori==0?j:D,v=E.ori==1?j:D;if(de<0||Re==0||h){u=P.idx=null;for(let b=0;b<y.length;b++){let _=it[b];_!=null&&Mt(_,-10,-10,j,D)}fl&&yt(null,bl,!0,l==null&&xe.setSeries),J.live&&(fe.fill(u),st=!0)}else{let b,_,k;i==1&&(b=E.ori==0?de:ve,_=_t(b,C),u=P.idx=gt(_,s[0],De,ze),k=L(s[0][u],E,m,0));let T=-10,z=-10,B=0,se=0,le=!0,Z="",H="";for(let R=i==2?1:0;R<y.length;R++){let me=y[R],ye=fe[R],Pe=ye==null?null:i==1?s[R][ye]:s[R][1][ye],ue=P.dataIdx(t,R,u,_),_e=ue==null?null:i==1?s[R][ue]:s[R][1][ue];if(st=st||_e!=Pe||ue!=ye,fe[R]=ue,R>0&&me.show){let Je=ue==null?-10:ue==u?k:L(i==1?s[0][ue]:s[R][0][ue],E,m,0),He=_e==null?-10:G(_e,i==1?x[me.scale]:x[me.facets[1].scale],v,0);if(fl&&_e!=null){let ot=E.ori==1?de:ve,dt=Ae(bt.dist(t,R,ue,He,ot));if(dt<At){let xt=bt.bias;if(xt!=0){let Ze=_t(ot,me.scale),rt=_e>=0?1:-1,pt=Ze>=0?1:-1;pt==rt&&(pt==1?xt==1?_e>=Ze:_e<=Ze:xt==1?_e<=Ze:_e>=Ze)&&(At=dt,Rt=R)}else At=dt,Rt=R}}if(st||ul){let ot,dt;E.ori==0?(ot=Je,dt=He):(ot=He,dt=Je);let xt,Ze,rt,pt,Et,Ge,Qe=!0,qt=Ie.bbox;if(qt!=null){Qe=!1;let Be=qt(t,R);rt=Be.left,pt=Be.top,xt=Be.width,Ze=Be.height}else rt=ot,pt=dt,xt=Ze=Ie.size(t,R);if(Ge=Ie.fill(t,R),Et=Ie.stroke(t,R),ul)R==Rt&&At<=bt.prox&&(T=rt,z=pt,B=xt,se=Ze,le=Qe,Z=Ge,H=Et);else{let Be=it[R];Be!=null&&(cl[R]=rt,al[R]=pt,pi(Be,xt,Ze,Qe),hi(Be,Ge,Et),Mt(Be,ut(rt),ut(pt),j,D))}}}}if(ul){let R=bt.prox,me=Kt==null?At<=R:At>R||Rt!=Kt;if(st||me){let ye=it[0];ye!=null&&(cl[0]=T,al[0]=z,pi(ye,B,se,le),hi(ye,Z,H),Mt(ye,ut(T),ut(z),j,D))}}}if(pe.show&&Lt)if(l!=null){let[b,_]=xe.scales,[k,T]=xe.match,[z,B]=l.cursor.sync.scales,se=l.cursor.drag;if(Ce=se._x,Oe=se._y,Ce||Oe){let{left:le,top:Z,width:H,height:R}=l.select,me=l.scales[z].ori,ye=l.posToVal,Pe,ue,_e,Je,He,ot=b!=null&&k(b,z),dt=_!=null&&T(_,B);ot&&Ce?(me==0?(Pe=le,ue=H):(Pe=Z,ue=R),_e=x[b],Je=L(ye(Pe,z),_e,m,0),He=L(ye(Pe+ue,z),_e,m,0),Vl(wt(Je,He),Ae(He-Je))):Vl(0,m),dt&&Oe?(me==1?(Pe=le,ue=H):(Pe=Z,ue=R),_e=x[_],Je=G(ye(Pe,B),_e,v,0),He=G(ye(Pe+ue,B),_e,v,0),Il(wt(Je,He),Ae(He-Je))):Il(0,v)}else Yn()}else{let b=Ae(Ns-Vs),_=Ae(Ws-Is);if(E.ori==1){let B=b;b=_,_=B}Ce=Fe.x&&b>=Fe.dist,Oe=Fe.y&&_>=Fe.dist;let k=Fe.uni;k!=null?Ce&&Oe&&(Ce=b>=k,Oe=_>=k,!Ce&&!Oe&&(_>b?Oe=!0:Ce=!0)):Fe.x&&Fe.y&&(Ce||Oe)&&(Ce=Oe=!0);let T,z;Ce&&(E.ori==0?(T=wl,z=de):(T=Sl,z=ve),Vl(wt(T,z),Ae(z-T)),Oe||Il(0,v)),Oe&&(E.ori==1?(T=wl,z=de):(T=Sl,z=ve),Il(wt(T,z),Ae(z-T)),Ce||Vl(0,m)),!Ce&&!Oe&&(Vl(0,0),Il(0,0))}if(Fe._x=Ce,Fe._y=Oe,l==null){if(r){if(Xs!=null){let[b,_]=xe.scales;xe.values[0]=b!=null?_t(E.ori==0?de:ve,b):null,xe.values[1]=_!=null?_t(E.ori==1?de:ve,_):null}Wl($n,t,de,ve,j,D,u)}if(fl){let b=r&&xe.setSeries,_=bt.prox;Kt==null?At<=_&&yt(Rt,bl,!0,b):At>_?yt(null,bl,!0,b):Rt!=Kt&&yt(Rt,bl,!0,b)}}st&&(J.idx=u,Hn()),o!==!1&&Le("setCursor")}let Ft=null;Object.defineProperty(t,"rect",{get(){return Ft==null&&Nl(!1),Ft}});function Nl(l=!1){l?Ft=null:(Ft=M.getBoundingClientRect(),Le("syncRect",Ft))}function Bs(l,o,r,u,h,m,v){P._lock||Lt&&l!=null&&l.movementX==0&&l.movementY==0||(Gn(l,o,r,u,h,m,v,!1,l!=null),l!=null?$t(null,!0,!0):$t(o,!0,!1))}function Gn(l,o,r,u,h,m,v,b,_){if(Ft==null&&Nl(!1),Ut(l),l!=null)r=l.clientX-Ft.left,u=l.clientY-Ft.top;else{if(r<0||u<0){de=-10,ve=-10;return}let[k,T]=xe.scales,z=o.cursor.sync,[B,se]=z.values,[le,Z]=z.scales,[H,R]=xe.match,me=o.axes[0].side%2==1,ye=E.ori==0?j:D,Pe=E.ori==1?j:D,ue=me?m:h,_e=me?h:m,Je=me?u:r,He=me?r:u;if(le!=null?r=H(k,le)?a(B,x[k],ye,0):-10:r=ye*(Je/ue),Z!=null?u=R(T,Z)?a(se,x[T],Pe,0):-10:u=Pe*(He/_e),E.ori==1){let ot=r;r=u,u=ot}}_&&(o==null||o.cursor.event.type==$n)&&((r<=1||r>=j-1)&&(r=Jt(r,j)),(u<=1||u>=D-1)&&(u=Jt(u,D))),b?(Vs=r,Is=u,[wl,Sl]=P.move(t,r,u)):(de=r,ve=u)}let Bn={width:0,height:0,left:0,top:0};function Yn(){ln(Bn,!1)}let Ys,Us,js,Ks;function $s(l,o,r,u,h,m,v){Lt=!0,Ce=Oe=Fe._x=Fe._y=!1,Gn(l,o,r,u,h,m,v,!0,!1),l!=null&&(We(qn,es,qs,!1),Wl(ii,t,wl,Sl,j,D,null));let{left:b,top:_,width:k,height:T}=pe;Ys=b,Us=_,js=k,Ks=T}function qs(l,o,r,u,h,m,v){Lt=Fe._x=Fe._y=!1,Gn(l,o,r,u,h,m,v,!1,!0);let{left:b,top:_,width:k,height:T}=pe,z=k>0||T>0,B=Ys!=b||Us!=_||js!=k||Ks!=T;if(z&&B&&ln(pe),Fe.setScale&&z&&B){let se=b,le=k,Z=_,H=T;if(E.ori==1&&(se=_,le=T,Z=b,H=k),Ce&&Pt(C,_t(se,C),_t(se+le,C)),Oe)for(let R in x){let me=x[R];R!=C&&me.from==null&&me.min!=ce&&Pt(R,_t(Z+H,R),_t(Z,R))}Yn()}else P.lock&&(P._lock=!P._lock,$t(o,!0,l!=null));l!=null&&(il(qn,es),Wl(qn,t,de,ve,j,D,null))}function ar(l,o,r,u,h,m,v){if(P._lock)return;Ut(l);let b=Lt;if(Lt){let _=!0,k=!0,T=10,z,B;E.ori==0?(z=Ce,B=Oe):(z=Oe,B=Ce),z&&B&&(_=de<=T||de>=j-T,k=ve<=T||ve>=D-T),z&&_&&(de=de<wl?0:j),B&&k&&(ve=ve<Sl?0:D),$t(null,!0,!0),Lt=!1}de=-10,ve=-10,fe.fill(null),$t(null,!0,!0),b&&(Lt=b)}function Js(l,o,r,u,h,m,v){P._lock||(Ut(l),kn(),Yn(),l!=null&&Wl(fi,t,de,ve,j,D,null))}function Zs(){F.forEach(wu),Mn(t.width,t.height,!0)}Xt(cn,El,Zs);let yl={};yl.mousedown=$s,yl.mousemove=Bs,yl.mouseup=qs,yl.dblclick=Js,yl.setSeries=(l,o,r,u)=>{let h=xe.match[2];r=h(t,o,r),r!=-1&&yt(r,u,!0,!1)},Ne&&(We(ii,M,$s),We($n,M,Bs),We(oi,M,l=>{Ut(l),Nl(!1)}),We(ri,M,ar),We(fi,M,Js),fs.add(t),t.syncRect=Nl);let nn=t.hooks=e.hooks||{};function Le(l,o,r){Vn?Fl.push([l,o,r]):l in nn&&nn[l].forEach(u=>{u.call(null,t,o,r)})}(e.plugins||[]).forEach(l=>{for(let o in l.hooks)nn[o]=(nn[o]||[]).concat(l.hooks[o])});let Qs=(l,o,r)=>r,xe=Ee({key:null,setSeries:!1,filters:{pub:vi,sub:vi},scales:[C,y[1]?y[1].scale:null],match:[bi,bi,Qs],values:[null,null]},P.sync);xe.match.length==2&&xe.match.push(Qs),P.sync=xe;let Xs=xe.key,Un=wo(Xs);function Wl(l,o,r,u,h,m,v){xe.filters.pub(l,o,r,u,h,m,v)&&Un.pub(l,o,r,u,h,m,v)}Un.sub(t);function hr(l,o,r,u,h,m,v){xe.filters.sub(l,o,r,u,h,m,v)&&yl[l](null,o,r,u,h,m,v)}t.pub=hr;function dr(){Un.unsub(t),fs.delete(t),Wt.clear(),ns(cn,El,Zs),p.remove(),oe?.remove(),Le("destroy")}t.destroy=dr;function jn(){Le("init",e,s),Ds(s||e.data,!1),I[C]?In(C,I[C]):kn(),Jl=pe.show&&(pe.width>0||pe.height>0),Yt=st=!0,Mn(e.width,e.height)}return y.forEach(Ts),F.forEach(Uo),n?n instanceof HTMLElement?(n.appendChild(p),jn()):n(t,jn):jn(),t}Ve.assign=Ee;Ve.fmtNum=ms;Ve.rangeNum=an;Ve.rangeLog=pn;Ve.rangeAsinh=ds;Ve.orient=tl;Ve.pxRatio=ie;Ve.join=ff;Ve.fmtDate=ws,Ve.tzDate=vf;Ve.sync=wo;{Ve.addGap=tu,Ve.clipGaps=wn;let e=Ve.paths={points:xo};e.linear=Mo,e.stepped=su,e.bars=iu,e.spline=ru}function ll(e,s,n){let t=n.initialDeps??[],i;function c(){var f,a,d,p;let S;n.key&&((f=n.debug)!=null&&f.call(n))&&(S=Date.now());let g=e();if(!(g.length!==t.length||g.some((M,O)=>t[O]!==M)))return i;t=g;let A;if(n.key&&((a=n.debug)!=null&&a.call(n))&&(A=Date.now()),i=s(...g),n.key&&((d=n.debug)!=null&&d.call(n))){let M=Math.round((Date.now()-S)*100)/100,O=Math.round((Date.now()-A)*100)/100,N=O/16,W=(y,F)=>{for(y=String(y);y.length<F;)y=" "+y;return y};console.info(`%c\u23F1 ${W(O,5)} /${W(M,5)} ms`,`
+var DvbVendor = "use strict";var DvbVendor=(()=>{var pr=Object.create;var sn=Object.defineProperty;var mr=Object.getOwnPropertyDescriptor;var gr=Object.getOwnPropertyNames;var wr=Object.getPrototypeOf,Sr=Object.prototype.hasOwnProperty;var vr=(e=>typeof require<"u"?require:typeof Proxy<"u"?new Proxy(e,{get:(s,n)=>(typeof require<"u"?require:s)[n]}):e)(function(e){if(typeof require<"u")return require.apply(this,arguments);throw Error('Dynamic require of "'+e+'" is not supported')});var br=(e,s)=>{for(var n in s)sn(e,n,{get:s[n],enumerable:!0})},ti=(e,s,n,t)=>{if(s&&typeof s=="object"||typeof s=="function")for(let i of gr(s))!Sr.call(e,i)&&i!==n&&sn(e,i,{get:()=>s[i],enumerable:!(t=mr(s,i))||t.enumerable});return e};var yr=(e,s,n)=>(n=e!=null?pr(wr(e)):{},ti(s||!e||!e.__esModule?sn(n,"default",{value:e,enumerable:!0}):n,e)),_r=e=>ti(sn({},"__esModule",{value:!0}),e);var xu={};br(xu,{Virtualizer:()=>_l,elementScroll:()=>fn,observeElementOffset:()=>rn,observeElementRect:()=>on,uPlot:()=>Ve,useVirtualizer:()=>ci});var Vt=yr(vr("react"),1);var li=e=>e();function Jt(e,s,n){let t=n.initialDeps??[],i;function c(){var f,a,d,p;let S;n.key&&((f=n.debug)!=null&&f.call(n))&&(S=Date.now());let g=e();if(!(g.length!==t.length||g.some((M,O)=>t[O]!==M)))return i;t=g;let A;if(n.key&&((a=n.debug)!=null&&a.call(n))&&(A=Date.now()),i=s(...g),n.key&&((d=n.debug)!=null&&d.call(n))){let M=Math.round((Date.now()-S)*100)/100,O=Math.round((Date.now()-A)*100)/100,N=O/16,W=(y,F)=>{for(y=String(y);y.length<F;)y=" "+y;return y};console.info(`%c\u23F1 ${W(O,5)} /${W(M,5)} ms`,`
             font-size: .6rem;
             font-weight: bold;
-            color: hsl(${Math.max(0,Math.min(120-120*N,120))}deg 100% 31%);`,n?.key)}return(p=n?.onChange)==null||p.call(n,i),i}return c.updateDeps=f=>{t=f},c}function Es(e,s){if(e===void 0)throw new Error(`Unexpected undefined${s?`: ${s}`:""}`);return e}var Do=(e,s)=>Math.abs(e-s)<1.01,zo=(e,s,n)=>{let t;return function(...i){e.clearTimeout(t),t=e.setTimeout(()=>s.apply(this,i),n)}};var Co=e=>{let{offsetWidth:s,offsetHeight:n}=e;return{width:s,height:n}},Su=e=>e,vu=e=>{let s=Math.max(e.startIndex-e.overscan,0),n=Math.min(e.endIndex+e.overscan,e.count-1),t=[];for(let i=s;i<=n;i++)t.push(i);return t},yn=(e,s)=>{let n=e.scrollElement;if(!n)return;let t=e.targetWindow;if(!t)return;let i=f=>{let{width:a,height:d}=f;s({width:Math.round(a),height:Math.round(d)})};if(i(Co(n)),!t.ResizeObserver)return()=>{};let c=new t.ResizeObserver(f=>{let a=()=>{let d=f[0];if(d?.borderBoxSize){let p=d.borderBoxSize[0];if(p){i({width:p.inlineSize,height:p.blockSize});return}}i(Co(n))};e.options.useAnimationFrameWithResizeObserver?requestAnimationFrame(a):a()});return c.observe(n,{box:"border-box"}),()=>{c.unobserve(n)}},Oo={passive:!0};var Lo=typeof window>"u"?!0:"onscrollend"in window,_n=(e,s)=>{let n=e.scrollElement;if(!n)return;let t=e.targetWindow;if(!t)return;let i=0,c=e.options.useScrollendEvent&&Lo?()=>{}:zo(t,()=>{s(i,!1)},e.options.isScrollingResetDelay),f=S=>()=>{let{horizontal:g,isRtl:w}=e.options;i=g?n.scrollLeft*(w&&-1||1):n.scrollTop,c(),s(i,S)},a=f(!0),d=f(!1);d(),n.addEventListener("scroll",a,Oo);let p=e.options.useScrollendEvent&&Lo;return p&&n.addEventListener("scrollend",d,Oo),()=>{n.removeEventListener("scroll",a),p&&n.removeEventListener("scrollend",d)}};var bu=(e,s,n)=>{if(s?.borderBoxSize){let t=s.borderBoxSize[0];if(t)return Math.round(t[n.options.horizontal?"inlineSize":"blockSize"])}return e[n.options.horizontal?"offsetWidth":"offsetHeight"]};var xn=(e,{adjustments:s=0,behavior:n},t)=>{var i,c;let f=e+s;(c=(i=t.scrollElement)==null?void 0:i.scrollTo)==null||c.call(i,{[t.options.horizontal?"left":"top"]:f,behavior:n})},Ol=class{constructor(s){this.unsubs=[],this.scrollElement=null,this.targetWindow=null,this.isScrolling=!1,this.measurementsCache=[],this.itemSizeCache=new Map,this.pendingMeasuredCacheIndexes=[],this.scrollRect=null,this.scrollOffset=null,this.scrollDirection=null,this.scrollAdjustments=0,this.elementsCache=new Map,this.observer=(()=>{let n=null,t=()=>n||(!this.targetWindow||!this.targetWindow.ResizeObserver?null:n=new this.targetWindow.ResizeObserver(i=>{i.forEach(c=>{let f=()=>{this._measureElement(c.target,c)};this.options.useAnimationFrameWithResizeObserver?requestAnimationFrame(f):f()})}));return{disconnect:()=>{var i;(i=t())==null||i.disconnect(),n=null},observe:i=>{var c;return(c=t())==null?void 0:c.observe(i,{box:"border-box"})},unobserve:i=>{var c;return(c=t())==null?void 0:c.unobserve(i)}}})(),this.range=null,this.setOptions=n=>{Object.entries(n).forEach(([t,i])=>{typeof i>"u"&&delete n[t]}),this.options={debug:!1,initialOffset:0,overscan:1,paddingStart:0,paddingEnd:0,scrollPaddingStart:0,scrollPaddingEnd:0,horizontal:!1,getItemKey:Su,rangeExtractor:vu,onChange:()=>{},measureElement:bu,initialRect:{width:0,height:0},scrollMargin:0,gap:0,indexAttribute:"data-index",initialMeasurementsCache:[],lanes:1,isScrollingResetDelay:150,enabled:!0,isRtl:!1,useScrollendEvent:!1,useAnimationFrameWithResizeObserver:!1,...n}},this.notify=n=>{var t,i;(i=(t=this.options).onChange)==null||i.call(t,this,n)},this.maybeNotify=ll(()=>(this.calculateRange(),[this.isScrolling,this.range?this.range.startIndex:null,this.range?this.range.endIndex:null]),n=>{this.notify(n)},{key:!1,debug:()=>this.options.debug,initialDeps:[this.isScrolling,this.range?this.range.startIndex:null,this.range?this.range.endIndex:null]}),this.cleanup=()=>{this.unsubs.filter(Boolean).forEach(n=>n()),this.unsubs=[],this.observer.disconnect(),this.scrollElement=null,this.targetWindow=null},this._didMount=()=>()=>{this.cleanup()},this._willUpdate=()=>{var n;let t=this.options.enabled?this.options.getScrollElement():null;if(this.scrollElement!==t){if(this.cleanup(),!t){this.maybeNotify();return}this.scrollElement=t,this.scrollElement&&"ownerDocument"in this.scrollElement?this.targetWindow=this.scrollElement.ownerDocument.defaultView:this.targetWindow=((n=this.scrollElement)==null?void 0:n.window)??null,this.elementsCache.forEach(i=>{this.observer.observe(i)}),this._scrollToOffset(this.getScrollOffset(),{adjustments:void 0,behavior:void 0}),this.unsubs.push(this.options.observeElementRect(this,i=>{this.scrollRect=i,this.maybeNotify()})),this.unsubs.push(this.options.observeElementOffset(this,(i,c)=>{this.scrollAdjustments=0,this.scrollDirection=c?this.getScrollOffset()<i?"forward":"backward":null,this.scrollOffset=i,this.isScrolling=c,this.maybeNotify()}))}},this.getSize=()=>this.options.enabled?(this.scrollRect=this.scrollRect??this.options.initialRect,this.scrollRect[this.options.horizontal?"width":"height"]):(this.scrollRect=null,0),this.getScrollOffset=()=>this.options.enabled?(this.scrollOffset=this.scrollOffset??(typeof this.options.initialOffset=="function"?this.options.initialOffset():this.options.initialOffset),this.scrollOffset):(this.scrollOffset=null,0),this.getFurthestMeasurement=(n,t)=>{let i=new Map,c=new Map;for(let f=t-1;f>=0;f--){let a=n[f];if(i.has(a.lane))continue;let d=c.get(a.lane);if(d==null||a.end>d.end?c.set(a.lane,a):a.end<d.end&&i.set(a.lane,!0),i.size===this.options.lanes)break}return c.size===this.options.lanes?Array.from(c.values()).sort((f,a)=>f.end===a.end?f.index-a.index:f.end-a.end)[0]:void 0},this.getMeasurementOptions=ll(()=>[this.options.count,this.options.paddingStart,this.options.scrollMargin,this.options.getItemKey,this.options.enabled],(n,t,i,c,f)=>(this.pendingMeasuredCacheIndexes=[],{count:n,paddingStart:t,scrollMargin:i,getItemKey:c,enabled:f}),{key:!1}),this.getMeasurements=ll(()=>[this.getMeasurementOptions(),this.itemSizeCache],({count:n,paddingStart:t,scrollMargin:i,getItemKey:c,enabled:f},a)=>{if(!f)return this.measurementsCache=[],this.itemSizeCache.clear(),[];this.measurementsCache.length===0&&(this.measurementsCache=this.options.initialMeasurementsCache,this.measurementsCache.forEach(S=>{this.itemSizeCache.set(S.key,S.size)}));let d=this.pendingMeasuredCacheIndexes.length>0?Math.min(...this.pendingMeasuredCacheIndexes):0;this.pendingMeasuredCacheIndexes=[];let p=this.measurementsCache.slice(0,d);for(let S=d;S<n;S++){let g=c(S),w=this.options.lanes===1?p[S-1]:this.getFurthestMeasurement(p,S),A=w?w.end+this.options.gap:t+i,M=a.get(g),O=typeof M=="number"?M:this.options.estimateSize(S),N=A+O,W=w?w.lane:S%this.options.lanes;p[S]={index:S,start:A,size:O,end:N,key:g,lane:W}}return this.measurementsCache=p,p},{key:!1,debug:()=>this.options.debug}),this.calculateRange=ll(()=>[this.getMeasurements(),this.getSize(),this.getScrollOffset(),this.options.lanes],(n,t,i,c)=>this.range=n.length>0&&t>0?yu({measurements:n,outerSize:t,scrollOffset:i,lanes:c}):null,{key:!1,debug:()=>this.options.debug}),this.getVirtualIndexes=ll(()=>{let n=null,t=null,i=this.calculateRange();return i&&(n=i.startIndex,t=i.endIndex),this.maybeNotify.updateDeps([this.isScrolling,n,t]),[this.options.rangeExtractor,this.options.overscan,this.options.count,n,t]},(n,t,i,c,f)=>c===null||f===null?[]:n({startIndex:c,endIndex:f,overscan:t,count:i}),{key:!1,debug:()=>this.options.debug}),this.indexFromElement=n=>{let t=this.options.indexAttribute,i=n.getAttribute(t);return i?parseInt(i,10):(console.warn(`Missing attribute name '${t}={index}' on measured element.`),-1)},this._measureElement=(n,t)=>{let i=this.indexFromElement(n),c=this.measurementsCache[i];if(!c)return;let f=c.key,a=this.elementsCache.get(f);a!==n&&(a&&this.observer.unobserve(a),this.observer.observe(n),this.elementsCache.set(f,n)),n.isConnected&&this.resizeItem(i,this.options.measureElement(n,t,this))},this.resizeItem=(n,t)=>{let i=this.measurementsCache[n];if(!i)return;let c=this.itemSizeCache.get(i.key)??i.size,f=t-c;f!==0&&((this.shouldAdjustScrollPositionOnItemSizeChange!==void 0?this.shouldAdjustScrollPositionOnItemSizeChange(i,f,this):i.start<this.getScrollOffset()+this.scrollAdjustments)&&this._scrollToOffset(this.getScrollOffset(),{adjustments:this.scrollAdjustments+=f,behavior:void 0}),this.pendingMeasuredCacheIndexes.push(i.index),this.itemSizeCache=new Map(this.itemSizeCache.set(i.key,t)),this.notify(!1))},this.measureElement=n=>{if(!n){this.elementsCache.forEach((t,i)=>{t.isConnected||(this.observer.unobserve(t),this.elementsCache.delete(i))});return}this._measureElement(n,void 0)},this.getVirtualItems=ll(()=>[this.getVirtualIndexes(),this.getMeasurements()],(n,t)=>{let i=[];for(let c=0,f=n.length;c<f;c++){let a=n[c],d=t[a];i.push(d)}return i},{key:!1,debug:()=>this.options.debug}),this.getVirtualItemForOffset=n=>{let t=this.getMeasurements();if(t.length!==0)return Es(t[Po(0,t.length-1,i=>Es(t[i]).start,n)])},this.getOffsetForAlignment=(n,t,i=0)=>{let c=this.getSize(),f=this.getScrollOffset();t==="auto"&&(t=n>=f+c?"end":"start"),t==="center"?n+=(i-c)/2:t==="end"&&(n-=c);let a=this.getTotalSize()+this.options.scrollMargin-c;return Math.max(Math.min(a,n),0)},this.getOffsetForIndex=(n,t="auto")=>{n=Math.max(0,Math.min(n,this.options.count-1));let i=this.measurementsCache[n];if(!i)return;let c=this.getSize(),f=this.getScrollOffset();if(t==="auto")if(i.end>=f+c-this.options.scrollPaddingEnd)t="end";else if(i.start<=f+this.options.scrollPaddingStart)t="start";else return[f,t];let a=t==="end"?i.end+this.options.scrollPaddingEnd:i.start-this.options.scrollPaddingStart;return[this.getOffsetForAlignment(a,t,i.size),t]},this.isDynamicMode=()=>this.elementsCache.size>0,this.scrollToOffset=(n,{align:t="start",behavior:i}={})=>{i==="smooth"&&this.isDynamicMode()&&console.warn("The `smooth` scroll behavior is not fully supported with dynamic size."),this._scrollToOffset(this.getOffsetForAlignment(n,t),{adjustments:void 0,behavior:i})},this.scrollToIndex=(n,{align:t="auto",behavior:i}={})=>{i==="smooth"&&this.isDynamicMode()&&console.warn("The `smooth` scroll behavior is not fully supported with dynamic size."),n=Math.max(0,Math.min(n,this.options.count-1));let c=0,f=10,a=p=>{if(!this.targetWindow)return;let S=this.getOffsetForIndex(n,p);if(!S){console.warn("Failed to get offset for index:",n);return}let[g,w]=S;this._scrollToOffset(g,{adjustments:void 0,behavior:i}),this.targetWindow.requestAnimationFrame(()=>{let A=this.getScrollOffset(),M=this.getOffsetForIndex(n,w);if(!M){console.warn("Failed to get offset for index:",n);return}Do(M[0],A)||d(w)})},d=p=>{this.targetWindow&&(c++,c<f?this.targetWindow.requestAnimationFrame(()=>a(p)):console.warn(`Failed to scroll to index ${n} after ${f} attempts.`))};a(t)},this.scrollBy=(n,{behavior:t}={})=>{t==="smooth"&&this.isDynamicMode()&&console.warn("The `smooth` scroll behavior is not fully supported with dynamic size."),this._scrollToOffset(this.getScrollOffset()+n,{adjustments:void 0,behavior:t})},this.getTotalSize=()=>{var n;let t=this.getMeasurements(),i;if(t.length===0)i=this.options.paddingStart;else if(this.options.lanes===1)i=((n=t[t.length-1])==null?void 0:n.end)??0;else{let c=Array(this.options.lanes).fill(null),f=t.length-1;for(;f>=0&&c.some(a=>a===null);){let a=t[f];c[a.lane]===null&&(c[a.lane]=a.end),f--}i=Math.max(...c.filter(a=>a!==null))}return Math.max(i-this.options.scrollMargin+this.options.paddingEnd,0)},this._scrollToOffset=(n,{adjustments:t,behavior:i})=>{this.options.scrollToFn(n,{behavior:i,adjustments:t},this)},this.measure=()=>{this.itemSizeCache=new Map,this.notify(!1)},this.setOptions(s)}},Po=(e,s,n,t)=>{for(;e<=s;){let i=(e+s)/2|0,c=n(i);if(c<t)e=i+1;else if(c>t)s=i-1;else return i}return e>0?e-1:0};function yu({measurements:e,outerSize:s,scrollOffset:n,lanes:t}){let i=e.length-1,c=d=>e[d].start;if(e.length<=t)return{startIndex:0,endIndex:i};let f=Po(0,i,c,n),a=f;if(t===1)for(;a<i&&e[a].end<n+s;)a++;else if(t>1){let d=Array(t).fill(0);for(;a<i&&d.some(S=>S<n+s);){let S=e[a];d[S.lane]=S.end,a++}let p=Array(t).fill(n+s);for(;f>=0&&p.some(S=>S>=n);){let S=e[f];p[S.lane]=S.start,f--}f=Math.max(0,f-f%t),a=Math.min(i,a+(t-1-a%t))}return{startIndex:f,endIndex:a}}var Nt=yr(vr("react"),1);var Ro=e=>e();var Fo=typeof document<"u"?Nt.useLayoutEffect:Nt.useEffect;function _u(e){let s=Nt.useReducer(()=>({}),{})[1],n={...e,onChange:(i,c)=>{var f;c?Ro(s):s(),(f=e.onChange)==null||f.call(e,i,c)}},[t]=Nt.useState(()=>new Ol(n));return t.setOptions(n),Fo(()=>t._didMount(),[]),Fo(()=>t._willUpdate()),t}function Vo(e){return _u({observeElementRect:yn,observeElementOffset:_n,scrollToFn:xn,...e})}return _r(xu);})();
+            color: hsl(${Math.max(0,Math.min(120-120*N,120))}deg 100% 31%);`,n?.key)}return(p=n?.onChange)==null||p.call(n,i),i}return c.updateDeps=f=>{t=f},c}function Kn(e,s){if(e===void 0)throw new Error(`Unexpected undefined${s?`: ${s}`:""}`);return e}var ni=(e,s)=>Math.abs(e-s)<1.01,si=(e,s,n)=>{let t;return function(...i){e.clearTimeout(t),t=e.setTimeout(()=>s.apply(this,i),n)}};var ii=e=>{let{offsetWidth:s,offsetHeight:n}=e;return{width:s,height:n}},xr=e=>e,Er=e=>{let s=Math.max(e.startIndex-e.overscan,0),n=Math.min(e.endIndex+e.overscan,e.count-1),t=[];for(let i=s;i<=n;i++)t.push(i);return t},on=(e,s)=>{let n=e.scrollElement;if(!n)return;let t=e.targetWindow;if(!t)return;let i=f=>{let{width:a,height:d}=f;s({width:Math.round(a),height:Math.round(d)})};if(i(ii(n)),!t.ResizeObserver)return()=>{};let c=new t.ResizeObserver(f=>{let a=()=>{let d=f[0];if(d?.borderBoxSize){let p=d.borderBoxSize[0];if(p){i({width:p.inlineSize,height:p.blockSize});return}}i(ii(n))};e.options.useAnimationFrameWithResizeObserver?requestAnimationFrame(a):a()});return c.observe(n,{box:"border-box"}),()=>{c.unobserve(n)}},oi={passive:!0};var ri=typeof window>"u"?!0:"onscrollend"in window,rn=(e,s)=>{let n=e.scrollElement;if(!n)return;let t=e.targetWindow;if(!t)return;let i=0,c=e.options.useScrollendEvent&&ri?()=>{}:si(t,()=>{s(i,!1)},e.options.isScrollingResetDelay),f=S=>()=>{let{horizontal:g,isRtl:w}=e.options;i=g?n.scrollLeft*(w&&-1||1):n.scrollTop,c(),s(i,S)},a=f(!0),d=f(!1);d(),n.addEventListener("scroll",a,oi);let p=e.options.useScrollendEvent&&ri;return p&&n.addEventListener("scrollend",d,oi),()=>{n.removeEventListener("scroll",a),p&&n.removeEventListener("scrollend",d)}};var Mr=(e,s,n)=>{if(s?.borderBoxSize){let t=s.borderBoxSize[0];if(t)return Math.round(t[n.options.horizontal?"inlineSize":"blockSize"])}return e[n.options.horizontal?"offsetWidth":"offsetHeight"]};var fn=(e,{adjustments:s=0,behavior:n},t)=>{var i,c;let f=e+s;(c=(i=t.scrollElement)==null?void 0:i.scrollTo)==null||c.call(i,{[t.options.horizontal?"left":"top"]:f,behavior:n})},_l=class{constructor(s){this.unsubs=[],this.scrollElement=null,this.targetWindow=null,this.isScrolling=!1,this.measurementsCache=[],this.itemSizeCache=new Map,this.pendingMeasuredCacheIndexes=[],this.scrollRect=null,this.scrollOffset=null,this.scrollDirection=null,this.scrollAdjustments=0,this.elementsCache=new Map,this.observer=(()=>{let n=null,t=()=>n||(!this.targetWindow||!this.targetWindow.ResizeObserver?null:n=new this.targetWindow.ResizeObserver(i=>{i.forEach(c=>{let f=()=>{this._measureElement(c.target,c)};this.options.useAnimationFrameWithResizeObserver?requestAnimationFrame(f):f()})}));return{disconnect:()=>{var i;(i=t())==null||i.disconnect(),n=null},observe:i=>{var c;return(c=t())==null?void 0:c.observe(i,{box:"border-box"})},unobserve:i=>{var c;return(c=t())==null?void 0:c.unobserve(i)}}})(),this.range=null,this.setOptions=n=>{Object.entries(n).forEach(([t,i])=>{typeof i>"u"&&delete n[t]}),this.options={debug:!1,initialOffset:0,overscan:1,paddingStart:0,paddingEnd:0,scrollPaddingStart:0,scrollPaddingEnd:0,horizontal:!1,getItemKey:xr,rangeExtractor:Er,onChange:()=>{},measureElement:Mr,initialRect:{width:0,height:0},scrollMargin:0,gap:0,indexAttribute:"data-index",initialMeasurementsCache:[],lanes:1,isScrollingResetDelay:150,enabled:!0,isRtl:!1,useScrollendEvent:!1,useAnimationFrameWithResizeObserver:!1,...n}},this.notify=n=>{var t,i;(i=(t=this.options).onChange)==null||i.call(t,this,n)},this.maybeNotify=Jt(()=>(this.calculateRange(),[this.isScrolling,this.range?this.range.startIndex:null,this.range?this.range.endIndex:null]),n=>{this.notify(n)},{key:!1,debug:()=>this.options.debug,initialDeps:[this.isScrolling,this.range?this.range.startIndex:null,this.range?this.range.endIndex:null]}),this.cleanup=()=>{this.unsubs.filter(Boolean).forEach(n=>n()),this.unsubs=[],this.observer.disconnect(),this.scrollElement=null,this.targetWindow=null},this._didMount=()=>()=>{this.cleanup()},this._willUpdate=()=>{var n;let t=this.options.enabled?this.options.getScrollElement():null;if(this.scrollElement!==t){if(this.cleanup(),!t){this.maybeNotify();return}this.scrollElement=t,this.scrollElement&&"ownerDocument"in this.scrollElement?this.targetWindow=this.scrollElement.ownerDocument.defaultView:this.targetWindow=((n=this.scrollElement)==null?void 0:n.window)??null,this.elementsCache.forEach(i=>{this.observer.observe(i)}),this._scrollToOffset(this.getScrollOffset(),{adjustments:void 0,behavior:void 0}),this.unsubs.push(this.options.observeElementRect(this,i=>{this.scrollRect=i,this.maybeNotify()})),this.unsubs.push(this.options.observeElementOffset(this,(i,c)=>{this.scrollAdjustments=0,this.scrollDirection=c?this.getScrollOffset()<i?"forward":"backward":null,this.scrollOffset=i,this.isScrolling=c,this.maybeNotify()}))}},this.getSize=()=>this.options.enabled?(this.scrollRect=this.scrollRect??this.options.initialRect,this.scrollRect[this.options.horizontal?"width":"height"]):(this.scrollRect=null,0),this.getScrollOffset=()=>this.options.enabled?(this.scrollOffset=this.scrollOffset??(typeof this.options.initialOffset=="function"?this.options.initialOffset():this.options.initialOffset),this.scrollOffset):(this.scrollOffset=null,0),this.getFurthestMeasurement=(n,t)=>{let i=new Map,c=new Map;for(let f=t-1;f>=0;f--){let a=n[f];if(i.has(a.lane))continue;let d=c.get(a.lane);if(d==null||a.end>d.end?c.set(a.lane,a):a.end<d.end&&i.set(a.lane,!0),i.size===this.options.lanes)break}return c.size===this.options.lanes?Array.from(c.values()).sort((f,a)=>f.end===a.end?f.index-a.index:f.end-a.end)[0]:void 0},this.getMeasurementOptions=Jt(()=>[this.options.count,this.options.paddingStart,this.options.scrollMargin,this.options.getItemKey,this.options.enabled],(n,t,i,c,f)=>(this.pendingMeasuredCacheIndexes=[],{count:n,paddingStart:t,scrollMargin:i,getItemKey:c,enabled:f}),{key:!1}),this.getMeasurements=Jt(()=>[this.getMeasurementOptions(),this.itemSizeCache],({count:n,paddingStart:t,scrollMargin:i,getItemKey:c,enabled:f},a)=>{if(!f)return this.measurementsCache=[],this.itemSizeCache.clear(),[];this.measurementsCache.length===0&&(this.measurementsCache=this.options.initialMeasurementsCache,this.measurementsCache.forEach(S=>{this.itemSizeCache.set(S.key,S.size)}));let d=this.pendingMeasuredCacheIndexes.length>0?Math.min(...this.pendingMeasuredCacheIndexes):0;this.pendingMeasuredCacheIndexes=[];let p=this.measurementsCache.slice(0,d);for(let S=d;S<n;S++){let g=c(S),w=this.options.lanes===1?p[S-1]:this.getFurthestMeasurement(p,S),A=w?w.end+this.options.gap:t+i,M=a.get(g),O=typeof M=="number"?M:this.options.estimateSize(S),N=A+O,W=w?w.lane:S%this.options.lanes;p[S]={index:S,start:A,size:O,end:N,key:g,lane:W}}return this.measurementsCache=p,p},{key:!1,debug:()=>this.options.debug}),this.calculateRange=Jt(()=>[this.getMeasurements(),this.getSize(),this.getScrollOffset(),this.options.lanes],(n,t,i,c)=>this.range=n.length>0&&t>0?kr({measurements:n,outerSize:t,scrollOffset:i,lanes:c}):null,{key:!1,debug:()=>this.options.debug}),this.getVirtualIndexes=Jt(()=>{let n=null,t=null,i=this.calculateRange();return i&&(n=i.startIndex,t=i.endIndex),this.maybeNotify.updateDeps([this.isScrolling,n,t]),[this.options.rangeExtractor,this.options.overscan,this.options.count,n,t]},(n,t,i,c,f)=>c===null||f===null?[]:n({startIndex:c,endIndex:f,overscan:t,count:i}),{key:!1,debug:()=>this.options.debug}),this.indexFromElement=n=>{let t=this.options.indexAttribute,i=n.getAttribute(t);return i?parseInt(i,10):(console.warn(`Missing attribute name '${t}={index}' on measured element.`),-1)},this._measureElement=(n,t)=>{let i=this.indexFromElement(n),c=this.measurementsCache[i];if(!c)return;let f=c.key,a=this.elementsCache.get(f);a!==n&&(a&&this.observer.unobserve(a),this.observer.observe(n),this.elementsCache.set(f,n)),n.isConnected&&this.resizeItem(i,this.options.measureElement(n,t,this))},this.resizeItem=(n,t)=>{let i=this.measurementsCache[n];if(!i)return;let c=this.itemSizeCache.get(i.key)??i.size,f=t-c;f!==0&&((this.shouldAdjustScrollPositionOnItemSizeChange!==void 0?this.shouldAdjustScrollPositionOnItemSizeChange(i,f,this):i.start<this.getScrollOffset()+this.scrollAdjustments)&&this._scrollToOffset(this.getScrollOffset(),{adjustments:this.scrollAdjustments+=f,behavior:void 0}),this.pendingMeasuredCacheIndexes.push(i.index),this.itemSizeCache=new Map(this.itemSizeCache.set(i.key,t)),this.notify(!1))},this.measureElement=n=>{if(!n){this.elementsCache.forEach((t,i)=>{t.isConnected||(this.observer.unobserve(t),this.elementsCache.delete(i))});return}this._measureElement(n,void 0)},this.getVirtualItems=Jt(()=>[this.getVirtualIndexes(),this.getMeasurements()],(n,t)=>{let i=[];for(let c=0,f=n.length;c<f;c++){let a=n[c],d=t[a];i.push(d)}return i},{key:!1,debug:()=>this.options.debug}),this.getVirtualItemForOffset=n=>{let t=this.getMeasurements();if(t.length!==0)return Kn(t[fi(0,t.length-1,i=>Kn(t[i]).start,n)])},this.getOffsetForAlignment=(n,t,i=0)=>{let c=this.getSize(),f=this.getScrollOffset();t==="auto"&&(t=n>=f+c?"end":"start"),t==="center"?n+=(i-c)/2:t==="end"&&(n-=c);let a=this.getTotalSize()+this.options.scrollMargin-c;return Math.max(Math.min(a,n),0)},this.getOffsetForIndex=(n,t="auto")=>{n=Math.max(0,Math.min(n,this.options.count-1));let i=this.measurementsCache[n];if(!i)return;let c=this.getSize(),f=this.getScrollOffset();if(t==="auto")if(i.end>=f+c-this.options.scrollPaddingEnd)t="end";else if(i.start<=f+this.options.scrollPaddingStart)t="start";else return[f,t];let a=t==="end"?i.end+this.options.scrollPaddingEnd:i.start-this.options.scrollPaddingStart;return[this.getOffsetForAlignment(a,t,i.size),t]},this.isDynamicMode=()=>this.elementsCache.size>0,this.scrollToOffset=(n,{align:t="start",behavior:i}={})=>{i==="smooth"&&this.isDynamicMode()&&console.warn("The `smooth` scroll behavior is not fully supported with dynamic size."),this._scrollToOffset(this.getOffsetForAlignment(n,t),{adjustments:void 0,behavior:i})},this.scrollToIndex=(n,{align:t="auto",behavior:i}={})=>{i==="smooth"&&this.isDynamicMode()&&console.warn("The `smooth` scroll behavior is not fully supported with dynamic size."),n=Math.max(0,Math.min(n,this.options.count-1));let c=0,f=10,a=p=>{if(!this.targetWindow)return;let S=this.getOffsetForIndex(n,p);if(!S){console.warn("Failed to get offset for index:",n);return}let[g,w]=S;this._scrollToOffset(g,{adjustments:void 0,behavior:i}),this.targetWindow.requestAnimationFrame(()=>{let A=this.getScrollOffset(),M=this.getOffsetForIndex(n,w);if(!M){console.warn("Failed to get offset for index:",n);return}ni(M[0],A)||d(w)})},d=p=>{this.targetWindow&&(c++,c<f?this.targetWindow.requestAnimationFrame(()=>a(p)):console.warn(`Failed to scroll to index ${n} after ${f} attempts.`))};a(t)},this.scrollBy=(n,{behavior:t}={})=>{t==="smooth"&&this.isDynamicMode()&&console.warn("The `smooth` scroll behavior is not fully supported with dynamic size."),this._scrollToOffset(this.getScrollOffset()+n,{adjustments:void 0,behavior:t})},this.getTotalSize=()=>{var n;let t=this.getMeasurements(),i;if(t.length===0)i=this.options.paddingStart;else if(this.options.lanes===1)i=((n=t[t.length-1])==null?void 0:n.end)??0;else{let c=Array(this.options.lanes).fill(null),f=t.length-1;for(;f>=0&&c.some(a=>a===null);){let a=t[f];c[a.lane]===null&&(c[a.lane]=a.end),f--}i=Math.max(...c.filter(a=>a!==null))}return Math.max(i-this.options.scrollMargin+this.options.paddingEnd,0)},this._scrollToOffset=(n,{adjustments:t,behavior:i})=>{this.options.scrollToFn(n,{behavior:i,adjustments:t},this)},this.measure=()=>{this.itemSizeCache=new Map,this.notify(!1)},this.setOptions(s)}},fi=(e,s,n,t)=>{for(;e<=s;){let i=(e+s)/2|0,c=n(i);if(c<t)e=i+1;else if(c>t)s=i-1;else return i}return e>0?e-1:0};function kr({measurements:e,outerSize:s,scrollOffset:n,lanes:t}){let i=e.length-1,c=d=>e[d].start;if(e.length<=t)return{startIndex:0,endIndex:i};let f=fi(0,i,c,n),a=f;if(t===1)for(;a<i&&e[a].end<n+s;)a++;else if(t>1){let d=Array(t).fill(0);for(;a<i&&d.some(S=>S<n+s);){let S=e[a];d[S.lane]=S.end,a++}let p=Array(t).fill(n+s);for(;f>=0&&p.some(S=>S>=n);){let S=e[f];p[S.lane]=S.start,f--}f=Math.max(0,f-f%t),a=Math.min(i,a+(t-1-a%t))}return{startIndex:f,endIndex:a}}var ui=typeof document<"u"?Vt.useLayoutEffect:Vt.useEffect;function Tr(e){let s=Vt.useReducer(()=>({}),{})[1],n={...e,onChange:(i,c)=>{var f;c?li(s):s(),(f=e.onChange)==null||f.call(e,i,c)}},[t]=Vt.useState(()=>new _l(n));return t.setOptions(n),ui(()=>t._didMount(),[]),ui(()=>t._willUpdate()),t}function ci(e){return Tr({observeElementRect:on,observeElementOffset:rn,scrollToFn:fn,...e})}var Ar="uplot",Dr="u-hz",zr="u-vt",Cr="u-title",Or="u-wrap",Lr="u-under",Pr="u-over",Rr="u-axis",Xt="u-off",Fr="u-select",Vr="u-cursor-x",Ir="u-cursor-y",Nr="u-cursor-pt",Wr="u-legend",Hr="u-live",Gr="u-inline",Br="u-series",Yr="u-marker",ai="u-label",Ur="u-value",Gl="width",Bl="height";var hi="bottom",xl="left",$n="right",as="#000",di=as+"0",qn="mousemove",pi="mousedown",Jn="mouseup",mi="mouseenter",gi="mouseleave",wi="dblclick",jr="resize",Kr="scroll",Si="change",dn="dppxchange",hs="--",zl=typeof window<"u",ts=zl?document:null,Ml=zl?window:null,$r=zl?navigator:null,ie,un;function ls(){let e=devicePixelRatio;ie!=e&&(ie=e,un&&ss(Si,un,ls),un=matchMedia(`(min-resolution: ${ie-.001}dppx) and (max-resolution: ${ie+.001}dppx)`),el(Si,un,ls),Ml.dispatchEvent(new CustomEvent(dn)))}function Xe(e,s){if(s!=null){let n=e.classList;!n.contains(s)&&n.add(s)}}function ns(e,s){let n=e.classList;n.contains(s)&&n.remove(s)}function ge(e,s,n){e.style[s]=n+"px"}function mt(e,s,n,t){let i=ts.createElement(e);return s!=null&&Xe(i,s),n?.insertBefore(i,t),i}function ft(e,s){return mt("div",e,s)}var vi=new WeakMap;function Mt(e,s,n,t,i){let c="translate("+s+"px,"+n+"px)",f=vi.get(e);c!=f&&(e.style.transform=c,vi.set(e,c),s<0||n<0||s>t||n>i?Xe(e,Xt):ns(e,Xt))}var bi=new WeakMap;function yi(e,s,n){let t=s+n,i=bi.get(e);t!=i&&(bi.set(e,t),e.style.background=s,e.style.borderColor=n)}var _i=new WeakMap;function xi(e,s,n,t){let i=s+""+n,c=_i.get(e);i!=c&&(_i.set(e,i),e.style.height=n+"px",e.style.width=s+"px",e.style.marginLeft=t?-s/2+"px":0,e.style.marginTop=t?-n/2+"px":0)}var ds={passive:!0},qr={...ds,capture:!0};function el(e,s,n,t){s.addEventListener(e,n,t?qr:ds)}function ss(e,s,n,t){s.removeEventListener(e,n,ds)}zl&&ls();function gt(e,s,n,t){let i;n=n||0,t=t||s.length-1;let c=t<=2147483647;for(;t-n>1;)i=c?n+t>>1:et((n+t)/2),s[i]<e?n=i:t=i;return e-s[n]<=s[t]-e?n:t}function Zi(e){return(n,t,i)=>{let c=-1,f=-1;for(let a=t;a<=i;a++)if(e(n[a])){c=a;break}for(let a=i;a>=t;a--)if(e(n[a])){f=a;break}return[c,f]}}var Qi=e=>e!=null,Xi=e=>e!=null&&e>0,gn=Zi(Qi),Jr=Zi(Xi);function Zr(e,s,n,t=0,i=!1){let c=i?Jr:gn,f=i?Xi:Qi;[s,n]=c(e,s,n);let a=e[s],d=e[s];if(s>-1)if(t==1)a=e[s],d=e[n];else if(t==-1)a=e[n],d=e[s];else for(let p=s;p<=n;p++){let S=e[p];f(S)&&(S<a?a=S:S>d&&(d=S))}return[a??ce,d??-ce]}function wn(e,s,n,t){let i=ki(e),c=ki(s);e==s&&(i==-1?(e*=n,s/=n):(e/=n,s*=n));let f=n==10?Dt:eo,a=i==1?et:ut,d=c==1?ut:et,p=a(f(Ae(e))),S=d(f(Ae(s))),g=kl(n,p),w=kl(n,S);return n==10&&(p<0&&(g=ae(g,-p)),S<0&&(w=ae(w,-S))),t||n==2?(e=g*i,s=w*c):(e=so(e,g),s=Sn(s,w)),[e,s]}function ps(e,s,n,t){let i=wn(e,s,n,t);return e==0&&(i[0]=0),s==0&&(i[1]=0),i}var ms=.1,Ei={mode:3,pad:ms},Ul={pad:0,soft:null,mode:0},Qr={min:Ul,max:Ul};function pn(e,s,n,t){return vn(n)?Mi(e,s,n):(Ul.pad=n,Ul.soft=t?0:null,Ul.mode=t?3:0,Mi(e,s,Qr))}function ne(e,s){return e??s}function Xr(e,s,n){for(s=ne(s,0),n=ne(n,e.length-1);s<=n;){if(e[s]!=null)return!0;s++}return!1}function Mi(e,s,n){let t=n.min,i=n.max,c=ne(t.pad,0),f=ne(i.pad,0),a=ne(t.hard,-ce),d=ne(i.hard,ce),p=ne(t.soft,ce),S=ne(i.soft,-ce),g=ne(t.mode,0),w=ne(i.mode,0),A=s-e,M=Dt(A),O=Ye(Ae(e),Ae(s)),N=Dt(O),W=Ae(N-M);(A<1e-24||W>10)&&(A=0,(e==0||s==0)&&(A=1e-24,g==2&&p!=ce&&(c=0),w==2&&S!=-ce&&(f=0)));let y=A||O||1e3,F=Dt(y),x=kl(10,et(F)),$=y*(A==0?e==0?.1:1:c),C=ae(so(e-$,x/10),24),q=e>=p&&(g==1||g==3&&C<=p||g==2&&C>=p)?p:ce,U=Ye(a,C<q&&e>=q?q:wt(q,C)),Q=y*(A==0?s==0?.1:1:f),Y=ae(Sn(s+Q,x/10),24),E=s<=S&&(w==1||w==3&&Y>=S||w==2&&Y<=S)?S:-ce,K=wt(d,Y>E&&s<=E?E:Ye(E,Y));return U==K&&U==0&&(K=100),[U,K]}var ef=new Intl.NumberFormat(zl?$r.language:"en-US"),gs=e=>ef.format(e),tt=Math,hn=tt.PI,Ae=tt.abs,et=tt.floor,Te=tt.round,ut=tt.ceil,wt=tt.min,Ye=tt.max,kl=tt.pow,ki=tt.sign,Dt=tt.log10,eo=tt.log2,tf=(e,s=1)=>tt.sinh(e)*s,Zn=(e,s=1)=>tt.asinh(e/s),ce=1/0;function Ti(e){return(Dt((e^e>>31)-(e>>31))|0)+1}function is(e,s,n){return wt(Ye(e,s),n)}function to(e){return typeof e=="function"}function X(e){return to(e)?e:()=>e}var lf=()=>{},lo=e=>e,no=(e,s)=>s,nf=e=>null,Ai=e=>!0,Di=(e,s)=>e==s,sf=/\.\d*?(?=9{6,}|0{6,})/gm,tl=e=>{if(oo(e)||Nt.has(e))return e;let s=`${e}`,n=s.match(sf);if(n==null)return e;let t=n[0].length-1;if(s.indexOf("e-")!=-1){let[i,c]=s.split("e");return+`${tl(i)}e${c}`}return ae(e,t)};function Zt(e,s){return tl(ae(tl(e/s))*s)}function Sn(e,s){return tl(ut(tl(e/s))*s)}function so(e,s){return tl(et(tl(e/s))*s)}function ae(e,s=0){if(oo(e))return e;let n=10**s,t=e*n*(1+Number.EPSILON);return Te(t)/n}var Nt=new Map;function io(e){return((""+e).split(".")[1]||"").length}function Kl(e,s,n,t){let i=[],c=t.map(io);for(let f=s;f<n;f++){let a=Ae(f),d=ae(kl(e,f),a);for(let p=0;p<t.length;p++){let S=e==10?+`${t[p]}e${f}`:t[p]*d,g=(f>=0?0:a)+(f>=c[p]?0:c[p]),w=e==10?S:ae(S,g);i.push(w),Nt.set(w,g)}}return i}var jl={},ws=[],Tl=[null,null],It=Array.isArray,oo=Number.isInteger,of=e=>e===void 0;function zi(e){return typeof e=="string"}function vn(e){let s=!1;if(e!=null){let n=e.constructor;s=n==null||n==Object}return s}function rf(e){return e!=null&&typeof e=="object"}var ff=Object.getPrototypeOf(Uint8Array),ro="__proto__";function Al(e,s=vn){let n;if(It(e)){let t=e.find(i=>i!=null);if(It(t)||s(t)){n=Array(e.length);for(let i=0;i<e.length;i++)n[i]=Al(e[i],s)}else n=e.slice()}else if(e instanceof ff)n=e.slice();else if(s(e)){n={};for(let t in e)t!=ro&&(n[t]=Al(e[t],s))}else n=e;return n}function Ee(e){let s=arguments;for(let n=1;n<s.length;n++){let t=s[n];for(let i in t)i!=ro&&(vn(e[i])?Ee(e[i],Al(t[i])):e[i]=Al(t[i]))}return e}var uf=0,cf=1,af=2;function hf(e,s,n){for(let t=0,i,c=-1;t<s.length;t++){let f=s[t];if(f>c){for(i=f-1;i>=0&&e[i]==null;)e[i--]=null;for(i=f+1;i<n&&e[i]==null;)e[c=i++]=null}}}function df(e,s){if(gf(e)){let f=e[0].slice();for(let a=1;a<e.length;a++)f.push(...e[a].slice(1));return wf(f[0])||(f=mf(f)),f}let n=new Set;for(let f=0;f<e.length;f++){let d=e[f][0],p=d.length;for(let S=0;S<p;S++)n.add(d[S])}let t=[Array.from(n).sort((f,a)=>f-a)],i=t[0].length,c=new Map;for(let f=0;f<i;f++)c.set(t[0][f],f);for(let f=0;f<e.length;f++){let a=e[f],d=a[0];for(let p=1;p<a.length;p++){let S=a[p],g=Array(i).fill(void 0),w=s?s[f][p]:cf,A=[];for(let M=0;M<S.length;M++){let O=S[M],N=c.get(d[M]);O===null?w!=uf&&(g[N]=O,w==af&&A.push(N)):g[N]=O}hf(g,A,i),t.push(g)}}return t}var pf=typeof queueMicrotask>"u"?e=>Promise.resolve().then(e):queueMicrotask;function mf(e){let s=e[0],n=s.length,t=Array(n);for(let c=0;c<t.length;c++)t[c]=c;t.sort((c,f)=>s[c]-s[f]);let i=[];for(let c=0;c<e.length;c++){let f=e[c],a=Array(n);for(let d=0;d<n;d++)a[d]=f[t[d]];i.push(a)}return i}function gf(e){let s=e[0][0],n=s.length;for(let t=1;t<e.length;t++){let i=e[t][0];if(i.length!=n)return!1;if(i!=s){for(let c=0;c<n;c++)if(i[c]!=s[c])return!1}}return!0}function wf(e,s=100){let n=e.length;if(n<=1)return!0;let t=0,i=n-1;for(;t<=i&&e[t]==null;)t++;for(;i>=t&&e[i]==null;)i--;if(i<=t)return!0;let c=Ye(1,et((i-t+1)/s));for(let f=e[t],a=t+c;a<=i;a+=c){let d=e[a];if(d!=null){if(d<=f)return!1;f=d}}return!0}var fo=["January","February","March","April","May","June","July","August","September","October","November","December"],uo=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];function co(e){return e.slice(0,3)}var Sf=uo.map(co),vf=fo.map(co),bf={MMMM:fo,MMM:vf,WWWW:uo,WWW:Sf};function Hl(e){return(e<10?"0":"")+e}function yf(e){return(e<10?"00":e<100?"0":"")+e}var _f={YYYY:e=>e.getFullYear(),YY:e=>(e.getFullYear()+"").slice(2),MMMM:(e,s)=>s.MMMM[e.getMonth()],MMM:(e,s)=>s.MMM[e.getMonth()],MM:e=>Hl(e.getMonth()+1),M:e=>e.getMonth()+1,DD:e=>Hl(e.getDate()),D:e=>e.getDate(),WWWW:(e,s)=>s.WWWW[e.getDay()],WWW:(e,s)=>s.WWW[e.getDay()],HH:e=>Hl(e.getHours()),H:e=>e.getHours(),h:e=>{let s=e.getHours();return s==0?12:s>12?s-12:s},AA:e=>e.getHours()>=12?"PM":"AM",aa:e=>e.getHours()>=12?"pm":"am",a:e=>e.getHours()>=12?"p":"a",mm:e=>Hl(e.getMinutes()),m:e=>e.getMinutes(),ss:e=>Hl(e.getSeconds()),s:e=>e.getSeconds(),fff:e=>yf(e.getMilliseconds())};function Ss(e,s){s=s||bf;let n=[],t=/\{([a-z]+)\}|[^{]+/gi,i;for(;i=t.exec(e);)n.push(i[0][0]=="{"?_f[i[1]]:i[0]);return c=>{let f="";for(let a=0;a<n.length;a++)f+=typeof n[a]=="string"?n[a]:n[a](c,s);return f}}var xf=new Intl.DateTimeFormat().resolvedOptions().timeZone;function Ef(e,s){let n;return s=="UTC"||s=="Etc/UTC"?n=new Date(+e+e.getTimezoneOffset()*6e4):s==xf?n=e:(n=new Date(e.toLocaleString("en-US",{timeZone:s})),n.setMilliseconds(e.getMilliseconds())),n}var ao=e=>e%1==0,mn=[1,2,2.5,5],Mf=Kl(10,-32,0,mn),ho=Kl(10,0,32,mn),kf=ho.filter(ao),Qt=Mf.concat(ho),vs=`
+`,po="{YYYY}",Ci=vs+po,mo="{M}/{D}",Yl=vs+mo,cn=Yl+"/{YY}",go="{aa}",Tf="{h}:{mm}",El=Tf+go,Oi=vs+El,Li=":{ss}",re=null;function wo(e){let s=e*1e3,n=s*60,t=n*60,i=t*24,c=i*30,f=i*365,d=(e==1?Kl(10,0,3,mn).filter(ao):Kl(10,-3,0,mn)).concat([s,s*5,s*10,s*15,s*30,n,n*5,n*10,n*15,n*30,t,t*2,t*3,t*4,t*6,t*8,t*12,i,i*2,i*3,i*4,i*5,i*6,i*7,i*8,i*9,i*10,i*15,c,c*2,c*3,c*4,c*6,f,f*2,f*5,f*10,f*25,f*50,f*100]),p=[[f,po,re,re,re,re,re,re,1],[i*28,"{MMM}",Ci,re,re,re,re,re,1],[i,mo,Ci,re,re,re,re,re,1],[t,"{h}"+go,cn,re,Yl,re,re,re,1],[n,El,cn,re,Yl,re,re,re,1],[s,Li,cn+" "+El,re,Yl+" "+El,re,Oi,re,1],[e,Li+".{fff}",cn+" "+El,re,Yl+" "+El,re,Oi,re,1]];function S(g){return(w,A,M,O,N,W)=>{let y=[],F=N>=f,x=N>=c&&N<f,$=g(M),C=ae($*e,3),q=Qn($.getFullYear(),F?0:$.getMonth(),x||F?1:$.getDate()),U=ae(q*e,3);if(x||F){let Q=x?N/c:0,Y=F?N/f:0,E=C==U?C:ae(Qn(q.getFullYear()+Y,q.getMonth()+Q,1)*e,3),K=new Date(Te(E/e)),L=K.getFullYear(),G=K.getMonth();for(let I=0;E<=O;I++){let ee=Qn(L+Y*I,G+Q*I,1),V=ee-g(ae(ee*e,3));E=ae((+ee+V)*e,3),E<=O&&y.push(E)}}else{let Q=N>=i?i:N,Y=et(M)-et(C),E=U+Y+Sn(C-U,Q);y.push(E);let K=g(E),L=K.getHours()+K.getMinutes()/n+K.getSeconds()/t,G=N/t,I=w.axes[A]._space,ee=W/I;for(;E=ae(E+N,e==1?0:3),!(E>O);)if(G>1){let V=et(ae(L+G,6))%24,te=g(E).getHours()-V;te>1&&(te=-1),E-=te*t,L=(L+G)%24;let fe=y[y.length-1];ae((E-fe)/N,3)*ee>=.7&&y.push(E)}else y.push(E)}return y}}return[d,p,S]}var[Af,Df,zf]=wo(1),[Cf,Of,Lf]=wo(.001);Kl(2,-53,53,[1]);function Pi(e,s){return e.map(n=>n.map((t,i)=>i==0||i==8||t==null?t:s(i==1||n[8]==0?t:n[1]+t)))}function Ri(e,s){return(n,t,i,c,f)=>{let a=s.find(M=>f>=M[0])||s[s.length-1],d,p,S,g,w,A;return t.map(M=>{let O=e(M),N=O.getFullYear(),W=O.getMonth(),y=O.getDate(),F=O.getHours(),x=O.getMinutes(),$=O.getSeconds(),C=N!=d&&a[2]||W!=p&&a[3]||y!=S&&a[4]||F!=g&&a[5]||x!=w&&a[6]||$!=A&&a[7]||a[1];return d=N,p=W,S=y,g=F,w=x,A=$,C(O)})}}function Pf(e,s){let n=Ss(s);return(t,i,c,f,a)=>i.map(d=>n(e(d)))}function Qn(e,s,n){return new Date(e,s,n)}function Fi(e,s){return s(e)}var Rf="{YYYY}-{MM}-{DD} {h}:{mm}{aa}";function Vi(e,s){return(n,t,i,c)=>c==null?hs:s(e(t))}function Ff(e,s){let n=e.series[s];return n.width?n.stroke(e,s):n.points.width?n.points.stroke(e,s):null}function Vf(e,s){return e.series[s].fill(e,s)}var If={show:!0,live:!0,isolate:!1,mount:lf,markers:{show:!0,width:2,stroke:Ff,fill:Vf,dash:"solid"},idx:null,idxs:null,values:[]};function Nf(e,s){let n=e.cursor.points,t=ft(),i=n.size(e,s);ge(t,Gl,i),ge(t,Bl,i);let c=i/-2;ge(t,"marginLeft",c),ge(t,"marginTop",c);let f=n.width(e,s,i);return f&&ge(t,"borderWidth",f),t}function Wf(e,s){let n=e.series[s].points;return n._fill||n._stroke}function Hf(e,s){let n=e.series[s].points;return n._stroke||n._fill}function Gf(e,s){return e.series[s].points.size}var Xn=[0,0];function Bf(e,s,n){return Xn[0]=s,Xn[1]=n,Xn}function an(e,s,n,t=!0){return i=>{i.button==0&&(!t||i.target==s)&&n(i)}}function es(e,s,n,t=!0){return i=>{(!t||i.target==s)&&n(i)}}var Yf={show:!0,x:!0,y:!0,lock:!1,move:Bf,points:{one:!1,show:Nf,size:Gf,width:0,stroke:Hf,fill:Wf},bind:{mousedown:an,mouseup:an,click:an,dblclick:an,mousemove:es,mouseleave:es,mouseenter:es},drag:{setScale:!0,x:!0,y:!1,dist:0,uni:null,click:(e,s)=>{s.stopPropagation(),s.stopImmediatePropagation()},_x:!1,_y:!1},focus:{dist:(e,s,n,t,i)=>t-i,prox:-1,bias:0},hover:{skip:[void 0],prox:null,bias:0},left:-10,top:-10,idx:null,dataIdx:null,idxs:null,event:null},So={show:!0,stroke:"rgba(0,0,0,0.07)",width:2},bs=Ee({},So,{filter:no}),vo=Ee({},bs,{size:10}),bo=Ee({},So,{show:!1}),ys='12px system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"',yo="bold "+ys,_o=1.5,Ii={show:!0,scale:"x",stroke:as,space:50,gap:5,alignTo:1,size:50,labelGap:0,labelSize:30,labelFont:yo,side:2,grid:bs,ticks:vo,border:bo,font:ys,lineGap:_o,rotate:0},Uf="Value",jf="Time",Ni={show:!0,scale:"x",auto:!1,sorted:1,min:ce,max:-ce,idxs:[]};function Kf(e,s,n,t,i){return s.map(c=>c==null?"":gs(c))}function $f(e,s,n,t,i,c,f){let a=[],d=Nt.get(i)||0;n=f?n:ae(Sn(n,i),d);for(let p=n;p<=t;p=ae(p+i,d))a.push(Object.is(p,-0)?0:p);return a}function os(e,s,n,t,i,c,f){let a=[],d=e.scales[e.axes[s].scale].log,p=d==10?Dt:eo,S=et(p(n));i=kl(d,S),d==10&&(i=Qt[gt(i,Qt)]);let g=n,w=i*d;d==10&&(w=Qt[gt(w,Qt)]);do a.push(g),g=g+i,d==10&&!Nt.has(g)&&(g=ae(g,Nt.get(i))),g>=w&&(i=g,w=i*d,d==10&&(w=Qt[gt(w,Qt)]));while(g<=t);return a}function qf(e,s,n,t,i,c,f){let d=e.scales[e.axes[s].scale].asinh,p=t>d?os(e,s,Ye(d,n),t,i):[d],S=t>=0&&n<=0?[0]:[];return(n<-d?os(e,s,Ye(d,-t),-n,i):[d]).reverse().map(w=>-w).concat(S,p)}var xo=/./,Jf=/[12357]/,Zf=/[125]/,Wi=/1/,rs=(e,s,n,t)=>e.map((i,c)=>s==4&&i==0||c%t==0&&n.test(i.toExponential()[i<0?1:0])?i:null);function Qf(e,s,n,t,i){let c=e.axes[n],f=c.scale,a=e.scales[f],d=e.valToPos,p=c._space,S=d(10,f),g=d(9,f)-S>=p?xo:d(7,f)-S>=p?Jf:d(5,f)-S>=p?Zf:Wi;if(g==Wi){let w=Ae(d(1,f)-S);if(w<p)return rs(s.slice().reverse(),a.distr,g,ut(p/w)).reverse()}return rs(s,a.distr,g,1)}function Xf(e,s,n,t,i){let c=e.axes[n],f=c.scale,a=c._space,d=e.valToPos,p=Ae(d(1,f)-d(2,f));return p<a?rs(s.slice().reverse(),3,xo,ut(a/p)).reverse():s}function eu(e,s,n,t){return t==null?hs:s==null?"":gs(s)}var Hi={show:!0,scale:"y",stroke:as,space:30,gap:5,alignTo:1,size:50,labelGap:0,labelSize:30,labelFont:yo,side:3,grid:bs,ticks:vo,border:bo,font:ys,lineGap:_o,rotate:0};function tu(e,s){let n=3+(e||1)*2;return ae(n*s,3)}function lu(e,s){let{scale:n,idxs:t}=e.series[0],i=e._data[0],c=e.valToPos(i[t[0]],n,!0),f=e.valToPos(i[t[1]],n,!0),a=Ae(f-c),d=e.series[s],p=a/(d.points.space*ie);return t[1]-t[0]<=p}var Gi={scale:null,auto:!0,sorted:0,min:ce,max:-ce},Eo=(e,s,n,t,i)=>i,Bi={show:!0,auto:!0,sorted:0,gaps:Eo,alpha:1,facets:[Ee({},Gi,{scale:"x"}),Ee({},Gi,{scale:"y"})]},Yi={scale:"y",auto:!0,sorted:0,show:!0,spanGaps:!1,gaps:Eo,alpha:1,points:{show:lu,filter:null},values:null,min:ce,max:-ce,idxs:[],path:null,clip:null};function nu(e,s,n,t,i){return n/10}var Mo={time:!0,auto:!0,distr:1,log:10,asinh:1,min:null,max:null,dir:1,ori:0},su=Ee({},Mo,{time:!1,ori:1}),Ui={};function ko(e,s){let n=Ui[e];return n||(n={key:e,plots:[],sub(t){n.plots.push(t)},unsub(t){n.plots=n.plots.filter(i=>i!=t)},pub(t,i,c,f,a,d,p){for(let S=0;S<n.plots.length;S++)n.plots[S]!=i&&n.plots[S].pub(t,i,c,f,a,d,p)}},e!=null&&(Ui[e]=n)),n}var Dl=1,fs=2;function ll(e,s,n){let t=e.mode,i=e.series[s],c=t==2?e._data[s]:e._data,f=e.scales,a=e.bbox,d=c[0],p=t==2?c[1]:c[s],S=t==2?f[i.facets[0].scale]:f[e.series[0].scale],g=t==2?f[i.facets[1].scale]:f[i.scale],w=a.left,A=a.top,M=a.width,O=a.height,N=e.valToPosH,W=e.valToPosV;return S.ori==0?n(i,d,p,S,g,N,W,w,A,M,O,yn,Cl,xn,Ao,zo):n(i,d,p,S,g,W,N,A,w,O,M,_n,Ol,Es,Do,Co)}function _s(e,s){let n=0,t=0,i=ne(e.bands,ws);for(let c=0;c<i.length;c++){let f=i[c];f.series[0]==s?n=f.dir:f.series[1]==s&&(f.dir==1?t|=1:t|=2)}return[n,t==1?-1:t==2?1:t==3?2:0]}function iu(e,s,n,t,i){let c=e.mode,f=e.series[s],a=c==2?f.facets[1].scale:f.scale,d=e.scales[a];return i==-1?d.min:i==1?d.max:d.distr==3?d.dir==1?d.min:d.max:0}function zt(e,s,n,t,i,c){return ll(e,s,(f,a,d,p,S,g,w,A,M,O,N)=>{let W=f.pxRound,y=p.dir*(p.ori==0?1:-1),F=p.ori==0?Cl:Ol,x,$;y==1?(x=n,$=t):(x=t,$=n);let C=W(g(a[x],p,O,A)),q=W(w(d[x],S,N,M)),U=W(g(a[$],p,O,A)),Q=W(w(c==1?S.max:S.min,S,N,M)),Y=new Path2D(i);return F(Y,U,Q),F(Y,C,Q),F(Y,C,q),Y})}function bn(e,s,n,t,i,c){let f=null;if(e.length>0){f=new Path2D;let a=s==0?xn:Es,d=n;for(let g=0;g<e.length;g++){let w=e[g];if(w[1]>w[0]){let A=w[0]-d;A>0&&a(f,d,t,A,t+c),d=w[1]}}let p=n+i-d,S=10;p>0&&a(f,d,t-S/2,p,t+c+S)}return f}function ou(e,s,n){let t=e[e.length-1];t&&t[0]==s?t[1]=n:e.push([s,n])}function xs(e,s,n,t,i,c,f){let a=[],d=e.length;for(let p=i==1?n:t;p>=n&&p<=t;p+=i)if(s[p]===null){let g=p,w=p;if(i==1)for(;++p<=t&&s[p]===null;)w=p;else for(;--p>=n&&s[p]===null;)w=p;let A=c(e[g]),M=w==g?A:c(e[w]),O=g-i;A=f<=0&&O>=0&&O<d?c(e[O]):A;let W=w+i;M=f>=0&&W>=0&&W<d?c(e[W]):M,M>=A&&a.push([A,M])}return a}function ji(e){return e==0?lo:e==1?Te:s=>Zt(s,e)}function To(e){let s=e==0?yn:_n,n=e==0?(i,c,f,a,d,p)=>{i.arcTo(c,f,a,d,p)}:(i,c,f,a,d,p)=>{i.arcTo(f,c,d,a,p)},t=e==0?(i,c,f,a,d)=>{i.rect(c,f,a,d)}:(i,c,f,a,d)=>{i.rect(f,c,d,a)};return(i,c,f,a,d,p=0,S=0)=>{p==0&&S==0?t(i,c,f,a,d):(p=wt(p,a/2,d/2),S=wt(S,a/2,d/2),s(i,c+p,f),n(i,c+a,f,c+a,f+d,p),n(i,c+a,f+d,c,f+d,S),n(i,c,f+d,c,f,S),n(i,c,f,c+a,f,p),i.closePath())}}var yn=(e,s,n)=>{e.moveTo(s,n)},_n=(e,s,n)=>{e.moveTo(n,s)},Cl=(e,s,n)=>{e.lineTo(s,n)},Ol=(e,s,n)=>{e.lineTo(n,s)},xn=To(0),Es=To(1),Ao=(e,s,n,t,i,c)=>{e.arc(s,n,t,i,c)},Do=(e,s,n,t,i,c)=>{e.arc(n,s,t,i,c)},zo=(e,s,n,t,i,c,f)=>{e.bezierCurveTo(s,n,t,i,c,f)},Co=(e,s,n,t,i,c,f)=>{e.bezierCurveTo(n,s,i,t,f,c)};function Oo(e){return(s,n,t,i,c)=>ll(s,n,(f,a,d,p,S,g,w,A,M,O,N)=>{let{pxRound:W,points:y}=f,F,x;p.ori==0?(F=yn,x=Ao):(F=_n,x=Do);let $=ae(y.width*ie,3),C=(y.size-y.width)/2*ie,q=ae(C*2,3),U=new Path2D,Q=new Path2D,{left:Y,top:E,width:K,height:L}=s.bbox;xn(Q,Y-q,E-q,K+q*2,L+q*2);let G=I=>{if(d[I]!=null){let ee=W(g(a[I],p,O,A)),V=W(w(d[I],S,N,M));F(U,ee+C,V),x(U,ee,V,C,0,hn*2)}};if(c)c.forEach(G);else for(let I=t;I<=i;I++)G(I);return{stroke:$>0?U:null,fill:U,clip:Q,flags:Dl|fs}})}function Lo(e){return(s,n,t,i,c,f)=>{t!=i&&(c!=t&&f!=t&&e(s,n,t),c!=i&&f!=i&&e(s,n,i),e(s,n,f))}}var ru=Lo(Cl),fu=Lo(Ol);function Po(e){let s=ne(e?.alignGaps,0);return(n,t,i,c)=>ll(n,t,(f,a,d,p,S,g,w,A,M,O,N)=>{[i,c]=gn(d,i,c);let W=f.pxRound,y=L=>W(g(L,p,O,A)),F=L=>W(w(L,S,N,M)),x,$;p.ori==0?(x=Cl,$=ru):(x=Ol,$=fu);let C=p.dir*(p.ori==0?1:-1),q={stroke:new Path2D,fill:null,clip:null,band:null,gaps:null,flags:Dl},U=q.stroke,Q=!1;if(c-i>=O*4){let L=P=>n.posToVal(P,p.key,!0),G=null,I=null,ee,V,Ue,we=y(a[C==1?i:c]),te=y(a[i]),fe=y(a[c]),J=L(C==1?te+1:fe-1);for(let P=C==1?i:c;P>=i&&P<=c;P+=C){let Me=a[P],Se=(C==1?Me<J:Me>J)?we:y(Me),oe=d[P];Se==we?oe!=null?(V=oe,G==null?(x(U,Se,F(V)),ee=G=I=V):V<G?G=V:V>I&&(I=V)):oe===null&&(Q=!0):(G!=null&&$(U,we,F(G),F(I),F(ee),F(V)),oe!=null?(V=oe,x(U,Se,F(V)),G=I=ee=V):(G=I=null,oe===null&&(Q=!0)),we=Se,J=L(we+C))}G!=null&&G!=I&&Ue!=we&&$(U,we,F(G),F(I),F(ee),F(V))}else for(let L=C==1?i:c;L>=i&&L<=c;L+=C){let G=d[L];G===null?Q=!0:G!=null&&x(U,y(a[L]),F(G))}let[E,K]=_s(n,t);if(f.fill!=null||E!=0){let L=q.fill=new Path2D(U),G=f.fillTo(n,t,f.min,f.max,E),I=F(G),ee=y(a[i]),V=y(a[c]);C==-1&&([V,ee]=[ee,V]),x(L,V,I),x(L,ee,I)}if(!f.spanGaps){let L=[];Q&&L.push(...xs(a,d,i,c,C,y,s)),q.gaps=L=f.gaps(n,t,i,c,L),q.clip=bn(L,p.ori,A,M,O,N)}return K!=0&&(q.band=K==2?[zt(n,t,i,c,U,-1),zt(n,t,i,c,U,1)]:zt(n,t,i,c,U,K)),q})}function uu(e){let s=ne(e.align,1),n=ne(e.ascDesc,!1),t=ne(e.alignGaps,0),i=ne(e.extend,!1);return(c,f,a,d)=>ll(c,f,(p,S,g,w,A,M,O,N,W,y,F)=>{[a,d]=gn(g,a,d);let x=p.pxRound,{left:$,width:C}=c.bbox,q=te=>x(M(te,w,y,N)),U=te=>x(O(te,A,F,W)),Q=w.ori==0?Cl:Ol,Y={stroke:new Path2D,fill:null,clip:null,band:null,gaps:null,flags:Dl},E=Y.stroke,K=w.dir*(w.ori==0?1:-1),L=U(g[K==1?a:d]),G=q(S[K==1?a:d]),I=G,ee=G;i&&s==-1&&(ee=$,Q(E,ee,L)),Q(E,G,L);for(let te=K==1?a:d;te>=a&&te<=d;te+=K){let fe=g[te];if(fe==null)continue;let J=q(S[te]),P=U(fe);s==1?Q(E,J,L):Q(E,I,P),Q(E,J,P),L=P,I=J}let V=I;i&&s==1&&(V=$+C,Q(E,V,L));let[Ue,we]=_s(c,f);if(p.fill!=null||Ue!=0){let te=Y.fill=new Path2D(E),fe=p.fillTo(c,f,p.min,p.max,Ue),J=U(fe);Q(te,V,J),Q(te,ee,J)}if(!p.spanGaps){let te=[];te.push(...xs(S,g,a,d,K,q,t));let fe=p.width*ie/2,J=n||s==1?fe:-fe,P=n||s==-1?-fe:fe;te.forEach(Me=>{Me[0]+=J,Me[1]+=P}),Y.gaps=te=p.gaps(c,f,a,d,te),Y.clip=bn(te,w.ori,N,W,y,F)}return we!=0&&(Y.band=we==2?[zt(c,f,a,d,E,-1),zt(c,f,a,d,E,1)]:zt(c,f,a,d,E,we)),Y})}function Ki(e,s,n,t,i,c,f=ce){if(e.length>1){let a=null;for(let d=0,p=1/0;d<e.length;d++)if(s[d]!==void 0){if(a!=null){let S=Ae(e[d]-e[a]);S<p&&(p=S,f=Ae(n(e[d],t,i,c)-n(e[a],t,i,c)))}a=d}}return f}function cu(e){e=e||jl;let s=ne(e.size,[.6,ce,1]),n=e.align||0,t=e.gap||0,i=e.radius;i=i==null?[0,0]:typeof i=="number"?[i,0]:i;let c=X(i),f=1-s[0],a=ne(s[1],ce),d=ne(s[2],1),p=ne(e.disp,jl),S=ne(e.each,A=>{}),{fill:g,stroke:w}=p;return(A,M,O,N)=>ll(A,M,(W,y,F,x,$,C,q,U,Q,Y,E)=>{let K=W.pxRound,L=n,G=t*ie,I=a*ie,ee=d*ie,V,Ue;x.ori==0?[V,Ue]=c(A,M):[Ue,V]=c(A,M);let we=x.dir*(x.ori==0?1:-1),te=x.ori==0?xn:Es,fe=x.ori==0?S:(D,he,ke,ol,Gt,vt,Bt)=>{S(D,he,ke,Gt,ol,Bt,vt)},J=ne(A.bands,ws).find(D=>D.series[0]==M),P=J!=null?J.dir:0,Me=W.fillTo(A,M,W.min,W.max,P),Ne=K(q(Me,$,E,Q)),Se,oe,ct,$e=Y,be=K(W.width*ie),St=!1,kt=null,lt=null,Ct=null,nl=null;g!=null&&(be==0||w!=null)&&(St=!0,kt=g.values(A,M,O,N),lt=new Map,new Set(kt).forEach(D=>{D!=null&&lt.set(D,new Path2D)}),be>0&&(Ct=w.values(A,M,O,N),nl=new Map,new Set(Ct).forEach(D=>{D!=null&&nl.set(D,new Path2D)})));let{x0:sl,size:Ll}=p;if(sl!=null&&Ll!=null){L=1,y=sl.values(A,M,O,N),sl.unit==2&&(y=y.map(ke=>A.posToVal(U+ke*Y,x.key,!0)));let D=Ll.values(A,M,O,N);Ll.unit==2?oe=D[0]*Y:oe=C(D[0],x,Y,U)-C(0,x,Y,U),$e=Ki(y,F,C,x,Y,U,$e),ct=$e-oe+G}else $e=Ki(y,F,C,x,Y,U,$e),ct=$e*f+G,oe=$e-ct;ct<1&&(ct=0),be>=oe/2&&(be=0),ct<5&&(K=lo);let $l=ct>0,Wt=$e-ct-($l?be:0);oe=K(is(Wt,ee,I)),Se=(L==0?oe/2:L==we?0:oe)-L*we*((L==0?G/2:0)+($l?be/2:0));let We={stroke:null,fill:null,clip:null,band:null,gaps:null,flags:0},il=St?null:new Path2D,Tt=null;if(J!=null)Tt=A.data[J.series[1]];else{let{y0:D,y1:he}=p;D!=null&&he!=null&&(F=he.values(A,M,O,N),Tt=D.values(A,M,O,N))}let Ht=V*oe,j=Ue*oe;for(let D=we==1?O:N;D>=O&&D<=N;D+=we){let he=F[D];if(he==null)continue;if(Tt!=null){let je=Tt[D]??0;if(he-je==0)continue;Ne=q(je,$,E,Q)}let ke=x.distr!=2||p!=null?y[D]:D,ol=C(ke,x,Y,U),Gt=q(ne(he,Me),$,E,Q),vt=K(ol-Se),Bt=K(Ye(Gt,Ne)),qe=K(wt(Gt,Ne)),nt=Bt-qe;if(he!=null){let je=he<0?j:Ht,at=he<0?Ht:j;St?(be>0&&Ct[D]!=null&&te(nl.get(Ct[D]),vt,qe+et(be/2),oe,Ye(0,nt-be),je,at),kt[D]!=null&&te(lt.get(kt[D]),vt,qe+et(be/2),oe,Ye(0,nt-be),je,at)):te(il,vt,qe+et(be/2),oe,Ye(0,nt-be),je,at),fe(A,M,D,vt-be/2,qe,oe+be,nt)}}return be>0?We.stroke=St?nl:il:St||(We._fill=W.width==0?W._fill:W._stroke??W._fill,We.width=0),We.fill=St?lt:il,We})}function au(e,s){let n=ne(s?.alignGaps,0);return(t,i,c,f)=>ll(t,i,(a,d,p,S,g,w,A,M,O,N,W)=>{[c,f]=gn(p,c,f);let y=a.pxRound,F=V=>y(w(V,S,N,M)),x=V=>y(A(V,g,W,O)),$,C,q;S.ori==0?($=yn,q=Cl,C=zo):($=_n,q=Ol,C=Co);let U=S.dir*(S.ori==0?1:-1),Q=F(d[U==1?c:f]),Y=Q,E=[],K=[];for(let V=U==1?c:f;V>=c&&V<=f;V+=U)if(p[V]!=null){let we=d[V],te=F(we);E.push(Y=te),K.push(x(p[V]))}let L={stroke:e(E,K,$,q,C,y),fill:null,clip:null,band:null,gaps:null,flags:Dl},G=L.stroke,[I,ee]=_s(t,i);if(a.fill!=null||I!=0){let V=L.fill=new Path2D(G),Ue=a.fillTo(t,i,a.min,a.max,I),we=x(Ue);q(V,Y,we),q(V,Q,we)}if(!a.spanGaps){let V=[];V.push(...xs(d,p,c,f,U,F,n)),L.gaps=V=a.gaps(t,i,c,f,V),L.clip=bn(V,S.ori,M,O,N,W)}return ee!=0&&(L.band=ee==2?[zt(t,i,c,f,G,-1),zt(t,i,c,f,G,1)]:zt(t,i,c,f,G,ee)),L})}function hu(e){return au(du,e)}function du(e,s,n,t,i,c){let f=e.length;if(f<2)return null;let a=new Path2D;if(n(a,e[0],s[0]),f==2)t(a,e[1],s[1]);else{let d=Array(f),p=Array(f-1),S=Array(f-1),g=Array(f-1);for(let w=0;w<f-1;w++)S[w]=s[w+1]-s[w],g[w]=e[w+1]-e[w],p[w]=S[w]/g[w];d[0]=p[0];for(let w=1;w<f-1;w++)p[w]===0||p[w-1]===0||p[w-1]>0!=p[w]>0?d[w]=0:(d[w]=3*(g[w-1]+g[w])/((2*g[w]+g[w-1])/p[w-1]+(g[w]+2*g[w-1])/p[w]),isFinite(d[w])||(d[w]=0));d[f-1]=p[f-2];for(let w=0;w<f-1;w++)i(a,e[w]+g[w]/3,s[w]+d[w]*g[w]/3,e[w+1]-g[w]/3,s[w+1]-d[w+1]*g[w]/3,e[w+1],s[w+1])}return a}var us=new Set;function $i(){for(let e of us)e.syncRect(!0)}zl&&(el(jr,Ml,$i),el(Kr,Ml,$i,!0),el(dn,Ml,()=>{Ve.pxRatio=ie}));var pu=Po(),mu=Oo();function qi(e,s,n,t){return(t?[e[0],e[1]].concat(e.slice(2)):[e[0]].concat(e.slice(1))).map((c,f)=>cs(c,f,s,n))}function gu(e,s){return e.map((n,t)=>t==0?{}:Ee({},s,n))}function cs(e,s,n,t){return Ee({},s==0?n:t,e)}function Ro(e,s,n){return s==null?Tl:[s,n]}var wu=Ro;function Su(e,s,n){return s==null?Tl:pn(s,n,ms,!0)}function Fo(e,s,n,t){return s==null?Tl:wn(s,n,e.scales[t].log,!1)}var vu=Fo;function Vo(e,s,n,t){return s==null?Tl:ps(s,n,e.scales[t].log,!1)}var bu=Vo;function yu(e,s,n,t,i){let c=Ye(Ti(e),Ti(s)),f=s-e,a=gt(i/t*f,n);do{let d=n[a],p=t*d/f;if(p>=i&&c+(d<5?Nt.get(d):0)<=17)return[d,p]}while(++a<n.length);return[0,0]}function Ji(e){let s,n;return e=e.replace(/(\d+)px/,(t,i)=>(s=Te((n=+i)*ie))+"px"),[e,s,n]}function _u(e){e.show&&[e.font,e.labelFont].forEach(s=>{let n=ae(s[2]*ie,1);s[0]=s[0].replace(/[0-9.]+px/,n+"px"),s[1]=n})}function Ve(e,s,n){let t={mode:ne(e.mode,1)},i=t.mode;function c(l,o,r,u){let h=o.valToPct(l);return u+r*(o.dir==-1?1-h:h)}function f(l,o,r,u){let h=o.valToPct(l);return u+r*(o.dir==-1?h:1-h)}function a(l,o,r,u){return o.ori==0?c(l,o,r,u):f(l,o,r,u)}t.valToPosH=c,t.valToPosV=f;let d=!1;t.status=0;let p=t.root=ft(Ar);if(e.id!=null&&(p.id=e.id),Xe(p,e.class),e.title){let l=ft(Cr,p);l.textContent=e.title}let S=mt("canvas"),g=t.ctx=S.getContext("2d"),w=ft(Or,p);el("click",w,l=>{l.target===M&&(de!=wl||ve!=Sl)&&Fe.click(t,l)},!0);let A=t.under=ft(Lr,w);w.appendChild(S);let M=t.over=ft(Pr,w);e=Al(e);let O=+ne(e.pxAlign,1),N=ji(O);(e.plugins||[]).forEach(l=>{l.opts&&(e=l.opts(t,e)||e)});let W=e.ms||.001,y=t.series=i==1?qi(e.series||[],Ni,Yi,!1):gu(e.series||[null],Bi),F=t.axes=qi(e.axes||[],Ii,Hi,!0),x=t.scales={},$=t.bands=e.bands||[];$.forEach(l=>{l.fill=X(l.fill||null),l.dir=ne(l.dir,-1)});let C=i==2?y[1].facets[0].scale:y[0].scale,q={axes:Xo,series:$o},U=(e.drawOrder||["axes","series"]).map(l=>q[l]);function Q(l){let o=l.distr==3?r=>Dt(r>0?r:l.clamp(t,r,l.min,l.max,l.key)):l.distr==4?r=>Zn(r,l.asinh):l.distr==100?r=>l.fwd(r):r=>r;return r=>{let u=o(r),{_min:h,_max:m}=l,v=m-h;return(u-h)/v}}function Y(l){let o=x[l];if(o==null){let r=(e.scales||jl)[l]||jl;if(r.from!=null){Y(r.from);let u=Ee({},x[r.from],r,{key:l});u.valToPct=Q(u),x[l]=u}else{o=x[l]=Ee({},l==C?Mo:su,r),o.key=l;let u=o.time,h=o.range,m=It(h);if((l!=C||i==2&&!u)&&(m&&(h[0]==null||h[1]==null)&&(h={min:h[0]==null?Ei:{mode:1,hard:h[0],soft:h[0]},max:h[1]==null?Ei:{mode:1,hard:h[1],soft:h[1]}},m=!1),!m&&vn(h))){let v=h;h=(b,_,k)=>_==null?Tl:pn(_,k,v)}o.range=X(h||(u?wu:l==C?o.distr==3?vu:o.distr==4?bu:Ro:o.distr==3?Fo:o.distr==4?Vo:Su)),o.auto=X(m?!1:o.auto),o.clamp=X(o.clamp||nu),o._min=o._max=null,o.valToPct=Q(o)}}}Y("x"),Y("y"),i==1&&y.forEach(l=>{Y(l.scale)}),F.forEach(l=>{Y(l.scale)});for(let l in e.scales)Y(l);let E=x[C],K=E.distr,L,G;E.ori==0?(Xe(p,Dr),L=c,G=f):(Xe(p,zr),L=f,G=c);let I={};for(let l in x){let o=x[l];(o.min!=null||o.max!=null)&&(I[l]={min:o.min,max:o.max},o.min=o.max=null)}let ee=e.tzDate||(l=>new Date(Te(l/W))),V=e.fmtDate||Ss,Ue=W==1?zf(ee):Lf(ee),we=Ri(ee,Pi(W==1?Df:Of,V)),te=Vi(ee,Fi(Rf,V)),fe=[],J=t.legend=Ee({},If,e.legend),P=t.cursor=Ee({},Yf,{drag:{y:i==2}},e.cursor),Me=J.show,Ne=P.show,Se=J.markers;J.idxs=fe,Se.width=X(Se.width),Se.dash=X(Se.dash),Se.stroke=X(Se.stroke),Se.fill=X(Se.fill);let oe,ct,$e,be=[],St=[],kt,lt=!1,Ct={};if(J.live){let l=y[1]?y[1].values:null;lt=l!=null,kt=lt?l(t,1,0):{_:0};for(let o in kt)Ct[o]=hs}if(Me)if(oe=mt("table",Wr,p),$e=mt("tbody",null,oe),J.mount(t,oe),lt){ct=mt("thead",null,oe,$e);let l=mt("tr",null,ct);mt("th",null,l);for(var nl in kt)mt("th",ai,l).textContent=nl}else Xe(oe,Gr),J.live&&Xe(oe,Hr);let sl={show:!0},Ll={show:!1};function $l(l,o){if(o==0&&(lt||!J.live||i==2))return Tl;let r=[],u=mt("tr",Br,$e,$e.childNodes[o]);Xe(u,l.class),l.show||Xe(u,Xt);let h=mt("th",null,u);if(Se.show){let b=ft(Yr,h);if(o>0){let _=Se.width(t,o);_&&(b.style.border=_+"px "+Se.dash(t,o)+" "+Se.stroke(t,o)),b.style.background=Se.fill(t,o)}}let m=ft(ai,h);l.label instanceof HTMLElement?m.appendChild(l.label):m.textContent=l.label,o>0&&(Se.show||(m.style.color=l.width>0?Se.stroke(t,o):Se.fill(t,o)),We("click",h,b=>{if(P._lock)return;Ut(b);let _=y.indexOf(l);if((b.ctrlKey||b.metaKey)!=J.isolate){let k=y.some((T,z)=>z>0&&z!=_&&T.show);y.forEach((T,z)=>{z>0&&yt(z,k?z==_?sl:Ll:sl,!0,xe.setSeries)})}else yt(_,{show:!l.show},!0,xe.setSeries)},!1),fl&&We(mi,h,b=>{P._lock||(Ut(b),yt(y.indexOf(l),bl,!0,xe.setSeries))},!1));for(var v in kt){let b=mt("td",Ur,u);b.textContent="--",r.push(b)}return[u,r]}let Wt=new Map;function We(l,o,r,u=!0){let h=Wt.get(o)||{},m=P.bind[l](t,o,r,u);m&&(el(l,o,h[l]=m),Wt.set(o,h))}function il(l,o,r){let u=Wt.get(o)||{};for(let h in u)(l==null||h==l)&&(ss(h,o,u[h]),delete u[h]);l==null&&Wt.delete(o)}let Tt=0,Ht=0,j=0,D=0,he=0,ke=0,ol=he,Gt=ke,vt=j,Bt=D,qe=0,nt=0,je=0,at=0;t.bbox={};let En=!1,ql=!1,rl=!1,Yt=!1,Jl=!1,st=!1;function Mn(l,o,r){(r||l!=t.width||o!=t.height)&&Ms(l,o),dl(!1),rl=!0,ql=!0,pl()}function Ms(l,o){t.width=Tt=j=l,t.height=Ht=D=o,he=ke=0,Ho(),Go();let r=t.bbox;qe=r.left=Zt(he*ie,.5),nt=r.top=Zt(ke*ie,.5),je=r.width=Zt(j*ie,.5),at=r.height=Zt(D*ie,.5)}let Io=3;function No(){let l=!1,o=0;for(;!l;){o++;let r=Zo(o),u=Qo(o);l=o==Io||r&&u,l||(Ms(t.width,t.height),ql=!0)}}function Wo({width:l,height:o}){Mn(l,o)}t.setSize=Wo;function Ho(){let l=!1,o=!1,r=!1,u=!1;F.forEach((h,m)=>{if(h.show&&h._show){let{side:v,_size:b}=h,_=v%2,k=h.label!=null?h.labelSize:0,T=b+k;T>0&&(_?(j-=T,v==3?(he+=T,u=!0):r=!0):(D-=T,v==0?(ke+=T,l=!0):o=!0))}}),jt[0]=l,jt[1]=r,jt[2]=o,jt[3]=u,j-=Ot[1]+Ot[3],he+=Ot[3],D-=Ot[2]+Ot[0],ke+=Ot[0]}function Go(){let l=he+j,o=ke+D,r=he,u=ke;function h(m,v){switch(m){case 1:return l+=v,l-v;case 2:return o+=v,o-v;case 3:return r-=v,r+v;case 0:return u-=v,u+v}}F.forEach((m,v)=>{if(m.show&&m._show){let b=m.side;m._pos=h(b,m._size),m.label!=null&&(m._lpos=h(b,m.labelSize))}})}if(P.dataIdx==null){let l=P.hover,o=l.skip=new Set(l.skip??[]);o.add(void 0);let r=l.prox=X(l.prox),u=l.bias??(l.bias=0);P.dataIdx=(h,m,v,b)=>{if(m==0)return v;let _=v,k=r(h,m,v,b)??ce,T=k>=0&&k<ce,z=E.ori==0?j:D,B=P.left,se=s[0],le=s[m];if(o.has(le[v])){_=null;let Z=null,H=null,R;if(u==0||u==-1)for(R=v;Z==null&&R-- >0;)o.has(le[R])||(Z=R);if(u==0||u==1)for(R=v;H==null&&R++<le.length;)o.has(le[R])||(H=R);if(Z!=null||H!=null)if(T){let me=Z==null?-1/0:L(se[Z],E,z,0),ye=H==null?1/0:L(se[H],E,z,0),Pe=B-me,ue=ye-B;Pe<=ue?Pe<=k&&(_=Z):ue<=k&&(_=H)}else _=H==null?Z:Z==null?H:v-Z<=H-v?Z:H}else T&&Ae(B-L(se[v],E,z,0))>k&&(_=null);return _}}let Ut=l=>{P.event=l};P.idxs=fe,P._lock=!1;let Ie=P.points;Ie.show=X(Ie.show),Ie.size=X(Ie.size),Ie.stroke=X(Ie.stroke),Ie.width=X(Ie.width),Ie.fill=X(Ie.fill);let bt=t.focus=Ee({},e.focus||{alpha:.3},P.focus),fl=bt.prox>=0,ul=fl&&Ie.one,it=[],cl=[],al=[];function ks(l,o){let r=Ie.show(t,o);if(r instanceof HTMLElement)return Xe(r,Nr),Xe(r,l.class),Mt(r,-10,-10,j,D),M.insertBefore(r,it[o]),r}function Ts(l,o){if(i==1||o>0){let r=i==1&&x[l.scale].time,u=l.value;l.value=r?zi(u)?Vi(ee,Fi(u,V)):u||te:u||eu,l.label=l.label||(r?jf:Uf)}if(ul||o>0){l.width=l.width==null?1:l.width,l.paths=l.paths||pu||nf,l.fillTo=X(l.fillTo||iu),l.pxAlign=+ne(l.pxAlign,O),l.pxRound=ji(l.pxAlign),l.stroke=X(l.stroke||null),l.fill=X(l.fill||null),l._stroke=l._fill=l._paths=l._focus=null;let r=tu(Ye(1,l.width),1),u=l.points=Ee({},{size:r,width:Ye(1,r*.2),stroke:l.stroke,space:r*2,paths:mu,_stroke:null,_fill:null},l.points);u.show=X(u.show),u.filter=X(u.filter),u.fill=X(u.fill),u.stroke=X(u.stroke),u.paths=X(u.paths),u.pxAlign=l.pxAlign}if(Me){let r=$l(l,o);be.splice(o,0,r[0]),St.splice(o,0,r[1]),J.values.push(null)}if(Ne){fe.splice(o,0,null);let r=null;ul?o==0&&(r=ks(l,o)):o>0&&(r=ks(l,o)),it.splice(o,0,r),cl.splice(o,0,0),al.splice(o,0,0)}Le("addSeries",o)}function Bo(l,o){o=o??y.length,l=i==1?cs(l,o,Ni,Yi):cs(l,o,{},Bi),y.splice(o,0,l),Ts(y[o],o)}t.addSeries=Bo;function Yo(l){if(y.splice(l,1),Me){J.values.splice(l,1),St.splice(l,1);let o=be.splice(l,1)[0];il(null,o.firstChild),o.remove()}Ne&&(fe.splice(l,1),it.splice(l,1)[0].remove(),cl.splice(l,1),al.splice(l,1)),Le("delSeries",l)}t.delSeries=Yo;let jt=[!1,!1,!1,!1];function Uo(l,o){if(l._show=l.show,l.show){let r=l.side%2,u=x[l.scale];u==null&&(l.scale=r?y[1].scale:C,u=x[l.scale]);let h=u.time;l.size=X(l.size),l.space=X(l.space),l.rotate=X(l.rotate),It(l.incrs)&&l.incrs.forEach(v=>{!Nt.has(v)&&Nt.set(v,io(v))}),l.incrs=X(l.incrs||(u.distr==2?kf:h?W==1?Af:Cf:Qt)),l.splits=X(l.splits||(h&&u.distr==1?Ue:u.distr==3?os:u.distr==4?qf:$f)),l.stroke=X(l.stroke),l.grid.stroke=X(l.grid.stroke),l.ticks.stroke=X(l.ticks.stroke),l.border.stroke=X(l.border.stroke);let m=l.values;l.values=It(m)&&!It(m[0])?X(m):h?It(m)?Ri(ee,Pi(m,V)):zi(m)?Pf(ee,m):m||we:m||Kf,l.filter=X(l.filter||(u.distr>=3&&u.log==10?Qf:u.distr==3&&u.log==2?Xf:no)),l.font=Ji(l.font),l.labelFont=Ji(l.labelFont),l._size=l.size(t,null,o,0),l._space=l._rotate=l._incrs=l._found=l._splits=l._values=null,l._size>0&&(jt[o]=!0,l._el=ft(Rr,w))}}function Pl(l,o,r,u){let[h,m,v,b]=r,_=o%2,k=0;return _==0&&(b||m)&&(k=o==0&&!h||o==2&&!v?Te(Ii.size/3):0),_==1&&(h||v)&&(k=o==1&&!m||o==3&&!b?Te(Hi.size/2):0),k}let As=t.padding=(e.padding||[Pl,Pl,Pl,Pl]).map(l=>X(ne(l,Pl))),Ot=t._padding=As.map((l,o)=>l(t,o,jt,0)),Re,De=null,ze=null,Zl=i==1?y[0].idxs:null,ht=null,Rl=!1;function Ds(l,o){if(s=l??[],t.data=t._data=s,i==2){Re=0;for(let r=1;r<y.length;r++)Re+=s[r][0].length}else{s.length==0&&(t.data=t._data=s=[[]]),ht=s[0],Re=ht.length;let r=s;if(K==2){r=s.slice();let u=r[0]=Array(Re);for(let h=0;h<Re;h++)u[h]=h}t._data=s=r}if(dl(!0),Le("setData"),K==2&&(rl=!0),o!==!1){let r=E;r.auto(t,Rl)?kn():Pt(C,r.min,r.max),Yt=Yt||P.left>=0,st=!0,pl()}}t.setData=Ds;function kn(){Rl=!0;let l,o;i==1&&(Re>0?(De=Zl[0]=0,ze=Zl[1]=Re-1,l=s[0][De],o=s[0][ze],K==2?(l=De,o=ze):l==o&&(K==3?[l,o]=wn(l,l,E.log,!1):K==4?[l,o]=ps(l,l,E.log,!1):E.time?o=l+Te(86400/W):[l,o]=pn(l,o,ms,!0))):(De=Zl[0]=l=null,ze=Zl[1]=o=null)),Pt(C,l,o)}let Ql,hl,Tn,An,Dn,zn,Cn,On,Ln,Ke;function zs(l,o,r,u,h,m){l??(l=di),r??(r=ws),u??(u="butt"),h??(h=di),m??(m="round"),l!=Ql&&(g.strokeStyle=Ql=l),h!=hl&&(g.fillStyle=hl=h),o!=Tn&&(g.lineWidth=Tn=o),m!=Dn&&(g.lineJoin=Dn=m),u!=zn&&(g.lineCap=zn=u),r!=An&&g.setLineDash(An=r)}function Cs(l,o,r,u){o!=hl&&(g.fillStyle=hl=o),l!=Cn&&(g.font=Cn=l),r!=On&&(g.textAlign=On=r),u!=Ln&&(g.textBaseline=Ln=u)}function Pn(l,o,r,u,h=0){if(u.length>0&&l.auto(t,Rl)&&(o==null||o.min==null)){let m=ne(De,0),v=ne(ze,u.length-1),b=r.min==null?Zr(u,m,v,h,l.distr==3):[r.min,r.max];l.min=wt(l.min,r.min=b[0]),l.max=Ye(l.max,r.max=b[1])}}let Os={min:null,max:null};function jo(){for(let u in x){let h=x[u];I[u]==null&&(h.min==null||I[C]!=null&&h.auto(t,Rl))&&(I[u]=Os)}for(let u in x){let h=x[u];I[u]==null&&h.from!=null&&I[h.from]!=null&&(I[u]=Os)}I[C]!=null&&dl(!0);let l={};for(let u in I){let h=I[u];if(h!=null){let m=l[u]=Al(x[u],rf);if(h.min!=null)Ee(m,h);else if(u!=C||i==2)if(Re==0&&m.from==null){let v=m.range(t,null,null,u);m.min=v[0],m.max=v[1]}else m.min=ce,m.max=-ce}}if(Re>0){y.forEach((u,h)=>{if(i==1){let m=u.scale,v=I[m];if(v==null)return;let b=l[m];if(h==0){let _=b.range(t,b.min,b.max,m);b.min=_[0],b.max=_[1],De=gt(b.min,s[0]),ze=gt(b.max,s[0]),ze-De>1&&(s[0][De]<b.min&&De++,s[0][ze]>b.max&&ze--),u.min=ht[De],u.max=ht[ze]}else u.show&&u.auto&&Pn(b,v,u,s[h],u.sorted);u.idxs[0]=De,u.idxs[1]=ze}else if(h>0&&u.show&&u.auto){let[m,v]=u.facets,b=m.scale,_=v.scale,[k,T]=s[h],z=l[b],B=l[_];z!=null&&Pn(z,I[b],m,k,m.sorted),B!=null&&Pn(B,I[_],v,T,v.sorted),u.min=v.min,u.max=v.max}});for(let u in l){let h=l[u],m=I[u];if(h.from==null&&(m==null||m.min==null)){let v=h.range(t,h.min==ce?null:h.min,h.max==-ce?null:h.max,u);h.min=v[0],h.max=v[1]}}}for(let u in l){let h=l[u];if(h.from!=null){let m=l[h.from];if(m.min==null)h.min=h.max=null;else{let v=h.range(t,m.min,m.max,u);h.min=v[0],h.max=v[1]}}}let o={},r=!1;for(let u in l){let h=l[u],m=x[u];if(m.min!=h.min||m.max!=h.max){m.min=h.min,m.max=h.max;let v=m.distr;m._min=v==3?Dt(m.min):v==4?Zn(m.min,m.asinh):v==100?m.fwd(m.min):m.min,m._max=v==3?Dt(m.max):v==4?Zn(m.max,m.asinh):v==100?m.fwd(m.max):m.max,o[u]=r=!0}}if(r){y.forEach((u,h)=>{i==2?h>0&&o.y&&(u._paths=null):o[u.scale]&&(u._paths=null)});for(let u in o)rl=!0,Le("setScale",u);Ne&&P.left>=0&&(Yt=st=!0)}for(let u in I)I[u]=null}function Ko(l){let o=is(De-1,0,Re-1),r=is(ze+1,0,Re-1);for(;l[o]==null&&o>0;)o--;for(;l[r]==null&&r<Re-1;)r++;return[o,r]}function $o(){if(Re>0){let l=y.some(o=>o._focus)&&Ke!=bt.alpha;l&&(g.globalAlpha=Ke=bt.alpha),y.forEach((o,r)=>{if(r>0&&o.show&&(Ls(r,!1),Ls(r,!0),o._paths==null)){let u=Ke;Ke!=o.alpha&&(g.globalAlpha=Ke=o.alpha);let h=i==2?[0,s[r][0].length-1]:Ko(s[r]);o._paths=o.paths(t,r,h[0],h[1]),Ke!=u&&(g.globalAlpha=Ke=u)}}),y.forEach((o,r)=>{if(r>0&&o.show){let u=Ke;Ke!=o.alpha&&(g.globalAlpha=Ke=o.alpha),o._paths!=null&&Ps(r,!1);{let h=o._paths!=null?o._paths.gaps:null,m=o.points.show(t,r,De,ze,h),v=o.points.filter(t,r,m,h);(m||v)&&(o.points._paths=o.points.paths(t,r,De,ze,v),Ps(r,!0))}Ke!=u&&(g.globalAlpha=Ke=u),Le("drawSeries",r)}}),l&&(g.globalAlpha=Ke=1)}}function Ls(l,o){let r=o?y[l].points:y[l];r._stroke=r.stroke(t,l),r._fill=r.fill(t,l)}function Ps(l,o){let r=o?y[l].points:y[l],{stroke:u,fill:h,clip:m,flags:v,_stroke:b=r._stroke,_fill:_=r._fill,_width:k=r.width}=r._paths;k=ae(k*ie,3);let T=null,z=k%2/2;o&&_==null&&(_=k>0?"#fff":b);let B=r.pxAlign==1&&z>0;if(B&&g.translate(z,z),!o){let se=qe-k/2,le=nt-k/2,Z=je+k,H=at+k;T=new Path2D,T.rect(se,le,Z,H)}o?Rn(b,k,r.dash,r.cap,_,u,h,v,m):qo(l,b,k,r.dash,r.cap,_,u,h,v,T,m),B&&g.translate(-z,-z)}function qo(l,o,r,u,h,m,v,b,_,k,T){let z=!1;_!=0&&$.forEach((B,se)=>{if(B.series[0]==l){let le=y[B.series[1]],Z=s[B.series[1]],H=(le._paths||jl).band;It(H)&&(H=B.dir==1?H[0]:H[1]);let R,me=null;le.show&&H&&Xr(Z,De,ze)?(me=B.fill(t,se)||m,R=le._paths.clip):H=null,Rn(o,r,u,h,me,v,b,_,k,T,R,H),z=!0}}),z||Rn(o,r,u,h,m,v,b,_,k,T)}let Rs=Dl|fs;function Rn(l,o,r,u,h,m,v,b,_,k,T,z){zs(l,o,r,u,h),(_||k||z)&&(g.save(),_&&g.clip(_),k&&g.clip(k)),z?(b&Rs)==Rs?(g.clip(z),T&&g.clip(T),en(h,v),Xl(l,m,o)):b&fs?(en(h,v),g.clip(z),Xl(l,m,o)):b&Dl&&(g.save(),g.clip(z),T&&g.clip(T),en(h,v),g.restore(),Xl(l,m,o)):(en(h,v),Xl(l,m,o)),(_||k||z)&&g.restore()}function Xl(l,o,r){r>0&&(o instanceof Map?o.forEach((u,h)=>{g.strokeStyle=Ql=h,g.stroke(u)}):o!=null&&l&&g.stroke(o))}function en(l,o){o instanceof Map?o.forEach((r,u)=>{g.fillStyle=hl=u,g.fill(r)}):o!=null&&l&&g.fill(o)}function Jo(l,o,r,u){let h=F[l],m;if(u<=0)m=[0,0];else{let v=h._space=h.space(t,l,o,r,u),b=h._incrs=h.incrs(t,l,o,r,u,v);m=yu(o,r,b,u,v)}return h._found=m}function Fn(l,o,r,u,h,m,v,b,_,k){let T=v%2/2;O==1&&g.translate(T,T),zs(b,v,_,k,b),g.beginPath();let z,B,se,le,Z=h+(u==0||u==3?-m:m);r==0?(B=h,le=Z):(z=h,se=Z);for(let H=0;H<l.length;H++)o[H]!=null&&(r==0?z=se=l[H]:B=le=l[H],g.moveTo(z,B),g.lineTo(se,le));g.stroke(),O==1&&g.translate(-T,-T)}function Zo(l){let o=!0;return F.forEach((r,u)=>{if(!r.show)return;let h=x[r.scale];if(h.min==null){r._show&&(o=!1,r._show=!1,dl(!1));return}else r._show||(o=!1,r._show=!0,dl(!1));let m=r.side,v=m%2,{min:b,max:_}=h,[k,T]=Jo(u,b,_,v==0?j:D);if(T==0)return;let z=h.distr==2,B=r._splits=r.splits(t,u,b,_,k,T,z),se=h.distr==2?B.map(R=>ht[R]):B,le=h.distr==2?ht[B[1]]-ht[B[0]]:k,Z=r._values=r.values(t,r.filter(t,se,u,T,le),u,T,le);r._rotate=m==2?r.rotate(t,Z,u,T):0;let H=r._size;r._size=ut(r.size(t,Z,u,l)),H!=null&&r._size!=H&&(o=!1)}),o}function Qo(l){let o=!0;return As.forEach((r,u)=>{let h=r(t,u,jt,l);h!=Ot[u]&&(o=!1),Ot[u]=h}),o}function Xo(){for(let l=0;l<F.length;l++){let o=F[l];if(!o.show||!o._show)continue;let r=o.side,u=r%2,h,m,v=o.stroke(t,l),b=r==0||r==3?-1:1,[_,k]=o._found;if(o.label!=null){let Ge=o.labelGap*b,Qe=Te((o._lpos+Ge)*ie);Cs(o.labelFont[0],v,"center",r==2?"top":hi),g.save(),u==1?(h=m=0,g.translate(Qe,Te(nt+at/2)),g.rotate((r==3?-hn:hn)/2)):(h=Te(qe+je/2),m=Qe);let qt=to(o.label)?o.label(t,l,_,k):o.label;g.fillText(qt,h,m),g.restore()}if(k==0)continue;let T=x[o.scale],z=u==0?je:at,B=u==0?qe:nt,se=o._splits,le=T.distr==2?se.map(Ge=>ht[Ge]):se,Z=T.distr==2?ht[se[1]]-ht[se[0]]:_,H=o.ticks,R=o.border,me=H.show?H.size:0,ye=Te(me*ie),Pe=Te((o.alignTo==2?o._size-me-o.gap:o.gap)*ie),ue=o._rotate*-hn/180,_e=N(o._pos*ie),Je=(ye+Pe)*b,He=_e+Je;m=u==0?He:0,h=u==1?He:0;let ot=o.font[0],dt=o.align==1?xl:o.align==2?$n:ue>0?xl:ue<0?$n:u==0?"center":r==3?$n:xl,xt=ue||u==1?"middle":r==2?"top":hi;Cs(ot,v,dt,xt);let Ze=o.font[1]*o.lineGap,rt=se.map(Ge=>N(a(Ge,T,z,B))),pt=o._values;for(let Ge=0;Ge<pt.length;Ge++){let Qe=pt[Ge];if(Qe!=null){u==0?h=rt[Ge]:m=rt[Ge],Qe=""+Qe;let qt=Qe.indexOf(`
+`)==-1?[Qe]:Qe.split(/\n/gm);for(let Be=0;Be<qt.length;Be++){let ei=qt[Be];ue?(g.save(),g.translate(h,m+Be*Ze),g.rotate(ue),g.fillText(ei,0,0),g.restore()):g.fillText(ei,h,m+Be*Ze)}}}H.show&&Fn(rt,H.filter(t,le,l,k,Z),u,r,_e,ye,ae(H.width*ie,3),H.stroke(t,l),H.dash,H.cap);let Et=o.grid;Et.show&&Fn(rt,Et.filter(t,le,l,k,Z),u,u==0?2:1,u==0?nt:qe,u==0?at:je,ae(Et.width*ie,3),Et.stroke(t,l),Et.dash,Et.cap),R.show&&Fn([_e],[1],u==0?1:0,u==0?1:2,u==1?nt:qe,u==1?at:je,ae(R.width*ie,3),R.stroke(t,l),R.dash,R.cap)}Le("drawAxes")}function dl(l){y.forEach((o,r)=>{r>0&&(o._paths=null,l&&(i==1?(o.min=null,o.max=null):o.facets.forEach(u=>{u.min=null,u.max=null})))})}let tn=!1,Vn=!1,Fl=[];function er(){Vn=!1;for(let l=0;l<Fl.length;l++)Le(...Fl[l]);Fl.length=0}function pl(){tn||(pf(Fs),tn=!0)}function tr(l,o=!1){tn=!0,Vn=o,l(t),Fs(),o&&Fl.length>0&&queueMicrotask(er)}t.batch=tr;function Fs(){if(En&&(jo(),En=!1),rl&&(No(),rl=!1),ql){if(ge(A,xl,he),ge(A,"top",ke),ge(A,Gl,j),ge(A,Bl,D),ge(M,xl,he),ge(M,"top",ke),ge(M,Gl,j),ge(M,Bl,D),ge(w,Gl,Tt),ge(w,Bl,Ht),S.width=Te(Tt*ie),S.height=Te(Ht*ie),F.forEach(({_el:l,_show:o,_size:r,_pos:u,side:h})=>{if(l!=null)if(o){let m=h===3||h===0?r:0,v=h%2==1;ge(l,v?"left":"top",u-m),ge(l,v?"width":"height",r),ge(l,v?"top":"left",v?ke:he),ge(l,v?"height":"width",v?D:j),ns(l,Xt)}else Xe(l,Xt)}),Ql=hl=Tn=Dn=zn=Cn=On=Ln=An=null,Ke=1,Nl(!0),he!=ol||ke!=Gt||j!=vt||D!=Bt){dl(!1);let l=j/vt,o=D/Bt;if(Ne&&!Yt&&P.left>=0){P.left*=l,P.top*=o,ml&&Mt(ml,Te(P.left),0,j,D),gl&&Mt(gl,0,Te(P.top),j,D);for(let r=0;r<it.length;r++){let u=it[r];u!=null&&(cl[r]*=l,al[r]*=o,Mt(u,ut(cl[r]),ut(al[r]),j,D))}}if(pe.show&&!Jl&&pe.left>=0&&pe.width>0){pe.left*=l,pe.width*=l,pe.top*=o,pe.height*=o;for(let r in Bn)ge(vl,r,pe[r])}ol=he,Gt=ke,vt=j,Bt=D}Le("setSize"),ql=!1}Tt>0&&Ht>0&&(g.clearRect(0,0,S.width,S.height),Le("drawClear"),U.forEach(l=>l()),Le("draw")),pe.show&&Jl&&(ln(pe),Jl=!1),Ne&&Yt&&($t(null,!0,!1),Yt=!1),J.show&&J.live&&st&&(Hn(),st=!1),d||(d=!0,t.status=1,Le("ready")),Rl=!1,tn=!1}t.redraw=(l,o)=>{rl=o||!1,l!==!1?Pt(C,E.min,E.max):pl()};function In(l,o){let r=x[l];if(r.from==null){if(Re==0){let u=r.range(t,o.min,o.max,l);o.min=u[0],o.max=u[1]}if(o.min>o.max){let u=o.min;o.min=o.max,o.max=u}if(Re>1&&o.min!=null&&o.max!=null&&o.max-o.min<1e-16)return;l==C&&r.distr==2&&Re>0&&(o.min=gt(o.min,s[0]),o.max=gt(o.max,s[0]),o.min==o.max&&o.max++),I[l]=o,En=!0,pl()}}t.setScale=In;let Nn,Wn,ml,gl,Vs,Is,wl,Sl,Ns,Ws,de,ve,Lt=!1,Fe=P.drag,Ce=Fe.x,Oe=Fe.y;Ne&&(P.x&&(Nn=ft(Vr,M)),P.y&&(Wn=ft(Ir,M)),E.ori==0?(ml=Nn,gl=Wn):(ml=Wn,gl=Nn),de=P.left,ve=P.top);let pe=t.select=Ee({show:!0,over:!0,left:0,width:0,top:0,height:0},e.select),vl=pe.show?ft(Fr,pe.over?M:A):null;function ln(l,o){if(pe.show){for(let r in l)pe[r]=l[r],r in Bn&&ge(vl,r,l[r]);o!==!1&&Le("setSelect")}}t.setSelect=ln;function lr(l){if(y[l].show)Me&&ns(be[l],Xt);else if(Me&&Xe(be[l],Xt),Ne){let r=ul?it[0]:it[l];r!=null&&Mt(r,-10,-10,j,D)}}function Pt(l,o,r){In(l,{min:o,max:r})}function yt(l,o,r,u){o.focus!=null&&rr(l),o.show!=null&&y.forEach((h,m)=>{m>0&&(l==m||l==null)&&(h.show=o.show,lr(m),i==2?(Pt(h.facets[0].scale,null,null),Pt(h.facets[1].scale,null,null)):Pt(h.scale,null,null),pl())}),r!==!1&&Le("setSeries",l,o),u&&Wl("setSeries",t,l,o)}t.setSeries=yt;function nr(l,o){Ee($[l],o)}function sr(l,o){l.fill=X(l.fill||null),l.dir=ne(l.dir,-1),o=o??$.length,$.splice(o,0,l)}function ir(l){l==null?$.length=0:$.splice(l,1)}t.addBand=sr,t.setBand=nr,t.delBand=ir;function or(l,o){y[l].alpha=o,Ne&&it[l]!=null&&(it[l].style.opacity=o),Me&&be[l]&&(be[l].style.opacity=o)}let At,Rt,Kt,bl={focus:!0};function rr(l){if(l!=Kt){let o=l==null,r=bt.alpha!=1;y.forEach((u,h)=>{if(i==1||h>0){let m=o||h==0||h==l;u._focus=o?null:m,r&&or(h,m?1:bt.alpha)}}),Kt=l,r&&pl()}}Me&&fl&&We(gi,oe,l=>{P._lock||(Ut(l),Kt!=null&&yt(null,bl,!0,xe.setSeries))});function _t(l,o,r){let u=x[o];r&&(l=l/ie-(u.ori==1?ke:he));let h=j;u.ori==1&&(h=D,l=h-l),u.dir==-1&&(l=h-l);let m=u._min,v=u._max,b=l/h,_=m+(v-m)*b,k=u.distr;return k==3?kl(10,_):k==4?tf(_,u.asinh):k==100?u.bwd(_):_}function fr(l,o){let r=_t(l,C,o);return gt(r,s[0],De,ze)}t.valToIdx=l=>gt(l,s[0]),t.posToIdx=fr,t.posToVal=_t,t.valToPos=(l,o,r)=>x[o].ori==0?c(l,x[o],r?je:j,r?qe:0):f(l,x[o],r?at:D,r?nt:0),t.setCursor=(l,o,r)=>{de=l.left,ve=l.top,$t(null,o,r)};function Hs(l,o){ge(vl,xl,pe.left=l),ge(vl,Gl,pe.width=o)}function Gs(l,o){ge(vl,"top",pe.top=l),ge(vl,Bl,pe.height=o)}let Vl=E.ori==0?Hs:Gs,Il=E.ori==1?Hs:Gs;function ur(){if(Me&&J.live)for(let l=i==2?1:0;l<y.length;l++){if(l==0&&lt)continue;let o=J.values[l],r=0;for(let u in o)St[l][r++].firstChild.nodeValue=o[u]}}function Hn(l,o){if(l!=null&&(l.idxs?l.idxs.forEach((r,u)=>{fe[u]=r}):of(l.idx)||fe.fill(l.idx),J.idx=fe[0]),Me&&J.live){for(let r=0;r<y.length;r++)(r>0||i==1&&!lt)&&cr(r,fe[r]);ur()}st=!1,o!==!1&&Le("setLegend")}t.setLegend=Hn;function cr(l,o){let r=y[l],u=l==0&&K==2?ht:s[l],h;lt?h=r.values(t,l,o)??Ct:(h=r.value(t,o==null?null:u[o],l,o),h=h==null?Ct:{_:h}),J.values[l]=h}function $t(l,o,r){Ns=de,Ws=ve,[de,ve]=P.move(t,de,ve),P.left=de,P.top=ve,Ne&&(ml&&Mt(ml,Te(de),0,j,D),gl&&Mt(gl,0,Te(ve),j,D));let u,h=De>ze;At=ce,Rt=null;let m=E.ori==0?j:D,v=E.ori==1?j:D;if(de<0||Re==0||h){u=P.idx=null;for(let b=0;b<y.length;b++){let _=it[b];_!=null&&Mt(_,-10,-10,j,D)}fl&&yt(null,bl,!0,l==null&&xe.setSeries),J.live&&(fe.fill(u),st=!0)}else{let b,_,k;i==1&&(b=E.ori==0?de:ve,_=_t(b,C),u=P.idx=gt(_,s[0],De,ze),k=L(s[0][u],E,m,0));let T=-10,z=-10,B=0,se=0,le=!0,Z="",H="";for(let R=i==2?1:0;R<y.length;R++){let me=y[R],ye=fe[R],Pe=ye==null?null:i==1?s[R][ye]:s[R][1][ye],ue=P.dataIdx(t,R,u,_),_e=ue==null?null:i==1?s[R][ue]:s[R][1][ue];if(st=st||_e!=Pe||ue!=ye,fe[R]=ue,R>0&&me.show){let Je=ue==null?-10:ue==u?k:L(i==1?s[0][ue]:s[R][0][ue],E,m,0),He=_e==null?-10:G(_e,i==1?x[me.scale]:x[me.facets[1].scale],v,0);if(fl&&_e!=null){let ot=E.ori==1?de:ve,dt=Ae(bt.dist(t,R,ue,He,ot));if(dt<At){let xt=bt.bias;if(xt!=0){let Ze=_t(ot,me.scale),rt=_e>=0?1:-1,pt=Ze>=0?1:-1;pt==rt&&(pt==1?xt==1?_e>=Ze:_e<=Ze:xt==1?_e<=Ze:_e>=Ze)&&(At=dt,Rt=R)}else At=dt,Rt=R}}if(st||ul){let ot,dt;E.ori==0?(ot=Je,dt=He):(ot=He,dt=Je);let xt,Ze,rt,pt,Et,Ge,Qe=!0,qt=Ie.bbox;if(qt!=null){Qe=!1;let Be=qt(t,R);rt=Be.left,pt=Be.top,xt=Be.width,Ze=Be.height}else rt=ot,pt=dt,xt=Ze=Ie.size(t,R);if(Ge=Ie.fill(t,R),Et=Ie.stroke(t,R),ul)R==Rt&&At<=bt.prox&&(T=rt,z=pt,B=xt,se=Ze,le=Qe,Z=Ge,H=Et);else{let Be=it[R];Be!=null&&(cl[R]=rt,al[R]=pt,xi(Be,xt,Ze,Qe),yi(Be,Ge,Et),Mt(Be,ut(rt),ut(pt),j,D))}}}}if(ul){let R=bt.prox,me=Kt==null?At<=R:At>R||Rt!=Kt;if(st||me){let ye=it[0];ye!=null&&(cl[0]=T,al[0]=z,xi(ye,B,se,le),yi(ye,Z,H),Mt(ye,ut(T),ut(z),j,D))}}}if(pe.show&&Lt)if(l!=null){let[b,_]=xe.scales,[k,T]=xe.match,[z,B]=l.cursor.sync.scales,se=l.cursor.drag;if(Ce=se._x,Oe=se._y,Ce||Oe){let{left:le,top:Z,width:H,height:R}=l.select,me=l.scales[z].ori,ye=l.posToVal,Pe,ue,_e,Je,He,ot=b!=null&&k(b,z),dt=_!=null&&T(_,B);ot&&Ce?(me==0?(Pe=le,ue=H):(Pe=Z,ue=R),_e=x[b],Je=L(ye(Pe,z),_e,m,0),He=L(ye(Pe+ue,z),_e,m,0),Vl(wt(Je,He),Ae(He-Je))):Vl(0,m),dt&&Oe?(me==1?(Pe=le,ue=H):(Pe=Z,ue=R),_e=x[_],Je=G(ye(Pe,B),_e,v,0),He=G(ye(Pe+ue,B),_e,v,0),Il(wt(Je,He),Ae(He-Je))):Il(0,v)}else Yn()}else{let b=Ae(Ns-Vs),_=Ae(Ws-Is);if(E.ori==1){let B=b;b=_,_=B}Ce=Fe.x&&b>=Fe.dist,Oe=Fe.y&&_>=Fe.dist;let k=Fe.uni;k!=null?Ce&&Oe&&(Ce=b>=k,Oe=_>=k,!Ce&&!Oe&&(_>b?Oe=!0:Ce=!0)):Fe.x&&Fe.y&&(Ce||Oe)&&(Ce=Oe=!0);let T,z;Ce&&(E.ori==0?(T=wl,z=de):(T=Sl,z=ve),Vl(wt(T,z),Ae(z-T)),Oe||Il(0,v)),Oe&&(E.ori==1?(T=wl,z=de):(T=Sl,z=ve),Il(wt(T,z),Ae(z-T)),Ce||Vl(0,m)),!Ce&&!Oe&&(Vl(0,0),Il(0,0))}if(Fe._x=Ce,Fe._y=Oe,l==null){if(r){if(Xs!=null){let[b,_]=xe.scales;xe.values[0]=b!=null?_t(E.ori==0?de:ve,b):null,xe.values[1]=_!=null?_t(E.ori==1?de:ve,_):null}Wl(qn,t,de,ve,j,D,u)}if(fl){let b=r&&xe.setSeries,_=bt.prox;Kt==null?At<=_&&yt(Rt,bl,!0,b):At>_?yt(null,bl,!0,b):Rt!=Kt&&yt(Rt,bl,!0,b)}}st&&(J.idx=u,Hn()),o!==!1&&Le("setCursor")}let Ft=null;Object.defineProperty(t,"rect",{get(){return Ft==null&&Nl(!1),Ft}});function Nl(l=!1){l?Ft=null:(Ft=M.getBoundingClientRect(),Le("syncRect",Ft))}function Bs(l,o,r,u,h,m,v){P._lock||Lt&&l!=null&&l.movementX==0&&l.movementY==0||(Gn(l,o,r,u,h,m,v,!1,l!=null),l!=null?$t(null,!0,!0):$t(o,!0,!1))}function Gn(l,o,r,u,h,m,v,b,_){if(Ft==null&&Nl(!1),Ut(l),l!=null)r=l.clientX-Ft.left,u=l.clientY-Ft.top;else{if(r<0||u<0){de=-10,ve=-10;return}let[k,T]=xe.scales,z=o.cursor.sync,[B,se]=z.values,[le,Z]=z.scales,[H,R]=xe.match,me=o.axes[0].side%2==1,ye=E.ori==0?j:D,Pe=E.ori==1?j:D,ue=me?m:h,_e=me?h:m,Je=me?u:r,He=me?r:u;if(le!=null?r=H(k,le)?a(B,x[k],ye,0):-10:r=ye*(Je/ue),Z!=null?u=R(T,Z)?a(se,x[T],Pe,0):-10:u=Pe*(He/_e),E.ori==1){let ot=r;r=u,u=ot}}_&&(o==null||o.cursor.event.type==qn)&&((r<=1||r>=j-1)&&(r=Zt(r,j)),(u<=1||u>=D-1)&&(u=Zt(u,D))),b?(Vs=r,Is=u,[wl,Sl]=P.move(t,r,u)):(de=r,ve=u)}let Bn={width:0,height:0,left:0,top:0};function Yn(){ln(Bn,!1)}let Ys,Us,js,Ks;function $s(l,o,r,u,h,m,v){Lt=!0,Ce=Oe=Fe._x=Fe._y=!1,Gn(l,o,r,u,h,m,v,!0,!1),l!=null&&(We(Jn,ts,qs,!1),Wl(pi,t,wl,Sl,j,D,null));let{left:b,top:_,width:k,height:T}=pe;Ys=b,Us=_,js=k,Ks=T}function qs(l,o,r,u,h,m,v){Lt=Fe._x=Fe._y=!1,Gn(l,o,r,u,h,m,v,!1,!0);let{left:b,top:_,width:k,height:T}=pe,z=k>0||T>0,B=Ys!=b||Us!=_||js!=k||Ks!=T;if(z&&B&&ln(pe),Fe.setScale&&z&&B){let se=b,le=k,Z=_,H=T;if(E.ori==1&&(se=_,le=T,Z=b,H=k),Ce&&Pt(C,_t(se,C),_t(se+le,C)),Oe)for(let R in x){let me=x[R];R!=C&&me.from==null&&me.min!=ce&&Pt(R,_t(Z+H,R),_t(Z,R))}Yn()}else P.lock&&(P._lock=!P._lock,$t(o,!0,l!=null));l!=null&&(il(Jn,ts),Wl(Jn,t,de,ve,j,D,null))}function ar(l,o,r,u,h,m,v){if(P._lock)return;Ut(l);let b=Lt;if(Lt){let _=!0,k=!0,T=10,z,B;E.ori==0?(z=Ce,B=Oe):(z=Oe,B=Ce),z&&B&&(_=de<=T||de>=j-T,k=ve<=T||ve>=D-T),z&&_&&(de=de<wl?0:j),B&&k&&(ve=ve<Sl?0:D),$t(null,!0,!0),Lt=!1}de=-10,ve=-10,fe.fill(null),$t(null,!0,!0),b&&(Lt=b)}function Js(l,o,r,u,h,m,v){P._lock||(Ut(l),kn(),Yn(),l!=null&&Wl(wi,t,de,ve,j,D,null))}function Zs(){F.forEach(_u),Mn(t.width,t.height,!0)}el(dn,Ml,Zs);let yl={};yl.mousedown=$s,yl.mousemove=Bs,yl.mouseup=qs,yl.dblclick=Js,yl.setSeries=(l,o,r,u)=>{let h=xe.match[2];r=h(t,o,r),r!=-1&&yt(r,u,!0,!1)},Ne&&(We(pi,M,$s),We(qn,M,Bs),We(mi,M,l=>{Ut(l),Nl(!1)}),We(gi,M,ar),We(wi,M,Js),us.add(t),t.syncRect=Nl);let nn=t.hooks=e.hooks||{};function Le(l,o,r){Vn?Fl.push([l,o,r]):l in nn&&nn[l].forEach(u=>{u.call(null,t,o,r)})}(e.plugins||[]).forEach(l=>{for(let o in l.hooks)nn[o]=(nn[o]||[]).concat(l.hooks[o])});let Qs=(l,o,r)=>r,xe=Ee({key:null,setSeries:!1,filters:{pub:Ai,sub:Ai},scales:[C,y[1]?y[1].scale:null],match:[Di,Di,Qs],values:[null,null]},P.sync);xe.match.length==2&&xe.match.push(Qs),P.sync=xe;let Xs=xe.key,Un=ko(Xs);function Wl(l,o,r,u,h,m,v){xe.filters.pub(l,o,r,u,h,m,v)&&Un.pub(l,o,r,u,h,m,v)}Un.sub(t);function hr(l,o,r,u,h,m,v){xe.filters.sub(l,o,r,u,h,m,v)&&yl[l](null,o,r,u,h,m,v)}t.pub=hr;function dr(){Un.unsub(t),us.delete(t),Wt.clear(),ss(dn,Ml,Zs),p.remove(),oe?.remove(),Le("destroy")}t.destroy=dr;function jn(){Le("init",e,s),Ds(s||e.data,!1),I[C]?In(C,I[C]):kn(),Jl=pe.show&&(pe.width>0||pe.height>0),Yt=st=!0,Mn(e.width,e.height)}return y.forEach(Ts),F.forEach(Uo),n?n instanceof HTMLElement?(n.appendChild(p),jn()):n(t,jn):jn(),t}Ve.assign=Ee;Ve.fmtNum=gs;Ve.rangeNum=pn;Ve.rangeLog=wn;Ve.rangeAsinh=ps;Ve.orient=ll;Ve.pxRatio=ie;Ve.join=df;Ve.fmtDate=Ss,Ve.tzDate=Ef;Ve.sync=ko;{Ve.addGap=ou,Ve.clipGaps=bn;let e=Ve.paths={points:Oo};e.linear=Po,e.stepped=uu,e.bars=cu,e.spline=hu}return _r(xu);})();
 var DvbVendorCss = "\n.uplot, .uplot *, .uplot *::before, .uplot *::after {box-sizing: border-box;}.uplot {font-family: system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, \"Noto Sans\", sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\";line-height: 1.5;width: min-content;}.u-title {text-align: center;font-size: 18px;font-weight: bold;}.u-wrap {position: relative;user-select: none;}.u-over, .u-under {position: absolute;}.u-under {overflow: hidden;}.uplot canvas {display: block;position: relative;width: 100%;height: 100%;}.u-axis {position: absolute;}.u-legend {font-size: 14px;margin: auto;text-align: center;}.u-inline {display: block;}.u-inline * {display: inline-block;}.u-inline tr {margin-right: 16px;}.u-legend th {font-weight: 600;}.u-legend th > * {vertical-align: middle;display: inline-block;}.u-legend .u-marker {width: 1em;height: 1em;margin-right: 4px;background-clip: padding-box !important;}.u-inline.u-live th::after {content: \":\";vertical-align: middle;}.u-inline:not(.u-live) .u-value {display: none;}.u-series > * {padding: 4px;}.u-series th {cursor: pointer;}.u-legend .u-off > * {opacity: 0.3;}.u-select {background: rgba(0,0,0,0.07);position: absolute;pointer-events: none;}.u-cursor-x, .u-cursor-y {position: absolute;left: 0;top: 0;pointer-events: none;will-change: transform;}.u-hz .u-cursor-x, .u-vt .u-cursor-y {height: 100%;border-right: 1px dashed #607D8B;}.u-hz .u-cursor-y, .u-vt .u-cursor-x {width: 100%;border-bottom: 1px dashed #607D8B;}.u-cursor-pt {position: absolute;top: 0;left: 0;border-radius: 50%;border: 0 solid;pointer-events: none;will-change: transform;/*this has to be !important since we set inline \"background\" shorthand */background-clip: padding-box !important;}.u-axis.u-off, .u-select.u-off, .u-cursor-x.u-off, .u-cursor-y.u-off, .u-cursor-pt.u-off {display: none;}";
 // Vendor bridge — reads the `DvbVendor` factory-scope var injected by
 // scripts/build-client.mjs (which contains esbuild-bundled uPlot + virtual-core,
@@ -51,6 +51,7 @@ const vendorUseVirtualizer = () => {
 }
 
 const vendorAvailable = () => !!(vendorUPlot() && vendorVirtualizer())
+
 const NS = 'dsh-vision-bench'
 
 const COPY = {
@@ -191,7 +192,6 @@ const COPY = {
     framesAll: '全部串口',
     framesPortInUse: '串口被占用',
     framesUnconfigured: '未配置COM',
-    framesClearView: '清空显示',
     framesClearCache: '清除缓存',
     framesDetail: '事务详情',
     framesCopyHex: '复制 Hex',
@@ -377,26 +377,6 @@ const COPY = {
     needOpenocd: '请先在设置 → 台架 绑定 OpenOCD',
     flashDone: '烧录完成',
     flashFail: '烧录失败',
-    draftTitle: '配置草稿（RFC 6902）',
-    draftSubtitle: 'Agent 建议的配置差异，需用户批准后写入',
-    draftEmpty: '暂无草稿',
-    draftBaseVersion: '基线版本',
-    draftCurrentVersion: '当前版本',
-    draftPatchCount: '补丁数',
-    draftAffectedPoints: '影响点位',
-    draftAdded: '新增',
-    draftRemoved: '删除',
-    draftModified: '修改',
-    draftComConflict: 'COM 冲突',
-    draftUnitConflict: 'Unit ID 冲突',
-    draftDetails: '差异详情',
-    draftApprove: '批准并应用',
-    draftDiscard: '丢弃',
-    draftApplying: '应用中…',
-    draftDrift: '基线漂移，需重新生成',
-    draftApplied: '已应用',
-    draftDiscarded: '已丢弃',
-    draftApproveHint: '批准时将校验基线版本、端点指纹和对象存在性',
     configDrift: '配置已漂移（CONFIG_DRIFT）',
   },
   en: {
@@ -404,7 +384,8 @@ const COPY = {
     tabDebug: 'Debug',
     tabHmi: 'HMI',
     settingsTitle: 'Local programs',
-    settingsHint: 'Keil still binds local UV4/Python. Modbus and serial monitoring use the bundled Node runtime; pymodbus is not required.',
+    settingsHint:
+      'Keil still binds local UV4/Python. Modbus and serial monitoring use the bundled Node runtime; pymodbus is not required.',
     python: 'Python (optional Keil scripts)',
     uv4: 'Keil UV4',
     openocd: 'OpenOCD (legacy flash binding, removed in 0.20.0)',
@@ -536,7 +517,6 @@ const COPY = {
     framesAll: 'All ports',
     framesPortInUse: 'Port in use',
     framesUnconfigured: 'Unconfigured COM',
-    framesClearView: 'Clear view',
     framesClearCache: 'Clear cache',
     framesDetail: 'Transaction detail',
     framesCopyHex: 'Copy Hex',
@@ -722,35 +702,15 @@ const COPY = {
     needOpenocd: 'Bind OpenOCD in Settings → Bench first',
     flashDone: 'Flash done',
     flashFail: 'Flash failed',
-    draftTitle: 'Config draft (RFC 6902)',
-    draftSubtitle: 'Agent-proposed config diff, needs user approval',
-    draftEmpty: 'No drafts',
-    draftBaseVersion: 'Base version',
-    draftCurrentVersion: 'Current version',
-    draftPatchCount: 'Patches',
-    draftAffectedPoints: 'Affected points',
-    draftAdded: 'Added',
-    draftRemoved: 'Removed',
-    draftModified: 'Modified',
-    draftComConflict: 'COM conflict',
-    draftUnitConflict: 'Unit ID conflict',
-    draftDetails: 'Diff details',
-    draftApprove: 'Approve & Apply',
-    draftDiscard: 'Discard',
-    draftApplying: 'Applying…',
-    draftDrift: 'Base drifted — regenerate',
-    draftApplied: 'Applied',
-    draftDiscarded: 'Discarded',
-    draftApproveHint: 'Approval re-validates baseline, endpoint fingerprint and object existence',
     configDrift: 'Config drift (CONFIG_DRIFT)',
   },
 }
 
 function interpolate(template, params) {
   if (params == null) return template
-  return String(template).replace(/\{(\w+)\}/g, (match, name) => (
-    Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match
-  ))
+  return String(template).replace(/\{(\w+)\}/g, (match, name) =>
+    Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match,
+  )
 }
 
 function activeLocaleId(ctx) {
@@ -758,7 +718,9 @@ function activeLocaleId(ctx) {
     const locale = ctx && ctx.locale
     const snap = locale && (locale.getLocale ? locale.getLocale() : locale.getSnapshot && locale.getSnapshot())
     if (snap && typeof snap.active === 'string' && snap.active) return snap.active
-  } catch { /* inject miss */ }
+  } catch {
+    /* inject miss */
+  }
   const tag = (typeof document !== 'undefined' && document.documentElement && document.documentElement.lang) || 'zh'
   return tag
 }
@@ -779,7 +741,9 @@ function tWith(ctx, key, params) {
       const translated = locale.bind(NS)(key, params)
       if (translated && translated !== key) return interpolate(translated, params)
     }
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
   return translate(isZh(ctx) ? 'zh' : 'en', key, params)
 }
 
@@ -1276,9 +1240,11 @@ function createSettingsPage(React, t, post) {
     }
 
     React.useEffect(() => {
-      post('/dsh-vision-bench/state').then(applySnap).catch((err) => {
-        setMessage({ kind: 'err', text: String((err && err.message) || t('loadFail')) })
-      })
+      post('/dsh-vision-bench/state')
+        .then(applySnap)
+        .catch((err) => {
+          setMessage({ kind: 'err', text: String((err && err.message) || t('loadFail')) })
+        })
     }, [])
 
     function setField(key, value) {
@@ -1288,72 +1254,118 @@ function createSettingsPage(React, t, post) {
     function save() {
       setBusy(true)
       setMessage(null)
-      post('/dsh-vision-bench/bindings', { bindings }).then((data) => {
-        applySnap(data)
-        setMessage({ kind: data.ok ? 'ok' : 'err', text: data.ok ? t('saved') : (data.error || t('fail')) })
-      }).catch((err) => {
-        setMessage({ kind: 'err', text: String((err && err.message) || t('fail')) })
-      }).finally(() => setBusy(false))
+      post('/dsh-vision-bench/bindings', { bindings })
+        .then((data) => {
+          applySnap(data)
+          setMessage({ kind: data.ok ? 'ok' : 'err', text: data.ok ? t('saved') : data.error || t('fail') })
+        })
+        .catch((err) => {
+          setMessage({ kind: 'err', text: String((err && err.message) || t('fail')) })
+        })
+        .finally(() => setBusy(false))
     }
 
     function runCheck() {
       setChecking(true)
       setChecks(null)
-      post('/dsh-vision-bench/selfcheck', {}, 60000).then((data) => {
-        if (data && Array.isArray(data.checks)) setChecks(data)
-        else setMessage({ kind: 'err', text: (data && data.error) || t('fail') })
-      }).catch((err) => {
-        setMessage({ kind: 'err', text: String((err && err.message) || t('fail')) })
-      }).finally(() => setChecking(false))
+      post('/dsh-vision-bench/selfcheck', {}, 60000)
+        .then((data) => {
+          if (data && Array.isArray(data.checks)) setChecks(data)
+          else setMessage({ kind: 'err', text: (data && data.error) || t('fail') })
+        })
+        .catch((err) => {
+          setMessage({ kind: 'err', text: String((err && err.message) || t('fail')) })
+        })
+        .finally(() => setChecking(false))
     }
 
-    return el('div', { className: 'dvb-page' },
+    return el(
+      'div',
+      { className: 'dvb-page' },
       el('div', { className: 'dvb-title' }, t('settingsTitle')),
       el('div', { className: 'dvb-hint' }, t('settingsHint')),
-      el('div', { className: 'dvb-hint' }, t('ioRuntime') + (ioRuntime && ioRuntime.state ? ' · ' + ioRuntime.state : ' · idle')),
+      el(
+        'div',
+        { className: 'dvb-hint' },
+        t('ioRuntime') + (ioRuntime && ioRuntime.state ? ' · ' + ioRuntime.state : ' · idle'),
+      ),
       FIELDS.map((field) => {
         const kind = statusKind(health[field.key])
-        return el('div', { key: field.key, className: 'dvb-row' },
-          el('div', { className: 'dvb-label' },
+        return el(
+          'div',
+          { key: field.key, className: 'dvb-row' },
+          el(
+            'div',
+            { className: 'dvb-label' },
             el('span', null, t(field.label)),
-            el('span', { className: 'dvb-status', 'data-kind': kind }, t(kind))),
+            el('span', { className: 'dvb-status', 'data-kind': kind }, t(kind)),
+          ),
           el('input', {
             className: 'dvb-input',
             value: bindings[field.key] || '',
             placeholder: t(field.ph),
             spellCheck: false,
-            onChange(event) { setField(field.key, event.target.value) },
-          }))
+            onChange(event) {
+              setField(field.key, event.target.value)
+            },
+          }),
+        )
       }),
-      el('div', { className: 'dvb-actions' },
-        el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: busy, onClick: save },
-          busy ? t('saving') : t('save')),
-        el('button', { type: 'button', className: 'dvb-btn', disabled: checking, onClick: runCheck },
-          checking ? t('selfchecking') : t('selfcheck'))),
+      el(
+        'div',
+        { className: 'dvb-actions' },
+        el(
+          'button',
+          { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: busy, onClick: save },
+          busy ? t('saving') : t('save'),
+        ),
+        el(
+          'button',
+          { type: 'button', className: 'dvb-btn', disabled: checking, onClick: runCheck },
+          checking ? t('selfchecking') : t('selfcheck'),
+        ),
+      ),
       message ? el('div', { className: 'dvb-msg', 'data-kind': message.kind }, message.text) : null,
       checks
-        ? el('div', { className: 'dvb-journal' },
-          el('div', { className: 'dvb-journal-title' }, t('selfcheckTitle')
-            + ' · ' + (checks.ok ? t('selfcheckPass') : t('selfcheckFail'))),
-          checks.checks.map((item) => el('div', {
-            key: item.name,
-            className: 'dvb-task',
-            'data-ok': item.ok ? 'true' : 'false',
-          },
-            el('span', { className: 'dvb-badge' }, item.ok ? '✓' : '✗'),
-            el('span', null, item.name),
-            el('span', { className: 'dvb-hint' }, item.detail))),
-          checks.capabilities
-            ? Object.entries(checks.capabilities).map(([key, cap]) => el('div', {
-              key: 'cap-' + key,
-              className: 'dvb-task',
-              'data-ok': cap && cap.ready ? 'true' : 'false',
-            },
-              el('span', { className: 'dvb-badge' }, cap && cap.ready ? '✓' : '✗'),
-              el('span', null, key),
-              el('span', { className: 'dvb-hint' }, (cap && cap.reason) || '')))
-            : null)
-        : null)
+        ? el(
+            'div',
+            { className: 'dvb-journal' },
+            el(
+              'div',
+              { className: 'dvb-journal-title' },
+              t('selfcheckTitle') + ' · ' + (checks.ok ? t('selfcheckPass') : t('selfcheckFail')),
+            ),
+            checks.checks.map((item) =>
+              el(
+                'div',
+                {
+                  key: item.name,
+                  className: 'dvb-task',
+                  'data-ok': item.ok ? 'true' : 'false',
+                },
+                el('span', { className: 'dvb-badge' }, item.ok ? '✓' : '✗'),
+                el('span', null, item.name),
+                el('span', { className: 'dvb-hint' }, item.detail),
+              ),
+            ),
+            checks.capabilities
+              ? Object.entries(checks.capabilities).map(([key, cap]) =>
+                  el(
+                    'div',
+                    {
+                      key: 'cap-' + key,
+                      className: 'dvb-task',
+                      'data-ok': cap && cap.ready ? 'true' : 'false',
+                    },
+                    el('span', { className: 'dvb-badge' }, cap && cap.ready ? '✓' : '✗'),
+                    el('span', null, key),
+                    el('span', { className: 'dvb-hint' }, (cap && cap.reason) || ''),
+                  ),
+                )
+              : null,
+          )
+        : null,
+    )
   }
 }
 
@@ -1361,18 +1373,49 @@ function registerSettings(ctx, React, t, Page) {
   const slots = ctx.get ? ctx.get('slots') : ctx.slots
   if (slots == null || React == null) return function () {}
   return slots.inject('settings.section', function () {
-    return slots.register({
-      name: 'settings.section',
-      id: 'dsh-vision-bench',
-      order: 46,
-      locale: NS,
-      label() { return t('nav') },
-    }, Page)
+    return slots.register(
+      {
+        name: 'settings.section',
+        id: 'dsh-vision-bench',
+        order: 46,
+        locale: NS,
+        label() {
+          return t('nav')
+        },
+      },
+      Page,
+    )
   })
+}
+
+// @ts-check
+const WRITE_FNS = new Set([1, 3])
+
+/** @param {unknown} fn @param {unknown} address */
+function pointIdOf(fn, address) {
+  return `p${Number(fn)}_${Number(address)}`
+}
+
+/** @param {unknown} fn */
+function isWritableFunction(fn) {
+  return WRITE_FNS.has(Number(fn))
+}
+
+/** @param {any} point @param {unknown} raw */
+function decodeValue(point, raw) {
+  if (raw === null || raw === undefined || raw === '') return raw
+  if (typeof raw === 'boolean') return raw
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return raw
+  const scale = Number(point?.scale)
+  const offset = Number(point?.offset)
+  return n * (Number.isFinite(scale) ? scale : 1) + (Number.isFinite(offset) ? offset : 0)
 }
 
 // Point-first Modbus model. A point is one fully configured register/coil;
 // polling batches are derived (bench-pollplan.mjs), never hand-built.
+
+{ pointIdOf, isWritableFunction, decodeValue }
 
 const MAX_POINTS = 256
 const MAX_VALUES = 512
@@ -1419,15 +1462,11 @@ const writeTargetOf = (fn) => {
   return target ? { writable: true, ...target } : { writable: false, single: 0, multi: 0, kind: '', maxMulti: 0 }
 }
 
-const isWritableFunction = (fn) => !!WRITE_TARGET_OF[Number(fn)]
-
 const finiteOrNull = (value) => {
   if (value === null || value === undefined || value === '') return null
   const n = Number(value)
   return Number.isFinite(n) ? n : null
 }
-
-const pointIdOf = (fn, address) => 'p' + Number(fn) + '_' + Number(address)
 
 const FALLBACK_NAME_TAG = { 1: '线圈', 2: '离散量', 3: '寄存器', 4: '输入' }
 
@@ -1449,16 +1488,23 @@ const normalizePoint = (input) => {
     alarmMin: finiteOrNull(input && input.alarmMin),
     alarmMax: finiteOrNull(input && input.alarmMax),
     // TaskP0/0.20.0: 监视/告警为独立点位属性；旧 trendEnabled 输入迁移为 monitorEnabled
-    monitorEnabled: (input && input.monitorEnabled !== undefined)
-      ? input.monitorEnabled === true
-      : ((input && input.trendEnabled) === true || String(input && input.trendEnabled).toLowerCase() === 'true' || String(input && input.trendEnabled) === '1'),
-    alarmEnabled: (input && input.alarmEnabled !== undefined)
-      ? input.alarmEnabled === true
-      : (finiteOrNull(input && input.alarmMin) != null || finiteOrNull(input && input.alarmMax) != null),
+    monitorEnabled:
+      input && input.monitorEnabled !== undefined
+        ? input.monitorEnabled === true
+        : (input && input.trendEnabled) === true ||
+          String(input && input.trendEnabled).toLowerCase() === 'true' ||
+          String(input && input.trendEnabled) === '1',
+    alarmEnabled:
+      input && input.alarmEnabled !== undefined
+        ? input.alarmEnabled === true
+        : finiteOrNull(input && input.alarmMin) != null || finiteOrNull(input && input.alarmMax) != null,
     // 只读兼容别名：新写入只使用 monitorEnabled
-    trendEnabled: (input && input.monitorEnabled !== undefined)
-      ? input.monitorEnabled === true
-      : ((input && input.trendEnabled) === true || String(input && input.trendEnabled).toLowerCase() === 'true' || String(input && input.trendEnabled) === '1'),
+    trendEnabled:
+      input && input.monitorEnabled !== undefined
+        ? input.monitorEnabled === true
+        : (input && input.trendEnabled) === true ||
+          String(input && input.trendEnabled).toLowerCase() === 'true' ||
+          String(input && input.trendEnabled) === '1',
   }
 }
 
@@ -1535,14 +1581,17 @@ const putValueRec = (values, rec) => {
 const setPointValue = (values, point, raw, opts = {}) => {
   const list = (Array.isArray(values) ? values : []).map(normalizeValueRec).filter((r) => r.key)
   const hasRaw = raw !== null && raw !== undefined
-  putValueRec(list, normalizeValueRec({
-    key: point.id,
-    raw: hasRaw ? raw : null,
-    value: hasRaw ? decodeValue(point, typeof raw === 'boolean' ? (raw ? 1 : 0) : raw) : null,
-    ok: opts.ok !== false,
-    error: opts.error || '',
-    at: opts.at || Date.now(),
-  }))
+  putValueRec(
+    list,
+    normalizeValueRec({
+      key: point.id,
+      raw: hasRaw ? raw : null,
+      value: hasRaw ? decodeValue(point, typeof raw === 'boolean' ? (raw ? 1 : 0) : raw) : null,
+      ok: opts.ok !== false,
+      error: opts.error || '',
+      at: opts.at || Date.now(),
+    }),
+  )
   return list.slice(-MAX_VALUES)
 }
 
@@ -1556,14 +1605,17 @@ const scatterBatch = (values, points, batch, raw, ok, error, at = Date.now()) =>
     if (p.address < batch.address || p.address >= batch.address + batch.count) continue
     const idx = p.address - batch.address
     const has = ok && Array.isArray(raw) && raw[idx] !== undefined
-    putValueRec(list, normalizeValueRec({
-      key: p.id,
-      raw: has ? raw[idx] : null,
-      value: has ? decodeValue(p, typeof raw[idx] === 'boolean' ? (raw[idx] ? 1 : 0) : raw[idx]) : null,
-      ok: !!ok,
-      error: ok ? '' : String(error || ''),
-      at,
-    }))
+    putValueRec(
+      list,
+      normalizeValueRec({
+        key: p.id,
+        raw: has ? raw[idx] : null,
+        value: has ? decodeValue(p, typeof raw[idx] === 'boolean' ? (raw[idx] ? 1 : 0) : raw[idx]) : null,
+        ok: !!ok,
+        error: ok ? '' : String(error || ''),
+        at,
+      }),
+    )
   }
   return list.slice(-MAX_VALUES)
 }
@@ -1597,16 +1649,6 @@ const encodeValue = (point, engineeringValue) => {
   return { ok: true, raw: rounded }
 }
 
-const decodeValue = (point, raw) => {
-  if (raw === null || raw === undefined || raw === '') return raw
-  if (typeof raw === 'boolean') return raw
-  const n = Number(raw)
-  if (!Number.isFinite(n)) return raw
-  const scale = Number(point && point.scale)
-  const offset = Number(point && point.offset)
-  return n * (Number.isFinite(scale) ? scale : 1) + (Number.isFinite(offset) ? offset : 0)
-}
-
 // TaskP1/0.20.0: 点位运行状态 — 优先级：激活告警 > 通信异常 > 连接断开 > 正常 > 未读取
 const pointRuntimeStatus = (point, valueRec, alarmState, connectionState) => {
   const alarm = alarmState && typeof alarmState === 'object' ? alarmState[point && point.id] : null
@@ -1615,8 +1657,10 @@ const pointRuntimeStatus = (point, valueRec, alarmState, connectionState) => {
   }
   if (valueRec && valueRec.ok === false) return { key: 'comm-error', label: '通信异常' }
   const cs = connectionState || ''
-  if (cs === 'disconnected' || cs === 'error' || cs === 'disconnecting') return { key: 'disconnected', label: cs === 'error' ? '连接异常' : '已断开' }
-  if (valueRec && valueRec.ok === true && (valueRec.value !== null && valueRec.value !== undefined)) return { key: 'ok', label: '正常' }
+  if (cs === 'disconnected' || cs === 'error' || cs === 'disconnecting')
+    return { key: 'disconnected', label: cs === 'error' ? '连接异常' : '已断开' }
+  if (valueRec && valueRec.ok === true && valueRec.value !== null && valueRec.value !== undefined)
+    return { key: 'ok', label: '正常' }
   return { key: 'unread', label: '未读取' }
 }
 
@@ -1665,7 +1709,18 @@ const alarmLabelText = (item, kind) => {
 
 // ── CSV round-trip (per-point columns) ───────────────────────────────────
 
-const CSV_HEADER = ['name', 'function', 'address', 'scale', 'offset', 'unit', 'monitorEnabled', 'alarmEnabled', 'alarmMin', 'alarmMax']
+const CSV_HEADER = [
+  'name',
+  'function',
+  'address',
+  'scale',
+  'offset',
+  'unit',
+  'monitorEnabled',
+  'alarmEnabled',
+  'alarmMin',
+  'alarmMax',
+]
 
 const csvCell = (value) => {
   const s = value === null || value === undefined ? '' : String(value)
@@ -1698,26 +1753,36 @@ const csvSplit = (line) => {
 
 const pointsToCsv = (points) =>
   [CSV_HEADER.join(',')]
-    .concat(normalizePoints(points).map((item) => [
-      item.name || functionTag(item.function) + item.address,
-      item.function,
-      item.address,
-      item.scale,
-      item.offset,
-      item.unit,
-      item.monitorEnabled === true ? 'true' : '',
-      item.alarmEnabled === true ? 'true' : '',
-      item.alarmMin,
-      item.alarmMax,
-    ].map(csvCell).join(',')))
+    .concat(
+      normalizePoints(points).map((item) =>
+        [
+          item.name || functionTag(item.function) + item.address,
+          item.function,
+          item.address,
+          item.scale,
+          item.offset,
+          item.unit,
+          item.monitorEnabled === true ? 'true' : '',
+          item.alarmEnabled === true ? 'true' : '',
+          item.alarmMin,
+          item.alarmMax,
+        ]
+          .map(csvCell)
+          .join(','),
+      ),
+    )
     .join('\n') + '\n'
 
 const csvToPoints = (input) => {
-  const lines = String(input || '').split(/\r?\n/).filter((line) => line.trim())
+  const lines = String(input || '')
+    .split(/\r?\n/)
+    .filter((line) => line.trim())
   if (!lines.length) return { ok: false, error: 'CSV 为空' }
   const header = csvSplit(lines[0]).map((cell) => cell.trim().toLowerCase())
   const idx = {}
-  CSV_HEADER.forEach((key) => { idx[key] = header.indexOf(key.toLowerCase()) })
+  CSV_HEADER.forEach((key) => {
+    idx[key] = header.indexOf(key.toLowerCase())
+  })
   // TaskP0/0.20.0: 旧 trendEnabled 列作为 monitorEnabled 兼容别名
   if (idx.monitorEnabled < 0) idx.monitorEnabled = header.indexOf('trendenabled')
   if (idx.trendEnabled < 0) idx.trendEnabled = header.indexOf('trendenabled')
@@ -1728,7 +1793,7 @@ const csvToPoints = (input) => {
   for (let i = 1; i < lines.length; i++) {
     const cells = csvSplit(lines[i])
     const pick = (key) => (idx[key] >= 0 ? cells[idx[key]] : '')
-    if (pick('address') === '' ) continue
+    if (pick('address') === '') continue
     points.push({
       name: pick('name'),
       function: Number(pick('function')),
@@ -1738,8 +1803,12 @@ const csvToPoints = (input) => {
       unit: pick('unit'),
       alarmMin: pick('alarmMin') === '' ? null : Number(pick('alarmMin')),
       alarmMax: pick('alarmMax') === '' ? null : Number(pick('alarmMax')),
-      monitorEnabled: (pick('monitorEnabled') === 'true' || pick('monitorEnabled') === '1' || pick('trendEnabled') === 'true' || pick('trendEnabled') === '1'),
-      alarmEnabled: (pick('alarmEnabled') === 'true' || pick('alarmEnabled') === '1'),
+      monitorEnabled:
+        pick('monitorEnabled') === 'true' ||
+        pick('monitorEnabled') === '1' ||
+        pick('trendEnabled') === 'true' ||
+        pick('trendEnabled') === '1',
+      alarmEnabled: pick('alarmEnabled') === 'true' || pick('alarmEnabled') === '1',
     })
   }
   const normalized = normalizePoints(points)
@@ -1747,15 +1816,13 @@ const csvToPoints = (input) => {
   return { ok: true, points: normalized }
 }
 
-
 // ── Legacy compatibility shims (pre-v0.18 segment model) ─────────────────
 // Kept for bench-slave and old tests until they migrate.
 
 const MAX_SEGMENTS = 256
 const MAX_COUNT = 125
 
-const newSegmentId = () =>
-  's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+const newSegmentId = () => 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 
 const defaultSegmentName = (segment) => {
   const tag = functionTag(segment.function)
@@ -1770,17 +1837,17 @@ const pointName = (segment, index) => {
   return functionTag(segment.function) + addr
 }
 
-const pointKey = (segmentId, address, fn) =>
-  String(segmentId || '') + ':' + String(fn) + '@' + String(address)
+const pointKey = (segmentId, address, fn) => String(segmentId || '') + ':' + String(fn) + '@' + String(address)
 
 const normalizeSegment = (input) => {
   const address = clampInt(input && input.address, 0, 0, 65535)
-  const fn = new Set([1,2,3,4]).has(Number(input && input.function)) ? Number(input.function) : 3
+  const fn = new Set([1, 2, 3, 4]).has(Number(input && input.function)) ? Number(input.function) : 3
   const maxCount = Math.min(MAX_COUNT, 65536 - address)
   const count = clampInt(input && input.count, 1, 1, maxCount || 1)
   const scale = Number(input && input.scale)
   const offset = Number(input && input.offset)
-  const finiteOrNullLocal = (v) => (v===null||v===undefined||v===''?null:(Number.isFinite(Number(v))?Number(v):null))
+  const finiteOrNullLocal = (v) =>
+    v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null
   return {
     id: text(input && input.id, newSegmentId()),
     name: text(input && input.name, '').slice(0, 40),
@@ -1805,7 +1872,7 @@ const normalizeValue = (input) => {
   return {
     key: text(input && input.key, ''),
     segmentId: text(input && input.segmentId, ''),
-    function: new Set([1,2,3,4]).has(Number(input && input.function)) ? Number(input.function) : 3,
+    function: new Set([1, 2, 3, 4]).has(Number(input && input.function)) ? Number(input.function) : 3,
     address: clampInt(input && input.address, 0, 0, 65535),
     name: text(input && input.name, '').slice(0, 48),
     value: input && Object.prototype.hasOwnProperty.call(input, 'value') ? input.value : null,
@@ -1817,11 +1884,13 @@ const normalizeValue = (input) => {
 
 const normalizeValues = (list) => {
   if (!Array.isArray(list)) return []
-  return list.map(normalizeValue).filter((item) => item.key).slice(0, MAX_VALUES)
+  return list
+    .map(normalizeValue)
+    .filter((item) => item.key)
+    .slice(0, MAX_VALUES)
 }
 
-const sameRange = (a, b) =>
-  a.function === b.function && a.address === b.address && a.count === b.count
+const sameRange = (a, b) => a.function === b.function && a.address === b.address && a.count === b.count
 
 const addSegment = (list, spec) => {
   const current = normalizeSegments(list)
@@ -1877,9 +1946,10 @@ const expandPoints = (segments) => {
 const applySegmentRead = (values, segment, ran) => {
   const byKey = {}
   for (const item of normalizeValues(values)) byKey[item.key] = item
-  const raw = ran && ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw)
-    ? ran.result.details.raw
-    : []
+  const raw =
+    ran && ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw)
+      ? ran.result.details.raw
+      : []
   const at = Date.now()
   const ok = !!(ran && ran.ok)
   const error = ok ? '' : String((ran && ran.error) || '')
@@ -1899,13 +1969,16 @@ const applySegmentRead = (values, segment, ran) => {
       at,
     })
   }
-  return Object.keys(byKey).map((key) => byKey[key]).slice(0, MAX_VALUES)
+  return Object.keys(byKey)
+    .map((key) => byKey[key])
+    .slice(0, MAX_VALUES)
 }
 
 const segmentCovering = (segments, fn, address) =>
-  normalizeSegments(segments).find((segment) => segment.function === Number(fn)
-    && address >= segment.address
-    && address < segment.address + segment.count) || null
+  normalizeSegments(segments).find(
+    (segment) =>
+      segment.function === Number(fn) && address >= segment.address && address < segment.address + segment.count,
+  ) || null
 
 const applyPointWrite = (values, segment, address, value, at = Date.now()) => {
   const seg = normalizeSegment(segment)
@@ -1923,7 +1996,9 @@ const applyPointWrite = (values, segment, address, value, at = Date.now()) => {
     error: '',
     at,
   })
-  return Object.keys(byKey).map((k) => byKey[k]).slice(0, MAX_VALUES)
+  return Object.keys(byKey)
+    .map((k) => byKey[k])
+    .slice(0, MAX_VALUES)
 }
 
 const compactSegments = (segments) =>
@@ -1943,18 +2018,20 @@ const compactSegments = (segments) =>
 const compactValues = (values, segments) => {
   const byId = {}
   for (const seg of normalizeSegments(segments)) byId[seg.id] = seg
-  return normalizeValues(values).slice(0, 32).map((item) => {
-    const seg = byId[item.segmentId]
-    return {
-      name: item.name,
-      function: item.function,
-      address: item.address,
-      value: seg ? decodeValue(seg, item.value) : item.value,
-      raw: item.value,
-      ok: item.ok,
-      unit: seg ? seg.unit : '',
-    }
-  })
+  return normalizeValues(values)
+    .slice(0, 32)
+    .map((item) => {
+      const seg = byId[item.segmentId]
+      return {
+        name: item.name,
+        function: item.function,
+        address: item.address,
+        value: seg ? decodeValue(seg, item.value) : item.value,
+        raw: item.value,
+        ok: item.ok,
+        unit: seg ? seg.unit : '',
+      }
+    })
 }
 
 const simulateRaw = (segment, at = Date.now()) => {
@@ -1977,35 +2054,45 @@ const simulateSegmentRan = (segment, at) => ({
 })
 
 const segmentsToCsv = (segments) =>
-  [['name','function','address','count','scale','offset','unit','alarmMin','alarmMax'].join(',')]
-    .concat(normalizeSegments(segments).map((item) => [
-      item.name || defaultSegmentName(item),
-      item.function,
-      item.address,
-      item.count,
-      item.scale,
-      item.offset,
-      item.unit,
-      item.alarmMin,
-      item.alarmMax,
-    ].map((v) => {
-      const s = v === null || v === undefined ? '' : String(v)
-      return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
-    }).join(',')))
+  [['name', 'function', 'address', 'count', 'scale', 'offset', 'unit', 'alarmMin', 'alarmMax'].join(',')]
+    .concat(
+      normalizeSegments(segments).map((item) =>
+        [
+          item.name || defaultSegmentName(item),
+          item.function,
+          item.address,
+          item.count,
+          item.scale,
+          item.offset,
+          item.unit,
+          item.alarmMin,
+          item.alarmMax,
+        ]
+          .map((v) => {
+            const s = v === null || v === undefined ? '' : String(v)
+            return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+          })
+          .join(','),
+      ),
+    )
     .join('\n') + '\n'
 
 const csvToSegments = (input) => {
-  const lines = String(input || '').split(/\r?\n/).filter((line) => line.trim())
+  const lines = String(input || '')
+    .split(/\r?\n/)
+    .filter((line) => line.trim())
   if (!lines.length) return { ok: false, error: 'CSV 为空' }
-  const header = lines[0].split(',').map((cell) => cell.trim().replace(/^"|"$/g,'').toLowerCase())
+  const header = lines[0].split(',').map((cell) => cell.trim().replace(/^"|"$/g, '').toLowerCase())
   const idx = {}
-  ;['name','function','address','count','scale','offset','unit','alarmMin','alarmMax'].forEach((key) => { idx[key] = header.indexOf(key.toLowerCase()) })
+  ;['name', 'function', 'address', 'count', 'scale', 'offset', 'unit', 'alarmMin', 'alarmMax'].forEach((key) => {
+    idx[key] = header.indexOf(key.toLowerCase())
+  })
   if (idx.function < 0 || idx.address < 0) {
     return { ok: false, error: 'CSV 缺少 function 或 address 列' }
   }
   const segments = []
   for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split(',').map(c=>c.trim().replace(/^"|"$/g,''))
+    const cells = lines[i].split(',').map((c) => c.trim().replace(/^"|"$/g, ''))
     const pick = (key) => (idx[key] >= 0 ? cells[idx[key]] : '')
     segments.push({
       name: pick('name'),
@@ -2042,13 +2129,13 @@ const ALARM_CONDITION = { ACTIVE: COND_ACTIVE, RECOVERED: COND_RECOVERED }
 const ALLOWED_STATUS = new Set([ACTIVE, RECOVERED, ACKED])
 const ALLOWED_GROUP = new Set([PROCESS, COMM])
 const ALLOWED_COND = new Set([COND_ACTIVE, COND_RECOVERED])
-const textBy = (v) => typeof v === 'string' ? v.trim().slice(0, 32) : ''
+const textBy = (v) => (typeof v === 'string' ? v.trim().slice(0, 32) : '')
 
 const nowMs = () => Date.now()
 const capAlarm = 256
 const defaultSuppressMs = 30_000
 
-const textId = (v) => typeof v === 'string' ? v.trim() : ''
+const textId = (v) => (typeof v === 'string' ? v.trim() : '')
 
 function normalizeAlarmState(input, opts = {}) {
   const pointsById = opts.pointsById || null
@@ -2062,7 +2149,33 @@ function normalizeAlarmState(input, opts = {}) {
     // legacy boolean compat: true => active process alarm, false/empty => skip
     if (rawVal === true) {
       const _at = nowMs()
-      out[id] = { id, group: PROCESS, status: ACTIVE, condition: COND_ACTIVE, acknowledged: false, ackedAt: 0, ackedBy: '', kind: 'max', pointId: id, connectionId: '', deviceId: '', frameId: '', transactionId: '', taskId: '', value: null, threshold: null, quality: 'good', firstAt: _at, lastAt: _at, recoveredAt: 0, durationMs: 0, count: 1, severity: 'high', suppressUntil: 0, pendingSince: 0 }
+      out[id] = {
+        id,
+        group: PROCESS,
+        status: ACTIVE,
+        condition: COND_ACTIVE,
+        acknowledged: false,
+        ackedAt: 0,
+        ackedBy: '',
+        kind: 'max',
+        pointId: id,
+        connectionId: '',
+        deviceId: '',
+        frameId: '',
+        transactionId: '',
+        taskId: '',
+        value: null,
+        threshold: null,
+        quality: 'good',
+        firstAt: _at,
+        lastAt: _at,
+        recoveredAt: 0,
+        durationMs: 0,
+        count: 1,
+        severity: 'high',
+        suppressUntil: 0,
+        pendingSince: 0,
+      }
       continue
     }
     if (rawVal === false || rawVal == null) continue
@@ -2070,24 +2183,117 @@ function normalizeAlarmState(input, opts = {}) {
       // allow bare boolean-like object {active:true} legacy
       if (rawVal && rawVal.active === true && !rawVal.status && !rawVal.condition) {
         const _at2 = Number(rawVal.firstAt) || nowMs()
-        out[id] = { id, group: PROCESS, status: ACTIVE, condition: COND_ACTIVE, acknowledged: false, ackedAt: 0, ackedBy: '', kind: rawVal.kind || 'max', pointId: id, connectionId: textId(rawVal.connectionId), deviceId: textId(rawVal.deviceId), frameId: '', transactionId: '', taskId: '', value: rawVal.value ?? null, threshold: rawVal.threshold ?? null, quality: rawVal.quality || 'good', firstAt: _at2, lastAt: Number(rawVal.lastAt) || _at2, recoveredAt: 0, durationMs: 0, count: Number(rawVal.count) > 0 ? Math.trunc(rawVal.count) : 1, severity: 'high', suppressUntil: 0, pendingSince: 0 }
+        out[id] = {
+          id,
+          group: PROCESS,
+          status: ACTIVE,
+          condition: COND_ACTIVE,
+          acknowledged: false,
+          ackedAt: 0,
+          ackedBy: '',
+          kind: rawVal.kind || 'max',
+          pointId: id,
+          connectionId: textId(rawVal.connectionId),
+          deviceId: textId(rawVal.deviceId),
+          frameId: '',
+          transactionId: '',
+          taskId: '',
+          value: rawVal.value ?? null,
+          threshold: rawVal.threshold ?? null,
+          quality: rawVal.quality || 'good',
+          firstAt: _at2,
+          lastAt: Number(rawVal.lastAt) || _at2,
+          recoveredAt: 0,
+          durationMs: 0,
+          count: Number(rawVal.count) > 0 ? Math.trunc(rawVal.count) : 1,
+          severity: 'high',
+          suppressUntil: 0,
+          pendingSince: 0,
+        }
         continue
       }
-      const group = ALLOWED_GROUP.has(rawVal.group) ? rawVal.group : (id.startsWith('comm:') ? COMM : PROCESS)
+      const group = ALLOWED_GROUP.has(rawVal.group) ? rawVal.group : id.startsWith('comm:') ? COMM : PROCESS
       let condition = ALLOWED_COND.has(rawVal.condition) ? rawVal.condition : null
       let acknowledged = typeof rawVal.acknowledged === 'boolean' ? rawVal.acknowledged : null
       let status = ALLOWED_STATUS.has(rawVal.status) ? rawVal.status : null
-      if (condition === null && status) { if (status === ACTIVE) condition = COND_ACTIVE; else if (status === RECOVERED) condition = COND_RECOVERED; else if (status === ACKED) { condition = COND_RECOVERED; if (acknowledged === null) acknowledged = true } }
-      if (condition === null && typeof rawVal.acked === 'boolean') { if (rawVal.acked) { condition = COND_RECOVERED; acknowledged = true } else condition = COND_ACTIVE }
+      if (condition === null && status) {
+        if (status === ACTIVE) condition = COND_ACTIVE
+        else if (status === RECOVERED) condition = COND_RECOVERED
+        else if (status === ACKED) {
+          condition = COND_RECOVERED
+          if (acknowledged === null) acknowledged = true
+        }
+      }
+      if (condition === null && typeof rawVal.acked === 'boolean') {
+        if (rawVal.acked) {
+          condition = COND_RECOVERED
+          acknowledged = true
+        } else condition = COND_ACTIVE
+      }
       if (condition === null) condition = COND_ACTIVE
-      if (acknowledged === null) { if (status === ACKED) acknowledged = true; else if (typeof rawVal.acked === 'boolean') acknowledged = !!rawVal.acked; else acknowledged = false }
-      const firstAt = Number(rawVal.firstAt) > 0 ? Number(rawVal.firstAt) : (Number(rawVal.at) > 0 ? Number(rawVal.at) : nowMs()), lastAt = Number(rawVal.lastAt) > 0 ? Number(rawVal.lastAt) : firstAt, recoveredAt = Number(rawVal.recoveredAt) > 0 ? Number(rawVal.recoveredAt) : (condition === COND_RECOVERED ? lastAt : 0), durationMs = Number(rawVal.durationMs) > 0 ? Number(rawVal.durationMs) : (recoveredAt ? Math.max(0, recoveredAt - firstAt) : Math.max(0, lastAt - firstAt)), severity = typeof rawVal.severity === 'string' && rawVal.severity ? String(rawVal.severity).slice(0, 16) : (group === COMM ? 'high' : 'medium')
-      const pointId = textId(rawVal.pointId || (group === PROCESS ? id : '')), connectionId = textId(rawVal.connectionId || rawVal.connId || ''), deviceId = textId(rawVal.deviceId || '')
-      let fallbackConn = connectionId, fallbackDev = deviceId; if (pointsById && pointId && pointsById[pointId]) { fallbackConn = pointsById[pointId].connectionId || fallbackConn; fallbackDev = pointsById[pointId].deviceId || fallbackDev }
+      if (acknowledged === null) {
+        if (status === ACKED) acknowledged = true
+        else if (typeof rawVal.acked === 'boolean') acknowledged = !!rawVal.acked
+        else acknowledged = false
+      }
+      const firstAt =
+          Number(rawVal.firstAt) > 0 ? Number(rawVal.firstAt) : Number(rawVal.at) > 0 ? Number(rawVal.at) : nowMs(),
+        lastAt = Number(rawVal.lastAt) > 0 ? Number(rawVal.lastAt) : firstAt,
+        recoveredAt =
+          Number(rawVal.recoveredAt) > 0 ? Number(rawVal.recoveredAt) : condition === COND_RECOVERED ? lastAt : 0,
+        durationMs =
+          Number(rawVal.durationMs) > 0
+            ? Number(rawVal.durationMs)
+            : recoveredAt
+              ? Math.max(0, recoveredAt - firstAt)
+              : Math.max(0, lastAt - firstAt),
+        severity =
+          typeof rawVal.severity === 'string' && rawVal.severity
+            ? String(rawVal.severity).slice(0, 16)
+            : group === COMM
+              ? 'high'
+              : 'medium'
+      const pointId = textId(rawVal.pointId || (group === PROCESS ? id : '')),
+        connectionId = textId(rawVal.connectionId || rawVal.connId || ''),
+        deviceId = textId(rawVal.deviceId || '')
+      let fallbackConn = connectionId,
+        fallbackDev = deviceId
+      if (pointsById && pointId && pointsById[pointId]) {
+        fallbackConn = pointsById[pointId].connectionId || fallbackConn
+        fallbackDev = pointsById[pointId].deviceId || fallbackDev
+      }
       const ackedAt = Number(rawVal.ackedAt) > 0 ? Number(rawVal.ackedAt) : 0
       const ackedBy = textBy(rawVal.ackedBy || rawVal.ackBy || '')
-      const derivedStatus = acknowledged ? ACKED : (condition === COND_ACTIVE ? ACTIVE : RECOVERED)
-      out[id] = { id, group, status: derivedStatus, condition, acknowledged: !!acknowledged, ackedAt, ackedBy, suggestedAt: Number(rawVal.suggestedAt) > 0 ? Number(rawVal.suggestedAt) : 0, suggestedBy: textBy(rawVal.suggestedBy || ''), kind: typeof rawVal.kind === 'string' ? rawVal.kind.slice(0, 16) : '', pointId, connectionId: fallbackConn, deviceId: fallbackDev, frameId: textId(rawVal.frameId || ''), transactionId: textId(rawVal.transactionId || rawVal.txId || ''), taskId: textId(rawVal.taskId || ''), value: rawVal.value !== undefined ? rawVal.value : (rawVal.raw !== undefined ? rawVal.raw : null), threshold: rawVal.threshold !== undefined ? rawVal.threshold : null, quality: typeof rawVal.quality === 'string' ? rawVal.quality.slice(0, 16) : 'good', firstAt, lastAt, recoveredAt, durationMs, count: Number(rawVal.count) > 0 ? Math.min(9999, Math.trunc(rawVal.count)) : 1, severity, suppressUntil: Number(rawVal.suppressUntil) > 0 ? Number(rawVal.suppressUntil) : 0, pendingSince: Number(rawVal.pendingSince) > 0 ? Number(rawVal.pendingSince) : 0 }
+      const derivedStatus = acknowledged ? ACKED : condition === COND_ACTIVE ? ACTIVE : RECOVERED
+      out[id] = {
+        id,
+        group,
+        status: derivedStatus,
+        condition,
+        acknowledged: !!acknowledged,
+        ackedAt,
+        ackedBy,
+        suggestedAt: Number(rawVal.suggestedAt) > 0 ? Number(rawVal.suggestedAt) : 0,
+        suggestedBy: textBy(rawVal.suggestedBy || ''),
+        kind: typeof rawVal.kind === 'string' ? rawVal.kind.slice(0, 16) : '',
+        pointId,
+        connectionId: fallbackConn,
+        deviceId: fallbackDev,
+        frameId: textId(rawVal.frameId || ''),
+        transactionId: textId(rawVal.transactionId || rawVal.txId || ''),
+        taskId: textId(rawVal.taskId || ''),
+        value: rawVal.value !== undefined ? rawVal.value : rawVal.raw !== undefined ? rawVal.raw : null,
+        threshold: rawVal.threshold !== undefined ? rawVal.threshold : null,
+        quality: typeof rawVal.quality === 'string' ? rawVal.quality.slice(0, 16) : 'good',
+        firstAt,
+        lastAt,
+        recoveredAt,
+        durationMs,
+        count: Number(rawVal.count) > 0 ? Math.min(9999, Math.trunc(rawVal.count)) : 1,
+        severity,
+        suppressUntil: Number(rawVal.suppressUntil) > 0 ? Number(rawVal.suppressUntil) : 0,
+        pendingSince: Number(rawVal.pendingSince) > 0 ? Number(rawVal.pendingSince) : 0,
+      }
     }
   }
   return out
@@ -2095,22 +2301,56 @@ function normalizeAlarmState(input, opts = {}) {
 
 function groupAlarms(alarmState) {
   const all = Object.values(normalizeAlarmState(alarmState))
-  const process = all.filter(a => a.group === PROCESS), comm = all.filter(a => a.group === COMM)
-  const active = all.filter(a => a.condition === COND_ACTIVE && !a.acknowledged), recovered = all.filter(a => a.condition === COND_RECOVERED && !a.acknowledged), acked = all.filter(a => a.acknowledged)
-  const activeUnacked = active, activeAcked = all.filter(a => a.condition === COND_ACTIVE && a.acknowledged), recoveredUnacked = recovered, recoveredAcked = all.filter(a => a.condition === COND_RECOVERED && a.acknowledged)
-  const activeAll = all.filter(a => a.condition === COND_ACTIVE), recoveredAll = all.filter(a => a.condition === COND_RECOVERED), unacked = all.filter(a => !a.acknowledged)
-  const current = active.concat(recovered), historyLegacy = acked.concat(recovered), history = recoveredAcked
-  return { all, process, comm, active, recovered, acked, activeUnacked, activeAcked, recoveredUnacked, recoveredAcked, activeAll, recoveredAll, unacked, current, history: historyLegacy, historyAcked: history, historyConfirmed: history, byGroup: { process, comm }, byStatus: { active, recovered, acked }, byCondition: { active: activeAll, recovered: recoveredAll }, byAck: { acked, unacked }, buckets: { activeUnacked, activeAcked, recoveredUnacked, recoveredAcked } }
+  const process = all.filter((a) => a.group === PROCESS),
+    comm = all.filter((a) => a.group === COMM)
+  const active = all.filter((a) => a.condition === COND_ACTIVE && !a.acknowledged),
+    recovered = all.filter((a) => a.condition === COND_RECOVERED && !a.acknowledged),
+    acked = all.filter((a) => a.acknowledged)
+  const activeUnacked = active,
+    activeAcked = all.filter((a) => a.condition === COND_ACTIVE && a.acknowledged),
+    recoveredUnacked = recovered,
+    recoveredAcked = all.filter((a) => a.condition === COND_RECOVERED && a.acknowledged)
+  const activeAll = all.filter((a) => a.condition === COND_ACTIVE),
+    recoveredAll = all.filter((a) => a.condition === COND_RECOVERED),
+    unacked = all.filter((a) => !a.acknowledged)
+  const current = active.concat(recovered),
+    historyLegacy = acked.concat(recovered),
+    history = recoveredAcked
+  return {
+    all,
+    process,
+    comm,
+    active,
+    recovered,
+    acked,
+    activeUnacked,
+    activeAcked,
+    recoveredUnacked,
+    recoveredAcked,
+    activeAll,
+    recoveredAll,
+    unacked,
+    current,
+    history: historyLegacy,
+    historyAcked: history,
+    historyConfirmed: history,
+    byGroup: { process, comm },
+    byStatus: { active, recovered, acked },
+    byCondition: { active: activeAll, recovered: recoveredAll },
+    byAck: { acked, unacked },
+    buckets: { activeUnacked, activeAcked, recoveredUnacked, recoveredAcked },
+  }
 }
 
 function acknowledgeAlarm(alarmState, id, opts = {}) {
   const norm = normalizeAlarmState(alarmState)
   const at = Number(opts && opts.now) > 0 ? Number(opts.now) : nowMs()
-  const byRaw = opts && (opts.by || opts.ackedBy || opts.actor) ? String(opts.by || opts.ackedBy || opts.actor).trim() : ''
+  const byRaw =
+    opts && (opts.by || opts.ackedBy || opts.actor) ? String(opts.by || opts.ackedBy || opts.actor).trim() : ''
   const by = textBy(byRaw || 'user')
   const isAgent = by === 'agent'
   if (isAgent && !(opts && opts.force)) {
-    const handle = (k, v) => v.acknowledged ? v : { ...v, suggestedAt: at, suggestedBy: by }
+    const handle = (k, v) => (v.acknowledged ? v : { ...v, suggestedAt: at, suggestedBy: by })
     if (id === 'all' || id === '*') {
       const nextS = {}
       for (const [k, v] of Object.entries(norm)) nextS[k] = handle(k, v)
@@ -2123,7 +2363,10 @@ function acknowledgeAlarm(alarmState, id, opts = {}) {
   if (id === 'all' || id === '*') {
     const next = {}
     for (const [k, v] of Object.entries(norm)) {
-      if (v.acknowledged) { next[k] = v; continue }
+      if (v.acknowledged) {
+        next[k] = v
+        continue
+      }
       next[k] = { ...v, acknowledged: true, ackedAt: at, ackedBy: by, status: ACKED, suppressUntil: 0, pendingSince: 0 }
     }
     return next
@@ -2131,15 +2374,45 @@ function acknowledgeAlarm(alarmState, id, opts = {}) {
   const key = textId(id)
   if (!key || !norm[key]) return norm
   if (norm[key].acknowledged) return norm
-  return { ...norm, [key]: { ...norm[key], acknowledged: true, ackedAt: at, ackedBy: by, status: ACKED, suppressUntil: 0, pendingSince: 0 } }
+  return {
+    ...norm,
+    [key]: {
+      ...norm[key],
+      acknowledged: true,
+      ackedAt: at,
+      ackedBy: by,
+      status: ACKED,
+      suppressUntil: 0,
+      pendingSince: 0,
+    },
+  }
 }
 
-const suggestAlarm = (s, id, by='agent') => acknowledgeAlarm(s, id, { by })
-const buildAlarmRef = (a, o={}) => !a||!a.id?null:{ alarmId:a.id, pointId:a.pointId||'', connectionId:a.connectionId||'', deviceId:a.deviceId||'', frameId:a.frameId||'', transactionId:a.transactionId||'', taskId:a.taskId||'', firstAt:a.firstAt||0, lastAt:a.lastAt||0, recoveredAt:a.recoveredAt||0, condition:a.condition||COND_ACTIVE, acknowledged:!!a.acknowledged, severity:a.severity||'medium', count:a.count||1, version:Number(o.configVersion)>0?Number(o.configVersion):1 }
+const suggestAlarm = (s, id, by = 'agent') => acknowledgeAlarm(s, id, { by })
+const buildAlarmRef = (a, o = {}) =>
+  !a || !a.id
+    ? null
+    : {
+        alarmId: a.id,
+        pointId: a.pointId || '',
+        connectionId: a.connectionId || '',
+        deviceId: a.deviceId || '',
+        frameId: a.frameId || '',
+        transactionId: a.transactionId || '',
+        taskId: a.taskId || '',
+        firstAt: a.firstAt || 0,
+        lastAt: a.lastAt || 0,
+        recoveredAt: a.recoveredAt || 0,
+        condition: a.condition || COND_ACTIVE,
+        acknowledged: !!a.acknowledged,
+        severity: a.severity || 'medium',
+        count: a.count || 1,
+        version: Number(o.configVersion) > 0 ? Number(o.configVersion) : 1,
+      }
 
 // core evaluation: points + values -> process alarms, pollingByConnection -> comm alarms, with deadband/delay/suppress-window merging
 function evaluateAlarms({ points, values, prevState, pollingByConnection, connections, opts } = {}) {
-  const now = (opts && Number(opts.now) > 0) ? Number(opts.now) : nowMs()
+  const now = opts && Number(opts.now) > 0 ? Number(opts.now) : nowMs()
   const deadband = Number(opts && opts.deadband) > 0 ? Number(opts.deadband) : 0
   const delayMs = Number(opts && opts.delayMs) >= 0 ? Number(opts.delayMs) : 0
   const suppressMs = Number(opts && opts.suppressWindowMs) >= 0 ? Number(opts.suppressWindowMs) : defaultSuppressMs
@@ -2150,29 +2423,45 @@ function evaluateAlarms({ points, values, prevState, pollingByConnection, connec
   const pointsById = {}
   for (const p of Array.isArray(points) ? points : []) if (p && p.id) pointsById[p.id] = p
   const valueById = {}
-  for (const r of Array.isArray(values) ? values : []) { const k = r && (r.pointId || r.key); if (k) valueById[k] = r }
+  for (const r of Array.isArray(values) ? values : []) {
+    const k = r && (r.pointId || r.key)
+    if (k) valueById[k] = r
+  }
   // process alarms with deadband and delay
   for (const p of Array.isArray(points) ? points : []) {
     if (!p || !p.id) continue
     // Task9/0.20.1: 告警开关是真正的总开关（显式 alarmEnabled 优先；未声明按阈值推断）。
     // 关闭 → 不进入死区/breach；激活或 pending 告警立即转 recovered，清除 pendingSince。
-    const effAlarmEnabled = (p.alarmEnabled === undefined) ? (p.alarmMin != null || p.alarmMax != null) : p.alarmEnabled
+    const effAlarmEnabled = p.alarmEnabled === undefined ? p.alarmMin != null || p.alarmMax != null : p.alarmEnabled
     const alarmDisabled = effAlarmEnabled !== true || (p.alarmMin == null && p.alarmMax == null)
     if (alarmDisabled) {
-      if (next[p.id] && next[p.id].group === PROCESS && (next[p.id].condition === COND_ACTIVE || next[p.id].pendingSince || next[p.id].status === ACTIVE)) {
+      if (
+        next[p.id] &&
+        next[p.id].group === PROCESS &&
+        (next[p.id].condition === COND_ACTIVE || next[p.id].pendingSince || next[p.id].status === ACTIVE)
+      ) {
         const pr = next[p.id]
         const ra = now
-        next[p.id] = { ...pr, condition: COND_RECOVERED, status: pr.acknowledged ? ACKED : RECOVERED, recoveredAt: ra, durationMs: Math.max(0, ra - pr.firstAt), lastAt: now, suppressUntil: now + suppressMs, pendingSince: 0 }
+        next[p.id] = {
+          ...pr,
+          condition: COND_RECOVERED,
+          status: pr.acknowledged ? ACKED : RECOVERED,
+          recoveredAt: ra,
+          durationMs: Math.max(0, ra - pr.firstAt),
+          lastAt: now,
+          suppressUntil: now + suppressMs,
+          pendingSince: 0,
+        }
         recoveredList.push({ ...next[p.id] })
       }
       continue
     }
     const rec = valueById[p.id]
-    const quality = rec ? (rec.ok === true ? 'good' : (rec.error ? 'bad' : 'stale')) : 'stale'
+    const quality = rec ? (rec.ok === true ? 'good' : rec.error ? 'bad' : 'stale') : 'stale'
     const prevRec = next[p.id]
     if (!rec || rec.ok !== true) {
       if (prevRec && prevRec.group === PROCESS && prevRec.condition === COND_ACTIVE) {
-        next[p.id] = { ...prevRec, quality, lastAt: now, value: rec ? rec.raw ?? null : null }
+        next[p.id] = { ...prevRec, quality, lastAt: now, value: rec ? (rec.raw ?? null) : null }
       }
       continue
     }
@@ -2182,18 +2471,51 @@ function evaluateAlarms({ points, values, prevState, pollingByConnection, connec
     if (!breachKind && prevRec && prevRec.condition === COND_ACTIVE && deadband > 0) {
       const n = Number(engVal)
       if (prevRec.kind === 'max' && p.alarmMax != null && Number.isFinite(n)) {
-        if (n > (p.alarmMax - deadband)) breachKind = 'max'
+        if (n > p.alarmMax - deadband) breachKind = 'max'
       } else if (prevRec.kind === 'min' && p.alarmMin != null && Number.isFinite(n)) {
-        if (n < (p.alarmMin + deadband)) breachKind = 'min'
+        if (n < p.alarmMin + deadband) breachKind = 'min'
       }
     }
-    const threshold = breachKind === 'max' ? p.alarmMax : (breachKind === 'min' ? p.alarmMin : null)
+    const threshold = breachKind === 'max' ? p.alarmMax : breachKind === 'min' ? p.alarmMin : null
     if (breachKind) {
       // delay: need persistent breach for delayMs
       if (delayMs > 0) {
         const pend = prevRec && prevRec.pendingSince ? prevRec.pendingSince : 0
         if (!pend) {
-          next[p.id] = { ...(prevRec || { id: p.id, group: PROCESS, pointId: p.id, connectionId: p.connectionId || '', deviceId: p.deviceId || '', frameId: textId(opts && opts.frameId), transactionId: textId(opts && opts.transactionId), taskId: textId(opts && opts.taskId) }), group: PROCESS, condition: prevRec ? prevRec.condition : COND_ACTIVE, acknowledged: prevRec ? !!prevRec.acknowledged : false, status: prevRec && prevRec.acknowledged ? ACKED : (prevRec && prevRec.condition === COND_RECOVERED ? RECOVERED : ACTIVE), kind: breachKind, pendingSince: now, firstAt: prevRec ? prevRec.firstAt : now, lastAt: now, value: engVal, threshold, quality, count: prevRec ? prevRec.count : 1, severity: 'high', connectionId: p.connectionId || (prevRec && prevRec.connectionId) || '', deviceId: p.deviceId || (prevRec && prevRec.deviceId) || '', recoveredAt: 0, durationMs: 0 }
+          next[p.id] = {
+            ...(prevRec || {
+              id: p.id,
+              group: PROCESS,
+              pointId: p.id,
+              connectionId: p.connectionId || '',
+              deviceId: p.deviceId || '',
+              frameId: textId(opts && opts.frameId),
+              transactionId: textId(opts && opts.transactionId),
+              taskId: textId(opts && opts.taskId),
+            }),
+            group: PROCESS,
+            condition: prevRec ? prevRec.condition : COND_ACTIVE,
+            acknowledged: prevRec ? !!prevRec.acknowledged : false,
+            status:
+              prevRec && prevRec.acknowledged
+                ? ACKED
+                : prevRec && prevRec.condition === COND_RECOVERED
+                  ? RECOVERED
+                  : ACTIVE,
+            kind: breachKind,
+            pendingSince: now,
+            firstAt: prevRec ? prevRec.firstAt : now,
+            lastAt: now,
+            value: engVal,
+            threshold,
+            quality,
+            count: prevRec ? prevRec.count : 1,
+            severity: 'high',
+            connectionId: p.connectionId || (prevRec && prevRec.connectionId) || '',
+            deviceId: p.deviceId || (prevRec && prevRec.deviceId) || '',
+            recoveredAt: 0,
+            durationMs: 0,
+          }
           continue
         }
         if (now - pend < delayMs) {
@@ -2204,15 +2526,53 @@ function evaluateAlarms({ points, values, prevState, pollingByConnection, connec
       if (!prevRec || prevRec.condition === COND_RECOVERED) {
         const withinSuppress = prevRec && prevRec.suppressUntil && now < prevRec.suppressUntil
         const base = withinSuppress ? prevRec : null
-        const count = base ? (base.count + 1) : 1
+        const count = base ? base.count + 1 : 1
         const firstAt = base ? base.firstAt : now
-        next[p.id] = { id: p.id, group: PROCESS, condition: COND_ACTIVE, acknowledged: false, ackedAt: 0, ackedBy: '', suggestedAt: 0, suggestedBy: '', status: ACTIVE, kind: breachKind, pointId: p.id, connectionId: p.connectionId || '', deviceId: p.deviceId || '', frameId: textId(opts && opts.frameId || ''), transactionId: textId(opts && opts.transactionId || ''), taskId: textId(opts && opts.taskId || ''), value: engVal, threshold, quality, firstAt, lastAt: now, recoveredAt: 0, durationMs: 0, count, severity: 'high', suppressUntil: 0, pendingSince: 0 }
-        if (!base || prevRec.condition !== COND_ACTIVE) fired.push({ point: p, raw: rec.raw, kind: breachKind, alarm: next[p.id] })
+        next[p.id] = {
+          id: p.id,
+          group: PROCESS,
+          condition: COND_ACTIVE,
+          acknowledged: false,
+          ackedAt: 0,
+          ackedBy: '',
+          suggestedAt: 0,
+          suggestedBy: '',
+          status: ACTIVE,
+          kind: breachKind,
+          pointId: p.id,
+          connectionId: p.connectionId || '',
+          deviceId: p.deviceId || '',
+          frameId: textId((opts && opts.frameId) || ''),
+          transactionId: textId((opts && opts.transactionId) || ''),
+          taskId: textId((opts && opts.taskId) || ''),
+          value: engVal,
+          threshold,
+          quality,
+          firstAt,
+          lastAt: now,
+          recoveredAt: 0,
+          durationMs: 0,
+          count,
+          severity: 'high',
+          suppressUntil: 0,
+          pendingSince: 0,
+        }
+        if (!base || prevRec.condition !== COND_ACTIVE)
+          fired.push({ point: p, raw: rec.raw, kind: breachKind, alarm: next[p.id] })
       } else if (prevRec.condition === COND_ACTIVE) {
         // already active: update value/lastAt, handle dedup: if within suppress window, just bump count? For process active, suppress is for recovered; active just update
         // but if repeatedly firing same alarm within window while still active, we merge by counting? We keep count stable and just update time to avoid spam
         if (prevRec.kind !== breachKind) {
-          next[p.id] = { ...prevRec, kind: breachKind, value: engVal, threshold, quality, lastAt: now, pendingSince: 0, count: prevRec.count }
+          next[p.id] = {
+            ...prevRec,
+            kind: breachKind,
+            value: engVal,
+            threshold,
+            quality,
+            lastAt: now,
+            pendingSince: 0,
+            count: prevRec.count,
+          }
         } else {
           next[p.id] = { ...prevRec, value: engVal, threshold, quality, lastAt: now, pendingSince: 0 }
         }
@@ -2221,7 +2581,19 @@ function evaluateAlarms({ points, values, prevState, pollingByConnection, connec
     } else {
       if (prevRec && prevRec.condition === COND_ACTIVE) {
         const ra = now
-        next[p.id] = { ...prevRec, condition: COND_RECOVERED, status: prevRec.acknowledged ? ACKED : RECOVERED, recoveredAt: ra, durationMs: Math.max(0, ra - prevRec.firstAt), lastAt: now, value: engVal, threshold: null, quality, suppressUntil: now + suppressMs, pendingSince: 0 }
+        next[p.id] = {
+          ...prevRec,
+          condition: COND_RECOVERED,
+          status: prevRec.acknowledged ? ACKED : RECOVERED,
+          recoveredAt: ra,
+          durationMs: Math.max(0, ra - prevRec.firstAt),
+          lastAt: now,
+          value: engVal,
+          threshold: null,
+          quality,
+          suppressUntil: now + suppressMs,
+          pendingSince: 0,
+        }
         recoveredList.push({ point: p, raw: rec.raw ?? null, alarm: next[p.id] })
       } else if (prevRec && prevRec.pendingSince) {
         // breach pending but cleared before delay => drop pending
@@ -2233,7 +2605,7 @@ function evaluateAlarms({ points, values, prevState, pollingByConnection, connec
   // comm alarms: one per connection where polling lastOk === false or enabled connection has no recent poll (lastAt 0 and enabled? not comm)
   if (pollingByConnection && typeof pollingByConnection === 'object') {
     for (const [cid, st] of Object.entries(pollingByConnection)) {
-      const conn = Array.isArray(connections) ? connections.find(c => c.id === cid) : null
+      const conn = Array.isArray(connections) ? connections.find((c) => c.id === cid) : null
       const connName = conn ? conn.name : cid
       const commId = 'comm:' + cid
       const isFail = st && st.lastOk === false
@@ -2243,15 +2615,53 @@ function evaluateAlarms({ points, values, prevState, pollingByConnection, connec
           const withinSuppress = prevComm && prevComm.suppressUntil && now < prevComm.suppressUntil
           const cnt = withinSuppress ? prevComm.count + 1 : 1
           const firstAt = withinSuppress ? prevComm.firstAt : now
-          next[commId] = { id: commId, group: COMM, condition: COND_ACTIVE, acknowledged: false, ackedAt: 0, ackedBy: '', suggestedAt: 0, suggestedBy: '', status: ACTIVE, kind: 'commFail', pointId: '', connectionId: cid, deviceId: '', frameId: textId(opts && opts.frameId) || (prevComm ? prevComm.frameId : ''), transactionId: textId(opts && opts.transactionId) || (prevComm ? prevComm.transactionId : ''), taskId: textId(opts && opts.taskId) || (prevComm ? prevComm.taskId : ''), value: st.error || 'comm fail', threshold: null, quality: 'bad', firstAt, lastAt: now, recoveredAt: 0, durationMs: 0, count: cnt, severity: 'high', suppressUntil: 0, pendingSince: 0, label: connName }
-          if (!prevComm || prevComm.condition !== COND_ACTIVE) fired.push({ connectionId: cid, label: connName, kind: 'commFail', alarm: next[commId] })
+          next[commId] = {
+            id: commId,
+            group: COMM,
+            condition: COND_ACTIVE,
+            acknowledged: false,
+            ackedAt: 0,
+            ackedBy: '',
+            suggestedAt: 0,
+            suggestedBy: '',
+            status: ACTIVE,
+            kind: 'commFail',
+            pointId: '',
+            connectionId: cid,
+            deviceId: '',
+            frameId: textId(opts && opts.frameId) || (prevComm ? prevComm.frameId : ''),
+            transactionId: textId(opts && opts.transactionId) || (prevComm ? prevComm.transactionId : ''),
+            taskId: textId(opts && opts.taskId) || (prevComm ? prevComm.taskId : ''),
+            value: st.error || 'comm fail',
+            threshold: null,
+            quality: 'bad',
+            firstAt,
+            lastAt: now,
+            recoveredAt: 0,
+            durationMs: 0,
+            count: cnt,
+            severity: 'high',
+            suppressUntil: 0,
+            pendingSince: 0,
+            label: connName,
+          }
+          if (!prevComm || prevComm.condition !== COND_ACTIVE)
+            fired.push({ connectionId: cid, label: connName, kind: 'commFail', alarm: next[commId] })
         } else if (prevComm.condition === COND_ACTIVE) {
           next[commId] = { ...prevComm, lastAt: now, value: st.error || 'comm fail' }
         }
       } else {
         if (prevComm && prevComm.condition === COND_ACTIVE) {
           const ra = now
-          next[commId] = { ...prevComm, condition: COND_RECOVERED, status: prevComm.acknowledged ? ACKED : RECOVERED, recoveredAt: ra, durationMs: Math.max(0, ra - prevComm.firstAt), lastAt: now, suppressUntil: now + suppressMs }
+          next[commId] = {
+            ...prevComm,
+            condition: COND_RECOVERED,
+            status: prevComm.acknowledged ? ACKED : RECOVERED,
+            recoveredAt: ra,
+            durationMs: Math.max(0, ra - prevComm.firstAt),
+            lastAt: now,
+            suppressUntil: now + suppressMs,
+          }
           recoveredList.push({ connectionId: cid, alarm: next[commId] })
         }
       }
@@ -2260,10 +2670,17 @@ function evaluateAlarms({ points, values, prevState, pollingByConnection, connec
   // prune acked older than 7 days? keep bounded
   const keys = Object.keys(next)
   if (keys.length > capAlarm) {
-    const sorted = keys.map(k => [k, next[k]]).sort((a,b)=> (a[1].lastAt||0)-(b[1].lastAt||0))
-    for (let i=0; i < sorted.length - capAlarm; i++) delete next[sorted[i][0]]
+    const sorted = keys.map((k) => [k, next[k]]).sort((a, b) => (a[1].lastAt || 0) - (b[1].lastAt || 0))
+    for (let i = 0; i < sorted.length - capAlarm; i++) delete next[sorted[i][0]]
   }
-  return { next, fired, cleared: recoveredList, recovered: recoveredList, active: Object.values(next).filter(a=>a.condition===COND_ACTIVE && !a.acknowledged), recoveredList }
+  return {
+    next,
+    fired,
+    cleared: recoveredList,
+    recovered: recoveredList,
+    active: Object.values(next).filter((a) => a.condition === COND_ACTIVE && !a.acknowledged),
+    recoveredList,
+  }
 }
 
 // Modbus model v3: multi-connection + device/unit + stable point IDs
@@ -2279,7 +2696,7 @@ const normalizeTrendByPoint = (input) => {
     for (const sample of list) {
       const t = Number(sample && (sample.t ?? sample[0]))
       if (!Number.isFinite(t) || t <= 0) continue
-      const v = sample == null ? null : (sample.v !== undefined ? sample.v : sample[1])
+      const v = sample == null ? null : sample.v !== undefined ? sample.v : sample[1]
       clean.push([t, v === null || v === undefined ? null : Number(v)])
     }
     if (clean.length) out[pid] = clean.slice(-TREND_KEEP_LOCAL)
@@ -2296,7 +2713,7 @@ const FN_BY_AREA = { coil: 1, discreteInput: 2, holdingRegister: 3, inputRegiste
 const MAX_VALUES_SAFE = 512
 const MAX_FRAMES_PER_CONN = 500
 
-const devText = (v, fb='') => {
+const devText = (v, fb = '') => {
   const s = typeof v === 'string' ? v.trim() : ''
   return s || fb
 }
@@ -2348,9 +2765,8 @@ const normalizeConn = (input) => {
   return out
 }
 
-const connLabel = (conn) => conn.mode === 'tcp'
-  ? ((conn.host || '?') + ':' + conn.tcpPort)
-  : ((conn.port || '?') + ' @ ' + conn.baudrate)
+const connLabel = (conn) =>
+  conn.mode === 'tcp' ? (conn.host || '?') + ':' + conn.tcpPort : (conn.port || '?') + ' @ ' + conn.baudrate
 
 const emptyConnection = () => ({
   id: 'c1',
@@ -2365,7 +2781,13 @@ const normalizeConnection = (input) => {
   const base = emptyConnection()
   const id = devText(raw.id, '') || genId('c')
   const name = devText(raw.name, '') || base.name
-  const role = VALID_ROLES.has(raw.role) ? raw.role : (raw.role === 'master' ? 'client' : raw.role === 'slave' ? 'server' : 'client')
+  const role = VALID_ROLES.has(raw.role)
+    ? raw.role
+    : raw.role === 'master'
+      ? 'client'
+      : raw.role === 'slave'
+        ? 'server'
+        : 'client'
   // accept legacy master/slave as role
   return {
     id,
@@ -2397,7 +2819,8 @@ const normalizeDevice = (input, fallbackConnId) => {
   const connectionId = devText(raw.connectionId, '') || devText(raw.connId, '') || fallbackConnId || 'c1'
   const name = devText(raw.name, '') || '设备1'
   const hasUnit = raw.unitId !== undefined || raw.unit !== undefined || raw.slave !== undefined
-  const unitRaw = raw.unitId !== undefined ? raw.unitId : (raw.unit !== undefined ? raw.unit : (raw.slave !== undefined ? raw.slave : 1))
+  const unitRaw =
+    raw.unitId !== undefined ? raw.unitId : raw.unit !== undefined ? raw.unit : raw.slave !== undefined ? raw.slave : 1
   // 缺省默认 1；显式非法值在 validateDevices 拒绝，加载时钳到 1..247（不保留 0）
   const unitId = hasUnit ? (parseUnitId(unitRaw) ?? 1) : 1
   return {
@@ -2414,7 +2837,7 @@ const normalizeDevices = (list, connections) => {
     const first = Array.isArray(connections) && connections[0] ? connections[0].id : 'c1'
     return [normalizeDevice({ id: 'd1', connectionId: first, unitId: 1 }, first)]
   }
-  const validConnIds = new Set((connections || []).map(c => c.id))
+  const validConnIds = new Set((connections || []).map((c) => c.id))
   const seen = new Set()
   const out = []
   for (const raw of list) {
@@ -2443,16 +2866,17 @@ const normalizePointV3 = (input) => {
   let area = devText(raw.area, '')
   if (!VALID_AREAS.has(area)) {
     const fn = Number(raw.function ?? raw.fn)
-    if ([1,2,3,4].includes(fn)) area = AREA_BY_FN[fn]
+    if ([1, 2, 3, 4].includes(fn)) area = AREA_BY_FN[fn]
     else area = 'holdingRegister'
   }
   const fnFromArea = FN_BY_AREA[area] || 3
   const address = devClampInt(raw.address, 0, 0, 65535)
   const scale = Number(raw.scale)
   const offset = Number(raw.offset)
-  const name = devText(raw.name, '') .slice(0, 40)
+  const name = devText(raw.name, '').slice(0, 40)
   const unit = devText(raw.unit, '').slice(0, 12)
-  const finiteOrNull = (v) => (v===null||v===undefined||v==='' ? null : (Number.isFinite(Number(v)) ? Number(v) : null))
+  const finiteOrNull = (v) =>
+    v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null
   return {
     id,
     connectionId,
@@ -2467,27 +2891,24 @@ const normalizePointV3 = (input) => {
     alarmMin: finiteOrNull(raw.alarmMin),
     alarmMax: finiteOrNull(raw.alarmMax),
     // TaskP0/0.20.0: 监视/告警独立；旧 trendEnabled → monitorEnabled 迁移
-    monitorEnabled: (raw.monitorEnabled !== undefined)
-      ? raw.monitorEnabled === true
-      : (raw.trendEnabled === true),
-    alarmEnabled: (raw.alarmEnabled !== undefined)
-      ? raw.alarmEnabled === true
-      : (raw.alarmMin != null || raw.alarmMax != null),
-    trendEnabled: (raw.monitorEnabled !== undefined) ? raw.monitorEnabled === true : (raw.trendEnabled === true),
+    monitorEnabled: raw.monitorEnabled !== undefined ? raw.monitorEnabled === true : raw.trendEnabled === true,
+    alarmEnabled:
+      raw.alarmEnabled !== undefined ? raw.alarmEnabled === true : raw.alarmMin != null || raw.alarmMax != null,
+    trendEnabled: raw.monitorEnabled !== undefined ? raw.monitorEnabled === true : raw.trendEnabled === true,
   }
 }
 
 const normalizePointsV3 = (list, connections, devices) => {
   if (!Array.isArray(list)) return []
-  const validConnIds = new Set((connections || []).map(c => c.id))
-  const validDevIds = new Set((devices || []).map(d => d.id))
+  const validConnIds = new Set((connections || []).map((c) => c.id))
+  const validDevIds = new Set((devices || []).map((d) => d.id))
   const seen = new Set()
   const out = []
   for (const raw of list) {
     const p = normalizePointV3(raw)
     // fix refs
-    if (!validConnIds.has(p.connectionId)) p.connectionId = (connections && connections[0] ? connections[0].id : 'c1')
-    if (!validDevIds.has(p.deviceId)) p.deviceId = (devices && devices[0] ? devices[0].id : 'd1')
+    if (!validConnIds.has(p.connectionId)) p.connectionId = connections && connections[0] ? connections[0].id : 'c1'
+    if (!validDevIds.has(p.deviceId)) p.deviceId = devices && devices[0] ? devices[0].id : 'd1'
     if (seen.has(p.id)) continue
     seen.add(p.id)
     out.push(p)
@@ -2528,33 +2949,40 @@ const normalizeFramesByConnection = (input, connections) => {
   if (!input || typeof input !== 'object') return out
   for (const [k, v] of Object.entries(input)) {
     const arr = Array.isArray(v) ? v.slice(0, MAX_FRAMES_PER_CONN) : []
-    out[k] = arr.map(f => {
-      const rec = {
-        t: Number(f && (f.t ?? f.at)) || Date.now(),
-        label: typeof (f && f.label) === 'string' ? String(f.label).slice(0, 200) : '',
-        request: typeof (f && f.request) === 'string' ? String(f.request).slice(0, 200) : '',
-        response: typeof (f && f.response) === 'string' ? String(f.response).slice(0, 200) : '',
-        trace: Array.isArray(f && f.trace) ? f.trace.map(s => String(s).slice(0, 200)).slice(0, 8) : [],
-        deviceId: typeof (f && f.deviceId) === 'string' ? f.deviceId : '',
-        connectionId: typeof (f && f.connectionId) === 'string' ? f.connectionId : k,
-      }
-      const rawId = f && (f.id || f.frameId) ? String(f.id || f.frameId).slice(0, 64) : ''
-      if (rawId) { rec.id = rawId; rec.frameId = String(f.frameId || rawId).slice(0, 64) }
-      else if (f && typeof f.frameId === 'string') { rec.frameId = f.frameId.slice(0,64); rec.id = rec.frameId }
-      if (f && typeof f.transactionId === 'string') rec.transactionId = f.transactionId.slice(0, 64)
-      if (f && typeof f.taskId === 'string') rec.taskId = f.taskId.slice(0, 64)
-      if (f && typeof f.source === 'string') rec.source = f.source.slice(0, 16)
-      if (f && typeof f.direction === 'string') rec.direction = f.direction.slice(0, 16)
-      if (f && Number.isFinite(Number(f.unitId))) rec.unitId = Math.trunc(Number(f.unitId))
-      if (f && Number.isFinite(Number(f.functionCode))) rec.functionCode = Math.trunc(Number(f.functionCode))
-      if (f && Number.isFinite(Number(f.durationMs))) rec.durationMs = Math.trunc(Number(f.durationMs))
-      if (f && typeof f.status === 'string') rec.status = f.status.slice(0, 16)
-      if (f && typeof f.error === 'string') rec.error = f.error.slice(0, 200)
-      if (f && typeof f.requestHex === 'string') rec.requestHex = f.requestHex.slice(0, 400)
-      if (f && typeof f.responseHex === 'string') rec.responseHex = f.responseHex.slice(0, 400)
-      if (f && (f.frameFormat === 'tcp-normalized' || f.frameFormat === 'rtu-adu')) rec.frameFormat = f.frameFormat
-      return rec
-    }).slice(-MAX_FRAMES_PER_CONN)
+    out[k] = arr
+      .map((f) => {
+        const rec = {
+          t: Number(f && (f.t ?? f.at)) || Date.now(),
+          label: typeof (f && f.label) === 'string' ? String(f.label).slice(0, 200) : '',
+          request: typeof (f && f.request) === 'string' ? String(f.request).slice(0, 200) : '',
+          response: typeof (f && f.response) === 'string' ? String(f.response).slice(0, 200) : '',
+          trace: Array.isArray(f && f.trace) ? f.trace.map((s) => String(s).slice(0, 200)).slice(0, 8) : [],
+          deviceId: typeof (f && f.deviceId) === 'string' ? f.deviceId : '',
+          connectionId: typeof (f && f.connectionId) === 'string' ? f.connectionId : k,
+        }
+        const rawId = f && (f.id || f.frameId) ? String(f.id || f.frameId).slice(0, 64) : ''
+        if (rawId) {
+          rec.id = rawId
+          rec.frameId = String(f.frameId || rawId).slice(0, 64)
+        } else if (f && typeof f.frameId === 'string') {
+          rec.frameId = f.frameId.slice(0, 64)
+          rec.id = rec.frameId
+        }
+        if (f && typeof f.transactionId === 'string') rec.transactionId = f.transactionId.slice(0, 64)
+        if (f && typeof f.taskId === 'string') rec.taskId = f.taskId.slice(0, 64)
+        if (f && typeof f.source === 'string') rec.source = f.source.slice(0, 16)
+        if (f && typeof f.direction === 'string') rec.direction = f.direction.slice(0, 16)
+        if (f && Number.isFinite(Number(f.unitId))) rec.unitId = Math.trunc(Number(f.unitId))
+        if (f && Number.isFinite(Number(f.functionCode))) rec.functionCode = Math.trunc(Number(f.functionCode))
+        if (f && Number.isFinite(Number(f.durationMs))) rec.durationMs = Math.trunc(Number(f.durationMs))
+        if (f && typeof f.status === 'string') rec.status = f.status.slice(0, 16)
+        if (f && typeof f.error === 'string') rec.error = f.error.slice(0, 200)
+        if (f && typeof f.requestHex === 'string') rec.requestHex = f.requestHex.slice(0, 400)
+        if (f && typeof f.responseHex === 'string') rec.responseHex = f.responseHex.slice(0, 400)
+        if (f && (f.frameFormat === 'tcp-normalized' || f.frameFormat === 'rtu-adu')) rec.frameFormat = f.frameFormat
+        return rec
+      })
+      .slice(-MAX_FRAMES_PER_CONN)
   }
   return out
 }
@@ -2603,7 +3031,7 @@ const normalizeQualifiedValues = (list, points) => {
 // Validate RTU port uniqueness among enabled connections and TCP listenHost:listenPort for server role
 const validateConnections = (connections, devices) => {
   const errors = []
-  const enabled = (connections || []).filter(c => c && c.enabled !== false)
+  const enabled = (connections || []).filter((c) => c && c.enabled !== false)
   // RTU port uniqueness
   const portMap = new Map()
   for (const c of enabled) {
@@ -2652,7 +3080,7 @@ const validateDevices = (devices, connections) => {
   if (Array.isArray(connections)) {
     for (const c of connections) if (c && c.id) connEnabled.set(c.id, c.enabled !== false)
   }
-  const enabledDevices = devices.filter(d => d && d.enabled !== false)
+  const enabledDevices = devices.filter((d) => d && d.enabled !== false)
   const byConn = new Map()
   for (const d of enabledDevices) {
     const cid = d.connectionId || 'c1'
@@ -2692,8 +3120,8 @@ function migrateLegacy(modbusLike) {
     sim: pick('sim'),
   })
   const legacySlave = pick('slave')
-  const segments = Array.isArray(dev.segments) ? dev.segments : (Array.isArray(flat.segments) ? flat.segments : [])
-  const oldValues = Array.isArray(dev.values) ? dev.values : (Array.isArray(flat.values) ? flat.values : [])
+  const segments = Array.isArray(dev.segments) ? dev.segments : Array.isArray(flat.segments) ? flat.segments : []
+  const oldValues = Array.isArray(dev.values) ? dev.values : Array.isArray(flat.values) ? flat.values : []
   if (!segments.length && Number.isFinite(Number(flat.function)) && Number.isFinite(Number(flat.address))) {
     const fn = Number(flat.function)
     const addr = Number(flat.address)
@@ -2712,7 +3140,7 @@ function migrateLegacy(modbusLike) {
       const id = 'p' + fn + '_' + address
       points.push({
         id,
-        name: Number(seg.count) > 1 ? '' : (seg.name || ''),
+        name: Number(seg.count) > 1 ? '' : seg.name || '',
         function: fn,
         address,
         scale: seg.scale,
@@ -2737,7 +3165,7 @@ function migrateV2ToV3(v2) {
   const conn = normalizeConn(rawConn)
   const connection = {
     id: 'c1',
-    name: conn.port ? `连接-${conn.port}` : (conn.host ? `连接-${conn.host}:${conn.tcpPort}` : '连接1'),
+    name: conn.port ? `连接-${conn.port}` : conn.host ? `连接-${conn.host}:${conn.tcpPort}` : '连接1',
     role: 'client',
     enabled: true,
     conn,
@@ -2772,9 +3200,19 @@ function migrateV2ToV3(v2) {
       address: devClampInt(p && p.address, 0, 0, 65535),
       scale: Number.isFinite(Number(p && p.scale)) ? Number(p.scale) : 1,
       offset: Number.isFinite(Number(p && p.offset)) ? Number(p.offset) : 0,
-      unit: devText(p && p.unit, '').slice(0,12),
-      alarmMin: (p && (p.alarmMin===null||p.alarmMin===undefined||p.alarmMin==='')?null:(Number.isFinite(Number(p.alarmMin))?Number(p.alarmMin):null)),
-      alarmMax: (p && (p.alarmMax===null||p.alarmMax===undefined||p.alarmMax==='')?null:(Number.isFinite(Number(p.alarmMax))?Number(p.alarmMax):null)),
+      unit: devText(p && p.unit, '').slice(0, 12),
+      alarmMin:
+        p && (p.alarmMin === null || p.alarmMin === undefined || p.alarmMin === '')
+          ? null
+          : Number.isFinite(Number(p.alarmMin))
+            ? Number(p.alarmMin)
+            : null,
+      alarmMax:
+        p && (p.alarmMax === null || p.alarmMax === undefined || p.alarmMax === '')
+          ? null
+          : Number.isFinite(Number(p.alarmMax))
+            ? Number(p.alarmMax)
+            : null,
     })
   }
   const oldValues = Array.isArray(v2.values) ? v2.values : []
@@ -2797,12 +3235,18 @@ function migrateV2ToV3(v2) {
   // frames: old single-track frames -> framesByConnection[c1]
   let framesByConnection = { c1: [] }
   if (v2.frames && Array.isArray(v2.frames)) framesByConnection.c1 = v2.frames.slice(0, MAX_FRAMES_PER_CONN)
-  else if (v2.framesLog && Array.isArray(v2.framesLog)) framesByConnection.c1 = v2.framesLog.slice(0, MAX_FRAMES_PER_CONN)
+  else if (v2.framesLog && Array.isArray(v2.framesLog))
+    framesByConnection.c1 = v2.framesLog.slice(0, MAX_FRAMES_PER_CONN)
   else if (v2.framesByConnection && typeof v2.framesByConnection === 'object') {
     framesByConnection = normalizeFramesByConnection(v2.framesByConnection, [connection])
     if (!framesByConnection.c1) framesByConnection.c1 = []
   }
-  const alarmState = v2.alarmActive && typeof v2.alarmActive === 'object' ? { ...v2.alarmActive } : (v2.alarmState && typeof v2.alarmState === 'object' ? { ...v2.alarmState } : {})
+  const alarmState =
+    v2.alarmActive && typeof v2.alarmActive === 'object'
+      ? { ...v2.alarmActive }
+      : v2.alarmState && typeof v2.alarmState === 'object'
+        ? { ...v2.alarmState }
+        : {}
   // remap alarmState keys via idMap
   const nextAlarm = {}
   for (const [k, val] of Object.entries(alarmState)) {
@@ -2830,14 +3274,18 @@ const normalizeConfigVersion = (input) => {
   return Math.trunc(n)
 }
 
+/** @param {any} input @returns {any} */
 function normalizeModbus(input) {
   const src = input && typeof input === 'object' ? input : {}
   // Detect v3
-  const isV3 = src.version === 3 || Array.isArray(src.connections) || Array.isArray(src.devices) && src.points && Array.isArray(src.points) && src.points.some(p => p && p.area)
+  const isV3 =
+    src.version === 3 ||
+    Array.isArray(src.connections) ||
+    (Array.isArray(src.devices) && src.points && Array.isArray(src.points) && src.points.some((p) => p && p.area))
   // Detect legacy v2 or older flat
-  const looksLegacy = src.conn === undefined && (
-    Array.isArray(src.devices) || src.mode !== undefined || src.segments !== undefined || src.port !== undefined
-  )
+  const looksLegacy =
+    src.conn === undefined &&
+    (Array.isArray(src.devices) || src.mode !== undefined || src.segments !== undefined || src.port !== undefined)
   // v3 path
   if (isV3) {
     let connections = normalizeConnections(src.connections)
@@ -2852,7 +3300,7 @@ function normalizeModbus(input) {
       pollingByConnection = normalizePollingByConnection(src.pollingByConnection, connections)
     } else if (src.polling) {
       // single polling -> assign to active or first
-      const pid = devText(src.activeConnectionId, '') || (connections[0]?.id || 'c1')
+      const pid = devText(src.activeConnectionId, '') || connections[0]?.id || 'c1'
       pollingByConnection = normalizePollingByConnection({ [pid]: src.polling }, connections)
       // fill others
       for (const c of connections) if (!pollingByConnection[c.id]) pollingByConnection[c.id] = normalizePolling(null)
@@ -2871,19 +3319,27 @@ function normalizeModbus(input) {
     } else {
       framesByConnection = normalizeFramesByConnection(null, connections)
     }
-    let alarmState = normalizeAlarmState(src.alarmState && typeof src.alarmState === 'object' ? src.alarmState : (src.alarmActive && typeof src.alarmActive === 'object' ? src.alarmActive : {}), { pointsById: Object.fromEntries((points||[]).map(p=>[p.id,p])) })
+    let alarmState = normalizeAlarmState(
+      src.alarmState && typeof src.alarmState === 'object'
+        ? src.alarmState
+        : src.alarmActive && typeof src.alarmActive === 'object'
+          ? src.alarmActive
+          : {},
+      { pointsById: Object.fromEntries((points || []).map((p) => [p.id, p])) },
+    )
     const trend = normalizeTrendByPoint(src.trend)
     // TaskP0/0.20.0: 可视化组件（缺失/失效引用只做诊断，不清除用户配置）
-    const visualization = src.visualization && typeof src.visualization === 'object'
-      ? normalizeVisualization(src.visualization, points)
-      : emptyVisualization()
+    const visualization =
+      src.visualization && typeof src.visualization === 'object'
+        ? normalizeVisualization(src.visualization, points)
+        : emptyVisualization()
     // active ids
     let activeConnectionId = devText(src.activeConnectionId, '')
-    if (!connections.some(c=>c.id===activeConnectionId)) activeConnectionId = connections[0]?.id || 'c1'
+    if (!connections.some((c) => c.id === activeConnectionId)) activeConnectionId = connections[0]?.id || 'c1'
     let activeDeviceId = devText(src.activeDeviceId, '')
-    if (!devices.some(d=>d.id===activeDeviceId)) {
-      const devForConn = devices.find(d=>d.connectionId===activeConnectionId)
-      activeDeviceId = devForConn ? devForConn.id : (devices[0]?.id || 'd1')
+    if (!devices.some((d) => d.id === activeDeviceId)) {
+      const devForConn = devices.find((d) => d.connectionId === activeConnectionId)
+      activeDeviceId = devForConn ? devForConn.id : devices[0]?.id || 'd1'
     }
     const configVersion = normalizeConfigVersion(src.configVersion ?? src.rev ?? src.cfgVersion ?? 1)
     // also need to filter points/values that reference invalid connection/device? already fixed refs but keep check
@@ -2906,41 +3362,89 @@ function normalizeModbus(input) {
     Object.defineProperties(ret, {
       conn: {
         get() {
-          const ac = ret.connections.find(c=>c.id===ret.activeConnectionId) || ret.connections[0]
+          const ac = ret.connections.find((c) => c.id === ret.activeConnectionId) || ret.connections[0]
           return ac ? ac.conn : emptyConn()
         },
         enumerable: false,
       },
-      mode: { get(){ return ret.conn.mode }, enumerable:false },
-      port: { get(){ return ret.conn.port }, enumerable:false },
-      host: { get(){ return ret.conn.host }, enumerable:false },
-      baudrate: { get(){ return ret.conn.baudrate }, enumerable:false },
+      mode: {
+        get() {
+          return ret.conn.mode
+        },
+        enumerable: false,
+      },
+      port: {
+        get() {
+          return ret.conn.port
+        },
+        enumerable: false,
+      },
+      host: {
+        get() {
+          return ret.conn.host
+        },
+        enumerable: false,
+      },
+      baudrate: {
+        get() {
+          return ret.conn.baudrate
+        },
+        enumerable: false,
+      },
       slave: {
-        get(){
-          const ad = ret.devices.find(d=>d.id===ret.activeDeviceId) || ret.devices[0]
+        get() {
+          const ad = ret.devices.find((d) => d.id === ret.activeDeviceId) || ret.devices[0]
           return ad ? ad.unitId : 1
         },
-        enumerable:false
+        enumerable: false,
       },
-      sim: { get(){ return ret.conn.sim }, enumerable:false },
+      sim: {
+        get() {
+          return ret.conn.sim
+        },
+        enumerable: false,
+      },
       polling: {
-        get(){ return ret.pollingByConnection[ret.activeConnectionId] || normalizePolling(null) },
-        enumerable:false
+        get() {
+          return ret.pollingByConnection[ret.activeConnectionId] || normalizePolling(null)
+        },
+        enumerable: false,
       },
       alarmActive: {
-        get(){ return ret.alarmState },
-        enumerable:false
+        get() {
+          return ret.alarmState
+        },
+        enumerable: false,
       },
-      pointsLegacy: { get(){ return ret.points }, enumerable:false },
-      function: { get(){ return ret.points[0]?.function }, enumerable:false },
-      address: { get(){ return ret.points[0]?.address }, enumerable:false },
+      pointsLegacy: {
+        get() {
+          return ret.points
+        },
+        enumerable: false,
+      },
+      function: {
+        get() {
+          return ret.points[0]?.function
+        },
+        enumerable: false,
+      },
+      address: {
+        get() {
+          return ret.points[0]?.address
+        },
+        enumerable: false,
+      },
       segments: {
-        get(){ return ret.points.map(p=>({ ...p, count:1, id:p.id })) },
-        enumerable:false
+        get() {
+          return ret.points.map((p) => ({ ...p, count: 1, id: p.id }))
+        },
+        enumerable: false,
       },
       devices_legacy: {
-        get(){ return ret.devices },
-        enumerable:false
+        get() {
+          return ret.devices
+        },
+        enumerable: false,
       },
     })
     // Also provide flat points/values for old code expecting ret.points etc? Already version 3 has new points; keep them enumerable.
@@ -2956,7 +3460,7 @@ function normalizeModbus(input) {
       // 临时带回 slave 仅供 migrateV2ToV3 写入默认设备 unitId
       conn: m.legacySlave !== undefined ? { ...m.conn, slave: m.legacySlave } : m.conn,
       points: normalizePoints(m.points),
-      values: filterValues(m.values, new Set(m.points.map(p=>p.id))),
+      values: filterValues(m.values, new Set(m.points.map((p) => p.id))),
       polling: normalizePolling(src.polling),
       alarmActive: src.alarmActive && typeof src.alarmActive === 'object' ? { ...src.alarmActive } : {},
       frames: src.frames || src.framesLog || src.framesByConnection,
@@ -2965,10 +3469,10 @@ function normalizeModbus(input) {
     // 保留原始 conn.slave 供迁移读出；normalizeConn 在 migrateV2ToV3 内执行
     const rawConn = src.conn && typeof src.conn === 'object' ? src.conn : {}
     const points = normalizePoints(src.points)
-    const validKeys = new Set(points.map(p=>p.id))
+    const validKeys = new Set(points.map((p) => p.id))
     const normValues = filterValues(src.values, validKeys)
     v2 = {
-      version:2,
+      version: 2,
       conn: rawConn,
       points,
       values: normValues,
@@ -2981,7 +3485,7 @@ function normalizeModbus(input) {
   } else {
     // empty or unknown -> treat as v2 empty
     v2 = {
-      version:2,
+      version: 2,
       conn: normalizeConn(null),
       points: [],
       values: [],
@@ -2992,7 +3496,7 @@ function normalizeModbus(input) {
   const migrated = migrateV2ToV3(v2)
   const configVersion = normalizeConfigVersion(src.configVersion ?? src.rev ?? 1)
   const ret = {
-    version:3,
+    version: 3,
     configVersion,
     connections: migrated.connections,
     devices: migrated.devices,
@@ -3006,28 +3510,78 @@ function normalizeModbus(input) {
   }
   Object.defineProperties(ret, {
     conn: {
-      get(){ const ac = ret.connections.find(c=>c.id===ret.activeConnectionId) || ret.connections[0]; return ac ? ac.conn : emptyConn() },
-      enumerable:false
+      get() {
+        const ac = ret.connections.find((c) => c.id === ret.activeConnectionId) || ret.connections[0]
+        return ac ? ac.conn : emptyConn()
+      },
+      enumerable: false,
     },
-    mode: { get(){ return ret.conn.mode }, enumerable:false },
-    port: { get(){ return ret.conn.port }, enumerable:false },
-    host: { get(){ return ret.conn.host }, enumerable:false },
-    baudrate: { get(){ return ret.conn.baudrate }, enumerable:false },
+    mode: {
+      get() {
+        return ret.conn.mode
+      },
+      enumerable: false,
+    },
+    port: {
+      get() {
+        return ret.conn.port
+      },
+      enumerable: false,
+    },
+    host: {
+      get() {
+        return ret.conn.host
+      },
+      enumerable: false,
+    },
+    baudrate: {
+      get() {
+        return ret.conn.baudrate
+      },
+      enumerable: false,
+    },
     slave: {
-      get(){ const ad = ret.devices.find(d=>d.id===ret.activeDeviceId) || ret.devices[0]; return ad ? ad.unitId : 1 },
-      enumerable:false
+      get() {
+        const ad = ret.devices.find((d) => d.id === ret.activeDeviceId) || ret.devices[0]
+        return ad ? ad.unitId : 1
+      },
+      enumerable: false,
     },
-    sim: { get(){ return ret.conn.sim }, enumerable:false },
+    sim: {
+      get() {
+        return ret.conn.sim
+      },
+      enumerable: false,
+    },
     polling: {
-      get(){ return ret.pollingByConnection[ret.activeConnectionId] || normalizePolling(null) },
-      enumerable:false
+      get() {
+        return ret.pollingByConnection[ret.activeConnectionId] || normalizePolling(null)
+      },
+      enumerable: false,
     },
-    alarmActive: { get(){ return ret.alarmState }, enumerable:false },
-    function: { get(){ return ret.points[0]?.function }, enumerable:false },
-    address: { get(){ return ret.points[0]?.address }, enumerable:false },
+    alarmActive: {
+      get() {
+        return ret.alarmState
+      },
+      enumerable: false,
+    },
+    function: {
+      get() {
+        return ret.points[0]?.function
+      },
+      enumerable: false,
+    },
+    address: {
+      get() {
+        return ret.points[0]?.address
+      },
+      enumerable: false,
+    },
     segments: {
-      get(){ return ret.points.map(p=>({ ...p, count:1, id:p.id })) },
-      enumerable:false
+      get() {
+        return ret.points.map((p) => ({ ...p, count: 1, id: p.id }))
+      },
+      enumerable: false,
     },
   })
   return ret
@@ -3039,7 +3593,9 @@ const patchConn = (modbus, patch) => {
   // 连接补丁只改端点参数；忽略 legacy slave，不得改写设备 Unit ID
   const raw = patch && typeof patch === 'object' ? { ...patch } : {}
   delete raw.slave
-  const nextConns = normalized.connections.map(c => c.id===activeId ? { ...c, conn: normalizeConn({ ...c.conn, ...raw }) } : c)
+  const nextConns = normalized.connections.map((c) =>
+    c.id === activeId ? { ...c, conn: normalizeConn({ ...c.conn, ...raw }) } : c,
+  )
   return normalizeModbus({
     ...normalized,
     connections: nextConns,
@@ -3050,13 +3606,33 @@ const patchConn = (modbus, patch) => {
 // ── Legacy compat for old tests (recipePair etc.) ─────────────────────
 const recipePair = () => ({
   devices: [
-    { id: 'd1', name: '主机', role: 'master', mode: 'rtu', port: 'COM1', baudrate: 9600, slave: 1, sim: true, segments: [] },
-    { id: 'd2', name: '从机', role: 'slave', mode: 'rtu', port: 'COM2', baudrate: 9600, slave: 2, sim: true, segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }] },
+    {
+      id: 'd1',
+      name: '主机',
+      role: 'master',
+      mode: 'rtu',
+      port: 'COM1',
+      baudrate: 9600,
+      slave: 1,
+      sim: true,
+      segments: [],
+    },
+    {
+      id: 'd2',
+      name: '从机',
+      role: 'slave',
+      mode: 'rtu',
+      port: 'COM2',
+      baudrate: 9600,
+      slave: 2,
+      sim: true,
+      segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }],
+    },
   ],
   activeId: 'd1',
 })
 
-const emptyDevice = (input={}) => ({
+const emptyDevice = (input = {}) => ({
   id: input.id || 'd-legacy',
   name: input.name || '设备',
   role: input.role || 'master',
@@ -3069,12 +3645,12 @@ const emptyDevice = (input={}) => ({
 
 const addDevice = (modbus, spec) => {
   const pack = normalizeModbus(modbus)
-  return { devices: [...(modbus.devices||[]), { id: 'd-new', ...spec }], activeId: pack.conn ? 'd-new' : '' }
+  return { devices: [...(modbus.devices || []), { id: 'd-new', ...spec }], activeId: pack.conn ? 'd-new' : '' }
 }
 
 const removeDevice = (modbus, id) => {
   const pack = normalizeModbus(modbus)
-  return { devices: (modbus.devices||[]).filter(d=>d.id!==id) }
+  return { devices: (modbus.devices || []).filter((d) => d.id !== id) }
 }
 
 const patchActiveDevice = (modbus, patch) => {
@@ -3130,8 +3706,11 @@ const normalizeVisualizationComponent = (input) => {
   const raw = input && typeof input === 'object' ? input : {}
   const type = COMPONENT_TYPES.has(raw.type) ? raw.type : 'line'
   const id = String(raw.id || '').trim() || vizGenId('viz_')
-  const name = String(raw.name || '').trim().slice(0, MAX_COMPONENT_NAME) || '未命名组件'
-  const settings = (raw.settings && typeof raw.settings === 'object') ? raw.settings : {}
+  const name =
+    String(raw.name || '')
+      .trim()
+      .slice(0, MAX_COMPONENT_NAME) || '未命名组件'
+  const settings = raw.settings && typeof raw.settings === 'object' ? raw.settings : {}
   const windowMs = vizClampInt(settings.windowMs, 300000, 10000, 3600000)
   return {
     id,
@@ -3170,7 +3749,10 @@ const validateVisualizationComponent = (component, points) => {
   const ids = vizIds(c.pointIds)
   if (!ids.length) return { ok: false, error: '请至少关联一个已监视点位' }
   if (ids.length < limit.min || ids.length > limit.max) {
-    return { ok: false, error: '组件类型 ' + type + ' 需要 ' + limit.min + '–' + limit.max + ' 个点位，当前 ' + ids.length }
+    return {
+      ok: false,
+      error: '组件类型 ' + type + ' 需要 ' + limit.min + '–' + limit.max + ' 个点位，当前 ' + ids.length,
+    }
   }
   const byId = new Map((Array.isArray(points) ? points : []).map((p) => [p.id, p]))
   const notMonitored = []
@@ -3179,14 +3761,21 @@ const validateVisualizationComponent = (component, points) => {
   const numericFn = (fn) => fn === 3 || fn === 4
   for (const pid of ids) {
     const pt = byId.get(pid)
-    if (!pt) { notMonitored.push(pid); continue }
+    if (!pt) {
+      notMonitored.push(pid)
+      continue
+    }
     if (pt.monitorEnabled !== true) notMonitored.push(pid)
     if ((type === 'line' || type === 'bar') && !numericFn(pt.function)) unsupported.push(pid)
     if (type === 'switch' && pt.function !== 1) unsupported.push(pid)
     if (type === 'value' && ![1, 2, 3, 4].includes(pt.function)) unsupported.push(pid)
   }
   if (unsupported.length) {
-    return { ok: false, error: '组件类型不支持这些点位功能码: ' + unsupported.join(', '), errorCode: 'VIZ_POINT_TYPE_UNSUPPORTED' }
+    return {
+      ok: false,
+      error: '组件类型不支持这些点位功能码: ' + unsupported.join(', '),
+      errorCode: 'VIZ_POINT_TYPE_UNSUPPORTED',
+    }
   }
   if (notMonitored.length) return { ok: false, error: '以下点位未开启监视: ' + notMonitored.join(', ') }
   return { ok: true }
@@ -3210,21 +3799,26 @@ const visualizationComponentStatus = (component, points) => {
 
 // 组件编辑器的可选数据源：只列 monitorEnabled 点位，限定路径 连接/设备/点位。
 const monitoredPointOptions = (pack) => {
-  const conns = new Map((pack && pack.connections || []).map((c) => [c.id, c]))
-  const devs = new Map((pack && pack.devices || []).map((d) => [d.id, d]))
-  const values = new Map((pack && pack.values || []).map((v) => [v.key || v.pointId, v]))
+  const conns = new Map(((pack && pack.connections) || []).map((c) => [c.id, c]))
+  const devs = new Map(((pack && pack.devices) || []).map((d) => [d.id, d]))
+  const values = new Map(((pack && pack.values) || []).map((v) => [v.key || v.pointId, v]))
   const out = []
-  for (const p of pack && pack.points || []) {
+  for (const p of (pack && pack.points) || []) {
     if (p.monitorEnabled !== true) continue
     const conn = conns.get(p.connectionId)
     const dev = devs.get(p.deviceId)
     const rec = values.get(p.id)
     out.push({
       pointId: p.id,
-      name: p.name || (String(p.id)),
+      name: p.name || String(p.id),
       connectionId: p.connectionId,
       deviceId: p.deviceId,
-      path: (conn && conn.name || p.connectionId) + ' / ' + (dev && dev.name || p.deviceId) + ' / ' + (p.name || p.address),
+      path:
+        ((conn && conn.name) || p.connectionId) +
+        ' / ' +
+        ((dev && dev.name) || p.deviceId) +
+        ' / ' +
+        (p.name || p.address),
       function: p.function,
       address: p.address,
       unit: p.unit || '',
@@ -3253,11 +3847,19 @@ function formatSwitchWriteNote(data, wantOn) {
       const rb = Array.isArray(rbRaw) ? rbRaw[0] : rbRaw
       return '目标 ' + target + ' → 回读 ' + String(rb) + ' → 不一致'
     }
-    return (data && data.error) ? data.error : '写入失败'
+    return data && data.error ? data.error : '写入失败'
   }
   if (data.outcomeUnknown || data.unknown) return '目标 ' + target + ' → 回读未知 → 结果未知'
   const rbRaw = data.readback
-  const rb = Array.isArray(rbRaw) ? (rbRaw.length ? rbRaw[0] : '—') : (rbRaw != null ? rbRaw : (data.value != null ? data.value : '—'))
+  const rb = Array.isArray(rbRaw)
+    ? rbRaw.length
+      ? rbRaw[0]
+      : '—'
+    : rbRaw != null
+      ? rbRaw
+      : data.value != null
+        ? data.value
+        : '—'
   return '目标 ' + target + ' → 回读 ' + String(rb) + ' → 一致'
 }
 
@@ -4203,13 +4805,14 @@ function getActiveScope() {
 // value → 数值卡；switch → FC01 写点（确认后写入并读回）。
 const VIZ_COLORS = ['#4f8ef7', '#2eaf64', '#e0912f', '#c85454', '#8f63d2', '#2fa8a8', '#d27ab0', '#7a8494']
 
-const hasTrendSamples = (payload) => !!(
-  payload
-  && Array.isArray(payload.data)
-  && payload.data.length > 0
-  && Array.isArray(payload.data[0])
-  && payload.data[0].length > 0
-)
+const hasTrendSamples = (payload) =>
+  !!(
+    payload &&
+    Array.isArray(payload.data) &&
+    payload.data.length > 0 &&
+    Array.isArray(payload.data[0]) &&
+    payload.data[0].length > 0
+  )
 
 const pointCompatible = (type, fn) => {
   if (type === 'line' || type === 'bar') return fn === 3 || fn === 4
@@ -4248,7 +4851,9 @@ function createVisualizationPage(React, t, post, hooks) {
     React.useEffect(() => {
       setFocusVizId('')
       return subscribeFocus(cwd, (fs) => {
-        try { setFocusVizId((fs && fs.request && fs.request.visualizationId) || '') } catch {}
+        try {
+          setFocusVizId((fs && fs.request && fs.request.visualizationId) || '')
+        } catch {}
       })
     }, [cwd])
     const [, setTick] = React.useState(0)
@@ -4260,13 +4865,25 @@ function createVisualizationPage(React, t, post, hooks) {
       if (!cwd || !post) return undefined
       let stop = false
       const sid = (props && props.sessionId) || ''
-      post('/dsh-vision-bench/state', { cwd, sessionId: sid || undefined }).then((data) => { if (!stop && data) setMb(data.workspace && data.workspace.modbus || null) }).catch(() => {})
-      const unsub = subscribeState(post, cwd, (data) => {
-        if (stop || !data) return
-        const next = data.workspace && data.workspace.modbus
-        if (next) setMb(next)
-      }, { sessionId: sid })
-      return () => { stop = true; if (typeof unsub === 'function') unsub() }
+      post('/dsh-vision-bench/state', { cwd, sessionId: sid || undefined })
+        .then((data) => {
+          if (!stop && data) setMb((data.workspace && data.workspace.modbus) || null)
+        })
+        .catch(() => {})
+      const unsub = subscribeState(
+        post,
+        cwd,
+        (data) => {
+          if (stop || !data) return
+          const next = data.workspace && data.workspace.modbus
+          if (next) setMb(next)
+        },
+        { sessionId: sid },
+      )
+      return () => {
+        stop = true
+        if (typeof unsub === 'function') unsub()
+      }
     }, [cwd, post, props && props.sessionId])
 
     React.useEffect(() => {
@@ -4274,16 +4891,26 @@ function createVisualizationPage(React, t, post, hooks) {
       return () => clearInterval(timer)
     }, [])
 
-    const pack = (() => { try { return normalizeModbus(mb || {}) } catch { return null } })()
-    const points = pack ? (pack.points || []) : []
-    const viz = pack ? (pack.visualization || { schemaVersion: 1, components: [] }) : { schemaVersion: 1, components: [] }
-    const components = (viz && Array.isArray(viz.components)) ? viz.components : []
-    const values = pack ? (pack.values || []) : []
-    const trendStore = pack ? (pack.trend || {}) : {}
+    const pack = (() => {
+      try {
+        return normalizeModbus(mb || {})
+      } catch {
+        return null
+      }
+    })()
+    const points = pack ? pack.points || [] : []
+    const viz = pack ? pack.visualization || { schemaVersion: 1, components: [] } : { schemaVersion: 1, components: [] }
+    const components = viz && Array.isArray(viz.components) ? viz.components : []
+    const values = pack ? pack.values || [] : []
+    const trendStore = pack ? pack.trend || {} : {}
 
     const destroyChart = (id) => {
       const u = uplotRefs.current[id]
-      if (u) { try { u.destroy() } catch {} }
+      if (u) {
+        try {
+          u.destroy()
+        } catch {}
+      }
       delete uplotRefs.current[id]
     }
 
@@ -4308,39 +4935,59 @@ function createVisualizationPage(React, t, post, hooks) {
       return { ok: true, reason: '', cand }
     }
 
-    function persistViz(next) {
-      return post('/dsh-vision-bench/workspace', { cwd, modbus: { visualization: next, version: 3 } }).then((data) => {
-        if (data && data.ok === false) { setNote(data.error || '保存失败'); return false }
-        return post('/dsh-vision-bench/state', { cwd }).then((data2) => {
-          if (data2 && data2.workspace) setMb(data2.workspace.modbus)
+    function persistViz(op, component, visualizationId = '') {
+      return post('/dsh-vision-bench/command', {
+        cwd,
+        sessionId: (props && props.sessionId) || '',
+        source: 'user',
+        action: 'visualization',
+        payload: {
+          action: 'visualization',
+          op,
+          visualizationId,
+          component,
+          expectedConfigVersion: pack.configVersion || 1,
+        },
+      })
+        .then((data) => {
+          if (data && data.ok === false) {
+            setNote(data.errorCode === 'CONFIG_DRIFT' ? '配置已被其他操作更新，请刷新后重试' : data.error || '保存失败')
+            return false
+          }
+          if (data?.workspace?.modbus) setMb(data.workspace.modbus)
           return true
         })
-      }).catch((err) => { setNote(String((err && err.message) || '保存失败')); return false })
+        .catch((err) => {
+          setNote(String((err && err.message) || '保存失败'))
+          return false
+        })
     }
 
     function saveComponent() {
       if (!editor || saving) return
       const check = editorValidation()
-      if (!check.ok) { setNote(check.reason); return }
+      if (!check.ok) {
+        setNote(check.reason)
+        return
+      }
       const existingIndex = editor.id ? components.findIndex((c) => c.id === editor.id) : -1
       const base = existingIndex >= 0 ? components[existingIndex] : {}
-      const cand = normalizeVisualizationComponent({ ...base, ...editor, id: (existingIndex >= 0 ? base.id : '') })
-      const nextComponents = components.slice()
-      if (existingIndex >= 0) {
-        nextComponents[existingIndex] = cand
-      } else nextComponents.push(cand)
+      const cand = normalizeVisualizationComponent({ ...base, ...editor, id: existingIndex >= 0 ? base.id : '' })
       setSaving(true)
-      persistViz({ schemaVersion: 1, components: nextComponents }).then((ok) => {
-        setSaving(false)
-        if (ok) {
-          if (existingIndex >= 0 && base.type === 'line' && cand.type !== 'line') destroyChart(base.id)
-          setEditor(null); setNote('')
-        }
-      }).catch(() => setSaving(false))
+      persistViz(existingIndex >= 0 ? 'update' : 'add', cand, existingIndex >= 0 ? base.id : '')
+        .then((ok) => {
+          setSaving(false)
+          if (ok) {
+            if (existingIndex >= 0 && base.type === 'line' && cand.type !== 'line') destroyChart(base.id)
+            setEditor(null)
+            setNote('')
+          }
+        })
+        .catch(() => setSaving(false))
     }
 
     function removeComponent(id) {
-      persistViz({ schemaVersion: 1, components: components.filter((c) => c.id !== id) }).then((ok) => {
+      persistViz('remove', {}, id).then((ok) => {
         if (ok) destroyChart(id)
       })
       setDeleteId('')
@@ -4349,7 +4996,16 @@ function createVisualizationPage(React, t, post, hooks) {
     function openEditor(comp) {
       setNote('')
       if (comp) setEditor({ ...comp, pointIds: (comp.pointIds || []).slice(), search: '' })
-      else setEditor({ id: '', name: ('组件' + (components.length + 1)), type: 'line', pointIds: [], order: components.length, settings: { windowMs: 300000, confirmWrite: true }, search: '' })
+      else
+        setEditor({
+          id: '',
+          name: '组件' + (components.length + 1),
+          type: 'line',
+          pointIds: [],
+          order: components.length,
+          settings: { windowMs: 300000, confirmWrite: true },
+          search: '',
+        })
     }
 
     function toggleSwitch(comp, point, wantOn) {
@@ -4358,18 +5014,31 @@ function createVisualizationPage(React, t, post, hooks) {
       const desiredValue = wantOn ? 1 : 0
       const now = Date.now()
       const pending = switchDraft.current
-      const same = pending
-        && pending.componentId === comp.id
-        && pending.pointId === point.pointId
-        && pending.desiredValue === desiredValue
-        && pending.expiresAt > now
+      const same =
+        pending &&
+        pending.componentId === comp.id &&
+        pending.pointId === point.pointId &&
+        pending.desiredValue === desiredValue &&
+        pending.expiresAt > now
       if (settings.confirmWrite !== false && !same) {
-        switchDraft.current = { componentId: comp.id, pointId: point.pointId, desiredValue, expiresAt: now + 10000, busy: false }
+        switchDraft.current = {
+          componentId: comp.id,
+          pointId: point.pointId,
+          desiredValue,
+          expiresAt: now + 10000,
+          busy: false,
+        }
         setNote('再次点击「' + (wantOn ? '开' : '关') + '」确认写入（10 秒内有效）')
         setTick((n) => n + 1)
         return
       }
-      switchDraft.current = { componentId: comp.id, pointId: point.pointId, desiredValue, expiresAt: now + 10000, busy: true }
+      switchDraft.current = {
+        componentId: comp.id,
+        pointId: point.pointId,
+        desiredValue,
+        expiresAt: now + 10000,
+        busy: true,
+      }
       setTick((n) => n + 1)
       post('/dsh-vision-bench/modbus/write', {
         cwd,
@@ -4381,32 +5050,49 @@ function createVisualizationPage(React, t, post, hooks) {
         function: 1,
         address: point.address,
         values: [desiredValue],
-      }).then((data) => {
-        setNote(formatSwitchWriteNote(data, wantOn))
-        return post('/dsh-vision-bench/state', { cwd, sessionId: (props && props.sessionId) || undefined })
-      }).then((data) => {
-        if (data && data.workspace) setMb(data.workspace.modbus)
-      }).catch((err) => setNote(String((err && err.message) || '写入失败'))).finally(() => {
-        switchDraft.current = null
-        setTick((n) => n + 1)
       })
+        .then((data) => {
+          setNote(formatSwitchWriteNote(data, wantOn))
+          return post('/dsh-vision-bench/state', { cwd, sessionId: (props && props.sessionId) || undefined })
+        })
+        .then((data) => {
+          if (data && data.workspace) setMb(data.workspace.modbus)
+        })
+        .catch((err) => setNote(String((err && err.message) || '写入失败')))
+        .finally(() => {
+          switchDraft.current = null
+          setTick((n) => n + 1)
+        })
     }
 
     const seriesOfComponent = (comp) =>
-      trendDataForComponents(trendStore, points, comp.pointIds, (comp.settings && comp.settings.windowMs) || TREND_WINDOW_MS)
+      trendDataForComponents(
+        trendStore,
+        points,
+        comp.pointIds,
+        (comp.settings && comp.settings.windowMs) || TREND_WINDOW_MS,
+      )
 
     const ensureUplot = (node, comp) => {
       if (!node) return
       const payload = seriesOfComponent(comp)
       const existing = uplotRefs.current[comp.id]
       if (existing && existing._node === node) {
-        if (!hasTrendSamples(payload)) { destroyChart(comp.id); return }
-        try { existing.setData(payload.data) } catch (err) {
+        if (!hasTrendSamples(payload)) {
+          destroyChart(comp.id)
+          return
+        }
+        try {
+          existing.setData(payload.data)
+        } catch (err) {
           setChartErrors((prev) => ({ ...prev, [comp.id]: String((err && err.message) || err) }))
         }
         return
       }
-      if (!hasTrendSamples(payload)) { destroyChart(comp.id); return }
+      if (!hasTrendSamples(payload)) {
+        destroyChart(comp.id)
+        return
+      }
       const UPlot = vendorUPlot()
       if (!UPlot) {
         setChartErrors((prev) => ({ ...prev, [comp.id]: '图表运行时不可用' }))
@@ -4423,15 +5109,33 @@ function createVisualizationPage(React, t, post, hooks) {
           pxRatio: (hostWin && hostWin.devicePixelRatio) || 1,
           scales: { x: { time: true }, y: { auto: true } },
           axes: [
-            { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
-            { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
+            {
+              stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)',
+              grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' },
+            },
+            {
+              stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)',
+              grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' },
+            },
           ],
-          series: [{ label: 'time' }].concat(payload.keys.map((k, i) => ({ label: (payload.meta[i] && payload.meta[i].label) || k, stroke: VIZ_COLORS[i % VIZ_COLORS.length], width: 1.5, spanGaps: false, points: { show: false } }))),
+          series: [{ label: 'time' }].concat(
+            payload.keys.map((k, i) => ({
+              label: (payload.meta[i] && payload.meta[i].label) || k,
+              stroke: VIZ_COLORS[i % VIZ_COLORS.length],
+              width: 1.5,
+              spanGaps: false,
+              points: { show: false },
+            })),
+          ),
         }
         const chart = new UPlot(opts, payload.data, node)
         chart._node = node
         uplotRefs.current[comp.id] = chart
-        setChartErrors((prev) => { const next = { ...prev }; delete next[comp.id]; return next })
+        setChartErrors((prev) => {
+          const next = { ...prev }
+          delete next[comp.id]
+          return next
+        })
       } catch (err) {
         setChartErrors((prev) => ({ ...prev, [comp.id]: '曲线渲染失败: ' + String((err && err.message) || err) }))
       }
@@ -4441,14 +5145,20 @@ function createVisualizationPage(React, t, post, hooks) {
       const onResize = () => {
         for (const id of Object.keys(uplotRefs.current)) {
           const u = uplotRefs.current[id]
-          if (u && u._node && u.setSize) try { u.setSize({ width: u._node.clientWidth || 420, height: 150 }) } catch {}
+          if (u && u._node && u.setSize)
+            try {
+              u.setSize({ width: u._node.clientWidth || 420, height: 150 })
+            } catch {}
         }
       }
       if (typeof globalThis !== 'undefined' && globalThis.window) globalThis.window.addEventListener('resize', onResize)
       return () => {
-        if (typeof globalThis !== 'undefined' && globalThis.window) globalThis.window.removeEventListener('resize', onResize)
+        if (typeof globalThis !== 'undefined' && globalThis.window)
+          globalThis.window.removeEventListener('resize', onResize)
         for (const id of Object.keys(uplotRefs.current)) {
-          try { uplotRefs.current[id] && uplotRefs.current[id].destroy() } catch {}
+          try {
+            uplotRefs.current[id] && uplotRefs.current[id].destroy()
+          } catch {}
         }
         uplotRefs.current = {}
       }
@@ -4465,81 +5175,179 @@ function createVisualizationPage(React, t, post, hooks) {
         clearTimeout(copyClearTimer.current)
         copyClearTimer.current = 0
       }
-      const ref = buildAgentRef('visualization', { visualizationId: comp.id, type: comp.type, pointIds: comp.pointIds, name: comp.name }, { configVersion: pack && pack.configVersion || 1, start: Date.now() - TREND_WINDOW_MS, end: Date.now() })
-      dispatchAgentRef(ref, agentBridge).then((res) => {
-        if (!aliveRef.current || token !== copyToken.current) return
-        if (!res || !res.ok) { setCopied('复制失败'); return }
-        setCopied((res.mode === 'input' ? '已加入输入框' : res.mode === 'sent' ? '已发送' : '已复制组件引用') + ' · ' + comp.name)
-        copyClearTimer.current = setTimeout(() => {
-          copyClearTimer.current = 0
-          if (aliveRef.current && token === copyToken.current) setCopied('')
-        }, 2500)
-      }).catch(() => {
-        if (!aliveRef.current || token !== copyToken.current) return
-        setCopied('复制失败')
-        copyClearTimer.current = setTimeout(() => {
-          copyClearTimer.current = 0
-          if (aliveRef.current && token === copyToken.current) setCopied('')
-        }, 2500)
-      })
-      try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => { if (aliveRef.current) setNote(reason) }) } catch {}
+      const ref = buildAgentRef(
+        'visualization',
+        { visualizationId: comp.id, type: comp.type, pointIds: comp.pointIds, name: comp.name },
+        { configVersion: (pack && pack.configVersion) || 1, start: Date.now() - TREND_WINDOW_MS, end: Date.now() },
+      )
+      dispatchAgentRef(ref, agentBridge)
+        .then((res) => {
+          if (!aliveRef.current || token !== copyToken.current) return
+          if (!res || !res.ok) {
+            setCopied('复制失败')
+            return
+          }
+          setCopied(
+            (res.mode === 'input' ? '已加入输入框' : res.mode === 'sent' ? '已发送' : '已复制组件引用') +
+              ' · ' +
+              comp.name,
+          )
+          copyClearTimer.current = setTimeout(() => {
+            copyClearTimer.current = 0
+            if (aliveRef.current && token === copyToken.current) setCopied('')
+          }, 2500)
+        })
+        .catch(() => {
+          if (!aliveRef.current || token !== copyToken.current) return
+          setCopied('复制失败')
+          copyClearTimer.current = setTimeout(() => {
+            copyClearTimer.current = 0
+            if (aliveRef.current && token === copyToken.current) setCopied('')
+          }, 2500)
+        })
+      try {
+        postEvidence(post, cwd, evidenceFromRef(ref), (reason) => {
+          if (aliveRef.current) setNote(reason)
+        })
+      } catch {}
     }
 
     function renderer(comp, latest, byId, degraded) {
       if (degraded) {
         if (comp.type === 'line') destroyChart(comp.id)
-        return el('div', { className: 'dvb-viz-body' },
-          el('div', { className: 'dvb-hint dvb-need' }, '关联点位已关闭监视或被删除；请编辑组件恢复或选择新的监视点位。'),
-          el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openEditor(comp) } }, '修复'))
+        return el(
+          'div',
+          { className: 'dvb-viz-body' },
+          el(
+            'div',
+            { className: 'dvb-hint dvb-need' },
+            '关联点位已关闭监视或被删除；请编辑组件恢复或选择新的监视点位。',
+          ),
+          el(
+            'button',
+            {
+              type: 'button',
+              className: 'dvb-btn dvb-btn-sm',
+              onClick() {
+                openEditor(comp)
+              },
+            },
+            '修复',
+          ),
+        )
       }
       if (comp.type === 'line') {
         const payload = seriesOfComponent(comp)
         const chartErr = chartErrors[comp.id]
-        return el('div', { className: 'dvb-viz-body' },
+        return el(
+          'div',
+          { className: 'dvb-viz-body' },
           chartErr
-            ? el('div', { className: 'dvb-msg dvb-viz-chart-error', 'data-kind': 'err' },
+            ? el(
+                'div',
+                { className: 'dvb-msg dvb-viz-chart-error', 'data-kind': 'err' },
                 el('span', null, chartErr),
-                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '重试渲染该曲线', onClick() { setChartErrors((prev) => { const next = { ...prev }; delete next[comp.id]; return next }); setTick((n) => n + 1) } }, '重试'),
-                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openEditor(comp) } }, '编辑'))
+                el(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'dvb-btn dvb-btn-sm',
+                    title: '重试渲染该曲线',
+                    onClick() {
+                      setChartErrors((prev) => {
+                        const next = { ...prev }
+                        delete next[comp.id]
+                        return next
+                      })
+                      setTick((n) => n + 1)
+                    },
+                  },
+                  '重试',
+                ),
+                el(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'dvb-btn dvb-btn-sm',
+                    onClick() {
+                      openEditor(comp)
+                    },
+                  },
+                  '编辑',
+                ),
+              )
             : hasTrendSamples(payload)
-              ? el('div', { ref: (node) => { if (node) ensureUplot(node, comp) }, className: 'dvb-viz-uplot', style: { width: '100%', height: '150px' } })
-              : el('div', { className: 'dvb-hint' }, t('vizWaitingSamples') || '暂无历史样本，等待采集…'))
+              ? el('div', {
+                  ref: (node) => {
+                    if (node) ensureUplot(node, comp)
+                  },
+                  className: 'dvb-viz-uplot',
+                  style: { width: '100%', height: '150px' },
+                })
+              : el('div', { className: 'dvb-hint' }, t('vizWaitingSamples') || '暂无历史样本，等待采集…'),
+        )
       }
       if (comp.type === 'bar') {
         // CSS 条形图（非 uPlot bars）：中线为零基线，正右负左
         const bd = barDataOf(comp)
-        const nums = bd.latest.map((l) => (l.ok && l.value != null && Number.isFinite(Number(l.value))) ? Number(l.value) : null)
+        const nums = bd.latest.map((l) =>
+          l.ok && l.value != null && Number.isFinite(Number(l.value)) ? Number(l.value) : null,
+        )
         const absVals = nums.filter((v) => v !== null).map((v) => Math.abs(v))
         const maxAbs = absVals.length ? Math.max(...absVals) : 0
         const denom = maxAbs > 0 ? maxAbs : 1
-        return el('div', { className: 'dvb-viz-body' },
-          el('div', { className: 'dvb-viz-bars' },
+        return el(
+          'div',
+          { className: 'dvb-viz-body' },
+          el(
+            'div',
+            { className: 'dvb-viz-bars' },
             bd.latest.map((item) => {
-              const v = (item.ok && item.value != null && Number.isFinite(Number(item.value))) ? Number(item.value) : null
+              const v = item.ok && item.value != null && Number.isFinite(Number(item.value)) ? Number(item.value) : null
               const percent = v === null ? 0 : (Math.abs(v) / denom) * 50
-              return el('div', { key: item.pointId, className: 'dvb-viz-bar-row' },
+              return el(
+                'div',
+                { key: item.pointId, className: 'dvb-viz-bar-row' },
                 el('span', { className: 'dvb-viz-bar-name', title: item.name }, item.name),
-                el('div', { className: 'dvb-viz-bar-track' },
+                el(
+                  'div',
+                  { className: 'dvb-viz-bar-track' },
                   el('span', { className: 'dvb-viz-bar-zero-line', 'aria-hidden': 'true' }),
                   v === null
                     ? el('span', { className: 'dvb-viz-bar-missing', title: '无有效值' }, '—')
                     : el('div', {
-                        className: 'dvb-viz-bar-fill' + (v < 0 ? ' dvb-viz-bar-neg' : v === 0 ? ' dvb-viz-bar-zero' : ' dvb-viz-bar-pos'),
+                        className:
+                          'dvb-viz-bar-fill' +
+                          (v < 0 ? ' dvb-viz-bar-neg' : v === 0 ? ' dvb-viz-bar-zero' : ' dvb-viz-bar-pos'),
                         'data-sign': v < 0 ? 'neg' : v > 0 ? 'pos' : 'zero',
                         title: String(v) + (item.unit ? ' ' + item.unit : ''),
                         style: v === 0 ? { width: '2px' } : { width: Math.max(1, percent) + '%' },
-                      })),
-                el('span', { className: 'dvb-viz-bar-val' }, v === null ? '—' : String(v) + (item.unit ? ' ' + item.unit : '')))
-            })),
-          el('div', { className: 'dvb-hint' }, '柱长按 |值| / 最大绝对值 比例；正值向右、负值向左；通信失败显示 —'))
+                      }),
+                ),
+                el(
+                  'span',
+                  { className: 'dvb-viz-bar-val' },
+                  v === null ? '—' : String(v) + (item.unit ? ' ' + item.unit : ''),
+                ),
+              )
+            }),
+          ),
+          el('div', { className: 'dvb-hint' }, '柱长按 |值| / 最大绝对值 比例；正值向右、负值向左；通信失败显示 —'),
+        )
       }
       if (comp.type === 'value') {
         const item = latest[0] || {}
-        return el('div', { className: 'dvb-viz-body dvb-viz-value-card' },
+        return el(
+          'div',
+          { className: 'dvb-viz-body dvb-viz-value-card' },
           el('span', { className: 'dvb-viz-value-name' }, item.name || ''),
-          el('span', { className: 'dvb-viz-value' + (item.ok ? '' : ' dvb-viz-value-stale') },
-            item.ok && item.value != null ? String(item.value) : '—'),
-          el('span', { className: 'dvb-viz-value-unit' }, (item.ok && item.value != null && item.unit) ? item.unit : ''))
+          el(
+            'span',
+            { className: 'dvb-viz-value' + (item.ok ? '' : ' dvb-viz-value-stale') },
+            item.ok && item.value != null ? String(item.value) : '—',
+          ),
+          el('span', { className: 'dvb-viz-value-unit' }, item.ok && item.value != null && item.unit ? item.unit : ''),
+        )
       }
       if (comp.type === 'switch') {
         const item = latest[0] || {}
@@ -4547,16 +5355,53 @@ function createVisualizationPage(React, t, post, hooks) {
         const on = item.value === 1 || item.value === true
         const pending = switchDraft.current
         const busy = !!(pending && pending.busy && pending.componentId === comp.id)
-        const confirmHint = pending && pending.componentId === comp.id && !pending.busy && pending.expiresAt > Date.now()
-          ? ('确认写入「' + (pending.desiredValue ? '开' : '关') + '」…')
-          : ''
-        return el('div', { className: 'dvb-viz-body dvb-viz-switch-card' },
+        const confirmHint =
+          pending && pending.componentId === comp.id && !pending.busy && pending.expiresAt > Date.now()
+            ? '确认写入「' + (pending.desiredValue ? '开' : '关') + '」…'
+            : ''
+        return el(
+          'div',
+          { className: 'dvb-viz-body dvb-viz-switch-card' },
           el('span', { className: 'dvb-viz-value-name' }, item.name || ''),
           el('span', { className: 'dvb-viz-value' }, on ? 'ON' : 'OFF'),
           confirmHint ? el('div', { className: 'dvb-hint' }, confirmHint) : null,
-          el('div', { className: 'dvb-actions' },
-            el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-primary', disabled: !cwd || !pt.function || busy, onClick() { toggleSwitch(comp, { connectionId: pt.connectionId, deviceId: pt.deviceId, pointId: pt.id, address: pt.address }, true) } }, '开'),
-            el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', disabled: !cwd || !pt.function || busy, onClick() { toggleSwitch(comp, { connectionId: pt.connectionId, deviceId: pt.deviceId, pointId: pt.id, address: pt.address }, false) } }, '关')))
+          el(
+            'div',
+            { className: 'dvb-actions' },
+            el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-sm dvb-btn-primary',
+                disabled: !cwd || !pt.function || busy,
+                onClick() {
+                  toggleSwitch(
+                    comp,
+                    { connectionId: pt.connectionId, deviceId: pt.deviceId, pointId: pt.id, address: pt.address },
+                    true,
+                  )
+                },
+              },
+              '开',
+            ),
+            el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-sm',
+                disabled: !cwd || !pt.function || busy,
+                onClick() {
+                  toggleSwitch(
+                    comp,
+                    { connectionId: pt.connectionId, deviceId: pt.deviceId, pointId: pt.id, address: pt.address },
+                    false,
+                  )
+                },
+              },
+              '关',
+            ),
+          ),
+        )
       }
       return null
     }
@@ -4566,30 +5411,106 @@ function createVisualizationPage(React, t, post, hooks) {
       const byId = new Map(points.map((p) => [p.id, p]))
       const latest = componentLatestValues(values, points, comp.pointIds)
       const degraded = status !== 'ok'
-      return el('div', { key: comp.id, className: 'dvb-panel dvb-viz-card' + (degraded ? ' dvb-viz-degraded' : '') + (deleteId === comp.id ? ' dvb-viz-confirm' : '') + (focusVizId === comp.id ? ' dvb-viz-focused' : '') },
-        el('div', { className: 'dvb-viz-head' },
-          el('div', { className: 'dvb-viz-head-main' },
-            el('div', { className: 'dvb-viz-title-row' },
+      return el(
+        'div',
+        {
+          key: comp.id,
+          className:
+            'dvb-panel dvb-viz-card' +
+            (degraded ? ' dvb-viz-degraded' : '') +
+            (deleteId === comp.id ? ' dvb-viz-confirm' : '') +
+            (focusVizId === comp.id ? ' dvb-viz-focused' : ''),
+        },
+        el(
+          'div',
+          { className: 'dvb-viz-head' },
+          el(
+            'div',
+            { className: 'dvb-viz-head-main' },
+            el(
+              'div',
+              { className: 'dvb-viz-title-row' },
               el('span', { className: 'dvb-viz-title' }, comp.name),
-              el('span', { className: 'dvb-viz-type' }, vizTypeLabel(comp.type))),
-            el('div', { className: 'dvb-viz-meta' },
+              el('span', { className: 'dvb-viz-type' }, vizTypeLabel(comp.type)),
+            ),
+            el(
+              'div',
+              { className: 'dvb-viz-meta' },
               el('span', null, comp.pointIds.length + ' 个点位'),
-              degraded ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, '数据源不可用') : null)),
-          el('div', { className: 'dvb-viz-head-actions' },
-            el('button', {
-              type: 'button',
-              className: 'dvb-btn dvb-btn-sm',
-              title: hasHarnessInput(props) ? '将组件引用加入当前 Session 输入框并让 Agent 分析' : '复制组件结构化引用',
-              'aria-label': '让 Agent 分析组件 ' + (comp.name || comp.id),
-              onClick() { copyComponentRef(comp) },
-            }, hasHarnessInput(props) ? '让 Agent 分析' : '复制引用'),
-            el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openEditor(comp) } }, '编辑'),
+              degraded ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, '数据源不可用') : null,
+            ),
+          ),
+          el(
+            'div',
+            { className: 'dvb-viz-head-actions' },
+            el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-sm',
+                title: hasHarnessInput(props)
+                  ? '将组件引用加入当前 Session 输入框并让 Agent 分析'
+                  : '复制组件结构化引用',
+                'aria-label': '让 Agent 分析组件 ' + (comp.name || comp.id),
+                onClick() {
+                  copyComponentRef(comp)
+                },
+              },
+              hasHarnessInput(props) ? '让 Agent 分析' : '复制引用',
+            ),
+            el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-sm',
+                onClick() {
+                  openEditor(comp)
+                },
+              },
+              '编辑',
+            ),
             deleteId === comp.id
-              ? el('span', { className: 'dvb-actions' },
-                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-danger', onClick() { removeComponent(comp.id) } }, '确认删除'),
-                  el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { setDeleteId('') } }, t('csvCancel') || '取消'))
-              : el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-btn-danger', onClick() { setDeleteId(comp.id) } }, '删除'))),
-        el('div', { className: 'dvb-viz-body-wrap' }, renderer(comp, latest, byId, degraded)))
+              ? el(
+                  'span',
+                  { className: 'dvb-actions' },
+                  el(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'dvb-btn dvb-btn-sm dvb-btn-danger',
+                      onClick() {
+                        removeComponent(comp.id)
+                      },
+                    },
+                    '确认删除',
+                  ),
+                  el(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'dvb-btn dvb-btn-sm',
+                      onClick() {
+                        setDeleteId('')
+                      },
+                    },
+                    t('csvCancel') || '取消',
+                  ),
+                )
+              : el(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'dvb-btn dvb-btn-sm dvb-btn-danger',
+                    onClick() {
+                      setDeleteId(comp.id)
+                    },
+                  },
+                  '删除',
+                ),
+          ),
+        ),
+        el('div', { className: 'dvb-viz-body-wrap' }, renderer(comp, latest, byId, degraded)),
+      )
     }
 
     const pointOptions = pack ? monitoredPointOptions(pack) : []
@@ -4605,15 +5526,17 @@ function createVisualizationPage(React, t, post, hooks) {
       : []
     // 已选但不在 monitored 列表中的不兼容点：仍展示
     const orphanSelected = editor
-      ? (editor.pointIds || []).filter((pid) => !pointOptions.some((o) => o.pointId === pid)).map((pid) => {
-          const pt = byPointId.get(pid)
-          return {
-            pointId: pid,
-            name: (pt && pt.name) || pid,
-            path: '已选 · 当前不可用',
-            function: pt ? pt.function : 0,
-          }
-        })
+      ? (editor.pointIds || [])
+          .filter((pid) => !pointOptions.some((o) => o.pointId === pid))
+          .map((pid) => {
+            const pt = byPointId.get(pid)
+            return {
+              pointId: pid,
+              name: (pt && pt.name) || pid,
+              path: '已选 · 当前不可用',
+              function: pt ? pt.function : 0,
+            }
+          })
       : []
     const pickerRows = editorOpts.concat(orphanSelected.filter((o) => !editorOpts.some((x) => x.pointId === o.pointId)))
     const selectedIncompatible = editor
@@ -4625,83 +5548,219 @@ function createVisualizationPage(React, t, post, hooks) {
     const editorCheck = editorValidation()
     const singleSelect = editor && (editor.type === 'value' || editor.type === 'switch')
 
-    return el('div', { className: 'dvb-live dvb-viz' },
-      el('div', { className: 'dvb-live-head dvb-viz-page-head' },
-        el('div', { className: 'dvb-viz-page-title-block' },
+    return el(
+      'div',
+      { className: 'dvb-live dvb-viz' },
+      el(
+        'div',
+        { className: 'dvb-live-head dvb-viz-page-head' },
+        el(
+          'div',
+          { className: 'dvb-viz-page-title-block' },
           el('span', { className: 'dvb-live-title' }, t('liveChart') || '可视化'),
-          el('span', { className: 'dvb-map-meta' }, components.length + ' 个组件')),
-        !editor ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick() { openEditor(null) } }, t('vizNew') || '新建组件') : null),
+          el('span', { className: 'dvb-map-meta' }, components.length + ' 个组件'),
+        ),
+        !editor
+          ? el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-primary',
+                disabled: !cwd,
+                onClick() {
+                  openEditor(null)
+                },
+              },
+              t('vizNew') || '新建组件',
+            )
+          : null,
+      ),
       copied ? el('div', { className: 'dvb-hint' }, copied) : null,
       note ? el('div', { className: 'dvb-hint' }, note) : null,
       el('div', { className: 'dvb-viz-list' }, components.map(componentCard)),
       !components.length && !editor
-        ? el('div', { className: 'dvb-empty dvb-viz-empty' },
+        ? el(
+            'div',
+            { className: 'dvb-empty dvb-viz-empty' },
             el('div', { className: 'dvb-viz-empty-title' }, t('vizEmptyPoint') || '还没有可视化组件'),
-            el('div', { className: 'dvb-hint' }, pointOptions.length ? '从已监视点位创建曲线、柱状图、数值或开关组件' : '请先在上位机点位表开启「监视」'),
-            el('button', { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd || !pointOptions.length, onClick() { openEditor(null) } }, t('vizNew') || '新建组件'))
+            el(
+              'div',
+              { className: 'dvb-hint' },
+              pointOptions.length ? '从已监视点位创建曲线、柱状图、数值或开关组件' : '请先在上位机点位表开启「监视」',
+            ),
+            el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-primary',
+                disabled: !cwd || !pointOptions.length,
+                onClick() {
+                  openEditor(null)
+                },
+              },
+              t('vizNew') || '新建组件',
+            ),
+          )
         : null,
       editor
-        ? el('div', { className: 'dvb-panel dvb-write-panel' },
-            el('div', { className: 'dvb-panel-head' },
-              el('span', { className: 'dvb-panel-title' }, (editor.id ? t('vizEdit') || '编辑组件' : t('vizNew') || '新建组件'))),
-            el('div', { className: 'dvb-toolbar' },
-              vizFieldOf(el, t('vizName') || '组件名称', el('input', { className: 'dvb-input', value: editor.name, placeholder: '如 送风温度趋势', onChange: (e) => setEditor((prev) => ({ ...prev, name: e.target.value })) })),
-              vizFieldOf(el, t('vizType') || '组件类型', el('select', {
-                className: 'dvb-input',
-                value: editor.type,
-                onChange: (e) => {
-                  const nextType = e.target.value
-                  setEditor((prev) => ({ ...prev, type: nextType }))
-                },
-              }, ...[...COMPONENT_TYPES].map((ty) => el('option', { key: ty, value: ty }, vizTypeLabel(ty)))))),
-            el('div', { className: 'dvb-viz-picker' },
-              el('input', { className: 'dvb-input dvb-map-search', placeholder: t('vizSearch') || '搜索已监视点位…', value: editor.search, onChange: (e) => setEditor((prev) => ({ ...prev, search: e.target.value })) }),
-              el('div', { className: 'dvb-viz-picker-list' },
+        ? el(
+            'div',
+            { className: 'dvb-panel dvb-write-panel' },
+            el(
+              'div',
+              { className: 'dvb-panel-head' },
+              el(
+                'span',
+                { className: 'dvb-panel-title' },
+                editor.id ? t('vizEdit') || '编辑组件' : t('vizNew') || '新建组件',
+              ),
+            ),
+            el(
+              'div',
+              { className: 'dvb-toolbar' },
+              vizFieldOf(
+                el,
+                t('vizName') || '组件名称',
+                el('input', {
+                  className: 'dvb-input',
+                  value: editor.name,
+                  placeholder: '如 送风温度趋势',
+                  onChange: (e) => setEditor((prev) => ({ ...prev, name: e.target.value })),
+                }),
+              ),
+              vizFieldOf(
+                el,
+                t('vizType') || '组件类型',
+                el(
+                  'select',
+                  {
+                    className: 'dvb-input',
+                    value: editor.type,
+                    onChange: (e) => {
+                      const nextType = e.target.value
+                      setEditor((prev) => ({ ...prev, type: nextType }))
+                    },
+                  },
+                  ...[...COMPONENT_TYPES].map((ty) => el('option', { key: ty, value: ty }, vizTypeLabel(ty))),
+                ),
+              ),
+            ),
+            el(
+              'div',
+              { className: 'dvb-viz-picker' },
+              el('input', {
+                className: 'dvb-input dvb-map-search',
+                placeholder: t('vizSearch') || '搜索已监视点位…',
+                value: editor.search,
+                onChange: (e) => setEditor((prev) => ({ ...prev, search: e.target.value })),
+              }),
+              el(
+                'div',
+                { className: 'dvb-viz-picker-list' },
                 pickerRows.length
                   ? pickerRows.map((o) => {
                       const incompatible = !pointCompatible(editor.type, o.function)
                       const checked = editor.pointIds.includes(o.pointId)
-                      return el('label', { key: o.pointId, className: 'dvb-viz-picker-opt', title: o.path },
+                      return el(
+                        'label',
+                        { key: o.pointId, className: 'dvb-viz-picker-opt', title: o.path },
                         el('input', {
                           type: singleSelect ? 'radio' : 'checkbox',
-                          name: singleSelect ? ('viz-point-' + (editor.id || 'new')) : undefined,
+                          name: singleSelect ? 'viz-point-' + (editor.id || 'new') : undefined,
                           checked,
                           onChange: () => {
                             setEditor((prev) => {
                               if (singleSelect) return { ...prev, pointIds: [o.pointId] }
                               const has = prev.pointIds.includes(o.pointId)
-                              return { ...prev, pointIds: has ? prev.pointIds.filter((x) => x !== o.pointId) : prev.pointIds.concat([o.pointId]) }
+                              return {
+                                ...prev,
+                                pointIds: has
+                                  ? prev.pointIds.filter((x) => x !== o.pointId)
+                                  : prev.pointIds.concat([o.pointId]),
+                              }
                             })
                           },
                         }),
                         el('span', null, o.name),
                         incompatible ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, '不兼容') : null,
-                        incompatible ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: (ev) => { ev.preventDefault(); setEditor((prev) => ({ ...prev, pointIds: prev.pointIds.filter((x) => x !== o.pointId) })) } }, '移除') : null,
-                        el('span', { className: 'dvb-hint', style: { marginLeft: '8px' } }, o.path))
+                        incompatible
+                          ? el(
+                              'button',
+                              {
+                                type: 'button',
+                                className: 'dvb-btn dvb-btn-sm',
+                                onClick: (ev) => {
+                                  ev.preventDefault()
+                                  setEditor((prev) => ({
+                                    ...prev,
+                                    pointIds: prev.pointIds.filter((x) => x !== o.pointId),
+                                  }))
+                                },
+                              },
+                              '移除',
+                            )
+                          : null,
+                        el('span', { className: 'dvb-hint', style: { marginLeft: '8px' } }, o.path),
+                      )
                     })
-                  : el('div', { className: 'dvb-hint' }, pointOptions.length
-                    ? (t('vizNoCompatiblePoints') || '当前组件类型没有可用的已监视点位')
-                    : (t('vizNoMonitoredPoints') || '暂无可用点位，请先在上位机点位表中开启“监视”')))),
+                  : el(
+                      'div',
+                      { className: 'dvb-hint' },
+                      pointOptions.length
+                        ? t('vizNoCompatiblePoints') || '当前组件类型没有可用的已监视点位'
+                        : t('vizNoMonitoredPoints') || '暂无可用点位，请先在上位机点位表中开启“监视”',
+                    ),
+              ),
+            ),
             selectedIncompatible.length
-              ? el('div', { className: 'dvb-hint dvb-need' }, '已选但不兼容的点位：' + selectedIncompatible.join(', ') + '（请移除或改回兼容类型）')
+              ? el(
+                  'div',
+                  { className: 'dvb-hint dvb-need' },
+                  '已选但不兼容的点位：' + selectedIncompatible.join(', ') + '（请移除或改回兼容类型）',
+                )
               : null,
-            editor.pointIds.length ? el('div', { className: 'dvb-hint' }, '已选 ' + editor.pointIds.length + ' 个点位') : null,
-            !editorCheck.ok && editorCheck.reason ? el('div', { className: 'dvb-hint dvb-need' }, editorCheck.reason) : null,
-            el('div', { className: 'dvb-actions' },
-              el('button', { type: 'button', className: 'dvb-btn', disabled: saving, onClick() { setEditor(null) } }, t('csvCancel') || '取消'),
-              el('button', {
-                type: 'button',
-                className: 'dvb-btn dvb-btn-primary',
-                disabled: saving || !editorCheck.ok,
-                onClick: saveComponent,
-              }, saving ? '保存中…' : (editor.id ? (t('vizSave') || '保存修改') : (t('vizCreate') || '创建组件')))))
-        : null)
+            editor.pointIds.length
+              ? el('div', { className: 'dvb-hint' }, '已选 ' + editor.pointIds.length + ' 个点位')
+              : null,
+            !editorCheck.ok && editorCheck.reason
+              ? el('div', { className: 'dvb-hint dvb-need' }, editorCheck.reason)
+              : null,
+            el(
+              'div',
+              { className: 'dvb-actions' },
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn',
+                  disabled: saving,
+                  onClick() {
+                    setEditor(null)
+                  },
+                },
+                t('csvCancel') || '取消',
+              ),
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn dvb-btn-primary',
+                  disabled: saving || !editorCheck.ok,
+                  onClick: saveComponent,
+                },
+                saving ? '保存中…' : editor.id ? t('vizSave') || '保存修改' : t('vizCreate') || '创建组件',
+              ),
+            ),
+          )
+        : null,
+    )
   }
 }
 
-const vizTypeLabel = (type) => ({ line: '曲线图', bar: '柱状图', value: '数值卡', switch: '开关' }[type] || type)
+const vizTypeLabel = (type) => ({ line: '曲线图', bar: '柱状图', value: '数值卡', switch: '开关' })[type] || type
 
-const vizFieldOf = (el, label, control) => el('div', { className: 'dvb-row' }, el('div', { className: 'dvb-label' }, el('span', null, label)), control)
+const vizFieldOf = (el, label, control) =>
+  el('div', { className: 'dvb-row' }, el('div', { className: 'dvb-label' }, el('span', null, label)), control)
 
 const PACKAGES = { modbusSerial: '8.0.25', serialport: '13.0.0' }
 
@@ -4719,12 +5778,10 @@ const idleIoSnapshot = () => ({
 })
 
 const capabilitiesFromHealth = (data) => {
-  const tcp = data && data.tcp === true
-    ? 'ready'
-    : (data && (data.tcp === false || data.tcpError) ? 'unavailable' : 'unknown')
-  const rtu = data && data.rtu === true
-    ? 'ready'
-    : (data && (data.rtu === false || data.rtuError) ? 'unavailable' : 'unknown')
+  const tcp =
+    data && data.tcp === true ? 'ready' : data && (data.tcp === false || data.tcpError) ? 'unavailable' : 'unknown'
+  const rtu =
+    data && data.rtu === true ? 'ready' : data && (data.rtu === false || data.rtuError) ? 'unavailable' : 'unknown'
   return {
     modbusTcp: tcp,
     modbusRtu: rtu,
@@ -4748,7 +5805,7 @@ const canUseSerialMonitor = (ioRuntime) => capOf(ioRuntime, 'serialMonitor') !==
 
 const ioRuntimeStatus = (ioRuntime, connectionMode) => {
   const state = ioRuntime && ioRuntime.state ? ioRuntime.state : 'idle'
-  const key = connectionMode === 'tcp' ? 'modbusTcp' : (connectionMode === 'raw' ? 'serialMonitor' : 'modbusRtu')
+  const key = connectionMode === 'tcp' ? 'modbusTcp' : connectionMode === 'raw' ? 'serialMonitor' : 'modbusRtu'
   const value = capOf(ioRuntime, key)
   if (value === 'unavailable' || state === 'unhealthy') {
     return { kind: 'missing', labelKey: 'ioUnavailable', value: 'unavailable' }
@@ -4783,7 +5840,8 @@ function clearTrendState(cwd) {
 // New code must use getTrendState(cwd) / the cwd-explicit helpers below.
 const TREND = { cwd: '', series: new Map(), meta: new Map() }
 
-const trendKey = (connectionId, deviceId, pointId) => String(connectionId) + ':' + String(deviceId) + ':' + String(pointId)
+const trendKey = (connectionId, deviceId, pointId) =>
+  String(connectionId) + ':' + String(deviceId) + ':' + String(pointId)
 
 const sampleTrend = (cwd, pack) => {
   if (!cwd) return
@@ -4798,14 +5856,17 @@ const sampleTrend = (cwd, pack) => {
     const pt = pointsById[pid]
     const key = trendKey(pt.connectionId || '', pt.deviceId || '', pid)
     state.meta.set(key, {
-      label: (pt.name || pid),
+      label: pt.name || pid,
       unit: pt.unit || '',
       connectionId: pt.connectionId,
       deviceId: pt.deviceId,
       pointId: pid,
     })
     let list = state.series.get(key)
-    if (!list) { list = []; state.series.set(key, list) }
+    if (!list) {
+      list = []
+      state.series.set(key, list)
+    }
     // quality breakpoint: bad quality writes explicit null gap for uPlot spanGaps:false
     if (rec.ok !== true) {
       list.push({ t: now, v: null })
@@ -4838,7 +5899,9 @@ function computeStats(cwd, keyOrList, opts = {}) {
   const now = opts.now != null ? Number(opts.now) : Date.now()
   const windowMs = opts.windowMs != null ? Number(opts.windowMs) : TREND_WINDOW_MS
   const cutoff = now - windowMs
-  const win = list.filter((item) => item && item.t >= cutoff && item.v !== null && item.v !== undefined && Number.isFinite(Number(item.v)))
+  const win = list.filter(
+    (item) => item && item.t >= cutoff && item.v !== null && item.v !== undefined && Number.isFinite(Number(item.v)),
+  )
   const valid = win.length
   if (!valid) {
     return { count: list.length, valid: 0, min: null, max: null, avg: null, last: null, first: null }
@@ -4870,7 +5933,9 @@ function exportRangeCsv(cwd, opts = {}) {
   const cutoff = now - windowMs
   const start = opts.start != null ? Number(opts.start) : cutoff
   const end = opts.end != null ? Number(opts.end) : now
-  const keys = Array.isArray(opts.keys) ? opts.keys.filter((k) => state.series.has(k)) : Array.from(state.series.keys()).slice(0, 8)
+  const keys = Array.isArray(opts.keys)
+    ? opts.keys.filter((k) => state.series.has(k))
+    : Array.from(state.series.keys()).slice(0, 8)
   const header = ['time', 'connectionId', 'deviceId', 'pointId', 'label', 'unit', 'value']
   const rows = [header.join(',')]
   const esc = (s) => {
@@ -4885,7 +5950,17 @@ function exportRangeCsv(cwd, opts = {}) {
       if (item.t < start || item.t > end) continue
       const iso = new Date(item.t).toISOString()
       const v = item.v === null || item.v === undefined ? '' : String(item.v)
-      rows.push([iso, esc(meta.connectionId || ''), esc(meta.deviceId || ''), esc(meta.pointId || ''), esc(meta.label || key), esc(meta.unit || ''), v].join(','))
+      rows.push(
+        [
+          iso,
+          esc(meta.connectionId || ''),
+          esc(meta.deviceId || ''),
+          esc(meta.pointId || ''),
+          esc(meta.label || key),
+          esc(meta.unit || ''),
+          v,
+        ].join(','),
+      )
     }
   }
   return rows.join('\n')
@@ -4959,14 +6034,24 @@ const trendDataForComponents = (trendStore, points, componentIds = [], windowMs 
       const map = new Map(samples.map((sv) => [sv[0], sv[1]]))
       data.push(times.map((t) => (map.has(t) ? map.get(t) : null)))
       keys.push(pid)
-      meta.push({ label: pt ? (pt.name || String(pid)) : pid, unit: (pt && pt.unit) || '', connectionId: (pt && pt.connectionId) || '', deviceId: (pt && pt.deviceId) || '' })
+      meta.push({
+        label: pt ? pt.name || String(pid) : pid,
+        unit: (pt && pt.unit) || '',
+        connectionId: (pt && pt.connectionId) || '',
+        deviceId: (pt && pt.deviceId) || '',
+      })
       // 保留点位顺序：即使某点位零样本，也保留其 key/meta 位置，仅数据全 null
     }
   } else {
     for (const pid of ids) {
       keys.push(pid)
       const pt = byId.get(pid)
-      meta.push({ label: pt ? (pt.name || String(pid)) : pid, unit: (pt && pt.unit) || '', connectionId: (pt && pt.connectionId) || '', deviceId: (pt && pt.deviceId) || '' })
+      meta.push({
+        label: pt ? pt.name || String(pid) : pid,
+        unit: (pt && pt.unit) || '',
+        connectionId: (pt && pt.connectionId) || '',
+        deviceId: (pt && pt.deviceId) || '',
+      })
     }
   }
   return { data, keys, meta }
@@ -4979,7 +6064,14 @@ const componentLatestValues = (values, points, componentIds = []) => {
   return (Array.isArray(componentIds) ? componentIds : []).map((pid) => {
     const pt = ptsById.get(pid)
     const rec = byId.get(pid)
-    return { pointId: pid, name: pt ? pt.name : pid, unit: pt && pt.unit || '', value: rec && rec.ok ? rec.value : null, ok: !!(rec && rec.ok), at: rec && rec.at || 0 }
+    return {
+      pointId: pid,
+      name: pt ? pt.name : pid,
+      unit: (pt && pt.unit) || '',
+      value: rec && rec.ok ? rec.value : null,
+      ok: !!(rec && rec.ok),
+      at: (rec && rec.at) || 0,
+    }
   })
 }
 const UPLOT_PROTO = {
@@ -4991,6 +6083,7 @@ const UPLOT_PROTO = {
   spanGaps: false,
   hooks: {},
 }
+
 function formatResult(result) {
   if (!result) return ''
   const details = result.details || {}
@@ -4999,9 +6092,12 @@ function formatResult(result) {
   if (result.summary) lines.push(result.summary)
   if (metrics.compile_errors != null || metrics.after_build_errors != null) {
     lines.push(
-      '编译/链接 ' + String(metrics.compile_errors || 0)
-      + ' · 后处理 ' + String(metrics.after_build_errors || 0)
-      + ' · 警告 ' + String(metrics.warnings || 0),
+      '编译/链接 ' +
+        String(metrics.compile_errors || 0) +
+        ' · 后处理 ' +
+        String(metrics.after_build_errors || 0) +
+        ' · 警告 ' +
+        String(metrics.warnings || 0),
     )
   } else if (metrics.errors != null) {
     lines.push('errors=' + metrics.errors + ' warnings=' + metrics.warnings)
@@ -5018,10 +6114,13 @@ function formatResult(result) {
   if (result.download && result.download.path) {
     lines.push(result.download.wanted + ': ' + result.download.path)
   } else if (result.download && result.download.wanted) {
-    lines.push('未生成 ' + result.download.wanted
-      + (result.download.available && result.download.available.length
-        ? '（已有 ' + result.download.available.join(', ') + '）'
-        : ''))
+    lines.push(
+      '未生成 ' +
+        result.download.wanted +
+        (result.download.available && result.download.available.length
+          ? '（已有 ' + result.download.available.join(', ') + '）'
+          : ''),
+    )
   } else if (details.flash_file) {
     lines.push(details.flash_file)
   }
@@ -5039,26 +6138,46 @@ function agentNote(cwd, workspace, result) {
     '工程: ' + (keil.project || ''),
     'Target: ' + (keil.target || ''),
     '输出格式: ' + (keil.artifact || 'hex'),
-    download.path ? '输出: ' + download.path : (result ? '输出: 未生成所选格式' : ''),
+    download.path ? '输出: ' + download.path : result ? '输出: 未生成所选格式' : '',
     result && result.summary ? '结果: ' + result.summary : '',
     metrics.compile_errors != null
-      ? '编译/链接=' + metrics.compile_errors + ' 后处理=' + metrics.after_build_errors + ' warnings=' + metrics.warnings
-      : (metrics.errors != null ? 'errors=' + metrics.errors + ' warnings=' + metrics.warnings : ''),
+      ? '编译/链接=' +
+        metrics.compile_errors +
+        ' 后处理=' +
+        metrics.after_build_errors +
+        ' warnings=' +
+        metrics.warnings
+      : metrics.errors != null
+        ? 'errors=' + metrics.errors + ' warnings=' + metrics.warnings
+        : '',
     result && result.details && result.details.log_file ? '日志: ' + result.details.log_file : '',
     result && result.details && Array.isArray(result.details.errors) && result.details.errors.length
       ? '错误: ' + result.details.errors.slice(0, 4).join(' | ')
       : '',
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
-
 
 const FLASH_IFACES = ['cmsis-dap', 'stlink', 'jlink', 'ftdi', 'dap']
 const FLASH_TARGETS = [
-  'stm32f1x', 'stm32f2x', 'stm32f4x', 'stm32f7x', 'stm32g0x', 'stm32g4x',
-  'stm32h7x', 'stm32l0x', 'stm32l4x', 'nrf51', 'nrf52', 'rp2040', 'lpc55',
-  'kinetis', 'efm32', 'at91samd',
+  'stm32f1x',
+  'stm32f2x',
+  'stm32f4x',
+  'stm32f7x',
+  'stm32g0x',
+  'stm32g4x',
+  'stm32h7x',
+  'stm32l0x',
+  'stm32l4x',
+  'nrf51',
+  'nrf52',
+  'rp2040',
+  'lpc55',
+  'kinetis',
+  'efm32',
+  'at91samd',
 ]
-
 
 function createDebugView(React, t, post, openProject) {
   return function DebugView(props) {
@@ -5066,9 +6185,12 @@ function createDebugView(React, t, post, openProject) {
     const cwd = useSessionCwd(React, props)
     const sessionId = (props && props.sessionId) || ''
     function field(label, control) {
-      return el('div', { className: 'dvb-row' },
+      return el(
+        'div',
+        { className: 'dvb-row' },
         el('div', { className: 'dvb-label' }, el('span', null, label)),
-        control)
+        control,
+      )
     }
     const [health, setHealth] = React.useState({})
     const [workspace, setWorkspace] = React.useState(emptyWorkspace)
@@ -5081,29 +6203,44 @@ function createDebugView(React, t, post, openProject) {
     const [lastResult, setLastResult] = React.useState(null)
     const [copied, setCopied] = React.useState(false)
     const [picker, setPicker] = React.useState(null)
-    const [flash, setFlash] = React.useState({ interface: 'cmsis-dap', target: 'stm32f1x', busy: false, confirm: null, result: null })
+    const [flash, setFlash] = React.useState({
+      interface: 'cmsis-dap',
+      target: 'stm32f1x',
+      busy: false,
+      confirm: null,
+      result: null,
+    })
     const [pendingWrites, setPendingWrites] = React.useState([])
     const workspaceRef = React.useRef(workspace)
     workspaceRef.current = workspace
     const projectRef = React.useRef('')
 
-    React.useEffect(() => subscribeState(post, cwd, (data) => {
-      if (!data) return
-      if (data.health) setHealth(data.health)
-      if (Array.isArray(data.pendingWrites)) setPendingWrites(data.pendingWrites)
-      if (data.workspace) {
-        setWorkspace((prev) => ({
-          ...prev,
-          keil: { ...prev.keil, ...(data.workspace.keil || {}) },
-          session: data.workspace.session || prev.session,
-          manualRequests: Array.isArray(data.workspace.manualRequests)
-            ? data.workspace.manualRequests
-            : prev.manualRequests,
-          modbus: data.workspace.modbus || prev.modbus,
-        }))
-      }
-      setJournal(pickJournal(data))
-    }, { sessionId }), [cwd, post, sessionId])
+    React.useEffect(
+      () =>
+        subscribeState(
+          post,
+          cwd,
+          (data) => {
+            if (!data) return
+            if (data.health) setHealth(data.health)
+            if (Array.isArray(data.pendingWrites)) setPendingWrites(data.pendingWrites)
+            if (data.workspace) {
+              setWorkspace((prev) => ({
+                ...prev,
+                keil: { ...prev.keil, ...(data.workspace.keil || {}) },
+                session: data.workspace.session || prev.session,
+                manualRequests: Array.isArray(data.workspace.manualRequests)
+                  ? data.workspace.manualRequests
+                  : prev.manualRequests,
+                modbus: data.workspace.modbus || prev.modbus,
+              }))
+            }
+            setJournal(pickJournal(data))
+          },
+          { sessionId },
+        ),
+      [cwd, post, sessionId],
+    )
 
     function setKeil(patch) {
       setWorkspace((prev) => ({ ...prev, keil: { ...prev.keil, ...patch } }))
@@ -5112,39 +6249,68 @@ function createDebugView(React, t, post, openProject) {
     // Task7/0.19.2: Vision 自动服务当前 Session — 绑定 UI 已移除，boundId 只读兼容。
     function resolveManual(id, done) {
       if (!cwd) return
-      post('/dsh-vision-bench/manual/resolve', { cwd, id, done }, 15000).then(() => {
-        setWorkspace((prev) => ({
-          ...prev,
-          manualRequests: (prev.manualRequests || []).map((item) => item.id === id
-            ? { ...item, status: done ? 'done' : 'rejected' }
-            : item),
-        }))
-        return post('/dsh-vision-bench/state', { cwd })
-      }).then((data) => {
-        if (data && data.workspace) {
-          setWorkspace((prev) => ({ ...prev, manualRequests: data.workspace.manualRequests || prev.manualRequests }))
-        }
-        if (data) setJournal(pickJournal(data))
-      }).catch(() => { /* next poll refreshes */ })
+      post('/dsh-vision-bench/manual/resolve', { cwd, id, done }, 15000)
+        .then(() => {
+          setWorkspace((prev) => ({
+            ...prev,
+            manualRequests: (prev.manualRequests || []).map((item) =>
+              item.id === id ? { ...item, status: done ? 'done' : 'rejected' } : item,
+            ),
+          }))
+          return post('/dsh-vision-bench/state', { cwd })
+        })
+        .then((data) => {
+          if (data && data.workspace) {
+            setWorkspace((prev) => ({ ...prev, manualRequests: data.workspace.manualRequests || prev.manualRequests }))
+          }
+          if (data) setJournal(pickJournal(data))
+        })
+        .catch(() => {
+          /* next poll refreshes */
+        })
     }
 
     const openManual = (workspace.manualRequests || []).filter((item) => item.status === 'pending')
     const manualPanel = openManual.length
-      ? el('div', { className: 'dvb-panel dvb-write-panel' },
-        el('div', { className: 'dvb-panel-head' },
-          el('span', { className: 'dvb-panel-title' }, t('manualTitle'))),
-        openManual.map((req) => el('div', { key: req.id, className: 'dvb-task' },
-          el('span', { className: 'dvb-badge', 'data-source': req.sessionId ? 'agent' : 'user' }, req.sessionId ? 'Agent' : 'User'),
-          el('span', { className: 'dvb-hint' }, req.text),
-          el('button', {
-            type: 'button',
-            className: 'dvb-btn dvb-btn-primary',
-            onClick() { resolveManual(req.id, true) },
-          }, t('manualDone')),
-          el('button', {
-            type: 'button', className: 'dvb-btn',
-            onClick() { resolveManual(req.id, false) },
-          }, t('manualFail')))))
+      ? el(
+          'div',
+          { className: 'dvb-panel dvb-write-panel' },
+          el('div', { className: 'dvb-panel-head' }, el('span', { className: 'dvb-panel-title' }, t('manualTitle'))),
+          openManual.map((req) =>
+            el(
+              'div',
+              { key: req.id, className: 'dvb-task' },
+              el(
+                'span',
+                { className: 'dvb-badge', 'data-source': req.sessionId ? 'agent' : 'user' },
+                req.sessionId ? 'Agent' : 'User',
+              ),
+              el('span', { className: 'dvb-hint' }, req.text),
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn dvb-btn-primary',
+                  onClick() {
+                    resolveManual(req.id, true)
+                  },
+                },
+                t('manualDone'),
+              ),
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn',
+                  onClick() {
+                    resolveManual(req.id, false)
+                  },
+                },
+                t('manualFail'),
+              ),
+            ),
+          ),
+        )
       : null
 
     function mergeState(data) {
@@ -5162,44 +6328,67 @@ function createDebugView(React, t, post, openProject) {
     function startFlash() {
       if (!cwd) return
       setFlash((prev) => ({ ...prev, busy: true, result: null }))
-      post('/dsh-vision-bench/keil/download', {
-        cwd,
-        source: 'user',
-        sessionId,
-        interface: flash.interface,
-        target: flash.target,
-      }, 20000).then((data) => {
-        if (data && data.needsConfirm) {
-          setFlash((prev) => ({ ...prev, busy: false, confirm: data.request }))
-          return null
-        }
-        setFlash((prev) => ({ ...prev, busy: false, confirm: null, result: data }))
-        return post('/dsh-vision-bench/state', { cwd })
-      }).then(mergeState).catch((err) => {
-        setFlash((prev) => ({ ...prev, busy: false, result: { ok: false, error: String((err && err.message) || t('fail')) } }))
-      })
+      post(
+        '/dsh-vision-bench/keil/download',
+        {
+          cwd,
+          source: 'user',
+          sessionId,
+          interface: flash.interface,
+          target: flash.target,
+        },
+        20000,
+      )
+        .then((data) => {
+          if (data && data.needsConfirm) {
+            setFlash((prev) => ({ ...prev, busy: false, confirm: data.request }))
+            return null
+          }
+          setFlash((prev) => ({ ...prev, busy: false, confirm: null, result: data }))
+          return post('/dsh-vision-bench/state', { cwd })
+        })
+        .then(mergeState)
+        .catch((err) => {
+          setFlash((prev) => ({
+            ...prev,
+            busy: false,
+            result: { ok: false, error: String((err && err.message) || t('fail')) },
+          }))
+        })
     }
 
     function approveFlash() {
       const req = flash.confirm
       if (!req || !cwd) return
       setFlash((prev) => ({ ...prev, busy: true }))
-      post('/dsh-vision-bench/keil/download', {
-        cwd,
-        source: 'user',
-        sessionId,
-        interface: req.interface,
-        target: req.target,
-        path: req.file,
-        sha256: req.sha256 || '',
-        size: req.size || 0,
-        confirm: true,
-      }, 180000).then((data) => {
-        setFlash((prev) => ({ ...prev, busy: false, confirm: null, result: data }))
-        return post('/dsh-vision-bench/state', { cwd })
-      }).then(mergeState).catch((err) => {
-        setFlash((prev) => ({ ...prev, busy: false, confirm: null, result: { ok: false, error: String((err && err.message) || t('fail')) } }))
-      })
+      post(
+        '/dsh-vision-bench/keil/download',
+        {
+          cwd,
+          source: 'user',
+          sessionId,
+          interface: req.interface,
+          target: req.target,
+          path: req.file,
+          sha256: req.sha256 || '',
+          size: req.size || 0,
+          confirm: true,
+        },
+        180000,
+      )
+        .then((data) => {
+          setFlash((prev) => ({ ...prev, busy: false, confirm: null, result: data }))
+          return post('/dsh-vision-bench/state', { cwd })
+        })
+        .then(mergeState)
+        .catch((err) => {
+          setFlash((prev) => ({
+            ...prev,
+            busy: false,
+            confirm: null,
+            result: { ok: false, error: String((err && err.message) || t('fail')) },
+          }))
+        })
     }
 
     function persist(next) {
@@ -5223,13 +6412,16 @@ function createDebugView(React, t, post, openProject) {
       }
       setBusy(name)
       setError('')
-      return post(path, Object.assign({ cwd }, payload || {}), timeoutMs).then((data) => {
-        if (data && data.ok === false) setError(data.error || t('fail'))
-        return data
-      }).catch((err) => {
-        setError(String((err && err.message) || t('fail')))
-        return null
-      }).finally(() => setBusy(''))
+      return post(path, Object.assign({ cwd }, payload || {}), timeoutMs)
+        .then((data) => {
+          if (data && data.ok === false) setError(data.error || t('fail'))
+          return data
+        })
+        .catch((err) => {
+          setError(String((err && err.message) || t('fail')))
+          return null
+        })
+        .finally(() => setBusy(''))
     }
 
     function openPicker(path) {
@@ -5239,11 +6431,14 @@ function createDebugView(React, t, post, openProject) {
       }
       setBusy('picker')
       setError('')
-      post('/dsh-vision-bench/fs/list', { cwd, path: path || cwd }).then((data) => {
-        setPicker(data)
-      }).catch((err) => {
-        setError(String((err && err.message) || t('fail')))
-      }).finally(() => setBusy(''))
+      post('/dsh-vision-bench/fs/list', { cwd, path: path || cwd })
+        .then((data) => {
+          setPicker(data)
+        })
+        .catch((err) => {
+          setError(String((err && err.message) || t('fail')))
+        })
+        .finally(() => setBusy(''))
     }
 
     function chooseProject(path) {
@@ -5259,7 +6454,7 @@ function createDebugView(React, t, post, openProject) {
       if (!project) return
       run('targets', '/dsh-vision-bench/keil/targets', { project }).then((data) => {
         if (!data) return
-        const list = data.result && data.result.details && data.result.details.targets || []
+        const list = (data.result && data.result.details && data.result.details.targets) || []
         setTargets(list)
         // Judge from the latest server state, not the first-render closure:
         // auto-pick only when the workspace genuinely has no saved target.
@@ -5273,26 +6468,36 @@ function createDebugView(React, t, post, openProject) {
     }
 
     function build() {
-      persist().then(() => run('build', '/dsh-vision-bench/keil/build', {
-        project: workspace.keil.project,
-        target: workspace.keil.target,
-        artifact: workspace.keil.artifact,
-        source: 'user',
-        sessionId,
-      }, 620000)).then((data) => {
-        if (!data) return
-        setLastResult(data.result)
-        setBuildOut(formatResult(data.result))
-        setCopied(false)
-        if (data.ok === false && typeof openProject === 'function') openProject()
-        return post('/dsh-vision-bench/state', { cwd })
-      }).then((data) => {
-        // Do not merge keil back from the post-build snapshot: the user may
-        // have changed target/artifact during a long build. The poll loop
-        // keeps everything else fresh.
-        if (!data) return
-        setJournal(pickJournal(data))
-      })
+      persist()
+        .then(() =>
+          run(
+            'build',
+            '/dsh-vision-bench/keil/build',
+            {
+              project: workspace.keil.project,
+              target: workspace.keil.target,
+              artifact: workspace.keil.artifact,
+              source: 'user',
+              sessionId,
+            },
+            620000,
+          ),
+        )
+        .then((data) => {
+          if (!data) return
+          setLastResult(data.result)
+          setBuildOut(formatResult(data.result))
+          setCopied(false)
+          if (data.ok === false && typeof openProject === 'function') openProject()
+          return post('/dsh-vision-bench/state', { cwd })
+        })
+        .then((data) => {
+          // Do not merge keil back from the post-build snapshot: the user may
+          // have changed target/artifact during a long build. The poll loop
+          // keeps everything else fresh.
+          if (!data) return
+          setJournal(pickJournal(data))
+        })
     }
 
     // Task5/0.19.3: 编译错误 → 文件/行定位（打开工程结构并高亮）
@@ -5302,7 +6507,12 @@ function createDebugView(React, t, post, openProject) {
       const re = /^\s*(.+?)\((\d+)\)\s*:\s*(error|fatal error|warning)\s*:\s*(.*)$/gm
       let m = null
       while ((m = re.exec(text))) {
-        out.push({ file: m[1].trim(), line: Math.max(1, Number(m[2]) || 1), kind: m[3], text: m[4].trim().slice(0, 200) })
+        out.push({
+          file: m[1].trim(),
+          line: Math.max(1, Number(m[2]) || 1),
+          kind: m[3],
+          text: m[4].trim().slice(0, 200),
+        })
       }
       return out.slice(0, 60)
     })()
@@ -5314,16 +6524,29 @@ function createDebugView(React, t, post, openProject) {
     function openFullLog() {
       if (!lastResult || !cwd) return
       setLogView((prev) => ({ ...prev, open: true, busy: true, text: '' }))
-      const logFile = lastResult && lastResult.details && (lastResult.details.log_file || lastResult.details.logFile) || ''
-      post('/dsh-vision-bench/keil/log', { cwd, logFile }).then((data) => {
-        setLogView((prev) => ({ ...prev, busy: false, text: (data && data.text) || '', error: data && data.ok === false ? data.error : '' }))
-      }).catch((err) => setLogView((prev) => ({ ...prev, busy: false, text: '', error: String((err && err.message) || '读取失败') })))
+      const logFile =
+        (lastResult && lastResult.details && (lastResult.details.log_file || lastResult.details.logFile)) || ''
+      post('/dsh-vision-bench/keil/log', { cwd, logFile })
+        .then((data) => {
+          setLogView((prev) => ({
+            ...prev,
+            busy: false,
+            text: (data && data.text) || '',
+            error: data && data.ok === false ? data.error : '',
+          }))
+        })
+        .catch((err) =>
+          setLogView((prev) => ({ ...prev, busy: false, text: '', error: String((err && err.message) || '读取失败') })),
+        )
     }
 
     function copyForAgent() {
       const text = agentNote(cwd, workspace, lastResult)
       if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => setCopied(false))
+        navigator.clipboard
+          .writeText(text)
+          .then(() => setCopied(true))
+          .catch(() => setCopied(false))
       }
     }
 
@@ -5331,222 +6554,490 @@ function createDebugView(React, t, post, openProject) {
     const uv4Ready = statusKind(health.uv4) === 'ready'
     const buildRunning = runningOf(journal, 'build')
     const buildBusy = !!busy || buildRunning
-    const buildLabel = busy === 'build'
-      ? t('building')
-      : (buildRunning && runningSource(journal, 'build') === 'agent' ? t('agentBuilding') : (buildRunning ? t('building') : t('build')))
+    const buildLabel =
+      busy === 'build'
+        ? t('building')
+        : buildRunning && runningSource(journal, 'build') === 'agent'
+          ? t('agentBuilding')
+          : buildRunning
+            ? t('building')
+            : t('build')
     const buildBlock = !cwd
       ? ''
-      : (!pythonReady || !uv4Ready)
+      : !pythonReady || !uv4Ready
         ? t('needBindingsBuild')
-        : (!workspace.keil.project ? t('needProject') : '')
+        : !workspace.keil.project
+          ? t('needProject')
+          : ''
 
-    const pickerEl = picker ? el('div', { className: 'dvb-mask', onClick() { setPicker(null) } },
-      el('div', { className: 'dvb-picker', onClick(event) { event.stopPropagation() } },
-        el('div', { className: 'dvb-picker-head' },
-          el('button', {
-            type: 'button', className: 'dvb-btn', disabled: !picker.parent || !!busy,
-            onClick() { openPicker(picker.parent) },
-          }, t('pickerUp')),
-          el('div', { className: 'dvb-hint' }, picker.path),
-          el('button', { type: 'button', className: 'dvb-btn', onClick() { setPicker(null) } }, t('pickerClose'))),
-        (picker.dirs || []).map((item) => el('button', {
-          key: 'd-' + item.path, type: 'button', className: 'dvb-picker-row',
-          onClick() { openPicker(item.path) },
-        }, '▸ ' + item.name)),
-        (picker.files || []).map((item) => el('button', {
-          key: 'f-' + item.path, type: 'button', className: 'dvb-picker-row dvb-picker-file',
-          onClick() { chooseProject(item.path) },
-        }, item.name)),
-        (!picker.dirs || !picker.dirs.length) && (!picker.files || !picker.files.length)
-          ? el('div', { className: 'dvb-hint' }, t('pickerEmpty'))
-          : null)) : null
+    const pickerEl = picker
+      ? el(
+          'div',
+          {
+            className: 'dvb-mask',
+            onClick() {
+              setPicker(null)
+            },
+          },
+          el(
+            'div',
+            {
+              className: 'dvb-picker',
+              onClick(event) {
+                event.stopPropagation()
+              },
+            },
+            el(
+              'div',
+              { className: 'dvb-picker-head' },
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn',
+                  disabled: !picker.parent || !!busy,
+                  onClick() {
+                    openPicker(picker.parent)
+                  },
+                },
+                t('pickerUp'),
+              ),
+              el('div', { className: 'dvb-hint' }, picker.path),
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn',
+                  onClick() {
+                    setPicker(null)
+                  },
+                },
+                t('pickerClose'),
+              ),
+            ),
+            (picker.dirs || []).map((item) =>
+              el(
+                'button',
+                {
+                  key: 'd-' + item.path,
+                  type: 'button',
+                  className: 'dvb-picker-row',
+                  onClick() {
+                    openPicker(item.path)
+                  },
+                },
+                '▸ ' + item.name,
+              ),
+            ),
+            (picker.files || []).map((item) =>
+              el(
+                'button',
+                {
+                  key: 'f-' + item.path,
+                  type: 'button',
+                  className: 'dvb-picker-row dvb-picker-file',
+                  onClick() {
+                    chooseProject(item.path)
+                  },
+                },
+                item.name,
+              ),
+            ),
+            (!picker.dirs || !picker.dirs.length) && (!picker.files || !picker.files.length)
+              ? el('div', { className: 'dvb-hint' }, t('pickerEmpty'))
+              : null,
+          ),
+        )
+      : null
 
     const openocdReady = statusKind(health.openocd) === 'ready'
     const artifactPath = workspace.keil.download || ''
     const flashReq = flash.confirm
-    const flashPanel = el('div', { className: 'dvb-panel' },
-      el('div', { className: 'dvb-panel-head' },
+    const flashPanel = el(
+      'div',
+      { className: 'dvb-panel' },
+      el(
+        'div',
+        { className: 'dvb-panel-head' },
         el('span', { className: 'dvb-panel-title' }, t('flashTitle')),
-        !openocdReady ? el('span', { className: 'dvb-need' }, t('needOpenocd')) : null),
-      el('div', { className: 'dvb-toolbar' },
-        field(t('flashIface'), el('select', {
-          className: 'dvb-input',
-          value: flash.interface,
-          disabled: flash.busy,
-          onChange(event) { setFlash((prev) => ({ ...prev, interface: event.target.value })) },
-        }, FLASH_IFACES.map((name) => el('option', { key: name, value: name }, name)))),
-        field(t('flashTarget'), el('select', {
-          className: 'dvb-input',
-          value: flash.target,
-          disabled: flash.busy,
-          onChange(event) { setFlash((prev) => ({ ...prev, target: event.target.value })) },
-        }, FLASH_TARGETS.map((name) => el('option', { key: name, value: name }, name))))),
-      el('div', { className: 'dvb-file' },
-        el('div', { className: 'dvb-path', 'data-empty': artifactPath ? '0' : '1' },
-          artifactPath || t('flashNeedArtifact'))),
+        !openocdReady ? el('span', { className: 'dvb-need' }, t('needOpenocd')) : null,
+      ),
+      el(
+        'div',
+        { className: 'dvb-toolbar' },
+        field(
+          t('flashIface'),
+          el(
+            'select',
+            {
+              className: 'dvb-input',
+              value: flash.interface,
+              disabled: flash.busy,
+              onChange(event) {
+                setFlash((prev) => ({ ...prev, interface: event.target.value }))
+              },
+            },
+            FLASH_IFACES.map((name) => el('option', { key: name, value: name }, name)),
+          ),
+        ),
+        field(
+          t('flashTarget'),
+          el(
+            'select',
+            {
+              className: 'dvb-input',
+              value: flash.target,
+              disabled: flash.busy,
+              onChange(event) {
+                setFlash((prev) => ({ ...prev, target: event.target.value }))
+              },
+            },
+            FLASH_TARGETS.map((name) => el('option', { key: name, value: name }, name)),
+          ),
+        ),
+      ),
+      el(
+        'div',
+        { className: 'dvb-file' },
+        el(
+          'div',
+          { className: 'dvb-path', 'data-empty': artifactPath ? '0' : '1' },
+          artifactPath || t('flashNeedArtifact'),
+        ),
+      ),
       flashReq
-        ? el('div', { className: 'dvb-write-panel dvb-flash-confirm' },
-          el('div', { className: 'dvb-write-title' }, t('flashConfirmTitle')),
-          el('div', { className: 'dvb-hint' }, t('flashConfirmHint')),
-          el('div', { className: 'dvb-cwd' }, flashReq.target + ' · ' + flashReq.interface + '\n' + flashReq.file),
-          el('div', { className: 'dvb-hint' },
-            Math.max(1, Math.round(flashReq.size / 1024)) + ' KB'
-            + (flashReq.sha256 ? ' · sha256 ' + flashReq.sha256.slice(0, 16) + '…' : '')),
-          el('div', { className: 'dvb-actions' },
-            el('button', {
+        ? el(
+            'div',
+            { className: 'dvb-write-panel dvb-flash-confirm' },
+            el('div', { className: 'dvb-write-title' }, t('flashConfirmTitle')),
+            el('div', { className: 'dvb-hint' }, t('flashConfirmHint')),
+            el('div', { className: 'dvb-cwd' }, flashReq.target + ' · ' + flashReq.interface + '\n' + flashReq.file),
+            el(
+              'div',
+              { className: 'dvb-hint' },
+              Math.max(1, Math.round(flashReq.size / 1024)) +
+                ' KB' +
+                (flashReq.sha256 ? ' · sha256 ' + flashReq.sha256.slice(0, 16) + '…' : ''),
+            ),
+            el(
+              'div',
+              { className: 'dvb-actions' },
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn dvb-btn-primary dvb-btn-write',
+                  disabled: flash.busy,
+                  onClick: approveFlash,
+                },
+                flash.busy ? t('flashing') : t('flashApprove'),
+              ),
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn',
+                  disabled: flash.busy,
+                  onClick() {
+                    setFlash((prev) => ({ ...prev, confirm: null }))
+                  },
+                },
+                t('flashCancel'),
+              ),
+            ),
+          )
+        : el(
+            'button',
+            {
               type: 'button',
-              className: 'dvb-btn dvb-btn-primary dvb-btn-write',
-              disabled: flash.busy,
-              onClick: approveFlash,
-            }, flash.busy ? t('flashing') : t('flashApprove')),
-            el('button', {
-              type: 'button', className: 'dvb-btn',
-              disabled: flash.busy,
-              onClick() { setFlash((prev) => ({ ...prev, confirm: null })) },
-            }, t('flashCancel'))))
-        : el('button', {
-          type: 'button',
-          className: 'dvb-btn dvb-btn-write',
-          disabled: !cwd || !openocdReady || !artifactPath || flash.busy,
-          onClick: startFlash,
-        }, flash.busy ? t('flashing') : t('flashBtn')),
+              className: 'dvb-btn dvb-btn-write',
+              disabled: !cwd || !openocdReady || !artifactPath || flash.busy,
+              onClick: startFlash,
+            },
+            flash.busy ? t('flashing') : t('flashBtn'),
+          ),
       flash.result
-        ? el('div', {
-          className: 'dvb-msg',
-          'data-kind': flash.result.ok ? 'ok' : 'err',
-        }, flash.result.summary || flash.result.error || (flash.result.ok ? t('flashDone') : t('flashFail')))
-        : null)
+        ? el(
+            'div',
+            {
+              className: 'dvb-msg',
+              'data-kind': flash.result.ok ? 'ok' : 'err',
+            },
+            flash.result.summary || flash.result.error || (flash.result.ok ? t('flashDone') : t('flashFail')),
+          )
+        : null,
+    )
 
-
-    return el('div', { className: 'dvb-page' },
+    return el(
+      'div',
+      { className: 'dvb-page' },
       statusBar(el, t, cwd, [
         { key: 'python', health: health.python },
         { key: 'uv4', health: health.uv4 },
       ]),
       visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites, sessionId }),
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
-      el('div', { className: 'dvb-split' },
-        el('div', { className: 'dvb-panel' },
-          el('div', { className: 'dvb-panel-head' },
+      el(
+        'div',
+        { className: 'dvb-split' },
+        el(
+          'div',
+          { className: 'dvb-panel' },
+          el(
+            'div',
+            { className: 'dvb-panel-head' },
             el('span', { className: 'dvb-panel-title' }, t('project')),
-            el('button', {
-              type: 'button', className: 'dvb-btn', disabled: !cwd || !!busy,
-              onClick() { openPicker(cwd) },
-            }, busy === 'picker' ? t('opening') : t('browse')),
-            el('button', {
-              type: 'button', className: 'dvb-btn',
-              disabled: !cwd || !workspace.keil.project,
-              onClick() { if (typeof openProject === 'function') openProject() },
-            }, t('mapOpen'))),
-          el('div', { className: 'dvb-file' },
-            el('div', { className: 'dvb-path', 'data-empty': workspace.keil.project ? '0' : '1' },
-              workspace.keil.project || t('pickProject'))),
-          el('div', { className: 'dvb-toolbar' },
-            field(t('target'), el('select', {
-              className: 'dvb-input',
-              value: workspace.keil.target,
-              disabled: !workspace.keil.project || busy === 'targets',
-              onChange(event) {
-                const target = event.target.value
-                setKeil({ target })
-                persist({ ...workspace, keil: { ...workspace.keil, target } })
+            el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn',
+                disabled: !cwd || !!busy,
+                onClick() {
+                  openPicker(cwd)
+                },
               },
-            }, [el('option', { key: '', value: '' }, t('pickTarget'))].concat(
-              targets.map((item) => el('option', { key: item.name, value: item.name }, item.name))))),
-            field(t('artifact'), el('select', {
-              className: 'dvb-input',
-              value: workspace.keil.artifact || 'hex',
-              disabled: !workspace.keil.project,
-              onChange(event) {
-                const artifact = event.target.value
-                setKeil({ artifact })
-                persist({ ...workspace, keil: { ...workspace.keil, artifact } })
+              busy === 'picker' ? t('opening') : t('browse'),
+            ),
+            el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn',
+                disabled: !cwd || !workspace.keil.project,
+                onClick() {
+                  if (typeof openProject === 'function') openProject()
+                },
               },
-            },
-              el('option', { value: 'hex' }, '.hex'),
-              el('option', { value: 'bin' }, '.bin'),
-              el('option', { value: 'axf' }, '.axf'),
-              el('option', { value: 'elf' }, '.elf'))),
-            el('button', {
-              type: 'button',
-              className: 'dvb-btn dvb-btn-primary',
-              disabled: !cwd || !pythonReady || !uv4Ready || !workspace.keil.project || buildBusy,
-              onClick: build,
-            }, buildLabel),
+              t('mapOpen'),
+            ),
+          ),
+          el(
+            'div',
+            { className: 'dvb-file' },
+            el(
+              'div',
+              { className: 'dvb-path', 'data-empty': workspace.keil.project ? '0' : '1' },
+              workspace.keil.project || t('pickProject'),
+            ),
+          ),
+          el(
+            'div',
+            { className: 'dvb-toolbar' },
+            field(
+              t('target'),
+              el(
+                'select',
+                {
+                  className: 'dvb-input',
+                  value: workspace.keil.target,
+                  disabled: !workspace.keil.project || busy === 'targets',
+                  onChange(event) {
+                    const target = event.target.value
+                    setKeil({ target })
+                    persist({ ...workspace, keil: { ...workspace.keil, target } })
+                  },
+                },
+                [el('option', { key: '', value: '' }, t('pickTarget'))].concat(
+                  targets.map((item) => el('option', { key: item.name, value: item.name }, item.name)),
+                ),
+              ),
+            ),
+            field(
+              t('artifact'),
+              el(
+                'select',
+                {
+                  className: 'dvb-input',
+                  value: workspace.keil.artifact || 'hex',
+                  disabled: !workspace.keil.project,
+                  onChange(event) {
+                    const artifact = event.target.value
+                    setKeil({ artifact })
+                    persist({ ...workspace, keil: { ...workspace.keil, artifact } })
+                  },
+                },
+                el('option', { value: 'hex' }, '.hex'),
+                el('option', { value: 'bin' }, '.bin'),
+                el('option', { value: 'axf' }, '.axf'),
+                el('option', { value: 'elf' }, '.elf'),
+              ),
+            ),
+            el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-primary',
+                disabled: !cwd || !pythonReady || !uv4Ready || !workspace.keil.project || buildBusy,
+                onClick: build,
+              },
+              buildLabel,
+            ),
             lastResult
-              ? el('button', { type: 'button', className: 'dvb-btn', onClick: copyForAgent },
-                copied ? t('copied') : t('copyAgent'))
+              ? el(
+                  'button',
+                  { type: 'button', className: 'dvb-btn', onClick: copyForAgent },
+                  copied ? t('copied') : t('copyAgent'),
+                )
               : null,
-            !buildBusy && buildBlock ? el('span', { className: 'dvb-need' }, buildBlock) : null)),
-        el('div', { className: 'dvb-panel dvb-panel-fill' },
-          el('div', { className: 'dvb-panel-head' },
+            !buildBusy && buildBlock ? el('span', { className: 'dvb-need' }, buildBlock) : null,
+          ),
+        ),
+        el(
+          'div',
+          { className: 'dvb-panel dvb-panel-fill' },
+          el(
+            'div',
+            { className: 'dvb-panel-head' },
             el('span', { className: 'dvb-panel-title' }, t('outputLog')),
             buildErrors.length
               ? el('span', { className: 'dvb-badge', 'data-kind': 'err' }, buildErrors.length + ' 错误/警告')
               : null,
             lastResult && lastResult.details && (lastResult.details.log_file || lastResult.details.logFile)
-              ? el('button', {
-                type: 'button', className: 'dvb-btn',
-                onClick: openFullLog,
-              }, '查看完整日志')
-              : null),
+              ? el(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'dvb-btn',
+                    onClick: openFullLog,
+                  },
+                  '查看完整日志',
+                )
+              : null,
+          ),
           buildErrors.length
-            ? el('div', { className: 'dvb-map-funcs' },
-              buildErrors.slice(0, 30).map((err, idx) => el('div', { key: 'e' + idx, className: 'dvb-map-func', 'data-kind': err.kind === 'error' || err.kind === 'fatal error' ? 'err' : 'warn' },
-                el('span', { className: 'dvb-map-func-name' }, err.file),
-                el('span', { className: 'dvb-map-meta' }, ':' + err.line + ' ' + err.kind),
-                el('span', { className: 'dvb-hint', title: err.text }, err.text.slice(0, 120)),
-                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '打开工程结构并定位到该文件/行', onClick() { jumpToError(err) } }, '定位'))))
+            ? el(
+                'div',
+                { className: 'dvb-map-funcs' },
+                buildErrors.slice(0, 30).map((err, idx) =>
+                  el(
+                    'div',
+                    {
+                      key: 'e' + idx,
+                      className: 'dvb-map-func',
+                      'data-kind': err.kind === 'error' || err.kind === 'fatal error' ? 'err' : 'warn',
+                    },
+                    el('span', { className: 'dvb-map-func-name' }, err.file),
+                    el('span', { className: 'dvb-map-meta' }, ':' + err.line + ' ' + err.kind),
+                    el('span', { className: 'dvb-hint', title: err.text }, err.text.slice(0, 120)),
+                    el(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'dvb-btn dvb-btn-sm',
+                        title: '打开工程结构并定位到该文件/行',
+                        onClick() {
+                          jumpToError(err)
+                        },
+                      },
+                      '定位',
+                    ),
+                  ),
+                ),
+              )
             : null,
           buildOut
             ? el('pre', { className: 'dvb-log' }, buildOut)
-            : el('div', { className: 'dvb-empty' }, t('outputEmpty')))),
+            : el('div', { className: 'dvb-empty' }, t('outputEmpty')),
+        ),
+      ),
       flashPanel,
       manualPanel,
       // Task9/0.19.2: 完整时间线已迁入侧边栏"操作记录"；这里只保留轻量运行摘要
       journal && journal.running && journal.running.length
-        ? el('div', { className: 'dvb-hint' }, t('tasks') + ' · 运行中 ' + journal.running.map((r) => r.summary || r.type || r.id).filter(Boolean).join(' / '))
+        ? el(
+            'div',
+            { className: 'dvb-hint' },
+            t('tasks') +
+              ' · 运行中 ' +
+              journal.running
+                .map((r) => r.summary || r.type || r.id)
+                .filter(Boolean)
+                .join(' / '),
+          )
         : null,
       logView && logView.open
-        ? el('div', { className: 'dvb-panel dvb-write-panel' },
-          el('div', { className: 'dvb-panel-head' },
-            el('span', { className: 'dvb-panel-title' }, '完整日志'),
-            el('input', {
-              className: 'dvb-input dvb-map-search',
-              placeholder: '搜索…',
-              value: logView.search,
-              onChange: (event) => { setLogView((prev) => ({ ...prev, search: event.target.value })) },
-            }),
-            el('select', {
-              className: 'dvb-input',
-              value: logView.filter,
-              onChange: (event) => { setLogView((prev) => ({ ...prev, filter: event.target.value })) },
-            },
-              el('option', { value: 'all' }, '全部'),
-              el('option', { value: 'error' }, '仅错误'),
-              el('option', { value: 'warning' }, '仅警告')),
-            el('button', {
-              type: 'button', className: 'dvb-btn',
-              onClick() {
-                if (logView.text && typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(logView.text)
-              },
-            }, '复制'),
-            el('button', { type: 'button', className: 'dvb-btn', onClick() { setLogView((prev) => ({ ...prev, open: false })) } }, t('csvCancel'))),
-          logView.busy
-            ? el('div', { className: 'dvb-hint' }, t('opening'))
-            : (logView.error
-              ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, logView.error)
-              : el('pre', { className: 'dvb-log' },
-                (logView.text || '').split('\n').filter((line) => {
-                  if (logView.filter === 'error') return /error/i.test(line)
-                  if (logView.filter === 'warning') return /warning/i.test(line)
-                  return true
-                }).filter((line) => {
-                  const s = logView.search.trim().toLowerCase()
-                  return !s || line.toLowerCase().includes(s)
-                }).join('\n'))))
+        ? el(
+            'div',
+            { className: 'dvb-panel dvb-write-panel' },
+            el(
+              'div',
+              { className: 'dvb-panel-head' },
+              el('span', { className: 'dvb-panel-title' }, '完整日志'),
+              el('input', {
+                className: 'dvb-input dvb-map-search',
+                placeholder: '搜索…',
+                value: logView.search,
+                onChange: (event) => {
+                  setLogView((prev) => ({ ...prev, search: event.target.value }))
+                },
+              }),
+              el(
+                'select',
+                {
+                  className: 'dvb-input',
+                  value: logView.filter,
+                  onChange: (event) => {
+                    setLogView((prev) => ({ ...prev, filter: event.target.value }))
+                  },
+                },
+                el('option', { value: 'all' }, '全部'),
+                el('option', { value: 'error' }, '仅错误'),
+                el('option', { value: 'warning' }, '仅警告'),
+              ),
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn',
+                  onClick() {
+                    if (
+                      logView.text &&
+                      typeof navigator !== 'undefined' &&
+                      navigator.clipboard &&
+                      navigator.clipboard.writeText
+                    )
+                      navigator.clipboard.writeText(logView.text)
+                  },
+                },
+                '复制',
+              ),
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn',
+                  onClick() {
+                    setLogView((prev) => ({ ...prev, open: false }))
+                  },
+                },
+                t('csvCancel'),
+              ),
+            ),
+            logView.busy
+              ? el('div', { className: 'dvb-hint' }, t('opening'))
+              : logView.error
+                ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, logView.error)
+                : el(
+                    'pre',
+                    { className: 'dvb-log' },
+                    (logView.text || '')
+                      .split('\n')
+                      .filter((line) => {
+                        if (logView.filter === 'error') return /error/i.test(line)
+                        if (logView.filter === 'warning') return /warning/i.test(line)
+                        return true
+                      })
+                      .filter((line) => {
+                        const s = logView.search.trim().toLowerCase()
+                        return !s || line.toLowerCase().includes(s)
+                      })
+                      .join('\n'),
+                  ),
+          )
         : null,
-      pickerEl)
+      pickerEl,
+    )
   }
 }
 
@@ -5554,22 +7045,32 @@ function registerView(ctx, React, t, DebugPage, HmiPage) {
   const slots = ctx.get ? ctx.get('slots') : ctx.slots
   if (slots == null || React == null) return function () {}
   const stopDebug = slots.inject('conversation.view', function () {
-    return slots.register({
-      name: 'conversation.view',
-      id: 'vision-bench-debug',
-      order: 20,
-      locale: NS,
-      label() { return t('tabDebug') },
-    }, DebugPage)
+    return slots.register(
+      {
+        name: 'conversation.view',
+        id: 'vision-bench-debug',
+        order: 20,
+        locale: NS,
+        label() {
+          return t('tabDebug')
+        },
+      },
+      DebugPage,
+    )
   })
   const stopHmi = slots.inject('conversation.view', function () {
-    return slots.register({
-      name: 'conversation.view',
-      id: 'vision-bench-hmi',
-      order: 21,
-      locale: NS,
-      label() { return t('tabHmi') },
-    }, HmiPage)
+    return slots.register(
+      {
+        name: 'conversation.view',
+        id: 'vision-bench-hmi',
+        order: 21,
+        locale: NS,
+        label() {
+          return t('tabHmi')
+        },
+      },
+      HmiPage,
+    )
   })
   return function () {
     if (typeof stopDebug === 'function') stopDebug()
@@ -5724,138 +7225,6 @@ function renderPendingPanel(el, t, ctx) {
         ),
       ),
     ),
-  )
-}
-
-/** Config draft list (RFC6902). */
-function renderDraftPanel(el, t, ctx) {
-  const { workspace, normalizePack, draftBusy, draftNote, cwd, resolveDraft } = ctx
-  const draftList = (workspace.configDrafts || []).filter((d) => d?.id)
-  const pendingDrafts = draftList.filter((d) => d.status === 'pending')
-  const currentCfgVersion = normalizePack().configVersion || 1
-  return el(
-    'div',
-    { className: 'dvb-panel' },
-    el(
-      'div',
-      { className: 'dvb-panel-head' },
-      el('span', { className: 'dvb-panel-title' }, t('draftTitle')),
-      el(
-        'span',
-        { className: 'dvb-tag' },
-        (pendingDrafts.length ? pendingDrafts.length + ' 待确认' : t('draftEmpty')) + ' · v' + currentCfgVersion,
-      ),
-      pendingDrafts.length ? el('span', { className: 'dvb-hint' }, t('draftApproveHint')) : null,
-    ),
-    draftList.length
-      ? el(
-          'div',
-          { className: 'dvb-live-list' },
-          draftList.slice(0, 8).map((d) => {
-            const s = d.summary || {}
-            const isPending = d.status === 'pending'
-            const busyApply = draftBusy === d.id + ':apply'
-            const busyDiscard = draftBusy === d.id + ':discard'
-            const drift = !isPending && d.status !== 'applied' ? false : currentCfgVersion !== d.baseConfigVersion
-            return el(
-              'div',
-              {
-                key: d.id,
-                className: 'dvb-task',
-                'data-status': d.status,
-                style: drift ? { borderLeft: '3px solid #e0912f', paddingLeft: '6px' } : null,
-              },
-              el(
-                'span',
-                { className: 'dvb-badge', 'data-kind': isPending ? 'warn' : d.status === 'applied' ? 'ok' : 'idle' },
-                d.status === 'pending' ? '待确认' : d.status === 'applied' ? t('draftApplied') : t('draftDiscarded'),
-              ),
-              el('span', { className: 'dvb-hint', title: d.id }, d.id.slice(0, 12) + '…'),
-              el('span', { className: 'dvb-tag' }, t('draftBaseVersion') + ' v' + d.baseConfigVersion),
-              el('span', { className: 'dvb-tag' }, (s.patchCount || d.patch.length) + ' ' + t('draftPatchCount')),
-              el('span', { className: 'dvb-tag' }, t('draftAffectedPoints') + ' ' + (s.affectedPoints || 0)),
-              el(
-                'span',
-                { className: 'dvb-chip', 'data-kind': s.added || 0 ? 'ready' : 'idle' },
-                t('draftAdded') + ' ' + (s.added || 0),
-              ),
-              el(
-                'span',
-                { className: 'dvb-chip', 'data-kind': s.removed || 0 ? 'err' : 'idle' },
-                t('draftRemoved') + ' ' + (s.removed || 0),
-              ),
-              el(
-                'span',
-                { className: 'dvb-chip', 'data-kind': s.modified || 0 ? 'live' : 'idle' },
-                t('draftModified') + ' ' + (s.modified || 0),
-              ),
-              s.comConflicts?.length
-                ? el('span', { className: 'dvb-need' }, t('draftComConflict') + ': ' + s.comConflicts.join('；'))
-                : null,
-              s.unitIdConflicts?.length
-                ? el('span', { className: 'dvb-need' }, t('draftUnitConflict') + ': ' + s.unitIdConflicts.join('；'))
-                : null,
-              s.details?.length
-                ? el(
-                    'div',
-                    {
-                      className: 'dvb-hint',
-                      title: s.details.map((x) => x.op + ' ' + x.path).join('\n'),
-                      style: { maxWidth: '360px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-                    },
-                    t('draftDetails') +
-                      ': ' +
-                      s.details
-                        .slice(0, 3)
-                        .map((x) => x.op + ' ' + x.path)
-                        .join('；') +
-                      (s.details.length > 3 ? ' …' : ''),
-                  )
-                : null,
-              drift && isPending ? el('span', { className: 'dvb-need' }, t('draftDrift')) : null,
-              isPending
-                ? el(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'dvb-btn dvb-btn-primary dvb-btn-write',
-                      disabled: busyApply || busyDiscard || !cwd,
-                      onClick() {
-                        resolveDraft(d.id, 'apply')
-                      },
-                      title: t('draftApproveHint'),
-                    },
-                    busyApply ? t('draftApplying') : t('draftApprove'),
-                  )
-                : null,
-              isPending
-                ? el(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'dvb-btn',
-                      disabled: busyApply || busyDiscard,
-                      onClick() {
-                        resolveDraft(d.id, 'discard')
-                      },
-                    },
-                    busyDiscard ? '...' : t('draftDiscard'),
-                  )
-                : null,
-            )
-          }),
-        )
-      : el('div', { className: 'dvb-empty' }, t('draftEmpty')),
-    draftNote
-      ? el(
-          'div',
-          {
-            className: 'dvb-msg',
-            'data-kind': draftNote.indexOf('漂移') >= 0 || draftNote.indexOf('CONFIG_DRIFT') >= 0 ? 'err' : 'ok',
-          },
-          draftNote,
-        )
-      : null,
   )
 }
 
@@ -7454,7 +8823,7 @@ function renderDeviceCards(el, t, ctx) {
       'div',
       { className: 'dvb-panel-head' },
       el('span', { className: 'dvb-panel-title' }, '设备 · ' + (activeConnObj ? activeConnObj.name : '')),
-      el('span', { className: 'dvb-tag', title: '插件版本；改 client 后需重启 dsh web' }, 'v0.21.0'),
+      el('span', { className: 'dvb-tag', title: '插件版本；改 client 后需重启 dsh web' }, 'v0.22.0'),
       el('span', { className: 'dvb-tag' }, activeDevices.length + ' 个设备 · ' + points.length + ' 个点位'),
       el(
         'button',
@@ -7800,48 +9169,696 @@ function renderDeviceCards(el, t, ctx) {
   )
 }
 
-function createHmiView(React, t, post) {
-  return function HmiView(props) {
-    const el = React.createElement
-    const cwd = useSessionCwd(React, props)
-    const sessionId = props?.sessionId || ''
-    // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
-    const inputDraft = readInputDraft(props?.useInput)
-    const agentBridge = buildInputBridge(props, inputDraft)
-    const [health, setHealth] = React.useState({})
-    const [ioRuntime, setIoRuntime] = React.useState({})
-    const [workspace, setWorkspace] = React.useState(emptyWorkspace)
-    const [journal, setJournal] = React.useState(emptyJournal)
-    const [busy, setBusy] = React.useState('')
-    const [error, setError] = React.useState('')
-    const [ports, setPorts] = React.useState([])
-    const [scanning, setScanning] = React.useState(false)
-    const [pending, setPending] = React.useState([])
-    // Task1/0.19.3: 点位表单打开时固定 connectionId/deviceId，不依赖全局激活状态
-    // TaskP1/0.20.0: 行内编辑/行内写入 — 草稿固定携带 connectionId/deviceId/pointId
-    const [editingDeviceId, setEditingDeviceId] = React.useState('')
-    const [editingPointsDeviceId, setEditingPointsDeviceId] = React.useState('')
-    const [deviceDraft, setDeviceDraft] = React.useState(null)
-    const [pointDraftsById, setPointDraftsById] = React.useState({})
-    const [newPointDraft, setNewPointDraft] = React.useState(null)
-    const [inlineWrite, setInlineWrite] = React.useState(null)
-    const [batch, setBatch] = React.useState({ open: false, deviceId: '', prefix: '', fc: 3, start: 0, count: 5 })
-    const [devForm, setDevForm] = React.useState({ open: false, id: '', name: '', unitId: 1 })
-    const [devDeleteId, setDevDeleteId] = React.useState('')
-    const [csvText, setCsvText] = React.useState('')
-    const [csvTarget, setCsvTarget] = React.useState({ deviceId: '', open: false, mode: 'merge' })
-    const [csvNote, setCsvNote] = React.useState('')
-    const [connectionStates, setConnectionStates] = React.useState([])
-    const [linkBusy, setLinkBusy] = React.useState('')
-    const [draftBusy, setDraftBusy] = React.useState('')
-    const [draftNote, setDraftNote] = React.useState('')
-    const [flagSavingByPoint, setFlagSavingByPoint] = React.useState({})
-    const flagRequestSeq = React.useRef({})
+function createHmiCommandClient(post, cwd, sessionId) {
+  const send = (path, body = {}, timeout = 20000) => post(path, { cwd, sessionId, ...body }, timeout)
 
-    const [connForm, setConnForm] = React.useState({
-      open: false,
-      id: '',
-      name: '',
+  const persistRuntime = (modbusPatch, extra = {}) =>
+    send('/dsh-vision-bench/workspace', { modbus: { ...modbusPatch, version: 3 }, ...extra })
+
+  const command = (action, payload = {}, timeout = 20000) =>
+    send('/dsh-vision-bench/command', { action, payload: { ...payload, cwd }, source: 'user', sessionId }, timeout)
+
+  const mutateConfig = (operation, target, value, expectedConfigVersion, timeout = 20000) =>
+    command('config', { operation, target, value, expectedConfigVersion }, timeout)
+
+  const refresh = () => send('/dsh-vision-bench/state', {})
+
+  return { send, persistRuntime, command, mutateConfig, refresh }
+}
+
+function useHmiState(React, post, cwd, sessionId) {
+  const [health, setHealth] = React.useState({})
+  const [ioRuntime, setIoRuntime] = React.useState({})
+  const [workspace, setWorkspace] = React.useState(emptyWorkspace)
+  const [journal, setJournal] = React.useState(emptyJournal)
+  const [pending, setPending] = React.useState([])
+  const [connectionStates, setConnectionStates] = React.useState([])
+  const workspaceRef = React.useRef(workspace)
+  workspaceRef.current = workspace
+  const inflight = React.useRef(0)
+  const flagInflight = React.useRef(0)
+
+  React.useEffect(
+    () =>
+      subscribeState(
+        post,
+        cwd,
+        (data) => {
+          if (!data) return
+          if (data.health) setHealth(data.health)
+          if (data.ioRuntime) setIoRuntime(data.ioRuntime)
+          if (Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
+          if (Array.isArray(data.pendingWrites)) setPending(data.pendingWrites)
+          setJournal(pickJournal(data))
+          if (inflight.current > 0 || flagInflight.current > 0) return
+          if (data.workspace) {
+            setWorkspace((prev) => ({
+              ...prev,
+              modbus: data.workspace.modbus || prev.modbus,
+              focus: data.workspace.focus || prev.focus,
+            }))
+          }
+        },
+        { sessionId },
+      ),
+    [cwd, sessionId],
+  )
+
+  return {
+    health,
+    ioRuntime,
+    workspace,
+    setWorkspace,
+    journal,
+    setJournal,
+    pending,
+    setPending,
+    connectionStates,
+    setConnectionStates,
+    workspaceRef,
+    inflight,
+    flagInflight,
+  }
+}
+
+function useConnections(React) {
+  const [connForm, setConnForm] = React.useState({
+    open: false,
+    id: '',
+    name: '',
+    role: 'client',
+    enabled: true,
+    conn: {
+      mode: 'rtu',
+      port: '',
+      baudrate: 9600,
+      bytesize: 8,
+      parity: 'N',
+      stopbits: 1,
+      host: '',
+      tcpPort: 502,
+      sim: false,
+    },
+  })
+  const [hmiTab, setHmiTab] = React.useState('all')
+  const [moreOpen, setMoreOpen] = React.useState(false)
+  const [pendingDeleteId, setPendingDeleteId] = React.useState('')
+  const [linkBusy, setLinkBusy] = React.useState('')
+  const lastDeviceByConn = React.useRef({})
+  return {
+    connForm,
+    setConnForm,
+    hmiTab,
+    setHmiTab,
+    moreOpen,
+    setMoreOpen,
+    pendingDeleteId,
+    setPendingDeleteId,
+    linkBusy,
+    setLinkBusy,
+    lastDeviceByConn,
+  }
+}
+
+function usePoints(React) {
+  const [editingDeviceId, setEditingDeviceId] = React.useState('')
+  const [editingPointsDeviceId, setEditingPointsDeviceId] = React.useState('')
+  const [deviceDraft, setDeviceDraft] = React.useState(null)
+  const [pointDraftsById, setPointDraftsById] = React.useState({})
+  const [newPointDraft, setNewPointDraft] = React.useState(null)
+  const [inlineWrite, setInlineWrite] = React.useState(null)
+  const [batch, setBatch] = React.useState({ open: false, deviceId: '', prefix: '', fc: 3, start: 0, count: 5 })
+  const [devForm, setDevForm] = React.useState({ open: false, id: '', name: '', unitId: 1 })
+  const [devDeleteId, setDevDeleteId] = React.useState('')
+  const [csvText, setCsvText] = React.useState('')
+  const [csvTarget, setCsvTarget] = React.useState({ deviceId: '', open: false, mode: 'merge' })
+  const [csvNote, setCsvNote] = React.useState('')
+  const [flagSavingByPoint, setFlagSavingByPoint] = React.useState({})
+  const flagRequestSeq = React.useRef({})
+  return {
+    editingDeviceId,
+    setEditingDeviceId,
+    editingPointsDeviceId,
+    setEditingPointsDeviceId,
+    deviceDraft,
+    setDeviceDraft,
+    pointDraftsById,
+    setPointDraftsById,
+    newPointDraft,
+    setNewPointDraft,
+    inlineWrite,
+    setInlineWrite,
+    batch,
+    setBatch,
+    devForm,
+    setDevForm,
+    devDeleteId,
+    setDevDeleteId,
+    csvText,
+    setCsvText,
+    csvTarget,
+    setCsvTarget,
+    csvNote,
+    setCsvNote,
+    flagSavingByPoint,
+    setFlagSavingByPoint,
+    flagRequestSeq,
+  }
+}
+
+function useAgentFocus(React, cwd, workspaceFocus) {
+  const [focusState, setFocusUi] = React.useState({
+    request: null,
+    prev: null,
+    tempWatchIds: [],
+    badgeOnly: false,
+    evidence: [],
+  })
+  const [agentCopied, setAgentCopied] = React.useState('')
+  const [tempWatchNote, setTempWatchNote] = React.useState('')
+
+  React.useEffect(() => {
+    if (!workspaceFocus) return
+    setFocusUi(workspaceFocus)
+    try {
+      setFocusState(cwd, workspaceFocus)
+    } catch {
+      /* focus store is optional */
+    }
+  }, [cwd, workspaceFocus])
+
+  React.useEffect(() => {
+    if (!focusState.request || focusState.badgeOnly) return
+    const timer = setTimeout(() => {
+      setFocusUi((prev) =>
+        prev?.request ? { request: null, prev: prev.request, tempWatchIds: [], badgeOnly: false, evidence: [] } : prev,
+      )
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [
+    focusState.request?.connectionId,
+    focusState.request?.deviceId,
+    focusState.request?.pointId,
+    focusState.request?.frameId,
+    focusState.badgeOnly,
+  ])
+
+  return { focusState, setFocusUi, agentCopied, setAgentCopied, tempWatchNote, setTempWatchNote }
+}
+
+function usePendingWrites(React, post, cwd, setPending, setJournal, setWorkspace, setError, t) {
+  void React
+  function resolveWrite(id, approved) {
+    post('/dsh-vision-bench/modbus/write/approve', { cwd, id, approved }, 120000)
+      .then((data) => {
+        setPending((prev) => prev.filter((item) => item.id !== id))
+        if (data && data.ok === false && !data.rejected) setError(data.error || t('fail'))
+        return post('/dsh-vision-bench/state', { cwd })
+      })
+      .then((data) => {
+        if (!data) return
+        setJournal(pickJournal(data))
+        if (data.workspace?.modbus) {
+          setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus }))
+        }
+      })
+      .catch((err) => {
+        setError(String(err?.message || t('fail')))
+      })
+  }
+  return { resolveWrite }
+}
+
+/** All-connections management view. */
+function renderConnectionOverview(el, t, ctx) {
+  const {
+    cwd,
+    sessionId,
+    workspace,
+    journal,
+    pending,
+    error,
+    agentCopied,
+    ioStatus,
+    tabBar,
+    focusToast,
+    connListPanel,
+    connFormPanel,
+    statusBar,
+    visionCollabBar,
+  } = ctx
+  return el(
+    'div',
+    { className: 'dvb-page' },
+    statusBar(el, t, cwd, [
+      { key: 'io', kind: ioStatus.kind, text: t('ioRuntimeShort') + ' · ' + t(ioStatus.labelKey) },
+    ]),
+    visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
+    error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
+    agentCopied
+      ? el(
+          'div',
+          { className: 'dvb-msg', 'data-kind': 'ok' },
+          agentCopied.split(':').pop() + ' · ' + agentCopied.split(':').slice(0, 2).join(':'),
+        )
+      : null,
+    tabBar,
+    focusToast,
+    connListPanel,
+    connFormPanel,
+  )
+}
+
+/** Single-connection workspace: devices, points, pending writes. */
+function renderConnectionWorkspace(el, t, ctx) {
+  const {
+    cwd,
+    sessionId,
+    workspace,
+    journal,
+    pending,
+    error,
+    agentCopied,
+    ioStatus,
+    tabBar,
+    focusToast,
+    devFormPanel,
+    deviceCardsPanel,
+    pendingPanel,
+    statusBar,
+    visionCollabBar,
+  } = ctx
+  return el(
+    'div',
+    { className: 'dvb-page' },
+    statusBar(el, t, cwd, [
+      { key: 'io', kind: ioStatus.kind, text: t('ioRuntimeShort') + ' · ' + t(ioStatus.labelKey) },
+    ]),
+    visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
+    error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
+    agentCopied
+      ? el(
+          'div',
+          { className: 'dvb-msg', 'data-kind': 'ok' },
+          agentCopied.split(':').pop() + ' · ' + agentCopied.split(':').slice(0, 2).join(':'),
+        )
+      : null,
+    tabBar,
+    focusToast,
+    devFormPanel,
+    deviceCardsPanel,
+    pendingPanel,
+  )
+}
+
+/** Connection create/edit form used by the HMI page. */
+function renderConnectionEditor(el, t, ctx) {
+  return renderConnectionForm(el, t, ctx)
+}
+
+/** Device create/edit form used by the HMI page. */
+function renderDeviceEditor(el, t, ctx) {
+  return renderDeviceForm(el, t, ctx)
+}
+
+/** Device cards + nested point tables for the active connection. */
+function renderDeviceSection(el, t, ctx) {
+  return renderDeviceCards(el, t, ctx)
+}
+
+const same = (left, right) => JSON.stringify(left) === JSON.stringify(right)
+
+const byId = (rows) => new Map((Array.isArray(rows) ? rows : []).map((row) => [row.id, row]))
+
+function buildConfigMutationPlan(current, patch) {
+  const operations = []
+  const currentConnections = byId(current.connections)
+  const nextConnections = patch.connections === undefined ? currentConnections : byId(patch.connections)
+  const removedConnections = new Set(
+    patch.connections === undefined ? [] : [...currentConnections.keys()].filter((id) => !nextConnections.has(id)),
+  )
+
+  if (patch.connections !== undefined) {
+    for (const connection of nextConnections.values()) {
+      const previous = currentConnections.get(connection.id)
+      operations.push(
+        previous
+          ? !same(previous, connection) && {
+              operation: 'connection.update',
+              target: { connectionId: connection.id },
+              value: connection,
+            }
+          : {
+              operation: 'connection.create',
+              target: { connectionId: connection.id },
+              value: connection,
+            },
+      )
+    }
+  }
+
+  const currentDevices = byId(current.devices)
+  const nextDevices = patch.devices === undefined ? currentDevices : byId(patch.devices)
+  const removedDevices = new Set(
+    patch.devices === undefined
+      ? []
+      : [...currentDevices.keys()].filter((id) => {
+          const device = currentDevices.get(id)
+          return !nextDevices.has(id) && !removedConnections.has(device.connectionId)
+        }),
+  )
+
+  if (patch.devices !== undefined) {
+    for (const device of nextDevices.values()) {
+      const previous = currentDevices.get(device.id)
+      operations.push(
+        previous
+          ? !same(previous, device) && {
+              operation: 'device.update',
+              target: { connectionId: device.connectionId, deviceId: device.id },
+              value: device,
+            }
+          : {
+              operation: 'device.create',
+              target: { connectionId: device.connectionId, deviceId: device.id },
+              value: device,
+            },
+      )
+    }
+  }
+
+  if (patch.points !== undefined) {
+    const currentPoints = byId(current.points)
+    const nextPoints = byId(patch.points)
+    const added = []
+    const updated = []
+    const removed = []
+    for (const point of nextPoints.values()) {
+      const previous = currentPoints.get(point.id)
+      if (!previous) added.push(point)
+      else if (!same(previous, point)) updated.push(point)
+    }
+    for (const point of currentPoints.values()) {
+      if (
+        !nextPoints.has(point.id) &&
+        !removedConnections.has(point.connectionId) &&
+        !removedDevices.has(point.deviceId)
+      ) {
+        removed.push(point.id)
+      }
+    }
+    if (added.length) operations.push({ operation: 'points.add', target: {}, value: { points: added } })
+    if (updated.length) operations.push({ operation: 'points.update', target: {}, value: { points: updated } })
+    if (removed.length) operations.push({ operation: 'points.remove', target: {}, value: { ids: removed } })
+  }
+
+  for (const id of removedDevices) {
+    const device = currentDevices.get(id)
+    operations.push({
+      operation: 'device.remove',
+      target: { connectionId: device.connectionId, deviceId: id },
+      value: {},
+    })
+  }
+  for (const id of removedConnections) {
+    operations.push({ operation: 'connection.remove', target: { connectionId: id }, value: {} })
+  }
+
+  return operations.filter(Boolean)
+}
+
+function buildRuntimePatch(current, patch) {
+  const runtime = {}
+  for (const key of ['activeConnectionId', 'activeDeviceId']) {
+    if (patch[key] !== undefined) runtime[key] = patch[key]
+  }
+  for (const key of ['pollingByConnection', 'framesByConnection']) {
+    if (!patch[key] || typeof patch[key] !== 'object') continue
+    const changed = {}
+    for (const [id, value] of Object.entries(patch[key])) {
+      if (!same(current[key]?.[id], value)) changed[id] = value
+    }
+    if (Object.keys(changed).length) runtime[key] = changed
+  }
+  return runtime
+}
+
+async function persistHmiPatch(client, current, patch) {
+  const operations = buildConfigMutationPlan(current, patch)
+  let configVersion = current.configVersion || 1
+  let last = null
+  for (const item of operations) {
+    last = await client.mutateConfig(item.operation, item.target, item.value, configVersion)
+    if (!last || last.ok === false) return last
+    configVersion = last.nextConfigVersion || last.configVersion || configVersion + 1
+  }
+  const runtimePatch = buildRuntimePatch(current, patch)
+  if (Object.keys(runtimePatch).length) {
+    const runtime = await client.persistRuntime(runtimePatch)
+    if (!runtime || runtime.ok === false) return runtime
+    last = runtime
+  }
+  return last || { ok: true, unchanged: true }
+}
+
+/** Shared state, persistence, Agent-focus and derived-view helpers for the HMI page. */
+function createHmiCoreActions(ctx) {
+  const {
+    t,
+    post,
+    cwd,
+    props,
+    agentBridge,
+    commandClient,
+    setError,
+    setPorts,
+    setScanning,
+    ioRuntime,
+    setWorkspace,
+    setJournal,
+    workspaceRef,
+    inflight,
+    focusState,
+    agentCopied,
+    setAgentCopied,
+    setTempWatchNote,
+  } = ctx
+
+  function normalizePack() {
+    const mb = workspaceRef.current.modbus || emptyWorkspace().modbus
+    try {
+      return normalizeModbus(mb)
+    } catch {
+      if (mb && (mb.version === 2 || mb.version === 3)) return mb
+      return emptyWorkspace().modbus
+    }
+  }
+
+  function activeConnIdOf() {
+    const pack = normalizePack()
+    return pack.activeConnectionId || (pack.connections || [])[0]?.id || ''
+  }
+
+  function scanPorts() {
+    setScanning(true)
+    post('/dsh-vision-bench/serial/ports', {}, 30000)
+      .then((data) => setPorts(data && Array.isArray(data.ports) ? data.ports : []))
+      .catch(() => setPorts([]))
+      .finally(() => setScanning(false))
+  }
+
+  function persist(modbusPatch) {
+    if (!cwd) return Promise.resolve()
+    const currentPack = normalizePack()
+    const seq = ++inflight.current
+    setWorkspace((prev) => {
+      const next = { ...prev, modbus: { ...prev.modbus } }
+      for (const key of Object.keys(modbusPatch)) {
+        if (key === 'conn' || key === 'polling') {
+          next.modbus[key] = { ...(next.modbus[key] || {}), ...modbusPatch[key] }
+        } else {
+          next.modbus[key] = modbusPatch[key]
+        }
+      }
+      workspaceRef.current = next
+      return next
+    })
+    return persistHmiPatch(commandClient, currentPack, modbusPatch)
+      .then((data) => {
+        if (seq === inflight.current && data?.workspace?.modbus) {
+          setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus }))
+          workspaceRef.current = { ...workspaceRef.current, modbus: data.workspace.modbus }
+        }
+        if (data) setJournal(pickJournal(data))
+        if (data?.ok === false) {
+          setError(data.error || t('fail'))
+          return commandClient.refresh().then((fresh) => {
+            if (seq === inflight.current && fresh?.workspace?.modbus) {
+              setWorkspace((prev) => ({ ...prev, modbus: fresh.workspace.modbus }))
+              workspaceRef.current = { ...workspaceRef.current, modbus: fresh.workspace.modbus }
+            }
+          })
+        }
+        return data
+      })
+      .catch((error) => setError(String(error?.message || t('fail'))))
+      .finally(() => {
+        if (seq === inflight.current) inflight.current = 0
+      })
+  }
+
+  function cfgVersion() {
+    return normalizePack().configVersion || 1
+  }
+
+  function agentRefFor(kind, payload) {
+    return buildAgentRef(kind, payload, { configVersion: cfgVersion() })
+  }
+
+  function sendToAgent(kind, payload) {
+    const ref = agentRefFor(kind, payload)
+    Promise.resolve(dispatchAgentRef(ref, agentBridge))
+      .then((res) => {
+        const key = `${kind}:${payload?.id || payload?.pointId || payload?.frameId || payload?.connectionId || payload?.deviceId || ''}`
+        const status = res?.ok ? res.status || res.mode : '处理失败'
+        setAgentCopied(`${key}:${res?.mode || 'failed'}:${status}`)
+        setTimeout(() => setAgentCopied(''), 2500)
+      })
+      .catch(() => {})
+    try {
+      postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setError(reason))
+    } catch {}
+    return ref
+  }
+
+  function agentBtnLabel(kind, payload) {
+    const copied = String(agentCopied || '')
+    const key = `${kind}:${payload?.id || payload?.pointId || payload?.frameId || payload?.connectionId || ''}`
+    if (copied.startsWith(`${key}:`)) {
+      return (
+        copied
+          .slice(key.length + 1)
+          .split(':')
+          .slice(1)
+          .join(':') || '仅复制'
+      )
+    }
+    return hasHarnessInput(props) ? '让 Agent 分析' : '复制给 Agent'
+  }
+
+  function requestFocusUi(target, options) {
+    if (!cwd) return
+    post(
+      '/dsh-vision-bench/focus',
+      {
+        cwd,
+        target: target || {},
+        tempWatchIds: options?.tempWatchIds || [],
+        evidence: options?.evidence || [],
+        badgeOnly: !!options?.badgeOnly,
+        foreground: !options?.badgeOnly,
+      },
+      15000,
+    ).catch((error) => setError(String(error?.message || t('fail'))))
+  }
+
+  function returnToPrevFocus() {
+    if (focusState?.prev) requestFocusUi(focusState.prev, { badgeOnly: false })
+  }
+
+  function createTempWatch(ids) {
+    const list = setTempWatch(cwd, ids, 300000)
+    setTempWatchNote(`临时监视组已创建：${list.length} 点`)
+    setTimeout(() => setTempWatchNote(''), 2000)
+    requestFocusUi(focusState.request || {}, { tempWatchIds: list, badgeOnly: true })
+  }
+
+  function derived() {
+    const pack = normalizePack()
+    const connections = Array.isArray(pack.connections) ? pack.connections : []
+    const devices = Array.isArray(pack.devices) ? pack.devices : []
+    const activeConnId = pack.activeConnectionId || connections[0]?.id || ''
+    const activeDeviceId =
+      pack.activeDeviceId || devices.find((device) => device.connectionId === activeConnId)?.id || devices[0]?.id || ''
+    const activeConnObj = connections.find((connection) => connection.id === activeConnId) ||
+      connections[0] || { conn: {} }
+    const conn = activeConnObj.conn || {}
+    const allPoints = Array.isArray(pack.points) ? pack.points : []
+    const points = allPoints.filter((point) => (point.connectionId || point.connId) === activeConnId)
+    const activeDevices = devices.filter((device) => device.connectionId === activeConnId)
+    const valueMap = {}
+    for (const item of Array.isArray(pack.values) ? pack.values : []) {
+      const key = item.key || item.pointId
+      if (key) valueMap[key] = item
+    }
+    const alarmStateData = pack.alarmState && typeof pack.alarmState === 'object' ? pack.alarmState : {}
+    const sim = conn.sim === true
+    const pollingByConnection = pack.pollingByConnection || {}
+    const polling = pollingByConnection[activeConnId] || { enabled: false, intervalMs: 1000 }
+    return {
+      pack,
+      connections,
+      devices,
+      activeConnId,
+      activeDeviceId,
+      activeConnObj,
+      conn,
+      allPoints,
+      points,
+      activeDevices,
+      valueMap,
+      alarmStateData,
+      sim,
+      canDevice: canUseModbus(ioRuntime, conn.mode, { simulated: sim }),
+      ioStatus: ioRuntimeStatus(ioRuntime, conn.mode),
+      connMissing: !sim && (conn.mode === 'tcp' ? !conn.host : !conn.port),
+      pollingByConnection,
+      polling,
+      watchEnabled: !!polling.enabled,
+    }
+  }
+
+  return {
+    activeConnIdOf,
+    scanPorts,
+    normalizePack,
+    persist,
+    cfgVersion,
+    agentRefFor,
+    sendToAgent,
+    agentBtnLabel,
+    requestFocusUi,
+    returnToPrevFocus,
+    createTempWatch,
+    derived,
+  }
+}
+
+/** Connection and device lifecycle actions for the HMI page. */
+function createHmiConnectionActions(ctx, core) {
+  const {
+    cwd,
+    setError,
+    setFrameFilter,
+    setDevForm,
+    devForm,
+    setDevDeleteId,
+    connForm,
+    setConnForm,
+    setHmiTab,
+    setMoreOpen,
+    pendingDeleteId,
+    setPendingDeleteId,
+    lastDeviceByConn,
+  } = ctx
+  const { normalizePack, persist, activeConnIdOf } = core
+
+  function addConnection() {
+    const pack = normalizePack()
+    const id = hmiGenId('c')
+    const connection = {
+      id,
+      name: `连接${pack.connections.length + 1}`,
       role: 'client',
       enabled: true,
       conn: {
@@ -7855,105 +9872,1250 @@ function createHmiView(React, t, post) {
         tcpPort: 502,
         sim: false,
       },
+    }
+    persist({
+      connections: [...(pack.connections || []), connection],
+      devices: pack.devices || [],
+      pollingByConnection: {
+        ...(pack.pollingByConnection || {}),
+        [id]: { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' },
+      },
+      framesByConnection: { ...(pack.framesByConnection || {}), [id]: [] },
+      activeConnectionId: id,
+      activeDeviceId: '',
+      version: 3,
     })
-    const [pendingDeleteId, setPendingDeleteId] = React.useState('')
-    const [frameFilter, setFrameFilter] = React.useState('all')
-    const [hmiTab, setHmiTab] = React.useState('all')
-    const [moreOpen, setMoreOpen] = React.useState(false)
-    const [focusState, setFocusUi] = React.useState({
-      request: null,
-      prev: null,
-      tempWatchIds: [],
-      badgeOnly: false,
-      evidence: [],
+    setHmiTab(id)
+    lastDeviceByConn.current[id] = ''
+    setFrameFilter(id)
+    setDevForm({ open: true, id: '', name: '', unitId: 1 })
+  }
+
+  function openAddDevice() {
+    setError('')
+    const pack = normalizePack()
+    const connectionId = activeConnIdOf()
+    const devices = (pack.devices || []).filter((device) => device.connectionId === connectionId)
+    setDevForm({
+      open: true,
+      id: '',
+      name: '',
+      unitId: devices.length ? Math.max(...devices.map((device) => device.unitId || 1)) + 1 : 1,
     })
-    const [agentCopied, setAgentCopied] = React.useState('')
-    const [tempWatchNote, setTempWatchNote] = React.useState('')
-    const lastDeviceByConn = React.useRef({})
-    const workspaceRef = React.useRef(workspace)
-    workspaceRef.current = workspace
-    const inflight = React.useRef(0)
-    const flagInflight = React.useRef(0)
+  }
 
-    const field = (label, control) => renderField(el, t, { label, control })
+  function openEditDevice(device) {
+    setError('')
+    setDevForm({ open: true, id: device.id, name: device.name, unitId: device.unitId })
+  }
 
-    function scanPorts() {
-      setScanning(true)
-      post('/dsh-vision-bench/serial/ports', {}, 30000)
-        .then((data) => {
-          setPorts(data && Array.isArray(data.ports) ? data.ports : [])
-        })
-        .catch(() => setPorts([]))
-        .finally(() => setScanning(false))
+  function saveDeviceForm() {
+    const pack = normalizePack()
+    const connectionId = activeConnIdOf()
+    const name = String(devForm.name || '')
+      .trim()
+      .slice(0, 40)
+    if (!name) return setError('请填写设备名称')
+    const unitId = Math.trunc(Number(devForm.unitId))
+    if (!Number.isFinite(unitId) || unitId < 1 || unitId > 247) return setError('站号 1–247')
+    if (
+      (pack.devices || []).some(
+        (device) => device.connectionId === connectionId && device.id !== devForm.id && device.unitId === unitId,
+      )
+    ) {
+      return setError(`该连接内站号 ${unitId} 已存在`)
+    }
+    if (devForm.id) {
+      persist({
+        devices: (pack.devices || []).map((device) =>
+          device.id === devForm.id ? { ...device, name, unitId } : device,
+        ),
+        version: 3,
+      })
+    } else {
+      const id = hmiGenId('d')
+      persist({
+        devices: [...(pack.devices || []), { id, connectionId, name, unitId, enabled: true }],
+        activeDeviceId: id,
+        version: 3,
+      })
+      lastDeviceByConn.current[connectionId] = id
+    }
+    setDevForm((previous) => ({ ...previous, open: false }))
+  }
+
+  function requestDeleteDevice(device) {
+    const pack = normalizePack()
+    const connectionId = activeConnIdOf()
+    const points = (pack.points || []).filter(
+      (point) => point.deviceId === device.id && (point.connectionId || point.connId) === connectionId,
+    )
+    const pointIds = new Set(points.map((point) => point.id))
+    const valueCount = (pack.values || []).filter((value) => pointIds.has(value.pointId || value.key)).length
+    setDevDeleteId(`${device.id}|${points.length}|${valueCount}`)
+  }
+
+  function confirmDeleteDevice(device) {
+    const pack = normalizePack()
+    const connectionId = activeConnIdOf()
+    const removedPointIds = new Set(
+      (pack.points || [])
+        .filter((point) => point.deviceId === device.id && (point.connectionId || point.connId) === connectionId)
+        .map((point) => point.id),
+    )
+    const devices = (pack.devices || []).filter((candidate) => candidate.id !== device.id)
+    persist({
+      devices,
+      points: (pack.points || []).filter((point) => !removedPointIds.has(point.id)),
+      values: (pack.values || []).filter((value) => !removedPointIds.has(value.pointId || value.key)),
+      activeDeviceId: devices.some((candidate) => candidate.id === pack.activeDeviceId)
+        ? pack.activeDeviceId
+        : devices[0]?.id || '',
+      version: 3,
+    })
+    setDevDeleteId('')
+  }
+
+  function selectConnection(connectionId) {
+    const pack = normalizePack()
+    let deviceId = lastDeviceByConn.current[connectionId]
+    if (
+      !deviceId ||
+      !(pack.devices || []).some((device) => device.id === deviceId && device.connectionId === connectionId)
+    ) {
+      deviceId =
+        (pack.devices || []).find((device) => device.connectionId === connectionId)?.id || pack.devices[0]?.id || ''
+    }
+    persist({ activeConnectionId: connectionId, activeDeviceId: deviceId, version: 3 })
+    setPendingDeleteId('')
+    setHmiTab(connectionId)
+    setMoreOpen(false)
+    setFrameFilter(connectionId)
+  }
+
+  function requestDeleteConnection(connectionId) {
+    if (pendingDeleteId !== connectionId) return setPendingDeleteId(connectionId)
+    const pack = normalizePack()
+    if ((pack.connections || []).length <= 1) {
+      setError('至少保留一个连接')
+      return setPendingDeleteId('')
+    }
+    const connections = (pack.connections || []).filter((connection) => connection.id !== connectionId)
+    const devices = (pack.devices || []).filter((device) => device.connectionId !== connectionId)
+    const points = (pack.points || []).filter((point) => (point.connectionId || point.connId) !== connectionId)
+    const pointIds = new Set(points.map((point) => point.id))
+    const pollingByConnection = { ...(pack.pollingByConnection || {}) }
+    const framesByConnection = { ...(pack.framesByConnection || {}) }
+    delete pollingByConnection[connectionId]
+    delete framesByConnection[connectionId]
+    let activeConnectionId = pack.activeConnectionId
+    let activeDeviceId = pack.activeDeviceId
+    if (activeConnectionId === connectionId) {
+      activeConnectionId = connections[0]?.id || ''
+      activeDeviceId = devices.find((device) => device.connectionId === activeConnectionId)?.id || devices[0]?.id || ''
+      setFrameFilter(activeConnectionId || 'all')
+      setHmiTab(activeConnectionId || 'all')
+    }
+    clearFramesLog(cwd, connectionId)
+    setPendingDeleteId('')
+    persist({
+      connections,
+      devices,
+      points,
+      values: (pack.values || []).filter((value) => pointIds.has(value.key || value.pointId)),
+      pollingByConnection,
+      framesByConnection,
+      activeConnectionId,
+      activeDeviceId,
+      version: 3,
+    })
+  }
+
+  function openConnEdit(connection) {
+    setConnForm({
+      open: true,
+      id: connection.id,
+      name: connection.name,
+      role: connection.role,
+      enabled: connection.enabled !== false,
+      conn: { ...(connection.conn || {}) },
+    })
+  }
+
+  function saveConnEdit() {
+    const pack = normalizePack()
+    const connections = (pack.connections || []).map((connection) =>
+      connection.id === connForm.id
+        ? {
+            ...connection,
+            name: connForm.name.slice(0, 40),
+            role: connForm.role === 'server' || connForm.role === 'slave' ? 'server' : 'client',
+            enabled: true,
+            conn: {
+              ...(connection.conn || {}),
+              mode: connForm.conn.mode === 'tcp' ? 'tcp' : 'rtu',
+              port: String(connForm.conn.port || '').trim(),
+              baudrate: Number(connForm.conn.baudrate) || 9600,
+              bytesize: Number(connForm.conn.bytesize) === 7 ? 7 : 8,
+              parity: ['N', 'E', 'O'].includes(connForm.conn.parity) ? connForm.conn.parity : 'N',
+              stopbits: Number(connForm.conn.stopbits) === 2 ? 2 : 1,
+              host: String(connForm.conn.host || '').trim(),
+              tcpPort: Math.max(1, Math.min(65535, Number(connForm.conn.tcpPort) || 502)),
+              sim: !!connForm.conn.sim,
+            },
+          }
+        : connection,
+    )
+    setConnForm((previous) => ({ ...previous, open: false }))
+    persist({ connections, version: 3 })
+  }
+
+  function setActiveConnPatch(patch) {
+    const pack = normalizePack()
+    const connectionId = pack.activeConnectionId
+    if (!connectionId) return
+    const nextPatch = { ...(patch || {}), slave: undefined }
+    persist({
+      connections: (pack.connections || []).map((connection) =>
+        connection.id === connectionId
+          ? { ...connection, conn: { ...(connection.conn || {}), ...nextPatch } }
+          : connection,
+      ),
+      version: 3,
+    })
+  }
+
+  function updateActiveConnMeta(patch) {
+    const pack = normalizePack()
+    persist({
+      connections: (pack.connections || []).map((connection) =>
+        connection.id === pack.activeConnectionId ? { ...connection, ...patch } : connection,
+      ),
+      version: 3,
+    })
+  }
+
+  return {
+    addConnection,
+    openAddDevice,
+    openEditDevice,
+    saveDeviceForm,
+    requestDeleteDevice,
+    confirmDeleteDevice,
+    selectConnection,
+    requestDeleteConnection,
+    openConnEdit,
+    saveConnEdit,
+    setActiveConnPatch,
+    updateActiveConnMeta,
+  }
+}
+
+/** Point table, flags, drafts, and CSV actions. */
+function createHmiPointActions(ctx, core) {
+  const {
+    t,
+    post,
+    cwd,
+    commandClient,
+    setError,
+    setWorkspace,
+    workspaceRef,
+    flagInflight,
+    setEditingDeviceId,
+    setEditingPointsDeviceId,
+    deviceDraft,
+    setDeviceDraft,
+    pointDraftsById,
+    setPointDraftsById,
+    newPointDraft,
+    setNewPointDraft,
+    setInlineWrite,
+    batch,
+    setBatch,
+    csvText,
+    setCsvText,
+    csvTarget,
+    setCsvTarget,
+    setCsvNote,
+    setFlagSavingByPoint,
+    flagRequestSeq,
+  } = ctx
+  const { normalizePack, persist, activeConnIdOf } = core
+
+  function pointsOfDevice(devId) {
+    const packNow = normalizePack()
+    const active = packNow.activeConnectionId || packNow.connections[0]?.id || ''
+    return (packNow.points || []).filter((p) => (p.connectionId || p.connId) === active && (p.deviceId || '') === devId)
+  }
+
+  function generateBatch() {
+    const pack = normalizePack()
+    const fixedCid = batch.connectionId || pack.activeConnectionId || pack.connections[0]?.id || ''
+    const fixedDid = batch.deviceId
+    if (!fixedDid) {
+      setError('请先选择设备')
+      return
+    }
+    const count = Math.max(1, Math.min(Number(batch.count) || 1, 64))
+    const existingIds = new Set(
+      (pack.points || [])
+        .filter((p) => (p.connectionId || p.connId) === fixedCid && (p.deviceId || '') === fixedDid)
+        .map((p) => p.id),
+    )
+    const existingAddr = new Set(
+      (pack.points || [])
+        .filter(
+          (p) =>
+            (p.connectionId || p.connId) === fixedCid &&
+            (p.deviceId || '') === fixedDid &&
+            p.function === Number(batch.fc),
+        )
+        .map((p) => p.address),
+    )
+    const additions = []
+    for (let i = 0; i < count; i++) {
+      const address = Number(batch.start) + i
+      if (existingAddr.has(address)) continue
+      const id = hmiGenId('p')
+      if (existingIds.has(id)) continue
+      additions.push({
+        id,
+        connectionId: fixedCid,
+        connId: fixedCid,
+        deviceId: fixedDid,
+        name: (batch.prefix || '') + i,
+        function: Number(batch.fc),
+        address,
+        area: Number(batch.fc) === 1 ? 'coil' : 'holdingRegister',
+        scale: 1,
+        offset: 0,
+        unit: '',
+        trendEnabled: false,
+        alarmMin: null,
+        alarmMax: null,
+      })
+    }
+    if (!additions.length) {
+      setError('批量点位的地址全部与现有点位重复')
+      return
+    }
+    setError('')
+    setBatch((prev) => ({ ...prev, open: false }))
+    persist({ points: (pack.points || []).concat(additions), version: 3 })
+  }
+
+  function removePointRow(point) {
+    const pack = normalizePack()
+    persist({
+      points: (pack.points || []).filter((p) => p.id !== point.id),
+      values: (pack.values || []).filter((v) => (v.key || v.pointId) !== point.id),
+      version: 3,
+    })
+  }
+
+  function enterDeviceEdit(d) {
+    setError('')
+    setNewPointDraft(null)
+    setEditingPointsDeviceId('')
+    setPointDraftsById({})
+    setEditingDeviceId(d.id)
+    setDeviceDraft({ id: d.id, name: d.name, unitId: d.unitId, connectionId: d.connectionId })
+  }
+
+  function enterPointsEdit(d) {
+    setError('')
+    setNewPointDraft(null)
+    setEditingDeviceId('')
+    setDeviceDraft(null)
+    setEditingPointsDeviceId(d.id)
+    const drafts = {}
+    for (const pt of pointsOfDevice(d.id)) {
+      drafts[pt.id] = {
+        id: pt.id,
+        connectionId: pt.connectionId,
+        deviceId: pt.deviceId,
+        name: pt.name || '',
+        function: pt.function,
+        area: pt.area || AREA_BY_FN_EDIT[pt.function] || 'holdingRegister',
+        address: pt.address,
+        scale: pt.scale,
+        offset: pt.offset,
+        unit: pt.unit || '',
+        alarmMin: pt.alarmMin == null ? '' : String(pt.alarmMin),
+        alarmMax: pt.alarmMax == null ? '' : String(pt.alarmMax),
+      }
+    }
+    setPointDraftsById(drafts)
+  }
+
+  function patchDraft(pointId, patch) {
+    setPointDraftsById((prev) => {
+      const cur = { ...(prev[pointId] || {}), ...patch }
+      if (patch.function !== undefined) {
+        const fn = Math.trunc(Number(patch.function))
+        if (AREA_BY_FN_EDIT[fn]) cur.area = AREA_BY_FN_EDIT[fn]
+        cur.function = fn
+      }
+      return { ...prev, [pointId]: cur }
+    })
+  }
+
+  function applyPointFlagLocal(pointId, patch) {
+    setWorkspace((prev) => {
+      const points = prev.modbus?.points || []
+      const nextPoints = points.map((p) => {
+        if (p.id !== pointId) return p
+        const next = { ...p, ...patch }
+        if (patch.monitorEnabled !== undefined) next.trendEnabled = patch.monitorEnabled === true
+        return next
+      })
+      const next = { ...prev, modbus: { ...prev.modbus, points: nextPoints } }
+      workspaceRef.current = next
+      return next
+    })
+  }
+
+  function validateAlarmEnable(point) {
+    const minRaw = point?.alarmMin
+    const maxRaw = point?.alarmMax
+    const hasMin = minRaw !== null && minRaw !== undefined && minRaw !== ''
+    const hasMax = maxRaw !== null && maxRaw !== undefined && maxRaw !== ''
+    if (!hasMin && !hasMax) return { ok: true, warn: '尚未配置阈值' }
+    if (hasMin && hasMax) {
+      const min = Number(minRaw)
+      const max = Number(maxRaw)
+      if (!(Number.isFinite(min) && Number.isFinite(max) && min < max)) {
+        return { ok: false, error: '告警上下限非法，无法开启' }
+      }
+    }
+    return { ok: true }
+  }
+
+  function persistPointFlags(pointId, patch) {
+    if (!cwd || !pointId || !patch || typeof patch !== 'object') return Promise.resolve()
+    const keys = Object.keys(patch).filter((k) => k === 'monitorEnabled' || k === 'alarmEnabled')
+    if (!keys.length) return Promise.resolve()
+
+    const packNow = normalizePack()
+    const current = (packNow.points || []).find((p) => p.id === pointId)
+    if (!current) {
+      setError('点位不存在')
+      return Promise.resolve()
     }
 
+    if (patch.alarmEnabled === true) {
+      const check = validateAlarmEnable(current)
+      if (!check.ok) {
+        setError(check.error)
+        return Promise.resolve()
+      }
+      if (check.warn) setError(check.warn)
+    }
+
+    const prevSnapshot = {
+      monitorEnabled: current.monitorEnabled === true,
+      alarmEnabled: current.alarmEnabled === true,
+      trendEnabled: current.trendEnabled === true,
+    }
+    const seqKeys = keys.map((k) => pointId + ':' + k)
+    for (const sk of seqKeys) {
+      flagRequestSeq.current[sk] = (flagRequestSeq.current[sk] || 0) + 1
+    }
+    const seqAtStart = Object.fromEntries(seqKeys.map((sk) => [sk, flagRequestSeq.current[sk]]))
+
+    applyPointFlagLocal(pointId, patch)
+    flagInflight.current += 1
+    setFlagSavingByPoint((prev) => {
+      const next = { ...prev }
+      for (const sk of seqKeys) next[sk] = true
+      return next
+    })
+
+    const body = {
+      cwd,
+      pointId,
+      expectedConfigVersion: packNow.configVersion || 1,
+    }
+    for (const k of keys) body[k] = patch[k] === true
+
+    const isLatest = () => seqKeys.every((sk) => seqAtStart[sk] === flagRequestSeq.current[sk])
+
+    const rollback = (msg) => {
+      if (!isLatest()) return
+      applyPointFlagLocal(pointId, {
+        monitorEnabled: prevSnapshot.monitorEnabled,
+        alarmEnabled: prevSnapshot.alarmEnabled,
+        trendEnabled: prevSnapshot.trendEnabled,
+      })
+      if (msg) setError(msg)
+    }
+
+    const applySuccess = (data) => {
+      if (!isLatest()) return data
+      if (data.workspace?.modbus) {
+        setWorkspace((prev) => {
+          const next = { ...prev, modbus: data.workspace.modbus }
+          workspaceRef.current = next
+          return next
+        })
+      } else if (data.point?.id) {
+        applyPointFlagLocal(pointId, {
+          monitorEnabled: data.point.monitorEnabled === true,
+          alarmEnabled: data.point.alarmEnabled === true,
+          trendEnabled: data.point.monitorEnabled === true,
+        })
+        if (data.configVersion != null) {
+          setWorkspace((prev) => {
+            const next = { ...prev, modbus: { ...prev.modbus, configVersion: data.configVersion } }
+            workspaceRef.current = next
+            return next
+          })
+        }
+      }
+      setError('')
+      return data
+    }
+
+    const sendFlagPatch = (expectedConfigVersion) =>
+      post('/dsh-vision-bench/points/flags', { ...body, expectedConfigVersion })
+
+    return sendFlagPatch(packNow.configVersion || 1)
+      .then((data) => {
+        if (!isLatest()) return data
+        if (!data || data.ok === false) {
+          const code = data?.errorCode
+          if (code === 'CONFIG_DRIFT') {
+            return commandClient
+              .refresh()
+              .then((fresh) => {
+                if (!isLatest()) return data
+                const currentVersion = fresh?.workspace?.modbus?.configVersion
+                if (!currentVersion) return data
+                return sendFlagPatch(currentVersion)
+              })
+              .then((data2) => {
+                if (!isLatest()) return data2
+                if (!data2 || data2.ok === false) {
+                  rollback('点位配置已被其他操作更新，请重试')
+                  return data2
+                }
+                return applySuccess(data2)
+              })
+              .catch(() => rollback('点位配置已被其他操作更新，请重试'))
+          }
+          const tip = keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态'
+          rollback(tip)
+          return data
+        }
+        return applySuccess(data)
+      })
+      .catch(() => {
+        rollback(keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态')
+      })
+      .finally(() => {
+        flagInflight.current = Math.max(0, flagInflight.current - 1)
+        setFlagSavingByPoint((prev) => {
+          const next = { ...prev }
+          for (const sk of seqKeys) {
+            if (seqAtStart[sk] === flagRequestSeq.current[sk]) delete next[sk]
+          }
+          return next
+        })
+      })
+  }
+
+  function addNewPointRow(deviceId) {
+    const activeConnId = activeConnIdOf()
+    setError('')
+    setInlineWrite(null)
+    setEditingDeviceId('')
+    setDeviceDraft(null)
+    setBatch((prev) => ({ ...prev, open: false, deviceId: deviceId, connectionId: activeConnId }))
+    setNewPointDraft({
+      connectionId: activeConnId,
+      deviceId,
+      name: '',
+      function: 3,
+      address: 0,
+      scale: 1,
+      offset: 0,
+      unit: '',
+      monitorEnabled: true,
+      alarmEnabled: false,
+      alarmMin: '',
+      alarmMax: '',
+    })
+  }
+
+  function saveNewPointDraft() {
+    const d = newPointDraft
+    if (!d) return
+    const pack = normalizePack()
+    const fnNum = Math.trunc(Number(d.function) || 3)
+    const addrNum = Math.trunc(Number(d.address))
+    if (!Number.isFinite(addrNum) || addrNum < 0 || addrNum > 65535) {
+      setError(t('ptAddr') + ' 0–65535')
+      return
+    }
+    const dup = (pack.points || []).some(
+      (p) =>
+        (p.connectionId || p.connId) === d.connectionId &&
+        (p.deviceId || '') === d.deviceId &&
+        p.function === fnNum &&
+        p.address === addrNum,
+    )
+    if (dup) {
+      setError('该设备下已存在相同功能码和地址的点位')
+      return
+    }
+    const alarmOn = d.alarmEnabled === true
+    const min = alarmOn && d.alarmMin !== '' ? Number(d.alarmMin) : null
+    const max = alarmOn && d.alarmMax !== '' ? Number(d.alarmMax) : null
+    if (alarmOn && min != null && max != null && !(min < max)) {
+      setError('下限必须小于上限')
+      return
+    }
+    persist({
+      points: (pack.points || []).concat([
+        {
+          id: hmiGenId('p'),
+          connectionId: d.connectionId,
+          connId: d.connectionId,
+          deviceId: d.deviceId,
+          name: String(d.name || '').slice(0, 40),
+          function: fnNum,
+          address: addrNum,
+          scale: Number(d.scale) || 1,
+          offset: Number(d.offset) || 0,
+          unit: String(d.unit || '').slice(0, 12),
+          monitorEnabled: d.monitorEnabled === true,
+          alarmEnabled: alarmOn,
+          alarmMin: Number.isFinite(min) ? min : null,
+          alarmMax: Number.isFinite(max) ? max : null,
+          trendEnabled: d.monitorEnabled === true,
+          area:
+            fnNum === 1 ? 'coil' : fnNum === 2 ? 'discreteInput' : fnNum === 4 ? 'inputRegister' : 'holdingRegister',
+        },
+      ]),
+      version: 3,
+    })
+    setNewPointDraft(null)
+  }
+
+  function saveDeviceEdit(d) {
+    const pack = normalizePack()
+    const meta = deviceDraft
+    if (!meta) return
+    const name = String(meta.name || '')
+      .trim()
+      .slice(0, 40)
+    if (!name) {
+      setError('请填写设备名称')
+      return
+    }
+    const unitId = Math.trunc(Number(meta.unitId))
+    if (!Number.isFinite(unitId) || unitId < 1 || unitId > 247) {
+      setError('站号 1–247')
+      return
+    }
+    if ((pack.devices || []).some((x) => x.connectionId === d.connectionId && x.id !== d.id && x.unitId === unitId)) {
+      setError('该连接内站号 ' + unitId + ' 已存在')
+      return
+    }
+    persist({
+      devices: (pack.devices || []).map((x) => (x.id === d.id ? { ...x, name, unitId } : x)),
+      version: 3,
+    })
+    setEditingDeviceId('')
+    setDeviceDraft(null)
+  }
+
+  function savePointsEdit(d) {
+    const pack = normalizePack()
+    const drafts = pointDraftsById || {}
+    const keyOf = (p) => (p.connectionId || '') + '|' + (p.deviceId || '') + '|' + p.function + '|' + p.address
+    const seen = new Map()
+    for (const dOf of Object.values(drafts)) {
+      if (seen.has(keyOf(dOf))) {
+        setError('该设备下已存在相同功能码和地址的点位')
+        return
+      }
+      seen.set(keyOf(dOf), dOf)
+    }
+    try {
+      const nextPoints = (pack.points || []).map((p) => {
+        const dr = drafts[p.id]
+        if (!dr || (p.deviceId || '') !== d.id) return p
+        const min = dr.alarmMin !== '' ? Number(dr.alarmMin) : null
+        const max = dr.alarmMax !== '' ? Number(dr.alarmMax) : null
+        if (p.alarmEnabled === true && min != null && max != null && !(min < max)) {
+          throw new Error('下限必须小于上限: ' + (dr.name || p.name))
+        }
+        const fn = Math.trunc(Number(dr.function) || p.function)
+        return {
+          ...p,
+          name: String(dr.name || '').slice(0, 40) || p.name,
+          function: [1, 2, 3, 4].includes(fn) ? fn : p.function,
+          area: AREA_BY_FN_EDIT[fn] || p.area,
+          address: Math.trunc(Number(dr.address)),
+          scale: Number(dr.scale) || 1,
+          offset: Number(dr.offset) || 0,
+          unit: String(dr.unit || '').slice(0, 12),
+          alarmMin: Number.isFinite(min) ? min : null,
+          alarmMax: Number.isFinite(max) ? max : null,
+        }
+      })
+      persist({ points: nextPoints, version: 3 })
+      setEditingPointsDeviceId('')
+      setPointDraftsById({})
+    } catch (err) {
+      setError(String(err?.message || err))
+    }
+  }
+
+  function cancelDeviceEdit() {
+    setEditingDeviceId('')
+    setDeviceDraft(null)
+  }
+
+  function cancelPointsEdit() {
+    setEditingPointsDeviceId('')
+    setPointDraftsById({})
+    setNewPointDraft(null)
+  }
+
+  function exportCsv(deviceId) {
+    const pack = normalizePack()
+    const filtered = (pack.points || []).filter((p) => (p.deviceId || '') === (deviceId || ''))
+    navigator.clipboard
+      .writeText(pointsToCsv(filtered))
+      .then(() => {
+        setCsvNote(t('csvDone'))
+        setTimeout(() => setCsvNote(''), 1500)
+      })
+      .catch(() => {})
+  }
+
+  function importCsv() {
+    const parsed = csvToPoints(csvText)
+    if (!parsed.ok) {
+      setError(parsed.error)
+      return
+    }
+    const pack = normalizePack()
+    const fixedCid = pack.activeConnectionId || pack.connections[0]?.id || ''
+    const fixedDid = csvTarget.deviceId
+    if (!fixedDid) {
+      setError('请先选择设备再导入 CSV')
+      return
+    }
+    const withConn = parsed.points.map((p) => ({
+      ...p,
+      id: p.id || hmiGenId('p'),
+      connectionId: fixedCid,
+      connId: fixedCid,
+      deviceId: fixedDid,
+      trendEnabled: p.trendEnabled === true,
+      area:
+        p.function === 1
+          ? 'coil'
+          : p.function === 2
+            ? 'discreteInput'
+            : p.function === 4
+              ? 'inputRegister'
+              : 'holdingRegister',
+    }))
+    setError('')
+    setCsvTarget((prev) => ({ ...prev, open: false }))
+    setCsvText('')
+    const mode = csvTarget.mode === 'replace' ? 'replace' : 'merge'
+    if (mode === 'replace') {
+      const gone = new Set(
+        (pack.points || [])
+          .filter((p) => (p.connectionId || p.connId) === fixedCid && (p.deviceId || '') === fixedDid)
+          .map((p) => p.id),
+      )
+      const kept = (pack.points || []).filter((p) => !gone.has(p.id))
+      persist({
+        points: kept.concat(withConn),
+        values: (pack.values || []).filter((v) => !gone.has(v.pointId || v.key)),
+        version: 3,
+      })
+    } else {
+      const points = (pack.points || []).slice()
+      for (const np of withConn) {
+        const idx = points.findIndex(
+          (p) =>
+            (p.connectionId || p.connId) === fixedCid &&
+            (p.deviceId || '') === fixedDid &&
+            p.function === np.function &&
+            p.address === np.address,
+        )
+        if (idx >= 0) points[idx] = { ...points[idx], ...np, id: points[idx].id }
+        else points.push(np)
+      }
+      persist({ points, version: 3 })
+    }
+  }
+
+  return {
+    generateBatch,
+    removePointRow,
+    enterDeviceEdit,
+    enterPointsEdit,
+    patchDraft,
+    applyPointFlagLocal,
+    validateAlarmEnable,
+    persistPointFlags,
+    addNewPointRow,
+    saveNewPointDraft,
+    saveDeviceEdit,
+    savePointsEdit,
+    cancelDeviceEdit,
+    cancelPointsEdit,
+    exportCsv,
+    importCsv,
+    pointsOfDevice,
+  }
+}
+
+/** Live read/write, connection link, and polling actions. */
+function createHmiLiveActions(ctx, core) {
+  const {
+    t,
+    post,
+    cwd,
+    sessionId,
+    setBusy,
+    setError,
+    setWorkspace,
+    setJournal,
+    setConnectionStates,
+    workspaceRef,
+    setNewPointDraft,
+    inlineWrite,
+    setInlineWrite,
+    setLinkBusy,
+  } = ctx
+  const { normalizePack, persist, derived } = core
+
+  function readAll(deviceId) {
+    readOne(null, deviceId || undefined)
+  }
+
+  function readOne(pointId, deviceId) {
+    if (!cwd) {
+      setError(t('needWorkspace'))
+      return
+    }
+    const pack = normalizePack()
+    const activeConnId = pack.activeConnectionId || pack.connections[0]?.id || 'c1'
+    setBusy(pointId || deviceId || 'read')
+    setError('')
+    post(
+      '/dsh-vision-bench/modbus/read',
+      {
+        cwd,
+        source: 'user',
+        sessionId,
+        all: !pointId,
+        pointId: pointId || undefined,
+        deviceId: deviceId || undefined,
+      },
+      120000,
+    )
+      .then((data) => {
+        if (!data) return
+        pushFramesLog(cwd, activeConnId, data.framesLog || data.frames || [])
+        if (Array.isArray(data.values)) {
+          setWorkspace((prev) => ({ ...prev, modbus: { ...prev.modbus, values: data.values } }))
+          workspaceRef.current = {
+            ...workspaceRef.current,
+            modbus: { ...workspaceRef.current.modbus, values: data.values },
+          }
+        }
+        if (data.ok === false && data.error) setError(data.error)
+        return post('/dsh-vision-bench/state', { cwd })
+      })
+      .then((data) => {
+        if (!data) return
+        setJournal(pickJournal(data))
+        if (data.workspace?.modbus) {
+          setWorkspace((prev) => ({
+            ...prev,
+            modbus: { ...prev.modbus, values: data.workspace.modbus.values || prev.modbus.values },
+          }))
+        }
+      })
+      .catch((err) => {
+        setError(String(err?.message || t('fail')))
+      })
+      .finally(() => setBusy(''))
+  }
+
+  function openWriteCell(point) {
+    setError('')
+    setNewPointDraft(null)
+    const pack = normalizePack()
+    const rec = (pack.values || []).find((item) => (item.key || item.pointId) === point.id)
+    const currentEng = rec?.ok && rec.value != null ? String(rec.value) : ''
+    setInlineWrite({
+      connectionId: point.connectionId,
+      deviceId: point.deviceId,
+      pointId: point.id,
+      function: point.function,
+      address: point.address,
+      scale: point.scale,
+      offset: point.offset,
+      unit: point.unit || '',
+      text: currentEng,
+      busy: false,
+      result: null,
+    })
+  }
+
+  function submitWriteCell(rawOverride) {
+    const row = inlineWrite
+    if (!row || !cwd) return
+    let raw
+    if (row.function === 1) {
+      raw = rawOverride === true ? 1 : rawOverride === false ? 0 : Number(row.text) ? 1 : 0
+    } else {
+      const enc = encodeValue({ scale: row.scale, offset: row.offset }, row.text)
+      if (!enc.ok) {
+        setInlineWrite((prev) => ({ ...prev, result: { ok: false, error: enc.error } }))
+        return
+      }
+      raw = enc.raw
+    }
+    const check = normalizeWriteValues(row.function, [raw], 1)
+    if (!check.ok) {
+      setInlineWrite((prev) => ({ ...prev, result: { ok: false, error: check.error } }))
+      return
+    }
+    setInlineWrite((prev) => ({ ...prev, busy: true, result: null }))
+    post(
+      '/dsh-vision-bench/modbus/write',
+      {
+        cwd,
+        source: 'user',
+        sessionId,
+        connectionId: row.connectionId,
+        deviceId: row.deviceId,
+        pointId: row.pointId,
+        function: row.function,
+        address: row.address,
+        values: [raw],
+      },
+      60000,
+    )
+      .then((data) => {
+        setInlineWrite((prev) => ({ ...prev, busy: false, result: data }))
+        pushFramesLog(cwd, row.connectionId, (data && (data.framesLog || data.frames)) || [])
+        if (Array.isArray(data.values)) {
+          setWorkspace((prev) => ({ ...prev, modbus: { ...prev.modbus, values: data.values } }))
+          workspaceRef.current = {
+            ...workspaceRef.current,
+            modbus: { ...workspaceRef.current.modbus, values: data.values },
+          }
+        }
+        return post('/dsh-vision-bench/state', { cwd })
+      })
+      .then((data) => {
+        if (!data) return
+        setJournal(pickJournal(data))
+        if (data.workspace?.modbus) {
+          setWorkspace((prev) => ({
+            ...prev,
+            modbus: { ...prev.modbus, values: data.workspace.modbus.values || prev.modbus.values },
+          }))
+        }
+      })
+      .catch((err) => {
+        setInlineWrite((prev) => ({
+          ...prev,
+          busy: false,
+          result: { ok: false, error: String(err?.message || t('fail')) },
+        }))
+      })
+  }
+
+  function linkConnection(id) {
+    if (!cwd || !id) return
+    setLinkBusy(id)
+    post('/dsh-vision-bench/connection/open', { cwd, connectionId: id }, 15000)
+      .then((data) => {
+        if (data && data.ok === false) setError(data.error || t('fail'))
+        return post('/dsh-vision-bench/state', { cwd })
+      })
+      .then((data) => {
+        if (data && Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
+      })
+      .catch((err) => setError(String(err?.message || t('fail'))))
+      .finally(() => setLinkBusy(''))
+  }
+
+  function unlinkConnection(id) {
+    if (!cwd || !id) return
+    setLinkBusy(id)
+    post('/dsh-vision-bench/connection/close', { cwd, connectionId: id }, 15000)
+      .then(() => post('/dsh-vision-bench/state', { cwd }))
+      .then((data) => {
+        if (data && Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
+      })
+      .catch(() => {})
+      .finally(() => setLinkBusy(''))
+  }
+
+  function toggleSim() {
+    const pack = normalizePack()
+    const connectionId = pack.activeConnectionId
+    if (!connectionId) return
+    persist({
+      connections: (pack.connections || []).map((connection) =>
+        connection.id === connectionId
+          ? { ...connection, conn: { ...(connection.conn || {}), sim: !derived().sim, slave: undefined } }
+          : connection,
+      ),
+      version: 3,
+    })
+  }
+
+  function toggleCollection() {
+    const d = derived()
+    if (!cwd || !d.activeConnId) return
+    setLinkBusy('poll')
+    const url = d.watchEnabled ? '/dsh-vision-bench/polling/stop' : '/dsh-vision-bench/polling/start'
+    post(url, { cwd, connectionId: d.activeConnId }, 15000)
+      .then(() => post('/dsh-vision-bench/state', { cwd }))
+      .then((data) => {
+        if (data?.workspace?.modbus) {
+          setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus }))
+        }
+      })
+      .catch((err) => setError(String(err?.message || t('fail'))))
+      .finally(() => setLinkBusy(''))
+  }
+
+  function setPollingInterval(ms) {
+    const d = derived()
+    persist({
+      pollingByConnection: {
+        ...(d.pollingByConnection || {}),
+        [d.activeConnId]: { ...d.polling, enabled: true, intervalMs: Number(ms) || 1000 },
+      },
+      version: 3,
+    })
+    post('/dsh-vision-bench/polling/start', {
+      cwd,
+      connectionId: d.activeConnId,
+      intervalMs: Number(ms) || 1000,
+    }).catch(() => {})
+  }
+
+  function findRtuOccupier(port, excludeId) {
+    return rtuOccupierAmong(derived().connections, port, excludeId)
+  }
+
+  function findTcpOccupier(host, tcpPort, excludeId) {
+    return tcpOccupierAmong(derived().connections, host, tcpPort, excludeId)
+  }
+
+  return {
+    readAll,
+    readOne,
+    openWriteCell,
+    submitWriteCell,
+    linkConnection,
+    unlinkConnection,
+    toggleSim,
+    toggleCollection,
+    setPollingInterval,
+    findRtuOccupier,
+    findTcpOccupier,
+  }
+}
+
+/**
+ * Page actions for HMI: compose core / connection / point / live factories.
+ * Called each render with current hook state.
+ */
+function createHmiActions(ctx) {
+  const core = createHmiCoreActions(ctx)
+  const connectionActions = createHmiConnectionActions(ctx, core)
+  const pointActions = createHmiPointActions(ctx, core)
+  const liveActions = createHmiLiveActions(ctx, core)
+  return {
+    ...core,
+    ...connectionActions,
+    ...pointActions,
+    ...liveActions,
+  }
+}
+
+function createHmiView(React, t, post) {
+  return function HmiView(props) {
+    const el = React.createElement
+    const cwd = useSessionCwd(React, props)
+    const sessionId = props?.sessionId || ''
+    const inputDraft = readInputDraft(props?.useInput)
+    const agentBridge = buildInputBridge(props, inputDraft)
+    const [busy, setBusy] = React.useState('')
+    const [error, setError] = React.useState('')
+    const [ports, setPorts] = React.useState([])
+    const [scanning, setScanning] = React.useState(false)
+    const [frameFilter, setFrameFilter] = React.useState('all')
+    const {
+      health,
+      ioRuntime,
+      workspace,
+      setWorkspace,
+      journal,
+      setJournal,
+      pending,
+      setPending,
+      connectionStates,
+      setConnectionStates,
+      workspaceRef,
+      inflight,
+      flagInflight,
+    } = useHmiState(React, post, cwd, sessionId)
+    const {
+      editingDeviceId,
+      setEditingDeviceId,
+      editingPointsDeviceId,
+      setEditingPointsDeviceId,
+      deviceDraft,
+      setDeviceDraft,
+      pointDraftsById,
+      setPointDraftsById,
+      newPointDraft,
+      setNewPointDraft,
+      inlineWrite,
+      setInlineWrite,
+      batch,
+      setBatch,
+      devForm,
+      setDevForm,
+      devDeleteId,
+      setDevDeleteId,
+      csvText,
+      setCsvText,
+      csvTarget,
+      setCsvTarget,
+      csvNote,
+      setCsvNote,
+      flagSavingByPoint,
+      setFlagSavingByPoint,
+      flagRequestSeq,
+    } = usePoints(React)
+    const {
+      connForm,
+      setConnForm,
+      hmiTab,
+      setHmiTab,
+      moreOpen,
+      setMoreOpen,
+      pendingDeleteId,
+      setPendingDeleteId,
+      linkBusy,
+      setLinkBusy,
+      lastDeviceByConn,
+    } = useConnections(React)
+    const { focusState, setFocusUi, agentCopied, setAgentCopied, tempWatchNote, setTempWatchNote } = useAgentFocus(
+      React,
+      cwd,
+      workspace.focus,
+    )
+    const { resolveWrite } = usePendingWrites(React, post, cwd, setPending, setJournal, setWorkspace, setError, t)
+    const commandClient = createHmiCommandClient(post, cwd, sessionId)
+    void health
+    void tempWatchNote
+    void frameFilter
+
+    const field = (label, control) => renderField(el, t, { label, control })
+    const actions = createHmiActions({
+      React,
+      el,
+      t,
+      post,
+      cwd,
+      sessionId,
+      props,
+      agentBridge,
+      commandClient,
+      setBusy,
+      setError,
+      setPorts,
+      setScanning,
+      setFrameFilter,
+      ioRuntime,
+      setWorkspace,
+      setJournal,
+      setPending,
+      setConnectionStates,
+      workspaceRef,
+      inflight,
+      flagInflight,
+      editingPointsDeviceId,
+      setEditingDeviceId,
+      setEditingPointsDeviceId,
+      deviceDraft,
+      setDeviceDraft,
+      pointDraftsById,
+      setPointDraftsById,
+      newPointDraft,
+      setNewPointDraft,
+      inlineWrite,
+      setInlineWrite,
+      batch,
+      setBatch,
+      devForm,
+      setDevForm,
+      setDevDeleteId,
+      csvText,
+      setCsvText,
+      csvTarget,
+      setCsvTarget,
+      setCsvNote,
+      flagSavingByPoint,
+      setFlagSavingByPoint,
+      flagRequestSeq,
+      connForm,
+      setConnForm,
+      setHmiTab,
+      setMoreOpen,
+      pendingDeleteId,
+      setPendingDeleteId,
+      setLinkBusy,
+      lastDeviceByConn,
+      focusState,
+      agentCopied,
+      setAgentCopied,
+      setTempWatchNote,
+    })
+
     React.useEffect(() => {
-      scanPorts()
+      actions.scanPorts()
     }, [cwd])
 
-    React.useEffect(
-      () =>
-        subscribeState(
-          post,
-          cwd,
-          (data) => {
-            if (!data) return
-            if (data.health) setHealth(data.health)
-            if (data.ioRuntime) setIoRuntime(data.ioRuntime)
-            if (Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
-            if (Array.isArray(data.pendingWrites)) setPending(data.pendingWrites)
-            setJournal(pickJournal(data))
-            if (data.workspace?.focus) {
-              setFocusUi(data.workspace.focus)
-              try {
-                setFocusState(cwd, data.workspace.focus)
-              } catch {}
-            }
-            if (inflight.current > 0 || flagInflight.current > 0) return
-            if (data.workspace) {
-              setWorkspace((prev) => ({
-                ...prev,
-                modbus: data.workspace.modbus || prev.modbus,
-                focus: data.workspace.focus || prev.focus,
-                configDrafts: data.workspace.configDrafts || prev.configDrafts || [],
-              }))
-              if (data.workspace.configDrafts) {
-                // also keep workspaceRef in sync for cfgVersion
-                workspaceRef.current = {
-                  ...workspaceRef.current,
-                  configDrafts: data.workspace.configDrafts,
-                  modbus: data.workspace.modbus || workspaceRef.current.modbus,
-                }
-              }
-            }
-          },
-          { sessionId },
-        ),
-      [cwd, sessionId],
-    )
-
-    // Task14: 显式 focus 且 foreground 显式时才切换连接/设备/高亮；badgeOnly 仅角标
     React.useEffect(() => {
       if (!cwd || !focusState.request || focusState.badgeOnly) return
       const r = focusState.request
-      const pack = normalizePack()
+      const pack = actions.normalizePack()
       if (r.connectionId && r.connectionId !== pack.activeConnectionId) {
-        // 无效组合已在服务端拦截，这里仅对有效目标做半完成防护
-        if (pack.connections.some((c) => c.id === r.connectionId)) {
-          selectConnection(r.connectionId)
-        }
+        if (pack.connections.some((c) => c.id === r.connectionId)) actions.selectConnection(r.connectionId)
       } else if (r.deviceId && r.deviceId !== pack.activeDeviceId) {
         if (
           pack.devices.some(
             (d) => d.id === r.deviceId && d.connectionId === (r.connectionId || pack.activeConnectionId),
           )
         ) {
-          persist({ activeDeviceId: r.deviceId, version: 3 })
+          actions.persist({ activeDeviceId: r.deviceId, version: 3 })
         }
       }
-      if (r.pointId || r.frameId) {
-        setFrameFilter(r.connectionId || pack.activeConnectionId || 'all')
-      }
+      if (r.pointId || r.frameId) setFrameFilter(r.connectionId || pack.activeConnectionId || 'all')
     }, [
       cwd,
       focusState.request?.connectionId,
@@ -7963,1308 +11125,86 @@ function createHmiView(React, t, post) {
       focusState.badgeOnly,
     ])
 
-    // Task8/0.19.2: 高亮与轻提示只短暂停留（3~5 秒），随后自动回到常态
-    React.useEffect(() => {
-      if (!focusState.request || focusState.badgeOnly) return
-      const timer = setTimeout(() => {
-        setFocusUi((prev) =>
-          prev?.request
-            ? { request: null, prev: prev.request, tempWatchIds: [], badgeOnly: false, evidence: [] }
-            : prev,
-        )
-      }, 5000)
-      return () => clearTimeout(timer)
-    }, [
-      focusState.request?.connectionId,
-      focusState.request?.deviceId,
-      focusState.request?.pointId,
-      focusState.request?.frameId,
-    ])
-
-    function normalizePack() {
-      const mb = workspaceRef.current.modbus || emptyWorkspace().modbus
-      // 兼容 v2 与 v3：v3 含 connections/devices，v2 为单 conn
-      try {
-        if (mb && mb.version === 3) {
-          // normalize via bench-devices to ensure defaults
-          return normalizeModbus(mb)
-        }
-        if (mb && mb.version === 2) {
-          // 仍通过 normalizeModbus 迁移到 v3，保证上层统一使用 v3 结构
-          return normalizeModbus(mb)
-        }
-        // 未标记 version 时尝试按 v3 归一化，失败则回退
-        if (mb && (Array.isArray(mb.connections) || Array.isArray(mb.devices))) {
-          return normalizeModbus(mb)
-        }
-        return normalizeModbus(mb)
-      } catch {
-        if (mb && mb.version === 2) return mb
-        if (mb && mb.version === 3) return mb
-        return emptyWorkspace().modbus
-      }
-    }
-
-    function persist(modbusPatch) {
-      if (!cwd) return Promise.resolve()
-      const seq = ++inflight.current
-      // 乐观更新：按 connId 定向合并，避免闪烁
-      setWorkspace((prev) => {
-        const next = { ...prev, modbus: { ...prev.modbus } }
-        // v3 keys直接合并；v2 legacy conn/polling 按 activeConnId 定向已在 bench-store 处理
-        for (const k of Object.keys(modbusPatch)) {
-          if (
-            k === 'connections' ||
-            k === 'devices' ||
-            k === 'points' ||
-            k === 'values' ||
-            k === 'pollingByConnection' ||
-            k === 'framesByConnection' ||
-            k === 'activeConnectionId' ||
-            k === 'activeDeviceId' ||
-            k === 'alarmState' ||
-            k === 'alarmActive' ||
-            k === 'version'
-          ) {
-            next.modbus[k] = modbusPatch[k]
-          } else if (k === 'conn' || k === 'polling') {
-            // 保留给 bench-store 做定向映射，本地也做一份便于立即显示
-            if (k === 'conn') {
-              next.modbus.conn = { ...(next.modbus.conn || {}), ...modbusPatch.conn }
-            } else {
-              next.modbus.polling = { ...(next.modbus.polling || {}), ...modbusPatch.polling }
-            }
-          } else {
-            next.modbus[k] = modbusPatch[k]
-          }
-        }
-        workspaceRef.current = next
-        return next
-      })
-      return post('/dsh-vision-bench/workspace', { cwd, modbus: modbusPatch })
-        .then((data) => {
-          if (seq === inflight.current && data && data.workspace && data.workspace.modbus) {
-            setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus }))
-            workspaceRef.current = { ...workspaceRef.current, modbus: data.workspace.modbus }
-          }
-          if (data) setJournal(pickJournal(data))
-          if (data && data.ok === false && data.error) setError(data.error)
-        })
-        .catch((err) => {
-          setError(String(err?.message || t('fail')))
-        })
-        .finally(() => {
-          if (seq === inflight.current) inflight.current = 0
-        })
-    }
-
-    function cfgVersion() {
-      try {
-        return normalizePack().configVersion || 1
-      } catch {
-        return 1
-      }
-    }
-
-    function agentRefFor(kind, payload) {
-      const pack = normalizePack()
-      return buildAgentRef(kind, payload, { configVersion: pack.configVersion || 1 })
-    }
-
-    function sendToAgent(kind, payload) {
-      const ref = agentRefFor(kind, payload)
-      Promise.resolve(dispatchAgentRef(ref, agentBridge))
-        .then((res) => {
-          const key =
-            kind +
-            ':' +
-            ((payload &&
-              (payload.id || payload.pointId || payload.frameId || payload.connectionId || payload.deviceId)) ||
-              '')
-          const status = res?.ok ? res.status || res.mode : '处理失败'
-          setAgentCopied(key + ':' + (res?.mode || 'failed') + ':' + status)
-          setTimeout(() => setAgentCopied(''), 2500)
-        })
-        .catch(() => {})
-      try {
-        postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setError(reason))
-      } catch {}
-      return ref
-    }
-
-    function agentBtnLabel(k, p) {
-      const key = k + ':' + ((p && (p.id || p.pointId || p.frameId || p.connectionId)) || '')
-      if (agentCopied.startsWith(key + ':'))
-        return (
-          agentCopied
-            .slice(key.length + 1)
-            .split(':')
-            .slice(1)
-            .join(':') || '仅复制'
-        )
-      return hasHarnessInput(props) ? '让 Agent 分析' : '复制给 Agent'
-    }
-
-    function requestFocusUi(target, opts) {
-      if (!cwd) return
-      const pack = normalizePack()
-      const payload = {
-        cwd,
-        target: target || {},
-        tempWatchIds: opts?.tempWatchIds || [],
-        evidence: opts?.evidence || [],
-        badgeOnly: !!opts?.badgeOnly,
-        foreground: !opts?.badgeOnly,
-      }
-      post('/dsh-vision-bench/focus', payload, 15000).catch((e) => setError(String(e?.message || t('fail'))))
-    }
-
-    function returnToPrevFocus() {
-      const prev = focusState?.prev
-      if (!prev) return
-      requestFocusUi(prev, { badgeOnly: false })
-    }
-
-    function createTempWatch(ids) {
-      const list = setTempWatch(cwd, ids, 300000)
-      setTempWatchNote('临时监视组已创建：' + list.length + ' 点')
-      setTimeout(() => setTempWatchNote(''), 2000)
-      // Also push to focus state tempWatchIds
-      requestFocusUi(focusState.request || {}, { tempWatchIds: list, badgeOnly: true })
-    }
-
-    // ── connection list operations（Task1/0.19.3：只建连接，不自动生成设备）──
-    function addConnection() {
-      const pack = normalizePack()
-      const nid = hmiGenId('c')
-      const newConn = {
-        id: nid,
-        name: '连接' + (pack.connections.length + 1),
-        role: 'client',
-        enabled: true,
-        conn: {
-          mode: 'rtu',
-          port: '',
-          baudrate: 9600,
-          bytesize: 8,
-          parity: 'N',
-          stopbits: 1,
-          host: '',
-          tcpPort: 502,
-          sim: false,
-        },
-      }
-      const nextConns = (pack.connections || []).concat([newConn])
-      const nextPolling = {
-        ...(pack.pollingByConnection || {}),
-        [nid]: { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' },
-      }
-      const nextFrames = { ...(pack.framesByConnection || {}), [nid]: [] }
-      persist({
-        connections: nextConns,
-        devices: pack.devices || [],
-        pollingByConnection: nextPolling,
-        framesByConnection: nextFrames,
-        activeConnectionId: nid,
-        activeDeviceId: '',
-        version: 3,
-      })
-      setHmiTab(nid)
-      lastDeviceByConn.current[nid] = ''
-      setFrameFilter(nid)
-      setDevForm({ open: true, id: '', name: '', unitId: 1 })
-    }
-
-    // ── Task1/0.19.3: 设备表单 — 名称 + Unit ID（连接内唯一），禁止直接生成 Unit 1 ──
-    function openAddDevice() {
-      setError('')
-      setDevForm({
-        open: true,
-        id: '',
-        name: '',
-        unitId: activeDevices.length ? Math.max(...activeDevices.map((d) => d.unitId || 1)) + 1 : 1,
-      })
-    }
-    function openEditDevice(dev) {
-      setError('')
-      setDevForm({ open: true, id: dev.id, name: dev.name, unitId: dev.unitId })
-    }
-    function saveDeviceForm() {
-      const pack = normalizePack()
-      const name = String(devForm.name || '')
-        .trim()
-        .slice(0, 40)
-      if (!name) {
-        setError('请填写设备名称')
-        return
-      }
-      const unitId = Math.trunc(Number(devForm.unitId))
-      if (!Number.isFinite(unitId) || unitId < 1 || unitId > 247) {
-        setError('站号 1–247')
-        return
-      }
-      const dupUnit = (pack.devices || []).some(
-        (d) => d.connectionId === activeConnId && d.id !== devForm.id && d.unitId === unitId,
-      )
-      if (dupUnit) {
-        setError('该连接内站号 ' + unitId + ' 已存在')
-        return
-      }
-      if (devForm.id) {
-        persist({
-          devices: (pack.devices || []).map((d) => (d.id === devForm.id ? { ...d, name, unitId } : d)),
-          version: 3,
-        })
-      } else {
-        const nid = hmiGenId('d')
-        persist({
-          devices: (pack.devices || []).concat([{ id: nid, connectionId: activeConnId, name, unitId, enabled: true }]),
-          activeDeviceId: nid,
-          version: 3,
-        })
-        lastDeviceByConn.current[activeConnId] = nid
-      }
-      setDevForm((prev) => ({ ...prev, open: false }))
-    }
-    function requestDeleteDevice(dev) {
-      const pack = normalizePack()
-      const n = (pack.points || []).filter(
-        (p) => (p.deviceId || '') === dev.id && (p.connectionId || p.connId) === activeConnId,
-      ).length
-      const vn = (pack.values || []).filter(
-        (v) =>
-          (v.pointId || v.key) &&
-          pack.points.some((p) => p.id === (v.pointId || v.key) && (p.deviceId || '') === dev.id),
-      ).length
-      setDevDeleteId(dev.id + '|' + n + '|' + vn)
-    }
-    function confirmDeleteDevice(dev) {
-      const pack = normalizePack()
-      const gone = new Set(
-        (pack.points || [])
-          .filter((p) => (p.deviceId || '') === dev.id && (p.connectionId || p.connId) === activeConnId)
-          .map((p) => p.id),
-      )
-      const nextDevices = (pack.devices || []).filter((d) => d.id !== dev.id)
-      persist({
-        devices: nextDevices,
-        points: (pack.points || []).filter((p) => !gone.has(p.id)),
-        values: (pack.values || []).filter((v) => !gone.has(v.pointId || v.key)),
-        activeDeviceId: nextDevices.some((d) => d.id === pack.activeDeviceId)
-          ? pack.activeDeviceId
-          : nextDevices[0]
-            ? nextDevices[0].id
-            : '',
-        version: 3,
-      })
-      setDevDeleteId('')
-    }
-
-    function selectConnection(connId) {
-      const pack = normalizePack()
-      // restore last device for this connection if any
-      let targetDevId = lastDeviceByConn.current[connId]
-      if (!targetDevId || !(pack.devices || []).some((d) => d.id === targetDevId && d.connectionId === connId)) {
-        const devFor = (pack.devices || []).find((d) => d.connectionId === connId)
-        targetDevId = devFor ? devFor.id : pack.devices[0]?.id || ''
-      }
-      persist({ activeConnectionId: connId, activeDeviceId: targetDevId, version: 3 })
-      setPendingDeleteId('')
-      setHmiTab(connId)
-      setMoreOpen(false)
-      setFrameFilter(connId)
-    }
-
-    function requestDeleteConnection(connId) {
-      if (pendingDeleteId !== connId) {
-        setPendingDeleteId(connId)
-        return
-      }
-      const pack = normalizePack()
-      if ((pack.connections || []).length <= 1) {
-        setError('至少保留一个连接')
-        setPendingDeleteId('')
-        return
-      }
-      const nextConns = (pack.connections || []).filter((c) => c.id !== connId)
-      const nextDevs = (pack.devices || []).filter((d) => d.connectionId !== connId)
-      const nextPoints = (pack.points || []).filter((p) => (p.connectionId || p.connId) !== connId)
-      const nextValues = (pack.values || []).filter((v) => {
-        const pid = v.key || v.pointId
-        return !!nextPoints.some((pt) => pt.id === pid)
-      })
-      // 保留仍存在的 values（更简单：过滤掉被删连接关联的 points 对应的 values）
-      const keptValues = (pack.values || []).filter((v) => {
-        const pt = (pack.points || []).find((p) => p.id === (v.key || v.pointId))
-        return pt && (pt.connectionId || pt.connId) !== connId
-      })
-      const nextPolling = { ...(pack.pollingByConnection || {}) }
-      delete nextPolling[connId]
-      const nextFrames = { ...(pack.framesByConnection || {}) }
-      delete nextFrames[connId]
-      let nextActive = pack.activeConnectionId
-      let nextActiveDev = pack.activeDeviceId
-      if (nextActive === connId) {
-        nextActive = nextConns[0]?.id || ''
-        const devFor = (nextDevs || []).find((d) => d.connectionId === nextActive)
-        nextActiveDev = devFor ? devFor.id : nextDevs[0]?.id || ''
-        setFrameFilter(nextActive || 'all')
-        setHmiTab(nextActive || 'all')
-      }
-      clearFramesLog(cwd, connId)
-      setPendingDeleteId('')
-      persist({
-        connections: nextConns,
-        devices: nextDevs,
-        points: nextPoints,
-        values: keptValues,
-        pollingByConnection: nextPolling,
-        framesByConnection: nextFrames,
-        activeConnectionId: nextActive,
-        activeDeviceId: nextActiveDev,
-        version: 3,
-      })
-    }
-
-    function openConnEdit(conn) {
-      setConnForm({
-        open: true,
-        id: conn.id,
-        name: conn.name,
-        role: conn.role,
-        enabled: conn.enabled !== false,
-        conn: { ...(conn.conn || {}) },
-      })
-    }
-
-    function saveConnEdit() {
-      const pack = normalizePack()
-      const targetId = connForm.id
-      // 连接编辑只改端点参数；禁止改写任何设备 Unit ID
-      const nextConns = (pack.connections || []).map((c) =>
-        c.id === targetId
-          ? {
-              ...c,
-              name: connForm.name.slice(0, 40),
-              role: connForm.role === 'server' || connForm.role === 'slave' ? 'server' : 'client',
-              enabled: true,
-              conn: {
-                ...(c.conn || {}),
-                mode: connForm.conn.mode === 'tcp' ? 'tcp' : 'rtu',
-                port: String(connForm.conn.port || '').trim(),
-                baudrate: Number(connForm.conn.baudrate) || 9600,
-                bytesize: Number(connForm.conn.bytesize) === 7 ? 7 : 8,
-                parity: ['N', 'E', 'O'].includes(connForm.conn.parity) ? connForm.conn.parity : 'N',
-                stopbits: Number(connForm.conn.stopbits) === 2 ? 2 : 1,
-                host: String(connForm.conn.host || '').trim(),
-                tcpPort: Math.max(1, Math.min(65535, Number(connForm.conn.tcpPort) || 502)),
-                sim: !!connForm.conn.sim,
-              },
-            }
-          : c,
-      )
-      setConnForm((prev) => ({ ...prev, open: false }))
-      persist({ connections: nextConns, version: 3 })
-    }
-
-    function setActiveConnPatch(patch) {
-      const pack = normalizePack()
-      const aid = pack.activeConnectionId
-      if (!aid) return
-      const raw = { ...(patch || {}) }
-      raw.slave = undefined
-      const nextConns = (pack.connections || []).map((c) =>
-        c.id === aid ? { ...c, conn: { ...(c.conn || {}), ...raw } } : c,
-      )
-      persist({ connections: nextConns, version: 3 })
-    }
-
-    function updateActiveConnMeta(patch) {
-      const pack = normalizePack()
-      const aid = pack.activeConnectionId
-      const nextConns = (pack.connections || []).map((c) => (c.id === aid ? { ...c, ...patch } : c))
-      persist({ connections: nextConns, version: 3 })
-    }
-
-    // ── point form（Task1/0.19.3：打开表单时固定 connectionId/deviceId）──
-    function generateBatch() {
-      const pack = normalizePack()
-      const fixedCid = batch.connectionId || pack.activeConnectionId || pack.connections[0]?.id || ''
-      const fixedDid = batch.deviceId
-      if (!fixedDid) {
-        setError('请先选择设备')
-        return
-      }
-      const count = Math.max(1, Math.min(Number(batch.count) || 1, 64))
-      const existingIds = new Set(
-        (pack.points || [])
-          .filter((p) => (p.connectionId || p.connId) === fixedCid && (p.deviceId || '') === fixedDid)
-          .map((p) => p.id),
-      )
-      const existingAddr = new Set(
-        (pack.points || [])
-          .filter(
-            (p) =>
-              (p.connectionId || p.connId) === fixedCid &&
-              (p.deviceId || '') === fixedDid &&
-              p.function === Number(batch.fc),
-          )
-          .map((p) => p.address),
-      )
-      const additions = []
-      for (let i = 0; i < count; i++) {
-        const address = Number(batch.start) + i
-        if (existingAddr.has(address)) continue
-        const id = hmiGenId('p')
-        if (existingIds.has(id)) continue
-        additions.push({
-          id,
-          connectionId: fixedCid,
-          connId: fixedCid,
-          deviceId: fixedDid,
-          name: (batch.prefix || '') + i,
-          function: Number(batch.fc),
-          address,
-          area: Number(batch.fc) === 1 ? 'coil' : 'holdingRegister',
-          scale: 1,
-          offset: 0,
-          unit: '',
-          trendEnabled: false,
-          alarmMin: null,
-          alarmMax: null,
-        })
-      }
-      if (!additions.length) {
-        setError('批量点位的地址全部与现有点位重复')
-        return
-      }
-      setError('')
-      setBatch((prev) => ({ ...prev, open: false }))
-      persist({ points: (pack.points || []).concat(additions), version: 3 })
-    }
-
-    function removePointRow(point) {
-      const pack = normalizePack()
-      persist({
-        points: (pack.points || []).filter((p) => p.id !== point.id),
-        values: (pack.values || []).filter((v) => (v.key || v.pointId) !== point.id),
-        version: 3,
-      })
-    }
-
-    // ── reads ──
-    function readAll(deviceId) {
-      readOne(null, deviceId || undefined)
-    }
-
-    function readOne(pointId, deviceId) {
-      if (!cwd) {
-        setError(t('needWorkspace'))
-        return
-      }
-      const pack = normalizePack()
-      const activeConnId = pack.activeConnectionId || pack.connections[0]?.id || 'c1'
-      setBusy(pointId || deviceId || 'read')
-      setError('')
-      post(
-        '/dsh-vision-bench/modbus/read',
-        {
-          cwd,
-          source: 'user',
-          sessionId,
-          all: !pointId,
-          pointId: pointId || undefined,
-          deviceId: deviceId || undefined,
-        },
-        120000,
-      )
-        .then((data) => {
-          if (!data) return
-          // 报文分轨：按 activeConnId 切轨
-          pushFramesLog(cwd, activeConnId, data.framesLog || data.frames || [])
-          if (Array.isArray(data.values)) {
-            setWorkspace((prev) => ({ ...prev, modbus: { ...prev.modbus, values: data.values } }))
-            workspaceRef.current = {
-              ...workspaceRef.current,
-              modbus: { ...workspaceRef.current.modbus, values: data.values },
-            }
-          }
-          if (data.ok === false && data.error) setError(data.error)
-          return post('/dsh-vision-bench/state', { cwd })
-        })
-        .then((data) => {
-          if (!data) return
-          setJournal(pickJournal(data))
-          if (data.workspace?.modbus) {
-            setWorkspace((prev) => ({
-              ...prev,
-              modbus: { ...prev.modbus, values: data.workspace.modbus.values || prev.modbus.values },
-            }))
-          }
-        })
-        .catch((err) => {
-          setError(String(err?.message || t('fail')))
-        })
-        .finally(() => setBusy(''))
-    }
-
-    // ── inline write ──
-    // ── TaskP1/0.20.0 行内写入：固定 connectionId/deviceId/pointId，工程值输入 ──
-    function openWriteCell(point) {
-      setError('')
-      setNewPointDraft(null)
-      const pack = normalizePack()
-      const rec = (pack.values || []).find((item) => (item.key || item.pointId) === point.id)
-      // 输入与显示均为工程值
-      const currentEng = rec?.ok && rec.value != null ? String(rec.value) : ''
-      setInlineWrite({
-        connectionId: point.connectionId,
-        deviceId: point.deviceId,
-        pointId: point.id,
-        function: point.function,
-        address: point.address,
-        scale: point.scale,
-        offset: point.offset,
-        unit: point.unit || '',
-        text: currentEng,
-        busy: false,
-        result: null,
-      })
-    }
-
-    function submitWriteCell(rawOverride) {
-      const row = inlineWrite
-      if (!row || !cwd) return
-      let raw
-      if (row.function === 1) {
-        // FC01 开/关语义
-        raw = rawOverride === true ? 1 : rawOverride === false ? 0 : Number(row.text) ? 1 : 0
-      } else {
-        const enc = encodeValue({ scale: row.scale, offset: row.offset }, row.text)
-        if (!enc.ok) {
-          setInlineWrite((prev) => ({ ...prev, result: { ok: false, error: enc.error } }))
-          return
-        }
-        raw = enc.raw
-      }
-      const check = normalizeWriteValues(row.function, [raw], 1)
-      if (!check.ok) {
-        setInlineWrite((prev) => ({ ...prev, result: { ok: false, error: check.error } }))
-        return
-      }
-      setInlineWrite((prev) => ({ ...prev, busy: true, result: null }))
-      post(
-        '/dsh-vision-bench/modbus/write',
-        {
-          cwd,
-          source: 'user',
-          sessionId,
-          connectionId: row.connectionId,
-          deviceId: row.deviceId,
-          pointId: row.pointId,
-          function: row.function,
-          address: row.address,
-          values: [raw],
-        },
-        60000,
-      )
-        .then((data) => {
-          setInlineWrite((prev) => ({ ...prev, busy: false, result: data }))
-          pushFramesLog(cwd, row.connectionId, (data && (data.framesLog || data.frames)) || [])
-          if (Array.isArray(data.values)) {
-            setWorkspace((prev) => ({ ...prev, modbus: { ...prev.modbus, values: data.values } }))
-            workspaceRef.current = {
-              ...workspaceRef.current,
-              modbus: { ...workspaceRef.current.modbus, values: data.values },
-            }
-          }
-          return post('/dsh-vision-bench/state', { cwd })
-        })
-        .then((data) => {
-          if (!data) return
-          setJournal(pickJournal(data))
-          if (data.workspace?.modbus) {
-            setWorkspace((prev) => ({
-              ...prev,
-              modbus: { ...prev.modbus, values: data.workspace.modbus.values || prev.modbus.values },
-            }))
-          }
-        })
-        .catch((err) => {
-          setInlineWrite((prev) => ({
-            ...prev,
-            busy: false,
-            result: { ok: false, error: String(err?.message || t('fail')) },
-          }))
-        })
-    }
-
-    // ── TaskP1/0.20.0 行内编辑草稿：设备编辑与点位编辑分离 ──
-    function enterDeviceEdit(d) {
-      setError('')
-      setNewPointDraft(null)
-      setEditingPointsDeviceId('')
-      setPointDraftsById({})
-      setEditingDeviceId(d.id)
-      setDeviceDraft({ id: d.id, name: d.name, unitId: d.unitId, connectionId: d.connectionId })
-    }
-
-    function enterPointsEdit(d) {
-      setError('')
-      setNewPointDraft(null)
-      setEditingDeviceId('')
-      setDeviceDraft(null)
-      setEditingPointsDeviceId(d.id)
-      const drafts = {}
-      for (const pt of pointsOfDevice(d.id)) {
-        drafts[pt.id] = {
-          id: pt.id,
-          connectionId: pt.connectionId,
-          deviceId: pt.deviceId,
-          name: pt.name || '',
-          function: pt.function,
-          area: pt.area || AREA_BY_FN_EDIT[pt.function] || 'holdingRegister',
-          address: pt.address,
-          scale: pt.scale,
-          offset: pt.offset,
-          unit: pt.unit || '',
-          alarmMin: pt.alarmMin == null ? '' : String(pt.alarmMin),
-          alarmMax: pt.alarmMax == null ? '' : String(pt.alarmMax),
-        }
-      }
-      setPointDraftsById(drafts)
-    }
-
-    function patchDraft(pointId, patch) {
-      setPointDraftsById((prev) => {
-        const cur = { ...(prev[pointId] || {}), ...patch }
-        // 功能码变更必须同步 area，否则 normalize 会按旧 area 盖回 function
-        if (patch.function !== undefined) {
-          const fn = Math.trunc(Number(patch.function))
-          if (AREA_BY_FN_EDIT[fn]) cur.area = AREA_BY_FN_EDIT[fn]
-          cur.function = fn
-        }
-        return { ...prev, [pointId]: cur }
-      })
-    }
-
-    function applyPointFlagLocal(pointId, patch) {
-      setWorkspace((prev) => {
-        const points = prev.modbus?.points || []
-        const nextPoints = points.map((p) => {
-          if (p.id !== pointId) return p
-          const next = { ...p, ...patch }
-          if (patch.monitorEnabled !== undefined) next.trendEnabled = patch.monitorEnabled === true
-          return next
-        })
-        const next = { ...prev, modbus: { ...prev.modbus, points: nextPoints } }
-        workspaceRef.current = next
-        return next
-      })
-    }
-
-    function validateAlarmEnable(point) {
-      const minRaw = point?.alarmMin
-      const maxRaw = point?.alarmMax
-      const hasMin = minRaw !== null && minRaw !== undefined && minRaw !== ''
-      const hasMax = maxRaw !== null && maxRaw !== undefined && maxRaw !== ''
-      if (!hasMin && !hasMax) return { ok: true, warn: '尚未配置阈值' }
-      if (hasMin && hasMax) {
-        const min = Number(minRaw)
-        const max = Number(maxRaw)
-        if (!(Number.isFinite(min) && Number.isFinite(max) && min < max)) {
-          return { ok: false, error: '告警上下限非法，无法开启' }
-        }
-      }
-      return { ok: true }
-    }
-
-    function persistPointFlags(pointId, patch) {
-      if (!cwd || !pointId || !patch || typeof patch !== 'object') return Promise.resolve()
-      const keys = Object.keys(patch).filter((k) => k === 'monitorEnabled' || k === 'alarmEnabled')
-      if (!keys.length) return Promise.resolve()
-
-      const packNow = normalizePack()
-      const current = (packNow.points || []).find((p) => p.id === pointId)
-      if (!current) {
-        setError('点位不存在')
-        return Promise.resolve()
-      }
-
-      if (patch.alarmEnabled === true) {
-        const check = validateAlarmEnable(current)
-        if (!check.ok) {
-          setError(check.error)
-          return Promise.resolve()
-        }
-        if (check.warn) setError(check.warn)
-      }
-
-      const prevSnapshot = {
-        monitorEnabled: current.monitorEnabled === true,
-        alarmEnabled: current.alarmEnabled === true,
-        trendEnabled: current.trendEnabled === true,
-      }
-      const seqKeys = keys.map((k) => pointId + ':' + k)
-      for (const sk of seqKeys) {
-        flagRequestSeq.current[sk] = (flagRequestSeq.current[sk] || 0) + 1
-      }
-      const seqAtStart = Object.fromEntries(seqKeys.map((sk) => [sk, flagRequestSeq.current[sk]]))
-
-      applyPointFlagLocal(pointId, patch)
-      flagInflight.current += 1
-      setFlagSavingByPoint((prev) => {
-        const next = { ...prev }
-        for (const sk of seqKeys) next[sk] = true
-        return next
-      })
-
-      const body = {
-        cwd,
-        pointId,
-        expectedConfigVersion: packNow.configVersion || 1,
-      }
-      for (const k of keys) body[k] = patch[k] === true
-
-      const isLatest = () => seqKeys.every((sk) => seqAtStart[sk] === flagRequestSeq.current[sk])
-
-      const rollback = (msg) => {
-        if (!isLatest()) return
-        applyPointFlagLocal(pointId, {
-          monitorEnabled: prevSnapshot.monitorEnabled,
-          alarmEnabled: prevSnapshot.alarmEnabled,
-          trendEnabled: prevSnapshot.trendEnabled,
-        })
-        if (msg) setError(msg)
-      }
-
-      const applySuccess = (data) => {
-        if (!isLatest()) return data
-        if (data.workspace?.modbus) {
-          setWorkspace((prev) => {
-            const next = { ...prev, modbus: data.workspace.modbus }
-            workspaceRef.current = next
-            return next
-          })
-        } else if (data.point?.id) {
-          applyPointFlagLocal(pointId, {
-            monitorEnabled: data.point.monitorEnabled === true,
-            alarmEnabled: data.point.alarmEnabled === true,
-            trendEnabled: data.point.monitorEnabled === true,
-          })
-          if (data.configVersion != null) {
-            setWorkspace((prev) => {
-              const next = { ...prev, modbus: { ...prev.modbus, configVersion: data.configVersion } }
-              workspaceRef.current = next
-              return next
-            })
-          }
-        }
-        setError('')
-        return data
-      }
-
-      // 兼容未重启的旧 host：flags 路由 404/405 时回退整表 workspace 写入
-      const fallbackWorkspacePersist = () => {
-        const pack = normalizePack()
-        const points = (pack.points || []).map((p) => {
-          if (p.id !== pointId) return p
-          const next = { ...p, ...patch }
-          if (patch.monitorEnabled !== undefined) next.trendEnabled = patch.monitorEnabled === true
-          return next
-        })
-        return post('/dsh-vision-bench/workspace', { cwd, modbus: { points, version: 3 } }).then((data) => {
-          if (!isLatest()) return data
-          if (!data || data.ok === false) {
-            rollback(keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态')
-            return data
-          }
-          if (data.workspace?.modbus) {
-            setWorkspace((prev) => {
-              const next = { ...prev, modbus: data.workspace.modbus }
-              workspaceRef.current = next
-              return next
-            })
-            setError('')
-          }
-          return data
-        })
-      }
-
-      return post('/dsh-vision-bench/points/flags', body)
-        .then((data) => {
-          if (!isLatest()) return data
-          if (!data || data.ok === false) {
-            const code = data?.errorCode
-            if (code === 'CONFIG_DRIFT') {
-              // 版本漂移：去掉 expected 重试一次（仍只改单点 flags）
-              const retry = { cwd, pointId }
-              for (const k of keys) retry[k] = patch[k] === true
-              return post('/dsh-vision-bench/points/flags', retry)
-                .then((data2) => {
-                  if (!isLatest()) return data2
-                  if (!data2 || data2.ok === false) {
-                    rollback('点位配置已被其他操作更新，请重试')
-                    return data2
-                  }
-                  return applySuccess(data2)
-                })
-                .catch(() =>
-                  fallbackWorkspacePersist().catch(() => {
-                    rollback('点位配置已被其他操作更新，请重试')
-                  }),
-                )
-            }
-            const tip =
-              keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态'
-            rollback(tip)
-            return data
-          }
-          return applySuccess(data)
-        })
-        .catch(() => {
-          // host 未重启时常见 405/空响应 → 回退 workspace
-          return fallbackWorkspacePersist().catch(() => {
-            rollback(
-              keys[0] === 'monitorEnabled'
-                ? '监视状态保存失败，已恢复原状态（请完全重启 dsh web）'
-                : '告警状态保存失败，已恢复原状态（请完全重启 dsh web）',
-            )
-          })
-        })
-        .finally(() => {
-          flagInflight.current = Math.max(0, flagInflight.current - 1)
-          setFlagSavingByPoint((prev) => {
-            const next = { ...prev }
-            for (const sk of seqKeys) {
-              if (seqAtStart[sk] === flagRequestSeq.current[sk]) delete next[sk]
-            }
-            return next
-          })
-        })
-    }
-
-    function addNewPointRow(deviceId) {
-      setError('')
-      setInlineWrite(null)
-      setEditingDeviceId('')
-      setDeviceDraft(null)
-      setBatch((prev) => ({ ...prev, open: false, deviceId: deviceId, connectionId: activeConnId }))
-      setNewPointDraft({
-        connectionId: activeConnId,
-        deviceId,
-        name: '',
-        function: 3,
-        address: 0,
-        scale: 1,
-        offset: 0,
-        unit: '',
-        monitorEnabled: true,
-        alarmEnabled: false,
-        alarmMin: '',
-        alarmMax: '',
-      })
-    }
-
-    function saveNewPointDraft() {
-      const d = newPointDraft
-      if (!d) return
-      const pack = normalizePack()
-      const fnNum = Math.trunc(Number(d.function) || 3)
-      const addrNum = Math.trunc(Number(d.address))
-      if (!Number.isFinite(addrNum) || addrNum < 0 || addrNum > 65535) {
-        setError(t('ptAddr') + ' 0–65535')
-        return
-      }
-      if ((d.alarmEnabled === true || d.alarmMin !== '' || d.alarmMax !== '') && !d.alarmEnabled) {
-        /* 允许仅阈值但开关未开 → 视为未启用 */
-      }
-      const dup = (pack.points || []).some(
-        (p) =>
-          (p.connectionId || p.connId) === d.connectionId &&
-          (p.deviceId || '') === d.deviceId &&
-          p.function === fnNum &&
-          p.address === addrNum,
-      )
-      if (dup) {
-        setError('该设备下已存在相同功能码和地址的点位')
-        return
-      }
-      const alarmOn = d.alarmEnabled === true
-      const min = alarmOn && d.alarmMin !== '' ? Number(d.alarmMin) : null
-      const max = alarmOn && d.alarmMax !== '' ? Number(d.alarmMax) : null
-      if (alarmOn && min != null && max != null && !(min < max)) {
-        setError('下限必须小于上限')
-        return
-      }
-      const base = {
-        id: hmiGenId('p'),
-        connectionId: d.connectionId,
-        connId: d.connectionId,
-        deviceId: d.deviceId,
-        name: String(d.name || '').slice(0, 40),
-        function: fnNum,
-        address: addrNum,
-        scale: Number(d.scale) || 1,
-        offset: Number(d.offset) || 0,
-        unit: String(d.unit || '').slice(0, 12),
-        monitorEnabled: d.monitorEnabled === true,
-        alarmEnabled: alarmOn,
-        alarmMin: Number.isFinite(min) ? min : null,
-        alarmMax: Number.isFinite(max) ? max : null,
-        trendEnabled: d.monitorEnabled === true,
-        area: fnNum === 1 ? 'coil' : fnNum === 2 ? 'discreteInput' : fnNum === 4 ? 'inputRegister' : 'holdingRegister',
-      }
-      persist({ points: (pack.points || []).concat([base]), version: 3 })
-      setNewPointDraft(null)
-    }
-
-    function saveDeviceEdit(d) {
-      const pack = normalizePack()
-      const meta = deviceDraft
-      if (!meta) return
-      const name = String(meta.name || '')
-        .trim()
-        .slice(0, 40)
-      if (!name) {
-        setError('请填写设备名称')
-        return
-      }
-      const unitId = Math.trunc(Number(meta.unitId))
-      if (!Number.isFinite(unitId) || unitId < 1 || unitId > 247) {
-        setError('站号 1–247')
-        return
-      }
-      if ((pack.devices || []).some((x) => x.connectionId === d.connectionId && x.id !== d.id && x.unitId === unitId)) {
-        setError('该连接内站号 ' + unitId + ' 已存在')
-        return
-      }
-      const nextDevices = (pack.devices || []).map((x) => (x.id === d.id ? { ...x, name, unitId } : x))
-      persist({ devices: nextDevices, version: 3 })
-      setEditingDeviceId('')
-      setDeviceDraft(null)
-    }
-
-    function savePointsEdit(d) {
-      const pack = normalizePack()
-      const drafts = pointDraftsById || {}
-      const keyOf = (p) => (p.connectionId || '') + '|' + (p.deviceId || '') + '|' + p.function + '|' + p.address
-      const seen = new Map()
-      for (const dOf of Object.values(drafts)) {
-        if (seen.has(keyOf(dOf))) {
-          setError('该设备下已存在相同功能码和地址的点位')
-          return
-        }
-        seen.set(keyOf(dOf), dOf)
-      }
-      try {
-        const nextPoints = (pack.points || []).map((p) => {
-          const dr = drafts[p.id]
-          if (!dr || (p.deviceId || '') !== d.id) return p
-          const min = dr.alarmMin !== '' ? Number(dr.alarmMin) : null
-          const max = dr.alarmMax !== '' ? Number(dr.alarmMax) : null
-          if (p.alarmEnabled === true && min != null && max != null && !(min < max)) {
-            throw new Error('下限必须小于上限: ' + (dr.name || p.name))
-          }
-          return {
-            ...p,
-            name: String(dr.name || '').slice(0, 40) || p.name,
-            function: (() => {
-              const fn = Math.trunc(Number(dr.function) || p.function)
-              return [1, 2, 3, 4].includes(fn) ? fn : p.function
-            })(),
-            area: (() => {
-              const fn = Math.trunc(Number(dr.function) || p.function)
-              return AREA_BY_FN_EDIT[fn] || p.area
-            })(),
-            address: Math.trunc(Number(dr.address)),
-            scale: Number(dr.scale) || 1,
-            offset: Number(dr.offset) || 0,
-            unit: String(dr.unit || '').slice(0, 12),
-            alarmMin: Number.isFinite(min) ? min : null,
-            alarmMax: Number.isFinite(max) ? max : null,
-          }
-        })
-        persist({ points: nextPoints, version: 3 })
-        setEditingPointsDeviceId('')
-        setPointDraftsById({})
-      } catch (err) {
-        setError(String(err?.message || err))
-      }
-    }
-
-    function cancelDeviceEdit() {
-      setEditingDeviceId('')
-      setDeviceDraft(null)
-    }
-
-    function cancelPointsEdit() {
-      setEditingPointsDeviceId('')
-      setPointDraftsById({})
-      setNewPointDraft(null)
-    }
-
-    // ── csv ──
-    function exportCsv(deviceId) {
-      const pack = normalizePack()
-      const did = deviceId || ''
-      const filtered = (pack.points || []).filter((p) => (p.deviceId || '') === did)
-      navigator.clipboard
-        .writeText(pointsToCsv(filtered))
-        .then(() => {
-          setCsvNote(t('csvDone'))
-          setTimeout(() => setCsvNote(''), 1500)
-        })
-        .catch(() => {
-          /* clipboard unavailable */
-        })
-    }
-
-    function importCsv() {
-      const parsed = csvToPoints(csvText)
-      if (!parsed.ok) {
-        setError(parsed.error)
-        return
-      }
-      const pack = normalizePack()
-      const fixedCid = pack.activeConnectionId || pack.connections[0]?.id || ''
-      const fixedDid = csvTarget.deviceId
-      if (!fixedDid) {
-        setError('请先选择设备再导入 CSV')
-        return
-      }
-      // Task1/0.19.3: CSV 只作用于当前设备；替换模式清空该设备点位与值
-      const withConn = parsed.points.map((p) => ({
-        ...p,
-        id: p.id || hmiGenId('p'),
-        connectionId: fixedCid,
-        connId: fixedCid,
-        deviceId: fixedDid,
-        trendEnabled: p.trendEnabled === true,
-        area:
-          p.function === 1
-            ? 'coil'
-            : p.function === 2
-              ? 'discreteInput'
-              : p.function === 4
-                ? 'inputRegister'
-                : 'holdingRegister',
-      }))
-      setError('')
-      setCsvTarget((prev) => ({ ...prev, open: false }))
-      setCsvText('')
-      const mode = csvTarget.mode === 'replace' ? 'replace' : 'merge'
-      if (mode === 'replace') {
-        // 替换：清空该设备点位与当前值，其余设备/连接保留
-        const kept = (pack.points || []).filter(
-          (p) => !((p.connectionId || p.connId) === fixedCid && (p.deviceId || '') === fixedDid),
-        )
-        const gone = new Set(
-          (pack.points || [])
-            .filter((p) => (p.connectionId || p.connId) === fixedCid && (p.deviceId || '') === fixedDid)
-            .map((p) => p.id),
-        )
-        const keptValues = (pack.values || []).filter((v) => !gone.has(v.pointId || v.key))
-        persist({ points: kept.concat(withConn), values: keptValues, version: 3 })
-      } else {
-        // 合并：仅追加/覆盖同设备同功能码同地址的点位
-        const points = (pack.points || []).slice()
-        for (const np of withConn) {
-          const idx = points.findIndex(
-            (p) =>
-              (p.connectionId || p.connId) === fixedCid &&
-              (p.deviceId || '') === fixedDid &&
-              p.function === np.function &&
-              p.address === np.address,
-          )
-          if (idx >= 0) points[idx] = { ...points[idx], ...np, id: points[idx].id }
-          else points.push(np)
-        }
-        persist({ points, version: 3 })
-      }
-    }
-
-    // ── derived ──
-    const pack = normalizePack()
-    const connections = Array.isArray(pack.connections) ? pack.connections : []
-    const devices = Array.isArray(pack.devices) ? pack.devices : []
-    const activeConnId = pack.activeConnectionId || connections[0]?.id || ''
-    const activeDeviceId =
-      pack.activeDeviceId || (devices || []).find((d) => d.connectionId === activeConnId)?.id || devices[0]?.id || ''
-    const activeConnObj = connections.find((c) => c.id === activeConnId) || connections[0] || { conn: {} }
-    const conn = activeConnObj?.conn || {}
-    // 点位表按 activeConnId 过滤
-    const allPoints = Array.isArray(pack.points) ? pack.points : []
-    const points = allPoints.filter((p) => (p.connectionId || p.connId) === activeConnId)
-    // 设备树：选中连接后列出该连接下 devices
-    const activeDevices = devices.filter((d) => d.connectionId === activeConnId)
-    const valuesArr = Array.isArray(pack.values) ? pack.values : []
-    const valueMap = {}
-    for (const item of valuesArr) {
-      const k = item.key || item.pointId
-      if (k) valueMap[k] = item
-    }
-    const alarmStateData = pack.alarmState && typeof pack.alarmState === 'object' ? pack.alarmState : {}
-    const sim = conn.sim === true
-    const canDevice = canUseModbus(ioRuntime, conn.mode, { simulated: sim })
-    const ioStatus = ioRuntimeStatus(ioRuntime, conn.mode)
-    const connMissing = !sim && (conn.mode === 'tcp' ? !conn.host : !conn.port)
-    const pollingByConnection = pack.pollingByConnection || {}
-    const polling = pollingByConnection[activeConnId] || { enabled: false, intervalMs: 1000 }
-    const watchEnabled = !!polling.enabled
-
-    function linkConnection(id) {
-      if (!cwd || !id) return
-      setLinkBusy(id)
-      post('/dsh-vision-bench/connection/open', { cwd, connectionId: id }, 15000)
-        .then((data) => {
-          if (data && data.ok === false) setError(data.error || t('fail'))
-          return post('/dsh-vision-bench/state', { cwd })
-        })
-        .then((data) => {
-          if (data && Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
-        })
-        .catch((err) => setError(String(err?.message || t('fail'))))
-        .finally(() => setLinkBusy(''))
-    }
-    function unlinkConnection(id) {
-      if (!cwd || !id) return
-      setLinkBusy(id)
-      post('/dsh-vision-bench/connection/close', { cwd, connectionId: id }, 15000)
-        .then(() => post('/dsh-vision-bench/state', { cwd }))
-        .then((data) => {
-          if (data && Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
-        })
-        .catch(() => {})
-        .finally(() => setLinkBusy(''))
-    }
-
-    function toggleSim() {
-      const next = !sim
-      // persist 按 connId 定向，toggleSim 按 activeConnId
-      setActiveConnPatch({ sim: next })
-    }
-
-    // Task2/0.19.3: 采集由 Host 后台服务运行；UI 只负责 开始/停止
-    function toggleCollection() {
-      if (!cwd || !activeConnId) return
-      setLinkBusy('poll')
-      const url = watchEnabled ? '/dsh-vision-bench/polling/stop' : '/dsh-vision-bench/polling/start'
-      post(url, { cwd, connectionId: activeConnId }, 15000)
-        .then(() => post('/dsh-vision-bench/state', { cwd }))
-        .then((data) => {
-          if (data?.workspace?.modbus) {
-            setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus }))
-          }
-        })
-        .catch((err) => setError(String(err?.message || t('fail'))))
-        .finally(() => setLinkBusy(''))
-    }
-
-    function setPollingInterval(ms) {
-      const nextPolling = {
-        ...(pollingByConnection || {}),
-        [activeConnId]: { ...polling, enabled: true, intervalMs: Number(ms) || 1000 },
-      }
-      persist({ pollingByConnection: nextPolling, version: 3 })
-      post('/dsh-vision-bench/polling/start', {
-        cwd,
-        connectionId: activeConnId,
-        intervalMs: Number(ms) || 1000,
-      }).catch(() => {})
-    }
-
-    function findRtuOccupier(port, excludeId) {
-      return rtuOccupierAmong(connections, port, excludeId)
-    }
-    function findTcpOccupier(host, tcpPort, excludeId) {
-      return tcpOccupierAmong(connections, host, tcpPort, excludeId)
-    }
-
-    const focusToast = renderFocusToast(el, t, { focusState, returnToPrevFocus, setFocusUi })
-
+    const d = actions.derived()
+    const focusToast = renderFocusToast(el, t, {
+      focusState,
+      returnToPrevFocus: actions.returnToPrevFocus,
+      setFocusUi,
+    })
     const connListPanel = renderConnectionPanel(el, t, {
       focusState,
-      connections,
+      connections: d.connections,
       cwd,
-      addConnection,
-      activeConnObj,
-      sim,
-      activeConnId,
-      toggleSim,
-      watchEnabled,
+      addConnection: actions.addConnection,
+      activeConnObj: d.activeConnObj,
+      sim: d.sim,
+      activeConnId: d.activeConnId,
+      toggleSim: actions.toggleSim,
+      watchEnabled: d.watchEnabled,
       linkBusy,
-      points,
-      toggleCollection,
-      polling,
-      setPollingInterval,
-      canDevice,
+      points: d.points,
+      toggleCollection: actions.toggleCollection,
+      polling: d.polling,
+      setPollingInterval: actions.setPollingInterval,
+      canDevice: d.canDevice,
       connectionStates,
-      selectConnection,
-      findRtuOccupier,
-      linkConnection,
-      unlinkConnection,
-      openConnEdit,
-      sendToAgent,
+      selectConnection: actions.selectConnection,
+      findRtuOccupier: actions.findRtuOccupier,
+      linkConnection: actions.linkConnection,
+      unlinkConnection: actions.unlinkConnection,
+      openConnEdit: actions.openConnEdit,
+      sendToAgent: actions.sendToAgent,
       pendingDeleteId,
       setPendingDeleteId,
-      requestDeleteConnection,
+      requestDeleteConnection: actions.requestDeleteConnection,
     })
-    const connFormPanel = renderConnectionForm(el, t, {
+    const connFormPanel = renderConnectionEditor(el, t, {
       connForm,
       setConnForm,
       connectionStates,
       field,
       scanning,
       ports,
-      findRtuOccupier,
-      findTcpOccupier,
-      scanPorts,
+      findRtuOccupier: actions.findRtuOccupier,
+      findTcpOccupier: actions.findTcpOccupier,
+      scanPorts: actions.scanPorts,
       cwd,
-      saveConnEdit,
+      saveConnEdit: actions.saveConnEdit,
     })
-
-    const devFormPanel = renderDeviceForm(el, t, {
+    const devFormPanel = renderDeviceEditor(el, t, {
       field,
       devForm,
       setDevForm,
-      activeConnId,
-      activeConnObj,
+      activeConnId: d.activeConnId,
+      activeConnObj: d.activeConnObj,
       cwd,
-      saveDeviceForm,
+      saveDeviceForm: actions.saveDeviceForm,
     })
-
-    const pointsOfDevice = (devId) =>
-      allPoints.filter((p) => (p.connectionId || p.connId) === activeConnId && (p.deviceId || '') === devId)
-    const readRunning = runningOf(journal, 'read')
-    const writeRunning = runningOf(journal, 'write')
-
     const pointRowCtx = {
-      valueMap,
+      valueMap: d.valueMap,
       focusState,
       editingPointsDeviceId,
       pointDraftsById,
       inlineWrite,
       setInlineWrite,
-      submitWriteCell,
-      openWriteCell,
+      submitWriteCell: actions.submitWriteCell,
+      openWriteCell: actions.openWriteCell,
       busy,
-      writeRunning,
-      patchDraft,
-      sendToAgent,
+      writeRunning: runningOf(journal, 'write'),
+      patchDraft: actions.patchDraft,
+      sendToAgent: actions.sendToAgent,
       flagSavingByPoint,
-      persistPointFlags,
-      removePointRow,
+      persistPointFlags: actions.persistPointFlags,
+      removePointRow: actions.removePointRow,
     }
-
-    const deviceCardsPanel = renderDeviceCards(el, t, {
-      activeConnObj,
-      activeDevices,
-      points,
+    const deviceCardsPanel = renderDeviceSection(el, t, {
+      activeConnObj: d.activeConnObj,
+      activeDevices: d.activeDevices,
+      points: d.points,
       cwd,
-      activeConnId,
-      openAddDevice,
-      pointsOfDevice,
+      activeConnId: d.activeConnId,
+      openAddDevice: actions.openAddDevice,
+      pointsOfDevice: actions.pointsOfDevice,
       busy,
       devDeleteId,
       setDevDeleteId,
@@ -9278,163 +11218,72 @@ function createHmiView(React, t, post) {
       setCsvTarget,
       csvNote,
       connectionStates,
-      valueMap,
-      alarmStateData,
+      valueMap: d.valueMap,
+      alarmStateData: d.alarmStateData,
       focusState,
       deviceDraft,
       setDeviceDraft,
-      saveDeviceEdit,
-      cancelDeviceEdit,
-      requestDeleteDevice,
-      enterDeviceEdit,
-      savePointsEdit,
-      cancelPointsEdit,
-      addNewPointRow,
-      canDevice,
-      connMissing,
-      readRunning,
-      readAll,
-      enterPointsEdit,
-      exportCsv,
-      sendToAgent,
-      confirmDeleteDevice,
+      saveDeviceEdit: actions.saveDeviceEdit,
+      cancelDeviceEdit: actions.cancelDeviceEdit,
+      requestDeleteDevice: actions.requestDeleteDevice,
+      enterDeviceEdit: actions.enterDeviceEdit,
+      savePointsEdit: actions.savePointsEdit,
+      cancelPointsEdit: actions.cancelPointsEdit,
+      addNewPointRow: actions.addNewPointRow,
+      canDevice: d.canDevice,
+      connMissing: d.connMissing,
+      readRunning: runningOf(journal, 'read'),
+      readAll: actions.readAll,
+      enterPointsEdit: actions.enterPointsEdit,
+      exportCsv: actions.exportCsv,
+      sendToAgent: actions.sendToAgent,
+      confirmDeleteDevice: actions.confirmDeleteDevice,
       field,
-      generateBatch,
-      importCsv,
+      generateBatch: actions.generateBatch,
+      importCsv: actions.importCsv,
       csvText,
       setCsvText,
-      saveNewPointDraft,
+      saveNewPointDraft: actions.saveNewPointDraft,
       pointRowCtx,
     })
-
     const pendingPanel = renderPendingPanel(el, t, { pending, resolveWrite })
-
-    function resolveDraft(id, action) {
-      if (!cwd) return
-      setDraftBusy(id + ':' + action)
-      setDraftNote('')
-      const url = action === 'apply' ? '/dsh-vision-bench/config/draft/apply' : '/dsh-vision-bench/config/draft'
-      const body = action === 'apply' ? { cwd, draftId: id } : { cwd, op: 'discard', draftId: id, id }
-      post(url, body, 20000)
-        .then((data) => {
-          if (data && data.ok === false) {
-            const code = data.errorCode || ''
-            setDraftNote((code === 'CONFIG_DRIFT' ? t('configDrift') + ': ' : '') + (data.error || t('fail')))
-            setError((code === 'CONFIG_DRIFT' ? t('configDrift') + ': ' : '') + (data.error || ''))
-          } else {
-            setDraftNote(action === 'apply' ? t('draftApplied') : t('draftDiscarded'))
-            setTimeout(() => setDraftNote(''), 1800)
-          }
-          return post('/dsh-vision-bench/state', { cwd })
-        })
-        .then((data) => {
-          if (!data) return
-          setJournal(pickJournal(data))
-          if (data.workspace) {
-            setWorkspace((prev) => ({
-              ...prev,
-              modbus: data.workspace.modbus || prev.modbus,
-              configDrafts: data.workspace.configDrafts || prev.configDrafts,
-            }))
-            workspaceRef.current = {
-              ...workspaceRef.current,
-              modbus: data.workspace.modbus || workspaceRef.current.modbus,
-              configDrafts: data.workspace.configDrafts || workspaceRef.current.configDrafts,
-            }
-          }
-        })
-        .catch((err) => {
-          setDraftNote(String(err?.message || t('fail')))
-          setError(String(err?.message || t('fail')))
-        })
-        .finally(() => setDraftBusy(''))
-    }
-    const draftPanel = renderDraftPanel(el, t, { workspace, normalizePack, draftBusy, draftNote, cwd, resolveDraft })
-
-    function resolveWrite(id, approved) {
-      post('/dsh-vision-bench/modbus/write/approve', { cwd, id, approved }, 120000)
-        .then((data) => {
-          setPending((prev) => prev.filter((item) => item.id !== id))
-          if (data && data.ok === false && !data.rejected) setError(data.error || t('fail'))
-          return post('/dsh-vision-bench/state', { cwd })
-        })
-        .then((data) => {
-          if (!data) return
-          setJournal(pickJournal(data))
-          if (data.workspace?.modbus) {
-            setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus }))
-          }
-        })
-        .catch((err) => {
-          setError(String(err?.message || t('fail')))
-        })
-    }
-
     const tabBar = renderConnectionTabs(el, t, {
-      pack,
+      pack: d.pack,
       pending,
       journal,
-      activeConnId,
-      connections,
+      activeConnId: d.activeConnId,
+      connections: d.connections,
       hmiTab,
       setHmiTab,
       moreOpen,
       setMoreOpen,
-      selectConnection,
-      findRtuOccupier,
-      findTcpOccupier,
+      selectConnection: actions.selectConnection,
+      findRtuOccupier: actions.findRtuOccupier,
+      findTcpOccupier: actions.findTcpOccupier,
       cwd,
-      addConnection,
+      addConnection: actions.addConnection,
     })
-
-    // 全部连接视图：仅管理表
-    if (hmiTab === 'all') {
-      return el(
-        'div',
-        { className: 'dvb-page' },
-        statusBar(el, t, cwd, [
-          { key: 'io', kind: ioStatus.kind, text: t('ioRuntimeShort') + ' · ' + t(ioStatus.labelKey) },
-        ]),
-        visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
-        error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
-        agentCopied
-          ? el(
-              'div',
-              { className: 'dvb-msg', 'data-kind': 'ok' },
-              agentCopied.split(':').pop() + ' · ' + agentCopied.split(':').slice(0, 2).join(':'),
-            )
-          : null,
-        tabBar,
-        focusToast,
-        connListPanel,
-        connFormPanel,
-        draftPanel,
-      )
-    }
-
-    return el(
-      'div',
-      { className: 'dvb-page' },
-      statusBar(el, t, cwd, [
-        { key: 'io', kind: ioStatus.kind, text: t('ioRuntimeShort') + ' · ' + t(ioStatus.labelKey) },
-      ]),
-      visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
-      error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
-      agentCopied
-        ? el(
-            'div',
-            { className: 'dvb-msg', 'data-kind': 'ok' },
-            agentCopied.split(':').pop() + ' · ' + agentCopied.split(':').slice(0, 2).join(':'),
-          )
-        : null,
+    const pageCtx = {
+      cwd,
+      sessionId,
+      workspace,
+      journal,
+      pending,
+      error,
+      agentCopied,
+      ioStatus: d.ioStatus,
       tabBar,
       focusToast,
-      // 连接总览卡片仅在「全部连接」；单连接 tab 只看设备/点位
+      connListPanel,
+      connFormPanel,
       devFormPanel,
       deviceCardsPanel,
       pendingPanel,
-      draftPanel,
-    )
+      statusBar,
+      visionCollabBar,
+    }
+    if (hmiTab === 'all') return renderConnectionOverview(el, t, pageCtx)
+    return renderConnectionWorkspace(el, t, pageCtx)
   }
 }
 
@@ -9479,38 +11328,66 @@ const drawTrend = (container, cwd = '', now = Date.now(), payload) => {
   const UPlot = vendorUPlot()
   if (!UPlot) return null
   // Task3/0.19.3: 优先使用调用方传入的存储载荷；旧签名回退客户端缓存
-  const usePayload = payload && Array.isArray(payload.data) ? payload : toUplotData(cwd, { now, windowMs: TREND_WINDOW_MS })
+  const usePayload =
+    payload && Array.isArray(payload.data) ? payload : toUplotData(cwd, { now, windowMs: TREND_WINDOW_MS })
   const { data, keys, meta } = usePayload
-  const isDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  const isDark =
+    typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
   const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
-  const ks = keys.slice(0, 8), ms = meta.slice(0, 8)
+  const ks = keys.slice(0, 8),
+    ms = meta.slice(0, 8)
   const opts = {
-    ...UPLOT_PROTO, width: container.clientWidth || 560, height: 190, pxRatio: dpr,
+    ...UPLOT_PROTO,
+    width: container.clientWidth || 560,
+    height: 190,
+    pxRatio: dpr,
     spanGaps: false,
     cursor: { drag: { x: true, y: false, uni: 10 } },
     select: { show: true },
     scales: { x: { time: true }, y: { auto: true } },
     axes: [
-      { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
-      { stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)', grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
+      {
+        stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)',
+        grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' },
+      },
+      {
+        stroke: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)',
+        grid: { stroke: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' },
+      },
     ],
-    series: [{ label: 'time' }].concat(ks.map((k, i) => ({
-      label: (ms[i] && ms[i].label) || k,
-      stroke: TREND_COLORS[i % 8],
-      width: 1.5,
-      spanGaps: false,
-      points: { show: false },
-    }))),
+    series: [{ label: 'time' }].concat(
+      ks.map((k, i) => ({
+        label: (ms[i] && ms[i].label) || k,
+        stroke: TREND_COLORS[i % 8],
+        width: 1.5,
+        spanGaps: false,
+        points: { show: false },
+      })),
+    ),
     hooks: {
-      setSelect: [(u) => {
-        try {
-          const s = u.select
-          container._uplotSel = !s || !s.width ? null : { start: Math.round(u.posToVal(s.left, 'x') * 1000), end: Math.round(u.posToVal(s.left + s.width, 'x') * 1000) }
-        } catch { container._uplotSel = null }
-      }],
+      setSelect: [
+        (u) => {
+          try {
+            const s = u.select
+            container._uplotSel =
+              !s || !s.width
+                ? null
+                : {
+                    start: Math.round(u.posToVal(s.left, 'x') * 1000),
+                    end: Math.round(u.posToVal(s.left + s.width, 'x') * 1000),
+                  }
+          } catch {
+            container._uplotSel = null
+          }
+        },
+      ],
     },
   }
-  try { return new UPlot(opts, data, container) } catch { return null }
+  try {
+    return new UPlot(opts, data, container)
+  } catch {
+    return null
+  }
 }
 
 function createAlarmPage(React, t, post, hooks) {
@@ -9527,110 +11404,377 @@ function createAlarmPage(React, t, post, hooks) {
     const [pack, setPack] = React.useState(null)
     const [view, setView] = React.useState('activeUnacked')
     const [group, setGroup] = React.useState('all')
-    React.useEffect(() => subscribeState(post, cwd, (data) => {
-      if (!data) return
-      const timeline = data.journal && Array.isArray(data.journal.timeline) ? data.journal.timeline : []
-      setEvents(timeline.filter((item) => item.kind === 'alarm' || item.kind === 'alarm-clear'))
-      const mb = data.workspace && data.workspace.modbus
-      if (mb) { setAlarmState(mb.alarmState || mb.alarmActive || {}); try { setPack(normalizeModbus(mb)) } catch { setPack(null) } }
-    }, { sessionId: (props && props.sessionId) || '' }), [cwd, post, props && props.sessionId])
+    React.useEffect(
+      () =>
+        subscribeState(
+          post,
+          cwd,
+          (data) => {
+            if (!data) return
+            const timeline = data.journal && Array.isArray(data.journal.timeline) ? data.journal.timeline : []
+            setEvents(timeline.filter((item) => item.kind === 'alarm' || item.kind === 'alarm-clear'))
+            const mb = data.workspace && data.workspace.modbus
+            if (mb) {
+              setAlarmState(mb.alarmState || mb.alarmActive || {})
+              try {
+                setPack(normalizeModbus(mb))
+              } catch {
+                setPack(null)
+              }
+            }
+          },
+          { sessionId: (props && props.sessionId) || '' },
+        ),
+      [cwd, post, props && props.sessionId],
+    )
     const grouped = groupAlarms(alarmState)
-    const bucketMap = grouped.buckets || { activeUnacked: grouped.activeUnacked || [], activeAcked: grouped.activeAcked || [], recoveredUnacked: grouped.recoveredUnacked || [], recoveredAcked: grouped.recoveredAcked || [] }
+    const bucketMap = grouped.buckets || {
+      activeUnacked: grouped.activeUnacked || [],
+      activeAcked: grouped.activeAcked || [],
+      recoveredUnacked: grouped.recoveredUnacked || [],
+      recoveredAcked: grouped.recoveredAcked || [],
+    }
     const legacyMap = { current: grouped.current, history: grouped.history }
     const list = bucketMap[view] || legacyMap[view] || grouped.current || []
-    const filtered = group === 'all' ? list : list.filter(a=> a.group===group)
+    const filtered = group === 'all' ? list : list.filter((a) => a.group === group)
     // enrich with point/connection/device labels
     const [copiedAlarm, setCopiedAlarm] = React.useState('')
     const [evNote, setEvNote] = React.useState('')
-    const enriched = filtered.map(a=>{
-      const pt = pack && a.pointId ? (pack.points||[]).find(p=> p.id===a.pointId) : null
-      const conn = pack && a.connectionId ? (pack.connections||[]).find(c=> c.id===a.connectionId) : null
-      const dev = pack && a.deviceId ? (pack.devices||[]).find(d=> d.id===a.deviceId) : null
-      const threshold = a.threshold != null ? a.threshold : (pt ? (a.kind==='max'? pt.alarmMax : pt.alarmMin) : null)
-      const label = pt ? (pt.name || a.pointId) : (a.label || a.connectionId || a.id)
-      return { a, pt, conn, dev, threshold, label }
-    }).sort((x,y)=> (y.a.lastAt||0)-(x.a.lastAt||0))
-    const doAck = (id)=>{
+    const enriched = filtered
+      .map((a) => {
+        const pt = pack && a.pointId ? (pack.points || []).find((p) => p.id === a.pointId) : null
+        const conn = pack && a.connectionId ? (pack.connections || []).find((c) => c.id === a.connectionId) : null
+        const dev = pack && a.deviceId ? (pack.devices || []).find((d) => d.id === a.deviceId) : null
+        const threshold = a.threshold != null ? a.threshold : pt ? (a.kind === 'max' ? pt.alarmMax : pt.alarmMin) : null
+        const label = pt ? pt.name || a.pointId : a.label || a.connectionId || a.id
+        return { a, pt, conn, dev, threshold, label }
+      })
+      .sort((x, y) => (y.a.lastAt || 0) - (x.a.lastAt || 0))
+    const doAck = (id) => {
       const next = acknowledgeAlarm(alarmState, id, { by: 'user' })
       if (next && next._suggested) return
       setAlarmState(next)
-      if (cwd) post('/dsh-vision-bench/workspace', { cwd, modbus:{ alarmState: next, version:3 } }).catch(()=>{})
+      if (cwd) post('/dsh-vision-bench/workspace', { cwd, modbus: { alarmState: next, version: 3 } }).catch(() => {})
     }
-    const sendToAgentAlarm = async (row)=>{
-      const cv = pack ? (pack.configVersion || 1) : 1
-      const ref = buildAgentRef('alarm', {
-        alarmId: row.a.id,
-        connectionId: row.a.connectionId,
-        deviceId: row.a.deviceId,
-        pointId: row.a.pointId,
-        label: row.label,
-        start: row.a.firstAt || row.a.lastAt,
-        end: row.a.lastAt,
-      }, { configVersion: cv, start: row.a.firstAt || row.a.lastAt, end: row.a.lastAt })
+    const sendToAgentAlarm = async (row) => {
+      const cv = pack ? pack.configVersion || 1 : 1
+      const ref = buildAgentRef(
+        'alarm',
+        {
+          alarmId: row.a.id,
+          connectionId: row.a.connectionId,
+          deviceId: row.a.deviceId,
+          pointId: row.a.pointId,
+          label: row.label,
+          start: row.a.firstAt || row.a.lastAt,
+          end: row.a.lastAt,
+        },
+        { configVersion: cv, start: row.a.firstAt || row.a.lastAt, end: row.a.lastAt },
+      )
       const res = await dispatchAgentRef(ref, agentBridge)
       // Task5/0.18.2: unified status enum input|sent|copied|failed — surface it on screen
       setCopiedAlarm(row.a.id + ':' + ((res && res.status) || '复制失败'))
-      setTimeout(()=> setCopiedAlarm(''), 2000)
+      setTimeout(() => setCopiedAlarm(''), 2000)
       if (cwd) {
         // Task4/0.18.2: typed evidence back-mount — failures surface CONFIG_DRIFT/TARGET_MISMATCH
-        try { postEvidence(post, cwd, evidenceFromRef(ref), (reason) => { setEvNote(reason); setTimeout(() => setEvNote(''), 4000) }) } catch {}
+        try {
+          postEvidence(post, cwd, evidenceFromRef(ref), (reason) => {
+            setEvNote(reason)
+            setTimeout(() => setEvNote(''), 4000)
+          })
+        } catch {}
       }
     }
-    const focusAlarm = (row)=>{
+    const focusAlarm = (row) => {
       if (!cwd) return
-      post('/dsh-vision-bench/focus', { cwd, target: { alarmId: row.a.id, connectionId: row.a.connectionId, deviceId: row.a.deviceId, pointId: row.a.pointId, kind: 'alarm' } }).catch(()=>{})
+      post('/dsh-vision-bench/focus', {
+        cwd,
+        target: {
+          alarmId: row.a.id,
+          connectionId: row.a.connectionId,
+          deviceId: row.a.deviceId,
+          pointId: row.a.pointId,
+          kind: 'alarm',
+        },
+      }).catch(() => {})
     }
-    const jumpPoint = (row)=>{ if (typeof openHmi==='function' && row.pt) try{ openHmi({ connectionId: row.a.connectionId, deviceId: row.a.deviceId, pointId: row.a.pointId }) }catch{} }
-    const jumpChart = ()=>{ if (typeof openLive==='function') try{ openLive() }catch{} }
-    const jumpFrames = (row)=>{ if (typeof openLive==='function') try{ openLive() }catch{} }
-    return el('div', { className: 'dvb-live' },
-      el('div', { className: 'dvb-live-head' },
+    const jumpPoint = (row) => {
+      if (typeof openHmi === 'function' && row.pt)
+        try {
+          openHmi({ connectionId: row.a.connectionId, deviceId: row.a.deviceId, pointId: row.a.pointId })
+        } catch {}
+    }
+    const jumpChart = () => {
+      if (typeof openLive === 'function')
+        try {
+          openLive()
+        } catch {}
+    }
+    const jumpFrames = (row) => {
+      if (typeof openLive === 'function')
+        try {
+          openLive()
+        } catch {}
+    }
+    return el(
+      'div',
+      { className: 'dvb-live' },
+      el(
+        'div',
+        { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('liveAlarm')),
-        el('span', { className: 'dvb-chip', 'data-kind': (grouped.activeAll && grouped.activeAll.length) || grouped.active.length?'err':'ready' }, ((grouped.activeAll && grouped.activeAll.length) || grouped.active.length)+' 激活')),
-      el('div', { className: 'dvb-toolbar' },
-        el('button', { type:'button', className:'dvb-btn'+(view==='activeUnacked'?' is-on':''), onClick(){ setView('activeUnacked') } }, '激活未确认'+(grouped.buckets? '·'+grouped.buckets.activeUnacked.length:'')),
-        el('button', { type:'button', className:'dvb-btn'+(view==='activeAcked'?' is-on':''), onClick(){ setView('activeAcked') } }, '激活已确认'+(grouped.buckets? '·'+grouped.buckets.activeAcked.length:'')),
-        el('button', { type:'button', className:'dvb-btn'+(view==='recoveredUnacked'?' is-on':''), onClick(){ setView('recoveredUnacked') } }, '已恢复未确认'+(grouped.buckets? '·'+grouped.buckets.recoveredUnacked.length:'')),
-        el('button', { type:'button', className:'dvb-btn'+(view==='recoveredAcked'?' is-on':''), onClick(){ setView('recoveredAcked') } }, '已恢复已确认·历史'+(grouped.buckets? '·'+grouped.buckets.recoveredAcked.length:'')),
-        el('span', { style:{width:'8px', display:'inline-block'}}),
-        el('button', { type:'button', className:'dvb-btn'+(group==='all'?' is-on':''), onClick(){ setGroup('all') } }, '全部'),
-        el('button', { type:'button', className:'dvb-btn'+(group===PROCESS?' is-on':''), onClick(){ setGroup(PROCESS) } }, '过程'),
-        el('button', { type:'button', className:'dvb-btn'+(group===COMM?' is-on':''), onClick(){ setGroup(COMM) } }, '通信'),
-        enriched.length ? el('button', { type:'button', className:'dvb-btn', onClick(){ doAck('all') } }, '全部确认') : null),
-      (copiedAlarm || evNote) ? el('div', { className: 'dvb-hint' + (evNote ? ' dvb-err' : ''), 'data-kind': evNote ? 'err' : undefined }, evNote || (copiedAlarm.split(':').pop() + ' · ' + copiedAlarm.split(':')[0]) ) : null,
+        el(
+          'span',
+          {
+            className: 'dvb-chip',
+            'data-kind': (grouped.activeAll && grouped.activeAll.length) || grouped.active.length ? 'err' : 'ready',
+          },
+          ((grouped.activeAll && grouped.activeAll.length) || grouped.active.length) + ' 激活',
+        ),
+      ),
+      el(
+        'div',
+        { className: 'dvb-toolbar' },
+        el(
+          'button',
+          {
+            type: 'button',
+            className: 'dvb-btn' + (view === 'activeUnacked' ? ' is-on' : ''),
+            onClick() {
+              setView('activeUnacked')
+            },
+          },
+          '激活未确认' + (grouped.buckets ? '·' + grouped.buckets.activeUnacked.length : ''),
+        ),
+        el(
+          'button',
+          {
+            type: 'button',
+            className: 'dvb-btn' + (view === 'activeAcked' ? ' is-on' : ''),
+            onClick() {
+              setView('activeAcked')
+            },
+          },
+          '激活已确认' + (grouped.buckets ? '·' + grouped.buckets.activeAcked.length : ''),
+        ),
+        el(
+          'button',
+          {
+            type: 'button',
+            className: 'dvb-btn' + (view === 'recoveredUnacked' ? ' is-on' : ''),
+            onClick() {
+              setView('recoveredUnacked')
+            },
+          },
+          '已恢复未确认' + (grouped.buckets ? '·' + grouped.buckets.recoveredUnacked.length : ''),
+        ),
+        el(
+          'button',
+          {
+            type: 'button',
+            className: 'dvb-btn' + (view === 'recoveredAcked' ? ' is-on' : ''),
+            onClick() {
+              setView('recoveredAcked')
+            },
+          },
+          '已恢复已确认·历史' + (grouped.buckets ? '·' + grouped.buckets.recoveredAcked.length : ''),
+        ),
+        el('span', { style: { width: '8px', display: 'inline-block' } }),
+        el(
+          'button',
+          {
+            type: 'button',
+            className: 'dvb-btn' + (group === 'all' ? ' is-on' : ''),
+            onClick() {
+              setGroup('all')
+            },
+          },
+          '全部',
+        ),
+        el(
+          'button',
+          {
+            type: 'button',
+            className: 'dvb-btn' + (group === PROCESS ? ' is-on' : ''),
+            onClick() {
+              setGroup(PROCESS)
+            },
+          },
+          '过程',
+        ),
+        el(
+          'button',
+          {
+            type: 'button',
+            className: 'dvb-btn' + (group === COMM ? ' is-on' : ''),
+            onClick() {
+              setGroup(COMM)
+            },
+          },
+          '通信',
+        ),
+        enriched.length
+          ? el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn',
+                onClick() {
+                  doAck('all')
+                },
+              },
+              '全部确认',
+            )
+          : null,
+      ),
+      copiedAlarm || evNote
+        ? el(
+            'div',
+            { className: 'dvb-hint' + (evNote ? ' dvb-err' : ''), 'data-kind': evNote ? 'err' : undefined },
+            evNote || copiedAlarm.split(':').pop() + ' · ' + copiedAlarm.split(':')[0],
+          )
+        : null,
       enriched.length
-        ? el('div', { className: 'dvb-live-list' }, enriched.slice(0,80).map((row)=> {
-            const condLabel = row.a.condition===COND_ACTIVE ? (row.a.acknowledged ? '激活已确认' : '激活未确认') : (row.a.acknowledged ? '已恢复已确认' : '已恢复未确认')
-            const ackInfo = row.a.acknowledged ? ('已确认·'+(row.a.ackedBy||'user')+'@'+clockOf(row.a.ackedAt)) : (row.a.suggestedBy ? '建议·'+row.a.suggestedBy : '未确认')
-            const dur = row.a.durationMs ? (Math.round(row.a.durationMs/1000)+'s') : (row.a.recoveredAt ? Math.round((row.a.recoveredAt - row.a.firstAt)/1000)+'s' : '')
-            return el('div', { key: row.a.id, className: 'dvb-task', 'data-status': row.a.status, 'data-condition': row.a.condition, 'data-acked': row.a.acknowledged?'true':'false', 'data-group': row.a.group },
-            el('span', { className: 'dvb-badge', 'data-status': row.a.status, 'data-condition': row.a.condition }, condLabel),
-            el('span', { className: 'dvb-badge', 'data-group': row.a.group }, row.a.group===COMM?'通信':'过程'),
-            el('span', { className: 'dvb-badge', 'data-severity': row.a.severity || 'medium' }, row.a.severity || ''),
-            el('span', { className: 'dvb-map-meta' }, clockOf(row.a.lastAt)),
-            el('span', { className: 'dvb-hint', title: row.a.id }, row.label),
-            row.conn ? el('span', { className: 'dvb-hint' }, row.conn.name) : null,
-            row.dev ? el('span', { className: 'dvb-hint' }, row.dev.name + '·站号 '+row.dev.unitId) : null,
-            el('span', { className: 'dvb-hint' }, row.a.threshold!=null?'阈值 '+row.a.threshold:''),
-            el('span', { className: 'dvb-hint' }, row.a.value!=null?'当前 '+row.a.value:''),
-            el('span', { className: 'dvb-badge', 'data-quality': row.a.quality || 'good' }, row.a.quality || 'good'),
-            row.a.count>1 ? el('span', { className: 'dvb-tag' }, '×'+row.a.count) : null,
-            dur ? el('span', { className: 'dvb-tag' }, '持续'+dur) : null,
-            el('span', { className: 'dvb-hint' }, ackInfo),
-            row.a.frameId ? el('span', { className: 'dvb-hint', title: row.a.frameId }, '帧:'+row.a.frameId.slice(0,8)) : null,
-            !row.a.acknowledged ? el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ doAck(row.a.id) } }, '确认') : null,
-            el('button', {
-              type:'button', className:'dvb-btn dvb-btn-sm',
-              title: '复制告警结构化引用（稳定 ID+配置版本+时间范围，含 point/connection/device/frame/transaction/task）',
-              onClick(){ sendToAgentAlarm(row) },
-            }, copiedAlarm===row.a.id ? '已复制' : '让 Agent 分析'),
-            row.pt ? el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ jumpPoint(row) } }, '点位') : null,
-            el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick: jumpChart }, '曲线'),
-            el('button', { type:'button', className:'dvb-btn dvb-btn-sm', onClick(){ jumpFrames(row) } }, '报文')
-          )}))
+        ? el(
+            'div',
+            { className: 'dvb-live-list' },
+            enriched.slice(0, 80).map((row) => {
+              const condLabel =
+                row.a.condition === COND_ACTIVE
+                  ? row.a.acknowledged
+                    ? '激活已确认'
+                    : '激活未确认'
+                  : row.a.acknowledged
+                    ? '已恢复已确认'
+                    : '已恢复未确认'
+              const ackInfo = row.a.acknowledged
+                ? '已确认·' + (row.a.ackedBy || 'user') + '@' + clockOf(row.a.ackedAt)
+                : row.a.suggestedBy
+                  ? '建议·' + row.a.suggestedBy
+                  : '未确认'
+              const dur = row.a.durationMs
+                ? Math.round(row.a.durationMs / 1000) + 's'
+                : row.a.recoveredAt
+                  ? Math.round((row.a.recoveredAt - row.a.firstAt) / 1000) + 's'
+                  : ''
+              return el(
+                'div',
+                {
+                  key: row.a.id,
+                  className: 'dvb-task',
+                  'data-status': row.a.status,
+                  'data-condition': row.a.condition,
+                  'data-acked': row.a.acknowledged ? 'true' : 'false',
+                  'data-group': row.a.group,
+                },
+                el(
+                  'span',
+                  { className: 'dvb-badge', 'data-status': row.a.status, 'data-condition': row.a.condition },
+                  condLabel,
+                ),
+                el(
+                  'span',
+                  { className: 'dvb-badge', 'data-group': row.a.group },
+                  row.a.group === COMM ? '通信' : '过程',
+                ),
+                el(
+                  'span',
+                  { className: 'dvb-badge', 'data-severity': row.a.severity || 'medium' },
+                  row.a.severity || '',
+                ),
+                el('span', { className: 'dvb-map-meta' }, clockOf(row.a.lastAt)),
+                el('span', { className: 'dvb-hint', title: row.a.id }, row.label),
+                row.conn ? el('span', { className: 'dvb-hint' }, row.conn.name) : null,
+                row.dev ? el('span', { className: 'dvb-hint' }, row.dev.name + '·站号 ' + row.dev.unitId) : null,
+                el('span', { className: 'dvb-hint' }, row.a.threshold != null ? '阈值 ' + row.a.threshold : ''),
+                el('span', { className: 'dvb-hint' }, row.a.value != null ? '当前 ' + row.a.value : ''),
+                el(
+                  'span',
+                  { className: 'dvb-badge', 'data-quality': row.a.quality || 'good' },
+                  row.a.quality || 'good',
+                ),
+                row.a.count > 1 ? el('span', { className: 'dvb-tag' }, '×' + row.a.count) : null,
+                dur ? el('span', { className: 'dvb-tag' }, '持续' + dur) : null,
+                el('span', { className: 'dvb-hint' }, ackInfo),
+                row.a.frameId
+                  ? el('span', { className: 'dvb-hint', title: row.a.frameId }, '帧:' + row.a.frameId.slice(0, 8))
+                  : null,
+                !row.a.acknowledged
+                  ? el(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'dvb-btn dvb-btn-sm',
+                        onClick() {
+                          doAck(row.a.id)
+                        },
+                      },
+                      '确认',
+                    )
+                  : null,
+                el(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'dvb-btn dvb-btn-sm',
+                    title:
+                      '复制告警结构化引用（稳定 ID+配置版本+时间范围，含 point/connection/device/frame/transaction/task）',
+                    onClick() {
+                      sendToAgentAlarm(row)
+                    },
+                  },
+                  copiedAlarm === row.a.id ? '已复制' : '让 Agent 分析',
+                ),
+                row.pt
+                  ? el(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'dvb-btn dvb-btn-sm',
+                        onClick() {
+                          jumpPoint(row)
+                        },
+                      },
+                      '点位',
+                    )
+                  : null,
+                el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: jumpChart }, '曲线'),
+                el(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'dvb-btn dvb-btn-sm',
+                    onClick() {
+                      jumpFrames(row)
+                    },
+                  },
+                  '报文',
+                ),
+              )
+            }),
+          )
         : el('div', { className: 'dvb-hint' }, t('alarmEmpty')),
-      events.length ? el('div', { className: 'dvb-hint', style:{marginTop:'8px'} }, '历史事件 '+events.length) : null,
-      events.length ? el('div', { className: 'dvb-live-list' }, events.slice(0,6).map((item)=> el('div', { key:item.id, className:'dvb-task', 'data-ok': item.ok?'true':'false' }, el('span', { className:'dvb-map-meta' }, clockOf(item.at)), el('span', { className:'dvb-badge', 'data-source':item.source }, item.source), el('span', { className:'dvb-hint' }, item.summary)))) : null)
+      events.length
+        ? el('div', { className: 'dvb-hint', style: { marginTop: '8px' } }, '历史事件 ' + events.length)
+        : null,
+      events.length
+        ? el(
+            'div',
+            { className: 'dvb-live-list' },
+            events
+              .slice(0, 6)
+              .map((item) =>
+                el(
+                  'div',
+                  { key: item.id, className: 'dvb-task', 'data-ok': item.ok ? 'true' : 'false' },
+                  el('span', { className: 'dvb-map-meta' }, clockOf(item.at)),
+                  el('span', { className: 'dvb-badge', 'data-source': item.source }, item.source),
+                  el('span', { className: 'dvb-hint' }, item.summary),
+                ),
+              ),
+          )
+        : null,
+    )
   }
 }
 
@@ -9646,66 +11790,177 @@ function createLogPage(React, t, post, helpers = {}) {
     { key: 'err', label: t('logFilterErr') || '错误' },
   ]
   return function LogPage(props) {
-    const cwd = (props && props.scope && props.scope.cwd) || props && props.cwd || ''
+    const cwd = (props && props.scope && props.scope.cwd) || (props && props.cwd) || ''
     const [journal, setJournal] = React.useState({ tasks: [], running: [], timeline: [] })
     const [filter, setFilter] = React.useState('all')
     const [note, setNote] = React.useState('')
-    React.useEffect(() => subscribeState(post, cwd, (data) => {
-      if (data && data.journal) setJournal(data.journal)
-    }), [cwd, post])
+    React.useEffect(
+      () =>
+        subscribeState(post, cwd, (data) => {
+          if (data && data.journal) setJournal(data.journal)
+        }),
+      [cwd, post],
+    )
     const tasks = journal && Array.isArray(journal.tasks) ? journal.tasks : []
     const timeline = journal && Array.isArray(journal.timeline) ? journal.timeline : []
     const running = journal && Array.isArray(journal.running) ? journal.running : []
     const filtered = timeline.filter((item) => {
-      if (filter === 'err') return item.ok === false || item.kind === 'error' || String(item.summary || '').indexOf('异常') >= 0
+      if (filter === 'err')
+        return item.ok === false || item.kind === 'error' || String(item.summary || '').indexOf('异常') >= 0
       if (filter === 'all') return true
       return (item.source || 'system') === filter
     })
     const jump = (item) => {
-      const target = item && (item.pointId ? { connectionId: item.connectionId, deviceId: item.deviceId, pointId: item.pointId } : item && item.deviceId ? { connectionId: item.connectionId, deviceId: item.deviceId } : item && item.connectionId ? { connectionId: item.connectionId } : {})
-      if (helpers && typeof helpers.openHmi === 'function') { try { helpers.openHmi(target) } catch {} return }
+      const target =
+        item &&
+        (item.pointId
+          ? { connectionId: item.connectionId, deviceId: item.deviceId, pointId: item.pointId }
+          : item && item.deviceId
+            ? { connectionId: item.connectionId, deviceId: item.deviceId }
+            : item && item.connectionId
+              ? { connectionId: item.connectionId }
+              : {})
+      if (helpers && typeof helpers.openHmi === 'function') {
+        try {
+          helpers.openHmi(target)
+        } catch {}
+        return
+      }
     }
     const copyLine = (item) => {
-      const line = '[' + String(item.source || 'system') + '] ' + clockOf(item.at) + ' ' + (item.summary || item.kind || item.id)
+      const line =
+        '[' + String(item.source || 'system') + '] ' + clockOf(item.at) + ' ' + (item.summary || item.kind || item.id)
       try {
         if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(line).then(() => setNote('已复制: ' + (item.summary || item.kind)), () => setNote('复制失败'))
-        } else { setNote('复制失败（无剪贴板）') }
-      } catch { setNote('复制失败') }
+          navigator.clipboard.writeText(line).then(
+            () => setNote('已复制: ' + (item.summary || item.kind)),
+            () => setNote('复制失败'),
+          )
+        } else {
+          setNote('复制失败（无剪贴板）')
+        }
+      } catch {
+        setNote('复制失败')
+      }
     }
-    const viewFrames = (item) => { if (helpers && typeof helpers.openFrames === 'function') { try { helpers.openFrames() } catch {} } }
-    return el('div', { className: 'dvb-page' },
-      el('div', { className: 'dvb-toolbar', style: { flexWrap: 'wrap' } },
-        FILTERS.map((f) => el('button', {
-          key: f.key,
-          type: 'button',
-          className: 'dvb-btn dvb-btn-sm' + (filter === f.key ? ' dvb-btn-primary' : ''),
-          onClick() { setFilter(f.key) },
-        }, f.label)),
+    const viewFrames = (item) => {
+      if (helpers && typeof helpers.openFrames === 'function') {
+        try {
+          helpers.openFrames()
+        } catch {}
+      }
+    }
+    return el(
+      'div',
+      { className: 'dvb-page' },
+      el(
+        'div',
+        { className: 'dvb-toolbar', style: { flexWrap: 'wrap' } },
+        FILTERS.map((f) =>
+          el(
+            'button',
+            {
+              key: f.key,
+              type: 'button',
+              className: 'dvb-btn dvb-btn-sm' + (filter === f.key ? ' dvb-btn-primary' : ''),
+              onClick() {
+                setFilter(f.key)
+              },
+            },
+            f.label,
+          ),
+        ),
         running.length ? el('span', { className: 'dvb-tag' }, '运行中 ' + running.length) : null,
-        el('span', { className: 'dvb-hint' }, '共 ' + filtered.length + ' 条')),
-      tasks.length ? el('div', { className: 'dvb-journal' },
-        el('div', { className: 'dvb-journal-title' }, t('tasks') || '任务'),
-        tasks.slice(0, 6).map((item) => el('div', { key: item.id, className: 'dvb-task', 'data-status': item.status, 'data-source': item.source },
-          el('span', { className: 'dvb-badge' }, clockOf(item.startedAt)),
-          el('span', { className: 'dvb-badge', 'data-source': item.source }, String(item.source || '')),
-          el('span', null, item.summary || String(item.type || '任务')),
-          item.status ? el('span', { className: 'dvb-badge' }, String(item.status)) : null))) : null,
-      filtered.length ? el('div', { className: 'dvb-journal' },
-        el('div', { className: 'dvb-journal-title' }, t('liveLog') || '操作记录'),
-        filtered.slice(-200).reverse().map((item) => el('div', {
-          key: item.id,
-          className: 'dvb-event',
-          'data-source': item.source,
-          'data-ok': item.ok === false ? 'false' : item.ok === true ? 'true' : '',
-        },
-          el('span', { className: 'dvb-badge' }, clockOf(item.at)),
-          el('span', { className: 'dvb-badge', 'data-source': item.source }, String(item.source || 'system')),
-          el('span', { className: 'dvb-hint', title: item.kind + (item.taskId ? ' · ' + item.taskId : '') }, item.summary || item.kind || item.id),
-          item.pointId || item.connectionId ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '跳转到目标', onClick() { jump(item) } }, t('logJump') || '跳转') : null,
-          el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '复制给 Agent', onClick() { copyLine(item) } }, t('logCopyAgent') || '复制'),
-          item.frameId ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { viewFrames(item) } }, t('logViewFrames') || '报文') : null))) : null,
-      note ? el('div', { className: 'dvb-hint' }, note) : null)
+        el('span', { className: 'dvb-hint' }, '共 ' + filtered.length + ' 条'),
+      ),
+      tasks.length
+        ? el(
+            'div',
+            { className: 'dvb-journal' },
+            el('div', { className: 'dvb-journal-title' }, t('tasks') || '任务'),
+            tasks
+              .slice(0, 6)
+              .map((item) =>
+                el(
+                  'div',
+                  { key: item.id, className: 'dvb-task', 'data-status': item.status, 'data-source': item.source },
+                  el('span', { className: 'dvb-badge' }, clockOf(item.startedAt)),
+                  el('span', { className: 'dvb-badge', 'data-source': item.source }, String(item.source || '')),
+                  el('span', null, item.summary || String(item.type || '任务')),
+                  item.status ? el('span', { className: 'dvb-badge' }, String(item.status)) : null,
+                ),
+              ),
+          )
+        : null,
+      filtered.length
+        ? el(
+            'div',
+            { className: 'dvb-journal' },
+            el('div', { className: 'dvb-journal-title' }, t('liveLog') || '操作记录'),
+            filtered
+              .slice(-200)
+              .reverse()
+              .map((item) =>
+                el(
+                  'div',
+                  {
+                    key: item.id,
+                    className: 'dvb-event',
+                    'data-source': item.source,
+                    'data-ok': item.ok === false ? 'false' : item.ok === true ? 'true' : '',
+                  },
+                  el('span', { className: 'dvb-badge' }, clockOf(item.at)),
+                  el('span', { className: 'dvb-badge', 'data-source': item.source }, String(item.source || 'system')),
+                  el(
+                    'span',
+                    { className: 'dvb-hint', title: item.kind + (item.taskId ? ' · ' + item.taskId : '') },
+                    item.summary || item.kind || item.id,
+                  ),
+                  item.pointId || item.connectionId
+                    ? el(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'dvb-btn dvb-btn-sm',
+                          title: '跳转到目标',
+                          onClick() {
+                            jump(item)
+                          },
+                        },
+                        t('logJump') || '跳转',
+                      )
+                    : null,
+                  el(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'dvb-btn dvb-btn-sm',
+                      title: '复制给 Agent',
+                      onClick() {
+                        copyLine(item)
+                      },
+                    },
+                    t('logCopyAgent') || '复制',
+                  ),
+                  item.frameId
+                    ? el(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'dvb-btn dvb-btn-sm',
+                          onClick() {
+                            viewFrames(item)
+                          },
+                        },
+                        t('logViewFrames') || '报文',
+                      )
+                    : null,
+                ),
+              ),
+          )
+        : null,
+      note ? el('div', { className: 'dvb-hint' }, note) : null,
+    )
   }
 }
 
@@ -9721,28 +11976,36 @@ function registerLive(ctx, React, t, LivePage, pages = {}) {
   const stops = [
     bs.registerTab({
       id: TAB_CHART,
-      title() { return t('liveChart') },
+      title() {
+        return t('liveChart')
+      },
       single: true,
       order: 71,
       component: TrendPage,
     }),
     bs.registerTab({
       id: TAB_ALARM,
-      title() { return t('liveAlarm') },
+      title() {
+        return t('liveAlarm')
+      },
       single: true,
       order: 72,
       component: AlarmPage,
     }),
     bs.registerTab({
       id: TAB_FRAMES,
-      title() { return t('framesTab') },
+      title() {
+        return t('framesTab')
+      },
       single: true,
       order: 73,
       component: FramesPage,
     }),
     bs.registerTab({
       id: TAB_LOG,
-      title() { return t('liveLog') },
+      title() {
+        return t('liveLog')
+      },
       single: true,
       order: 74,
       component: LogPage,
@@ -9800,9 +12063,10 @@ function buildFramePortOptions(connections, serialPorts, mode, liveSources) {
 }
 
 const selectProtocolFrames = (framesByConnection, selection) => {
-  const sel = typeof selection === 'object' && selection !== null
-    ? parseFramePortSelection(selection.value)
-    : parseFramePortSelection(selection)
+  const sel =
+    typeof selection === 'object' && selection !== null
+      ? parseFramePortSelection(selection.value)
+      : parseFramePortSelection(selection)
   const map = framesByConnection && typeof framesByConnection === 'object' ? framesByConnection : {}
   if (sel.kind === 'conn') {
     return Array.isArray(map[sel.connectionId]) ? map[sel.connectionId].slice() : []
@@ -9841,9 +12105,7 @@ const countAddedFrameIds = (prevIds, nextFrames) => {
   const prev = prevIds instanceof Set ? prevIds : new Set(prevIds || [])
   let added = 0
   for (const f of Array.isArray(nextFrames) ? nextFrames : []) {
-    const id = typeof f === 'string' || typeof f === 'number'
-      ? String(f)
-      : (f && (f.frameId || f.id))
+    const id = typeof f === 'string' || typeof f === 'number' ? String(f) : f && (f.frameId || f.id)
     if (id != null && id !== '' && !prev.has(String(id))) added += 1
   }
   return added
@@ -9855,8 +12117,9 @@ const frameStreamKey = (mode, selection) => {
 }
 
 const rawLineId = (port, line, index) => {
-  if (line && (line.id != null)) return String(line.connectionId || port || '') + ':' + String(line.epoch || '') + ':' + String(line.id)
-  return String(port || 'raw') + ':' + String(line && (line.t || line.at) || 0) + ':' + String(index || 0)
+  if (line && line.id != null)
+    return String(line.connectionId || port || '') + ':' + String(line.epoch || '') + ':' + String(line.id)
+  return String(port || 'raw') + ':' + String((line && (line.t || line.at)) || 0) + ':' + String(index || 0)
 }
 
 function resolveFrameSelection(value, connections) {
@@ -9891,13 +12154,24 @@ function createFramesPage(React, t, post, hooks) {
         if (props && props.scope && props.scope.cwd) return props.scope.cwd
         if (props && props.useSessions) {
           const sid = (props.scope && props.scope.sessionId) || props.sessionId
-          return props.useSessions((s) => (s.byId && sid && s.byId[sid] && s.byId[sid].cwd) || (s.byId && s.current && s.byId[s.current] && s.byId[s.current].cwd) || '')
+          return props.useSessions(
+            (s) =>
+              (s.byId && sid && s.byId[sid] && s.byId[sid].cwd) ||
+              (s.byId && s.current && s.byId[s.current] && s.byId[s.current].cwd) ||
+              '',
+          )
         }
       } catch {}
       return ''
     })()
     const [health, setHealth] = React.useState({})
-    const [modbus, setModbus] = React.useState({ version: 3, connections: [], devices: [], points: [], framesByConnection: {} })
+    const [modbus, setModbus] = React.useState({
+      version: 3,
+      connections: [],
+      devices: [],
+      points: [],
+      framesByConnection: {},
+    })
     const [ports, setPorts] = React.useState([])
     const [selection, setSelection] = React.useState('all')
     const [mode, setMode] = React.useState('proto')
@@ -9933,7 +12207,10 @@ function createFramesPage(React, t, post, hooks) {
           setLiveEpoch((n) => n + 1)
         } catch {}
       }, 1200)
-      return () => { stop = true; clearInterval(timer) }
+      return () => {
+        stop = true
+        clearInterval(timer)
+      }
     }, [realCwd])
 
     React.useEffect(() => {
@@ -9941,38 +12218,53 @@ function createFramesPage(React, t, post, hooks) {
       let stop = false
       const timer = setInterval(() => {
         const selNow = parseFramePortSelection(selection)
-        post('/dsh-vision-bench/serial/feed', {
-          cwd: realCwd,
-          connectionId: selNow.kind === 'conn' ? selNow.connectionId : '',
-          since: selNow.kind === 'conn' ? serial.lastId : serial.lastAt,
-        }, 10000).then((data) => {
-          if (stop || !data) return
-          const incoming = Array.isArray(data.lines) ? data.lines : []
-          setSerial((prev) => {
-            const seen = new Set()
-            const lines = []
-            for (const l of prev.lines.concat(incoming)) {
-              const id = rawLineId(l.port, l, 0)
-              if (seen.has(id)) continue
-              seen.add(id)
-              lines.push(l)
-            }
-            const lastAt = lines.reduce((m, l) => Math.max(m, Number(l.at || l.t || 0)), prev.lastAt || 0)
-            return {
-              ...prev,
-              lastId: data.lastId || prev.lastId,
-              lastAt,
-              lines: lines.slice(-2000),
-              error: data.error || '',
-            }
+        post(
+          '/dsh-vision-bench/serial/feed',
+          {
+            cwd: realCwd,
+            connectionId: selNow.kind === 'conn' ? selNow.connectionId : '',
+            since: selNow.kind === 'conn' ? serial.lastId : serial.lastAt,
+          },
+          10000,
+        )
+          .then((data) => {
+            if (stop || !data) return
+            const incoming = Array.isArray(data.lines) ? data.lines : []
+            setSerial((prev) => {
+              const seen = new Set()
+              const lines = []
+              for (const l of prev.lines.concat(incoming)) {
+                const id = rawLineId(l.port, l, 0)
+                if (seen.has(id)) continue
+                seen.add(id)
+                lines.push(l)
+              }
+              const lastAt = lines.reduce((m, l) => Math.max(m, Number(l.at || l.t || 0)), prev.lastAt || 0)
+              return {
+                ...prev,
+                lastId: data.lastId || prev.lastId,
+                lastAt,
+                lines: lines.slice(-2000),
+                error: data.error || '',
+              }
+            })
+            setLiveEpoch((n) => n + 1)
           })
-          setLiveEpoch((n) => n + 1)
-        }).catch(() => {})
+          .catch(() => {})
       }, 700)
-      return () => { stop = true; clearInterval(timer) }
+      return () => {
+        stop = true
+        clearInterval(timer)
+      }
     }, [realCwd, mode, serial.lastId, selection])
 
-    const pack = (() => { try { return normalizeModbus(modbus) } catch { return { connections: [], devices: [], points: [], framesByConnection: {} } } })()
+    const pack = (() => {
+      try {
+        return normalizeModbus(modbus)
+      } catch {
+        return { connections: [], devices: [], points: [], framesByConnection: {} }
+      }
+    })()
     const connections = Array.isArray(pack.connections) ? pack.connections : []
     const devices = Array.isArray(pack.devices) ? pack.devices : []
     const framesByConnection = (pack && pack.framesByConnection) || {}
@@ -10013,9 +12305,7 @@ function createFramesPage(React, t, post, hooks) {
     }
 
     // Task6/0.18.3: display snapshot ONLY from state — no setState during render
-    let displayedFrames = paused && pausedSnapshot
-      ? (pausedSnapshot[mode] || [])
-      : liveFrames
+    let displayedFrames = paused && pausedSnapshot ? pausedSnapshot[mode] || [] : liveFrames
 
     // filters + search run on the DISPLAYED layer
     let filtered = displayedFrames
@@ -10024,7 +12314,10 @@ function createFramesPage(React, t, post, hooks) {
     if (filters.status) filtered = filtered.filter((f) => f.status === filters.status)
     if (filters.source) filtered = filtered.filter((f) => (f.source || '') === filters.source)
     const needle = search.trim().toLowerCase()
-    if (needle) filtered = filtered.filter((f) => (f.request + ' ' + f.response + ' ' + f.label + ' ' + (f.connectionId || '')).toLowerCase().includes(needle))
+    if (needle)
+      filtered = filtered.filter((f) =>
+        (f.request + ' ' + f.response + ' ' + f.label + ' ' + (f.connectionId || '')).toLowerCase().includes(needle),
+      )
 
     // Task5+6/0.18.3: per-stream idle/added accounting with FULL previous-id sets.
     // Cursors are keyed by mode|selection so COM/connection/mode never pollute
@@ -10076,7 +12369,10 @@ function createFramesPage(React, t, post, hooks) {
       else {
         const cursors = cursorRef.current
         const cur = cursors.get(streamKey)
-        if (cur) { cur.pausedAnchor = null; cur.anchor = new Set(liveIds) }
+        if (cur) {
+          cur.pausedAnchor = null
+          cur.anchor = new Set(liveIds)
+        }
         setPendingNew(0)
       }
       setPaused(false)
@@ -10107,10 +12403,10 @@ function createFramesPage(React, t, post, hooks) {
       // when DOM row heights are approximate (happy-dom / first paint).
       if (inst && typeof inst.scrollToOffset === 'function') {
         const viewH = (el && el.clientHeight) || 320
-        const total = typeof inst.getTotalSize === 'function' ? inst.getTotalSize() : (filtered.length * ESTIMATE_SIZE)
+        const total = typeof inst.getTotalSize === 'function' ? inst.getTotalSize() : filtered.length * ESTIMATE_SIZE
         inst.scrollToOffset(Math.max(0, total - viewH), { align: 'start' })
       } else if (el) {
-        el.scrollTop = el.scrollHeight || (filtered.length * ESTIMATE_SIZE)
+        el.scrollTop = el.scrollHeight || filtered.length * ESTIMATE_SIZE
       }
       if (updateRef) wasAtBottomRef.current = true
       setPendingNew(0)
@@ -10141,7 +12437,7 @@ function createFramesPage(React, t, post, hooks) {
       overscan: OVERS_CAN,
       getItemKey: (index) => {
         const f = filtered[index]
-        return f ? (f.frameId || f.id || String(index)) : String(index)
+        return f ? f.frameId || f.id || String(index) : String(index)
       },
       onChange: (instance) => {
         const el = listRef.current
@@ -10152,11 +12448,16 @@ function createFramesPage(React, t, post, hooks) {
         }
       },
     })
-    const measureRow = vizer && typeof vizer.measureElement === 'function'
-      ? (node) => { if (node) vizer.measureElement(node) }
-      : undefined
+    const measureRow =
+      vizer && typeof vizer.measureElement === 'function'
+        ? (node) => {
+            if (node) vizer.measureElement(node)
+          }
+        : undefined
     const trackingRef = measureRow
-      ? (node) => { if (node) vizer.measureElement(node) }
+      ? (node) => {
+          if (node) vizer.measureElement(node)
+        }
       : undefined
 
     const virtualRows = vizer && vizer.getVirtualItems ? vizer.getVirtualItems() : []
@@ -10190,153 +12491,372 @@ function createFramesPage(React, t, post, hooks) {
           'hex: ' + String(frame.hex || ''),
           'text: ' + String(frame.text || frame.line || ''),
         ].join('\n')
-        try { navigator.clipboard.writeText(text).then(() => { setCopied('copy'); setTimeout(() => setCopied(''), 1500) }) } catch {}
+        try {
+          navigator.clipboard.writeText(text).then(() => {
+            setCopied('copy')
+            setTimeout(() => setCopied(''), 1500)
+          })
+        } catch {}
         return
       }
       const configVersion = Number(pack.configVersion) > 0 ? Number(pack.configVersion) : null
-      if (!configVersion) { setCopied('no-version'); setTimeout(() => setCopied(''), 2000); return }
+      if (!configVersion) {
+        setCopied('no-version')
+        setTimeout(() => setCopied(''), 2000)
+        return
+      }
       // Task4: typed evidence reference — kind frame with frameId, not id-as-point
-      const ref = buildAgentRef('frame', {
-        frameId: frame.frameId || frame.id,
-        connectionId: frame.connectionId,
-        deviceId: frame.deviceId,
-        label: frame.label,
-        transactionId: frame.transactionId,
-      }, { configVersion, start: (frame.t || frame.at || Date.now()) - 5 * 60 * 1000, end: frame.t || frame.at || Date.now() })
+      const ref = buildAgentRef(
+        'frame',
+        {
+          frameId: frame.frameId || frame.id,
+          connectionId: frame.connectionId,
+          deviceId: frame.deviceId,
+          label: frame.label,
+          transactionId: frame.transactionId,
+        },
+        {
+          configVersion,
+          start: (frame.t || frame.at || Date.now()) - 5 * 60 * 1000,
+          end: frame.t || frame.at || Date.now(),
+        },
+      )
       const res = await dispatchAgentRef(ref, agentBridge)
       const labelByMode = { input: '已加入输入框', sent: '已发送', copied: '已复制组件引用', failed: '复制失败' }
-      setCopied(labelByMode[(res && res.mode) || 'failed'] || ((res && res.status) || '复制失败'))
+      setCopied(labelByMode[(res && res.mode) || 'failed'] || (res && res.status) || '复制失败')
       setTimeout(() => setCopied(''), 2000)
       // Task4/0.18.2: evidence append must surface CONFIG_DRIFT/TARGET_MISMATCH, never silent
       postEvidence(post, realCwd, evidenceFromRef(ref), (reason) => {
         setError(reason)
         // reference already entered the input — keep the ref text visible
-        try { copyAgentRef(ref) } catch {}
+        try {
+          copyAgentRef(ref)
+        } catch {}
       })
     }
 
     function copyFrames() {
-      const text = filtered.map((f) => `[${new Date(f.t || f.at).toLocaleTimeString()}] ${f.direction || 'tx'} ${f.request || ''} ${f.response ? '← ' + f.response : ''} ${f.connectionId || ''}`).join('\n')
+      const text = filtered
+        .map(
+          (f) =>
+            `[${new Date(f.t || f.at).toLocaleTimeString()}] ${f.direction || 'tx'} ${f.request || ''} ${f.response ? '← ' + f.response : ''} ${f.connectionId || ''}`,
+        )
+        .join('\n')
       if (!text) return
-      try { navigator.clipboard.writeText(text).then(() => { setCopied('copy'); setTimeout(() => setCopied(''), 1500) }) } catch {}
+      try {
+        navigator.clipboard.writeText(text).then(() => {
+          setCopied('copy')
+          setTimeout(() => setCopied(''), 1500)
+        })
+      } catch {}
     }
     function exportFrames() {
       const blob = filtered.map((f) => JSON.stringify(f)).join('\n')
       if (!blob) return
-      try { navigator.clipboard.writeText(blob).then(() => { setCopied('export'); setTimeout(() => setCopied(''), 1500) }) } catch {}
+      try {
+        navigator.clipboard.writeText(blob).then(() => {
+          setCopied('export')
+          setTimeout(() => setCopied(''), 1500)
+        })
+      } catch {}
     }
 
-    const banner = !paused && pendingNew > 0
-      ? '有 ' + pendingNew + ' 条新报文 · 点击回到底部'
-      : (paused ? '已暂停' + (pendingNew > 0 ? '，新增 ' + pendingNew + ' 条' : '') : '')
+    const banner =
+      !paused && pendingNew > 0
+        ? '有 ' + pendingNew + ' 条新报文 · 点击回到底部'
+        : paused
+          ? '已暂停' + (pendingNew > 0 ? '，新增 ' + pendingNew + ' 条' : '')
+          : ''
 
     // fallback rows (vendor missing) shape: {index,start,size,key} per plan
-    const fallbackRows = !vizer && vendorVirtualizer() === null
-      ? filtered.slice(0, 30).map((f, index) => ({ index, start: index * ESTIMATE_SIZE, size: ESTIMATE_SIZE, key: f.frameId || f.id || String(index), f }))
-      : []
+    const fallbackRows =
+      !vizer && vendorVirtualizer() === null
+        ? filtered.slice(0, 30).map((f, index) => ({
+            index,
+            start: index * ESTIMATE_SIZE,
+            size: ESTIMATE_SIZE,
+            key: f.frameId || f.id || String(index),
+            f,
+          }))
+        : []
     const rows = vizer ? virtualRows : fallbackRows
 
     const selectedGone = sel.kind === 'conn' && !serialSources.some((s) => s.connectionId === sel.connectionId)
 
-    return el('div', { className: 'dvb-live dvb-frames-page', 'data-mode': mode },
-      el('div', { className: 'dvb-live-head' },
+    return el(
+      'div',
+      { className: 'dvb-live dvb-frames-page', 'data-mode': mode },
+      el(
+        'div',
+        { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('framesTab') || '串口报文'),
-        el('button', { type: 'button', className: 'dvb-btn' + (mode === 'proto' ? ' is-on' : ''), onClick() { switchMode('proto') } }, t('framesProto') || '协议报文'),
-        el('button', { type: 'button', className: 'dvb-btn' + (mode === 'raw' ? ' is-on' : ''), onClick() { switchMode('raw') } }, t('framesRaw') || '原始数据'),
-        el('button', { type: 'button', className: 'dvb-btn', onClick: togglePause }, paused ? (t('serialResume') || '恢复') : (t('serialPause') || '暂停')),
+        el(
+          'button',
+          {
+            type: 'button',
+            className: 'dvb-btn' + (mode === 'proto' ? ' is-on' : ''),
+            onClick() {
+              switchMode('proto')
+            },
+          },
+          t('framesProto') || '协议报文',
+        ),
+        el(
+          'button',
+          {
+            type: 'button',
+            className: 'dvb-btn' + (mode === 'raw' ? ' is-on' : ''),
+            onClick() {
+              switchMode('raw')
+            },
+          },
+          t('framesRaw') || '原始数据',
+        ),
+        el(
+          'button',
+          { type: 'button', className: 'dvb-btn', onClick: togglePause },
+          paused ? t('serialResume') || '恢复' : t('serialPause') || '暂停',
+        ),
         el('button', { type: 'button', className: 'dvb-btn', onClick: clearView }, t('framesClearView') || '清空显示'),
-        el('button', { type: 'button', className: 'dvb-btn', disabled: !filtered.length, onClick: exportFrames }, t('framesExport') || '导出')
+        el(
+          'button',
+          { type: 'button', className: 'dvb-btn', disabled: !filtered.length, onClick: exportFrames },
+          t('framesExport') || '导出',
+        ),
       ),
       selectedGone
-        ? el('div', { className: 'dvb-hint' },
-          el('div', null, (sel.port || sel.connectionId) + ' ' + (t('framesDisconnected') || '已断开，已停止接收新报文。历史报文仍可查看。')),
-          el('button', { type: 'button', className: 'dvb-btn', onClick() { setSelection('all') } }, t('framesPickOther') || '选择其他串口'))
+        ? el(
+            'div',
+            { className: 'dvb-hint' },
+            el(
+              'div',
+              null,
+              (sel.port || sel.connectionId) +
+                ' ' +
+                (t('framesDisconnected') || '已断开，已停止接收新报文。历史报文仍可查看。'),
+            ),
+            el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn',
+                onClick() {
+                  setSelection('all')
+                },
+              },
+              t('framesPickOther') || '选择其他串口',
+            ),
+          )
         : null,
-      el('div', { className: 'dvb-toolbar' },
-        el('select', { className: 'dvb-input', value: selection, onChange: (e) => { setSelection(e.target.value); setPendingNew(0) } },
-          portOptions.map((o) => el('option', { key: o.value, value: o.value }, o.label))
+      el(
+        'div',
+        { className: 'dvb-toolbar' },
+        el(
+          'select',
+          {
+            className: 'dvb-input',
+            value: selection,
+            onChange: (e) => {
+              setSelection(e.target.value)
+              setPendingNew(0)
+            },
+          },
+          portOptions.map((o) => el('option', { key: o.value, value: o.value }, o.label)),
         ),
-        el('button', { type: 'button', className: 'dvb-btn', onClick() { setShowFilters((v) => !v) } }, t('framesFilters') || '筛选'),
-        el('input', { className: 'dvb-input', value: search, placeholder: t('serialFilter') || '搜索报文……', onChange: (e) => setSearch(e.target.value) })
+        el(
+          'button',
+          {
+            type: 'button',
+            className: 'dvb-btn',
+            onClick() {
+              setShowFilters((v) => !v)
+            },
+          },
+          t('framesFilters') || '筛选',
+        ),
+        el('input', {
+          className: 'dvb-input',
+          value: search,
+          placeholder: t('serialFilter') || '搜索报文……',
+          onChange: (e) => setSearch(e.target.value),
+        }),
       ),
       showFilters && mode === 'proto'
-        ? el('div', { className: 'dvb-toolbar' },
-          el('select', { className: 'dvb-input', value: filters.deviceId, onChange: (e) => setFilters((p) => ({ ...p, deviceId: e.target.value })) },
-            el('option', { value: '' }, '全部设备'), devices.map((d) => el('option', { key: d.id, value: d.id }, d.name + ' · 站号 ' + d.unitId))
-          ),
-          el('select', { className: 'dvb-input', value: filters.functionCode, onChange: (e) => setFilters((p) => ({ ...p, functionCode: e.target.value })) },
-            el('option', { value: '' }, '全部功能码'), [1, 2, 3, 4, 5, 6, 15, 16].map((fc) => el('option', { key: String(fc), value: String(fc) }, 'FC' + fc))
-          ),
-          el('select', { className: 'dvb-input', value: filters.status, onChange: (e) => setFilters((p) => ({ ...p, status: e.target.value })) },
-            el('option', { value: '' }, '全部状态'), el('option', { value: 'ok' }, '成功'), el('option', { value: 'err' }, '失败')
-          ),
-          el('select', { className: 'dvb-input', value: filters.source, onChange: (e) => setFilters((p) => ({ ...p, source: e.target.value })) },
-            el('option', { value: '' }, '全部来源'), el('option', { value: 'manual' }, '用户'), el('option', { value: 'polling' }, '自动刷新'), el('option', { value: 'agent' }, 'Agent')
-          ))
+        ? el(
+            'div',
+            { className: 'dvb-toolbar' },
+            el(
+              'select',
+              {
+                className: 'dvb-input',
+                value: filters.deviceId,
+                onChange: (e) => setFilters((p) => ({ ...p, deviceId: e.target.value })),
+              },
+              el('option', { value: '' }, '全部设备'),
+              devices.map((d) => el('option', { key: d.id, value: d.id }, d.name + ' · 站号 ' + d.unitId)),
+            ),
+            el(
+              'select',
+              {
+                className: 'dvb-input',
+                value: filters.functionCode,
+                onChange: (e) => setFilters((p) => ({ ...p, functionCode: e.target.value })),
+              },
+              el('option', { value: '' }, '全部功能码'),
+              [1, 2, 3, 4, 5, 6, 15, 16].map((fc) => el('option', { key: String(fc), value: String(fc) }, 'FC' + fc)),
+            ),
+            el(
+              'select',
+              {
+                className: 'dvb-input',
+                value: filters.status,
+                onChange: (e) => setFilters((p) => ({ ...p, status: e.target.value })),
+              },
+              el('option', { value: '' }, '全部状态'),
+              el('option', { value: 'ok' }, '成功'),
+              el('option', { value: 'err' }, '失败'),
+            ),
+            el(
+              'select',
+              {
+                className: 'dvb-input',
+                value: filters.source,
+                onChange: (e) => setFilters((p) => ({ ...p, source: e.target.value })),
+              },
+              el('option', { value: '' }, '全部来源'),
+              el('option', { value: 'manual' }, '用户'),
+              el('option', { value: 'polling' }, '自动刷新'),
+              el('option', { value: 'agent' }, 'Agent'),
+            ),
+          )
         : null,
       serial.error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, serial.error) : null,
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
       copied ? el('div', { className: 'dvb-hint' }, copied) : null,
-      !filtered.length && !vizer && vendorVirtualizer() === null ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, '虚拟列表依赖未加载') : null,
+      !filtered.length && !vizer && vendorVirtualizer() === null
+        ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, '虚拟列表依赖未加载')
+        : null,
       !filtered.length ? el('div', { className: 'dvb-hint' }, t('framesEmpty') || '暂无报文') : null,
-      banner ? el('div', { className: 'dvb-hint dvb-new-banner', onClick: () => scrollToLatest(), role: 'button' }, banner) : null,
-      el('div', { className: 'dvb-live-list dvb-frames-virtual', style: { height: '320px', overflowY: 'auto', position: 'relative' }, ref: listRef, onScroll: () => {
-        const el2 = listRef.current
-        if (el2) wasAtBottomRef.current = framesShouldStickToBottom(el2.scrollTop, el2.scrollHeight, el2.clientHeight)
-      } },
-        el('div', { style: { height: totalHeight + 'px', position: 'relative', width: '100%' } },
+      banner
+        ? el('div', { className: 'dvb-hint dvb-new-banner', onClick: () => scrollToLatest(), role: 'button' }, banner)
+        : null,
+      el(
+        'div',
+        {
+          className: 'dvb-live-list dvb-frames-virtual',
+          style: { height: '320px', overflowY: 'auto', position: 'relative' },
+          ref: listRef,
+          onScroll: () => {
+            const el2 = listRef.current
+            if (el2)
+              wasAtBottomRef.current = framesShouldStickToBottom(el2.scrollTop, el2.scrollHeight, el2.clientHeight)
+          },
+        },
+        el(
+          'div',
+          { style: { height: totalHeight + 'px', position: 'relative', width: '100%' } },
           rows.map((item) => {
             const f = filtered[item.index]
             if (!f) return null
             const fid = f.frameId || f.id
-            const srcLabel = f.source === 'agent' ? (t('framesSrcAgent') || 'Agent') : f.source === 'polling' ? (t('framesSrcPoll') || '自动刷新') : (f.source ? (t('framesSrcUser') || '用户') : '')
+            const srcLabel =
+              f.source === 'agent'
+                ? t('framesSrcAgent') || 'Agent'
+                : f.source === 'polling'
+                  ? t('framesSrcPoll') || '自动刷新'
+                  : f.source
+                    ? t('framesSrcUser') || '用户'
+                    : ''
             const dev = devices.find((d) => d.id === f.deviceId)
-            return el('div', {
-              key: fid !== undefined ? String(fid) : String(item.key !== undefined ? item.key : item.index),
-              className: 'dvb-live-row' + (String(fid) === String(selectedFrameId) ? ' is-on' : ''),
-              ref: trackingRef,
-              'data-index': item.index,
-              'data-frameid': fid !== undefined ? String(fid) : '',
-              style: { position: 'absolute', top: 0, left: 0, width: '100%', transform: 'translateY(' + item.start + 'px)', height: (item.size || ESTIMATE_SIZE) + 'px' },
-              onClick() { setSelectedFrameId(String(fid || '')) },
-            },
+            return el(
+              'div',
+              {
+                key: fid !== undefined ? String(fid) : String(item.key !== undefined ? item.key : item.index),
+                className: 'dvb-live-row' + (String(fid) === String(selectedFrameId) ? ' is-on' : ''),
+                ref: trackingRef,
+                'data-index': item.index,
+                'data-frameid': fid !== undefined ? String(fid) : '',
+                style: {
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: 'translateY(' + item.start + 'px)',
+                  height: (item.size || ESTIMATE_SIZE) + 'px',
+                },
+                onClick() {
+                  setSelectedFrameId(String(fid || ''))
+                },
+              },
               el('span', { className: 'dvb-map-meta' }, new Date(f.t || f.at || Date.now()).toLocaleTimeString()),
               el('span', { className: 'dvb-hint' }, f.port || f.connectionId || ''),
               mode === 'raw'
                 ? el('span', { className: 'dvb-badge' }, (f.direction || 'tx').toUpperCase())
                 : el('span', { className: 'dvb-hint' }, (dev && dev.name) || f.deviceName || f.deviceId || ''),
               mode === 'raw'
-                ? el('span', { className: 'dvb-hint' }, String(f.bytes || f.byteLength || ((f.hex || '').length / 2) || ''))
+                ? el(
+                    'span',
+                    { className: 'dvb-hint' },
+                    String(f.bytes || f.byteLength || (f.hex || '').length / 2 || ''),
+                  )
                 : el('span', { className: 'dvb-hint', title: '站号' }, String(f.unitId || (dev && dev.unitId) || '—')),
               mode === 'raw'
                 ? el('span', { className: 'dvb-hint' }, f.hex || f.request || '')
                 : el('span', { className: 'dvb-hint' }, 'FC' + String(f.functionCode || '')),
-              mode === 'proto' ? el('span', { className: 'dvb-hint' }, (f.durationMs != null ? f.durationMs + 'ms' : '')) : null,
+              mode === 'proto'
+                ? el('span', { className: 'dvb-hint' }, f.durationMs != null ? f.durationMs + 'ms' : '')
+                : null,
               srcLabel ? el('span', { className: 'dvb-hint' }, srcLabel) : null,
-              mode === 'proto' ? el('span', { className: 'dvb-badge', 'data-kind': f.status === 'ok' ? 'ready' : 'err' }, f.status === 'ok' ? '成功' : (f.status || '失败')) : null,
-              el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: hasHarnessInput(props) ? '让 Agent 分析' : '复制给 Agent', onClick(ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); sendToAgent(f) } }, copied === '已加入输入框' ? '已加入' : (copied === '已发送' ? '已发送' : 'AI'))
+              mode === 'proto'
+                ? el(
+                    'span',
+                    { className: 'dvb-badge', 'data-kind': f.status === 'ok' ? 'ready' : 'err' },
+                    f.status === 'ok' ? '成功' : f.status || '失败',
+                  )
+                : null,
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn dvb-btn-sm',
+                  title: hasHarnessInput(props) ? '让 Agent 分析' : '复制给 Agent',
+                  onClick(ev) {
+                    if (ev && ev.stopPropagation) ev.stopPropagation()
+                    sendToAgent(f)
+                  },
+                },
+                copied === '已加入输入框' ? '已加入' : copied === '已发送' ? '已发送' : 'AI',
+              ),
             )
-          })
-        )
+          }),
+        ),
       ),
       (() => {
         const f = filtered.find((row) => String(row.frameId || row.id) === String(selectedFrameId))
         if (!f) return null
         const srcLabel = f.source === 'agent' ? 'Agent' : f.source === 'polling' ? '自动刷新' : '用户'
-        return el('div', { className: 'dvb-panel' },
+        return el(
+          'div',
+          { className: 'dvb-panel' },
           el('div', { className: 'dvb-hint' }, '发送：' + (f.request || f.hex || '')),
           f.response ? el('div', { className: 'dvb-hint' }, '接收：' + f.response) : null,
           el('div', { className: 'dvb-hint' }, '来源：' + srcLabel),
           el('div', { className: 'dvb-hint' }, '事务：' + (f.transactionId || f.frameId || '')),
           f.sessionId ? el('div', { className: 'dvb-hint' }, 'sessionId：' + f.sessionId) : null,
-          f.toolCallId ? el('div', { className: 'dvb-hint' }, 'toolCallId：' + f.toolCallId) : null)
+          f.toolCallId ? el('div', { className: 'dvb-hint' }, 'toolCallId：' + f.toolCallId) : null,
+        )
       })(),
-      el('div', { className: 'dvb-hint' }, mode === 'raw'
-        ? (t('framesRawHint') || '原始串口字节流')
-        : (t('framesProtoHint') || 'Modbus 事务报文 · TCP 显示协议归一化报文，不是原始 MBAP'))
+      el(
+        'div',
+        { className: 'dvb-hint' },
+        mode === 'raw'
+          ? t('framesRawHint') || '原始串口字节流'
+          : t('framesProtoHint') || 'Modbus 事务报文 · TCP 显示协议归一化报文，不是原始 MBAP',
+      ),
     )
   }
 }
+
 // Task5/0.19.3: 工程结构 — 组/文件/函数三级展开折叠 + 搜索 + 筛选
 // (缺失/不可读/工作区外) + 文件操作（预览源码/复制路径/让Agent分析/Include 关系）+
 // 可折叠的 编译配置（Include 路径、宏、依赖边）。侧栏「工程」→「工程结构」。
@@ -10365,20 +12885,27 @@ function createMapView(React, t, post) {
         setMapped(null)
         return undefined
       }
-      return subscribeState(post, cwd, (data) => {
-        if (!data || data.ok === false) return
-        const next = data.workspace && data.workspace.keil ? data.workspace.keil : {}
-        const project = next.project || ''
-        const target = next.target || ''
-        // Task5/0.19.3: 编译错误定位 — 调试页点击错误后写入 jump 目标
-        const jump = data.workspace && data.workspace.jumpProject
-        if (jump && jump.file) {
-          setJumpLine(Number(jump.line) || 0)
-          setOpenFiles((prev) => ({ ...prev, [jump.file]: true }))
-          try { setTargetJump(jump) } catch {}
-        }
-        setKeil((prev) => (prev.project === project && prev.target === target ? prev : { project, target }))
-      }, { sessionId: (props && props.sessionId) || '' })
+      return subscribeState(
+        post,
+        cwd,
+        (data) => {
+          if (!data || data.ok === false) return
+          const next = data.workspace && data.workspace.keil ? data.workspace.keil : {}
+          const project = next.project || ''
+          const target = next.target || ''
+          // Task5/0.19.3: 编译错误定位 — 调试页点击错误后写入 jump 目标
+          const jump = data.workspace && data.workspace.jumpProject
+          if (jump && jump.file) {
+            setJumpLine(Number(jump.line) || 0)
+            setOpenFiles((prev) => ({ ...prev, [jump.file]: true }))
+            try {
+              setTargetJump(jump)
+            } catch {}
+          }
+          setKeil((prev) => (prev.project === project && prev.target === target ? prev : { project, target }))
+        },
+        { sessionId: (props && props.sessionId) || '' },
+      )
     }, [cwd, post, props && props.sessionId])
 
     React.useEffect(() => {
@@ -10389,36 +12916,43 @@ function createMapView(React, t, post) {
       }
       setBusy(true)
       setError('')
-      post('/dsh-vision-bench/keil/map', { cwd, project: keil.project, target: keil.target }).then((data) => {
-        if (stop) return
-        if (data && data.ok === false) {
-          setMapped(null)
-          setError(data.error || t('loadFail'))
-          return
-        }
-        setError('')
-        setMapped(data && data.result && data.result.details ? data.result.details : null)
-        if (data && data.result && data.result.details) {
-          // 默认展开全部组
-          const groups = data.result.details.groups || []
-          const next = {}
-          for (const g of groups) next[g.name] = true
-          setOpenGroups(next)
-        }
-      }).catch((err) => {
-        if (!stop) {
-          setMapped(null)
-          setError(String((err && err.message) || t('loadFail')))
-        }
-      }).finally(() => { if (!stop) setBusy(false) })
-      return () => { stop = true }
+      post('/dsh-vision-bench/keil/map', { cwd, project: keil.project, target: keil.target })
+        .then((data) => {
+          if (stop) return
+          if (data && data.ok === false) {
+            setMapped(null)
+            setError(data.error || t('loadFail'))
+            return
+          }
+          setError('')
+          setMapped(data && data.result && data.result.details ? data.result.details : null)
+          if (data && data.result && data.result.details) {
+            // 默认展开全部组
+            const groups = data.result.details.groups || []
+            const next = {}
+            for (const g of groups) next[g.name] = true
+            setOpenGroups(next)
+          }
+        })
+        .catch((err) => {
+          if (!stop) {
+            setMapped(null)
+            setError(String((err && err.message) || t('loadFail')))
+          }
+        })
+        .finally(() => {
+          if (!stop) setBusy(false)
+        })
+      return () => {
+        stop = true
+      }
     }, [cwd, keil.project, keil.target])
 
     const counts = mapped && mapped.counts ? mapped.counts : {}
     const groups = mapped && Array.isArray(mapped.groups) ? mapped.groups : []
     const truncated = mapped && mapped.truncated && typeof mapped.truncated === 'object' ? mapped.truncated : {}
 
-    const fileKind = (file) => !file.inside ? 'outside' : (!file.exists ? 'missing' : (!file.readable ? 'unread' : 'ok'))
+    const fileKind = (file) => (!file.inside ? 'outside' : !file.exists ? 'missing' : !file.readable ? 'unread' : 'ok')
 
     const passesFilter = (file) => {
       if (filter === 'all') return true
@@ -10429,22 +12963,57 @@ function createMapView(React, t, post) {
     }
 
     const openPreview = (file) => {
-      setPreview({ loading: true, rel: file.rel || file.path || file.name, text: '', lines: 0, truncated: false, error: '' })
-      post('/dsh-vision-bench/project/file', { cwd, path: file.rel || file.path || file.name }).then((data) => {
-        setPreview(data && data.ok ? { rel: data.rel, text: data.text, lines: data.lines, truncated: !!data.truncated, error: '' }
-          : { loading: false, rel: file.name, text: '', lines: 0, truncated: false, error: (data && data.error) || '读取失败' })
-      }).catch((err) => setPreview({ loading: false, rel: file.name, text: '', lines: 0, truncated: false, error: String((err && err.message) || '读取失败') }))
+      setPreview({
+        loading: true,
+        rel: file.rel || file.path || file.name,
+        text: '',
+        lines: 0,
+        truncated: false,
+        error: '',
+      })
+      post('/dsh-vision-bench/project/file', { cwd, path: file.rel || file.path || file.name })
+        .then((data) => {
+          setPreview(
+            data && data.ok
+              ? { rel: data.rel, text: data.text, lines: data.lines, truncated: !!data.truncated, error: '' }
+              : {
+                  loading: false,
+                  rel: file.name,
+                  text: '',
+                  lines: 0,
+                  truncated: false,
+                  error: (data && data.error) || '读取失败',
+                },
+          )
+        })
+        .catch((err) =>
+          setPreview({
+            loading: false,
+            rel: file.name,
+            text: '',
+            lines: 0,
+            truncated: false,
+            error: String((err && err.message) || '读取失败'),
+          }),
+        )
     }
 
     const copyRel = (file) => {
       const line = file.rel || file.path || file.name
-      try { if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(line) } catch {}
+      try {
+        if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText)
+          navigator.clipboard.writeText(line)
+      } catch {}
       setCopied(line)
       setTimeout(() => setCopied(''), 2000)
     }
 
     const copyToAgent = (file) => {
-      const ref = buildAgentRef('file', { file: file.rel || file.path || file.name, group: (file._group || ''), functions: (file.functions || []).slice(0, 20).map((fn) => fn.name) })
+      const ref = buildAgentRef('file', {
+        file: file.rel || file.path || file.name,
+        group: file._group || '',
+        functions: (file.functions || []).slice(0, 20).map((fn) => fn.name),
+      })
       copyAgentRef(ref, () => setCopied('已复制文件引用'))
     }
 
@@ -10452,99 +13021,251 @@ function createMapView(React, t, post) {
       const kind = fileKind(file)
       const isOpen = !!openFiles[file.rel || file.path || file.name]
       const jumpHere = jumpLine > 0
-      return el('div', { key: 'f' + (file.rel || file.path || file.name), className: 'dvb-map-file-row', 'data-kind': kind },
-        el('div', { className: 'dvb-map-file', 'data-kind': kind, title: file.rel || file.name },
+      return el(
+        'div',
+        { key: 'f' + (file.rel || file.path || file.name), className: 'dvb-map-file-row', 'data-kind': kind },
+        el(
+          'div',
+          { className: 'dvb-map-file', 'data-kind': kind, title: file.rel || file.name },
           file.functions && file.functions.length
-            ? el('button', {
-              type: 'button',
-              className: 'dvb-btn dvb-btn-sm dvb-map-toggle',
-              onClick() {
-                const key = file.rel || file.path || file.name
-                setOpenFiles((prev) => ({ ...prev, [key]: !prev[key] }))
-              },
-            }, isOpen ? '▾' : '▸')
+            ? el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn dvb-btn-sm dvb-map-toggle',
+                  onClick() {
+                    const key = file.rel || file.path || file.name
+                    setOpenFiles((prev) => ({ ...prev, [key]: !prev[key] }))
+                  },
+                },
+                isOpen ? '▾' : '▸',
+              )
             : el('span', { className: 'dvb-map-toggle dvb-map-toggle-void' }, '·'),
-          el('button', {
-            type: 'button',
-            className: 'dvb-btn dvb-btn-sm dvb-map-file-name' + (jumpHere ? ' dvb-map-jump' : ''),
-            title: '预览源码',
-            onClick() { openPreview(file) },
-          }, file.name),
+          el(
+            'button',
+            {
+              type: 'button',
+              className: 'dvb-btn dvb-btn-sm dvb-map-file-name' + (jumpHere ? ' dvb-map-jump' : ''),
+              title: '预览源码',
+              onClick() {
+                openPreview(file)
+              },
+            },
+            file.name,
+          ),
           el('span', { className: 'dvb-map-meta' }, file.rel || ''),
-          el('span', { className: 'dvb-map-file-mark' },
-            kind === 'outside' ? '工作区外' : kind === 'missing' ? '缺失' : kind === 'unread' ? '不可读' : '')),
-        el('div', { className: 'dvb-actions dvb-map-file-actions' },
-          el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { openPreview(file) } }, '预览'),
-          el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { copyRel(file) } }, '复制路径'),
-          hasHarnessInput ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick() { copyToAgent(file) } }, '让 Agent 分析') : null,
-          file._includes && file._includes.length ? el('span', { className: 'dvb-hint' }, 'Include ' + file._includes.length) : null),
+          el(
+            'span',
+            { className: 'dvb-map-file-mark' },
+            kind === 'outside' ? '工作区外' : kind === 'missing' ? '缺失' : kind === 'unread' ? '不可读' : '',
+          ),
+        ),
+        el(
+          'div',
+          { className: 'dvb-actions dvb-map-file-actions' },
+          el(
+            'button',
+            {
+              type: 'button',
+              className: 'dvb-btn dvb-btn-sm',
+              onClick() {
+                openPreview(file)
+              },
+            },
+            '预览',
+          ),
+          el(
+            'button',
+            {
+              type: 'button',
+              className: 'dvb-btn dvb-btn-sm',
+              onClick() {
+                copyRel(file)
+              },
+            },
+            '复制路径',
+          ),
+          hasHarnessInput
+            ? el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn dvb-btn-sm',
+                  onClick() {
+                    copyToAgent(file)
+                  },
+                },
+                '让 Agent 分析',
+              )
+            : null,
+          file._includes && file._includes.length
+            ? el('span', { className: 'dvb-hint' }, 'Include ' + file._includes.length)
+            : null,
+        ),
         isOpen && file.functions && file.functions.length
-          ? el('div', { className: 'dvb-map-funcs' },
-            file.functions.map((fn) => el('div', { key: fn.name + ':' + fn.line, className: 'dvb-map-func', 'data-jump': jumpHere && fn.line === jumpLine ? 'true' : '' },
-              el('span', { className: 'dvb-map-func-name' }, fn.name),
-              el('span', { className: 'dvb-map-meta' }, 'line ' + (fn.line || '?')),
-              el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', title: '打开文件并定位到函数行', onClick() { openPreview(file); setJumpLine(fn.line || 0) } }, '定位'))))
-          : null)
+          ? el(
+              'div',
+              { className: 'dvb-map-funcs' },
+              file.functions.map((fn) =>
+                el(
+                  'div',
+                  {
+                    key: fn.name + ':' + fn.line,
+                    className: 'dvb-map-func',
+                    'data-jump': jumpHere && fn.line === jumpLine ? 'true' : '',
+                  },
+                  el('span', { className: 'dvb-map-func-name' }, fn.name),
+                  el('span', { className: 'dvb-map-meta' }, 'line ' + (fn.line || '?')),
+                  el(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'dvb-btn dvb-btn-sm',
+                      title: '打开文件并定位到函数行',
+                      onClick() {
+                        openPreview(file)
+                        setJumpLine(fn.line || 0)
+                      },
+                    },
+                    '定位',
+                  ),
+                ),
+              ),
+            )
+          : null,
+      )
     }
 
-    return el('div', { className: 'dvb-live dvb-map' },
-      el('div', { className: 'dvb-live-head' },
+    return el(
+      'div',
+      { className: 'dvb-live dvb-map' },
+      el(
+        'div',
+        { className: 'dvb-live-head' },
         el('span', { className: 'dvb-live-title' }, t('projectMap')),
-        mapped ? el('span', { className: 'dvb-map-meta' },
-          (mapped.target || '') + ' · ' + String(counts.files || 0) + ' 文件') : null,
+        mapped
+          ? el(
+              'span',
+              { className: 'dvb-map-meta' },
+              (mapped.target || '') + ' · ' + String(counts.files || 0) + ' 文件',
+            )
+          : null,
         el('input', {
           className: 'dvb-input dvb-map-search',
           placeholder: '搜索文件或函数…',
           value: search,
-          onChange: (event) => { setSearch(event.target.value) },
+          onChange: (event) => {
+            setSearch(event.target.value)
+          },
         }),
-        el('select', {
-          className: 'dvb-input dvb-map-filter',
-          value: filter,
-          onChange: (event) => { setFilter(event.target.value) },
-        },
+        el(
+          'select',
+          {
+            className: 'dvb-input dvb-map-filter',
+            value: filter,
+            onChange: (event) => {
+              setFilter(event.target.value)
+            },
+          },
           el('option', { value: 'all' }, '全部'),
           el('option', { value: 'missing' }, '缺失'),
           el('option', { value: 'unread' }, '不可读'),
-          el('option', { value: 'outside' }, '工作区外')),
-        el('button', {
-          type: 'button', className: 'dvb-btn dvb-btn-sm',
-          disabled: !keil.project,
-          onClick() {
-            setBusy(true)
-            post('/dsh-vision-bench/keil/map', { cwd, project: keil.project, target: keil.target }).then((data) => {
-              setMapped(data && data.result && data.result.details ? data.result.details : mapped)
-            }).catch(() => {}).finally(() => setBusy(false))
+          el('option', { value: 'outside' }, '工作区外'),
+        ),
+        el(
+          'button',
+          {
+            type: 'button',
+            className: 'dvb-btn dvb-btn-sm',
+            disabled: !keil.project,
+            onClick() {
+              setBusy(true)
+              post('/dsh-vision-bench/keil/map', { cwd, project: keil.project, target: keil.target })
+                .then((data) => {
+                  setMapped(data && data.result && data.result.details ? data.result.details : mapped)
+                })
+                .catch(() => {})
+                .finally(() => setBusy(false))
+            },
           },
-        }, '重新加载')),
+          '重新加载',
+        ),
+      ),
       !cwd
         ? el('div', { className: 'dvb-hint' }, t('needWorkspace'))
-        : (!keil.project
+        : !keil.project
           ? el('div', { className: 'dvb-hint' }, t('projectMapEmpty'))
-          : null),
+          : null,
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
-      mapped && (truncated.files || truncated.includes || truncated.defines || truncated.include_edges || truncated.functions)
-        ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('mapTruncated')) : null,
+      mapped &&
+        (truncated.files || truncated.includes || truncated.defines || truncated.include_edges || truncated.functions)
+        ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('mapTruncated'))
+        : null,
       busy ? el('div', { className: 'dvb-hint' }, t('opening')) : null,
       copied ? el('div', { className: 'dvb-hint' }, copied) : null,
       // ── 编译配置（可折叠）──
       mapped && mapped.includes && mapped.includes.length
-        ? el('div', { className: 'dvb-map-block' },
-          el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm dvb-map-cfg-toggle', onClick() { setCfgOpen((v) => !v) } },
-            (cfgOpen ? '▾ ' : '▸ ') + t('mapIncludes') + ' · ' + String(counts.includes || mapped.includes.length) + ' · ' + (mapped.defines || []).length + ' 宏 · ' + String(counts.include_edges || (mapped.include_edges || []).length) + ' 依赖'),
-          cfgOpen
-            ? el('div', null,
-              el('div', { className: 'dvb-map-label' }, t('mapIncludes')),
-              mapped.includes.map((item, index) => el('div', { key: 'i' + index, className: 'dvb-map-path', 'data-kind': item.exists ? (item.inside ? 'ok' : 'out') : 'missing' }, item.path)),
-              mapped.defines && mapped.defines.length
-                ? el('div', { className: 'dvb-map-label' }, t('mapDefines'))
-                : null,
-              mapped.defines ? el('div', { className: 'dvb-map-defs' }, mapped.defines.join(', ')) : null,
-              mapped.include_edges && mapped.include_edges.length
-                ? el('div', { className: 'dvb-map-label' }, t('mapIncludesOf'))
-                : null,
-              mapped.include_edges ? mapped.include_edges.slice(0, 120).map((edge, index) => el('div', { key: 'e' + index, className: 'dvb-map-path', 'data-kind': edge.resolved ? 'ok' : 'missing' }, (edge.from || '') + ' → ' + (edge.to || edge.name || ''))) : null)
-            : null)
+        ? el(
+            'div',
+            { className: 'dvb-map-block' },
+            el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-sm dvb-map-cfg-toggle',
+                onClick() {
+                  setCfgOpen((v) => !v)
+                },
+              },
+              (cfgOpen ? '▾ ' : '▸ ') +
+                t('mapIncludes') +
+                ' · ' +
+                String(counts.includes || mapped.includes.length) +
+                ' · ' +
+                (mapped.defines || []).length +
+                ' 宏 · ' +
+                String(counts.include_edges || (mapped.include_edges || []).length) +
+                ' 依赖',
+            ),
+            cfgOpen
+              ? el(
+                  'div',
+                  null,
+                  el('div', { className: 'dvb-map-label' }, t('mapIncludes')),
+                  mapped.includes.map((item, index) =>
+                    el(
+                      'div',
+                      {
+                        key: 'i' + index,
+                        className: 'dvb-map-path',
+                        'data-kind': item.exists ? (item.inside ? 'ok' : 'out') : 'missing',
+                      },
+                      item.path,
+                    ),
+                  ),
+                  mapped.defines && mapped.defines.length
+                    ? el('div', { className: 'dvb-map-label' }, t('mapDefines'))
+                    : null,
+                  mapped.defines ? el('div', { className: 'dvb-map-defs' }, mapped.defines.join(', ')) : null,
+                  mapped.include_edges && mapped.include_edges.length
+                    ? el('div', { className: 'dvb-map-label' }, t('mapIncludesOf'))
+                    : null,
+                  mapped.include_edges
+                    ? mapped.include_edges.slice(0, 120).map((edge, index) =>
+                        el(
+                          'div',
+                          {
+                            key: 'e' + index,
+                            className: 'dvb-map-path',
+                            'data-kind': edge.resolved ? 'ok' : 'missing',
+                          },
+                          (edge.from || '') + ' → ' + (edge.to || edge.name || ''),
+                        ),
+                      )
+                    : null,
+                )
+              : null,
+          )
         : null,
       // ── 组 → 文件 → 函数 树 ──
       groups.map((group, gi) => {
@@ -10553,31 +13274,87 @@ function createMapView(React, t, post) {
         const groupFiles = (group.files || []).filter((file) => passesFilter(file))
         const needle = search.trim().toLowerCase()
         const shown = needle
-          ? groupFiles.filter((f) => (f.name + ' ' + (f.rel || '') + ' ' + (f.functions || []).map((fn) => fn.name).join(' ')).toLowerCase().includes(needle))
+          ? groupFiles.filter((f) =>
+              (f.name + ' ' + (f.rel || '') + ' ' + (f.functions || []).map((fn) => fn.name).join(' '))
+                .toLowerCase()
+                .includes(needle),
+            )
           : groupFiles
-        return el('div', { key: 'g' + gi, className: 'dvb-map-group' },
-          el('div', { className: 'dvb-map-group-name' },
-            el('button', {
-              type: 'button', className: 'dvb-btn dvb-btn-sm dvb-map-toggle',
-              onClick() { setOpenGroups((prev) => ({ ...prev, [gKey]: !(prev[gKey] !== false) })) },
-            }, gOpen ? '▾' : '▸'),
-            el('span', null, (group.name || '') + ' · ' + String(groupFiles.length) + ' 文件' + (needle ? ' · 匹配 ' + shown.length : '')),
-            el('span', { className: 'dvb-hint' }, (group.files || []).filter((f) => !f.inside).length + ' 工作区外 · ' + (group.files || []).filter((f) => !f.exists).length + ' 缺失')),
-          gOpen ? shown.map((file) => fileRow({ ...file, _group: group.name }, group.name)) : null)
+        return el(
+          'div',
+          { key: 'g' + gi, className: 'dvb-map-group' },
+          el(
+            'div',
+            { className: 'dvb-map-group-name' },
+            el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn dvb-btn-sm dvb-map-toggle',
+                onClick() {
+                  setOpenGroups((prev) => ({ ...prev, [gKey]: !(prev[gKey] !== false) }))
+                },
+              },
+              gOpen ? '▾' : '▸',
+            ),
+            el(
+              'span',
+              null,
+              (group.name || '') +
+                ' · ' +
+                String(groupFiles.length) +
+                ' 文件' +
+                (needle ? ' · 匹配 ' + shown.length : ''),
+            ),
+            el(
+              'span',
+              { className: 'dvb-hint' },
+              (group.files || []).filter((f) => !f.inside).length +
+                ' 工作区外 · ' +
+                (group.files || []).filter((f) => !f.exists).length +
+                ' 缺失',
+            ),
+          ),
+          gOpen ? shown.map((file) => fileRow({ ...file, _group: group.name }, group.name)) : null,
+        )
       }),
       // ── 源码预览 ──
       preview
-        ? el('div', { className: 'dvb-panel dvb-write-panel' },
-          el('div', { className: 'dvb-panel-head' },
-            el('span', { className: 'dvb-panel-title' }, '源码预览 · ' + (preview.rel || '')),
-            preview.truncated ? el('span', { className: 'dvb-hint dvb-need' }, '超过 256KB，已截断') : null,
-            el('button', { type: 'button', className: 'dvb-btn', onClick() { setPreview(null) } }, t('csvCancel'))),
-          preview.loading
-            ? el('div', { className: 'dvb-hint' }, t('opening'))
-            : preview.error
-              ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, preview.error)
-              : el('pre', { className: 'dvb-log dvb-map-preview', style: { maxHeight: '320px', overflow: 'auto', whiteSpace: 'pre' } }, preview.text))
-        : null)
+        ? el(
+            'div',
+            { className: 'dvb-panel dvb-write-panel' },
+            el(
+              'div',
+              { className: 'dvb-panel-head' },
+              el('span', { className: 'dvb-panel-title' }, '源码预览 · ' + (preview.rel || '')),
+              preview.truncated ? el('span', { className: 'dvb-hint dvb-need' }, '超过 256KB，已截断') : null,
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn',
+                  onClick() {
+                    setPreview(null)
+                  },
+                },
+                t('csvCancel'),
+              ),
+            ),
+            preview.loading
+              ? el('div', { className: 'dvb-hint' }, t('opening'))
+              : preview.error
+                ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, preview.error)
+                : el(
+                    'pre',
+                    {
+                      className: 'dvb-log dvb-map-preview',
+                      style: { maxHeight: '320px', overflow: 'auto', whiteSpace: 'pre' },
+                    },
+                    preview.text,
+                  ),
+          )
+        : null,
+    )
   }
 }
 
@@ -10585,7 +13362,9 @@ function registerMap(ctx, React, t, MapPage) {
   const bs = ctx.betterSidebar
   return bs.registerTab({
     id: TAB_MAP,
-    title() { return t('projectMap') },
+    title() {
+      return t('projectMap')
+    },
     single: true,
     order: 74,
     component: MapPage,
@@ -10598,8 +13377,11 @@ function openProjectTab(side) {
 
 // 工程结构定位（编译错误跳转）：调试页写入，map 页消费
 let targetJump = null
-const setTargetJump = (jump) => { targetJump = jump }
+const setTargetJump = (jump) => {
+  targetJump = jump
+}
 const getTargetJump = () => targetJump
+
 // Task15: Harness inputActions dispatch in bench-shared, runtime respects focus badgeOnly
 // Task2/0.18.4: a unified sidebar page wrapper that keeps the ACTIVE session
 // cwd authoritative (token-guarded so an unmounting stale session page never
@@ -10611,10 +13393,12 @@ function scopedSidebarPage(React, Page, pageId) {
       try {
         if (props && props.scope && props.scope.cwd) return props.scope.cwd
         if (props && typeof props.useSessions === 'function') {
-          return props.useSessions((s) => {
-            const cur = s && s.current
-            return (s && s.byId && cur && s.byId[cur] && s.byId[cur].cwd) || ''
-          }) || ''
+          return (
+            props.useSessions((s) => {
+              const cur = s && s.current
+              return (s && s.byId && cur && s.byId[cur] && s.byId[cur].cwd) || ''
+            }) || ''
+          )
         }
       } catch {}
       return ''
@@ -10622,7 +13406,9 @@ function scopedSidebarPage(React, Page, pageId) {
     const tokenRef = React.useRef('')
     React.useEffect(() => {
       tokenRef.current = setActiveScope('sb-' + String(pageId) + '-' + Math.random().toString(36).slice(2, 8), cwd)
-      return () => { if (tokenRef.current) clearActiveScope(tokenRef.current) }
+      return () => {
+        if (tokenRef.current) clearActiveScope(tokenRef.current)
+      }
     }, [cwd, pageId])
     return Page(props)
   }
@@ -10649,7 +13435,9 @@ function apply(ctx) {
     if (ctx.locale && typeof ctx.locale.register === 'function') {
       localeDispose = ctx.locale.register(NS, COPY) || function () {}
     }
-  } catch { /* remount */ }
+  } catch {
+    /* remount */
+  }
 
   function t(key, params) {
     return interpolate(tWith(ctx, key, params), params)
@@ -10662,19 +13450,31 @@ function apply(ctx) {
       body: JSON.stringify(payload || {}),
       cache: 'no-store',
       signal: AbortSignal.timeout(timeoutMs || 15000),
-    }).then((res) => res.json().then((data) => {
-      if (!res.ok) throw new Error((data && data.error) || ('http ' + res.status))
-      return data
-    }))
+    }).then((res) =>
+      res.json().then((data) => {
+        if (!res.ok) throw new Error((data && data.error) || 'http ' + res.status)
+        return data
+      }),
+    )
   }
 
   let openProjectImpl = function () {}
   let openHmiImpl = function () {}
   let openFramesImpl = function () {}
   let closeTabImpl = function () {}
-  function openProject() { openProjectImpl() }
-  function openHmi(target) { try { openHmiImpl(target) } catch {} }
-  function openFrames() { try { openFramesImpl() } catch {} }
+  function openProject() {
+    openProjectImpl()
+  }
+  function openHmi(target) {
+    try {
+      openHmiImpl(target)
+    } catch {}
+  }
+  function openFrames() {
+    try {
+      openFramesImpl()
+    } catch {}
+  }
   const SettingsPage = createSettingsPage(React, t, post)
   const DebugView = createDebugView(React, t, post, openProject)
   const HmiView = createHmiView(React, t, post)
@@ -10688,19 +13488,39 @@ function apply(ctx) {
       openHmiImpl = function () {
         try {
           const slotsApi = ctx.get ? ctx.get('slots') : null
-          if (slotsApi && typeof slotsApi.select === 'function') slotsApi.select('conversation.view', 'vision-bench-hmi')
+          if (slotsApi && typeof slotsApi.select === 'function')
+            slotsApi.select('conversation.view', 'vision-bench-hmi')
           else if (side && typeof side.openTab === 'function') side.openTab({ type: 'dsh-vision-bench:charts' })
         } catch {}
       }
-      openProjectImpl = function () { openProjectTab(side) }
-      openFramesImpl = function () { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} }
-      closeTabImpl = function (id) { closeBetterTab(side, id) }
+      openProjectImpl = function () {
+        openProjectTab(side)
+      }
+      openFramesImpl = function () {
+        try {
+          side.openTab({ type: 'dsh-vision-bench:frames' })
+        } catch {}
+      }
+      closeTabImpl = function (id) {
+        closeBetterTab(side, id)
+      }
       const FramesPage = createFramesPage(React, t, post, { openHmi })
       const stopLive = registerLive(side, React, t, null, {
         trend: scopedSidebarPage(React, createVisualizationPage(React, t, post, { openHmi }), 'trend'), // dsh-vision-bench:charts 不变的「可视化」页
         alarm: scopedSidebarPage(React, createAlarmPage(React, t, post, { openHmi }), 'alarm'),
         frames: scopedSidebarPage(React, FramesPage, 'frames'),
-        log: scopedSidebarPage(React, createLogPage(React, t, post, { openHmi, openFrames: () => { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} } }), 'log'),
+        log: scopedSidebarPage(
+          React,
+          createLogPage(React, t, post, {
+            openHmi,
+            openFrames: () => {
+              try {
+                side.openTab({ type: 'dsh-vision-bench:frames' })
+              } catch {}
+            },
+          }),
+          'log',
+        ),
       })
       const stopMap = registerMap(side, React, t, scopedSidebarPage(React, MapPage, 'map'))
       // Task1+2/0.18.4: only the ACTIVE session's foreground focus may drive the
@@ -10715,13 +13535,28 @@ function apply(ctx) {
         })
         if (!decision.route) return
         lastRouteKey = decision.routeKey
-        if (decision.tab === 'trend') { try { side.openTab({ type: 'dsh-vision-bench:charts' }) } catch {} }
-        else if (decision.tab === 'alarm') { try { side.openTab({ type: 'dsh-vision-bench:alarms' }) } catch {} }
-        else if (decision.tab === 'frames') { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} }
-        else { openHmi() }
+        if (decision.tab === 'trend') {
+          try {
+            side.openTab({ type: 'dsh-vision-bench:charts' })
+          } catch {}
+        } else if (decision.tab === 'alarm') {
+          try {
+            side.openTab({ type: 'dsh-vision-bench:alarms' })
+          } catch {}
+        } else if (decision.tab === 'frames') {
+          try {
+            side.openTab({ type: 'dsh-vision-bench:frames' })
+          } catch {}
+        } else {
+          openHmi()
+        }
       }
       const focusUnsub = subscribeFocus('', (fs, cwd) => applyFocus(fs, cwd))
-      side.effect(() => () => { try { focusUnsub() } catch {} })
+      side.effect(() => () => {
+        try {
+          focusUnsub()
+        } catch {}
+      })
       side.effect(() => () => {
         if (typeof stopLive === 'function') stopLive()
         if (typeof stopMap === 'function') stopMap()

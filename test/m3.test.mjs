@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { _internal } from '../bench-actions.mjs'
 import {
   compactValues,
   csvToSegments,
@@ -8,12 +9,18 @@ import {
   normalizeSegment,
   segmentsToCsv,
 } from '../bench-points.mjs'
-import { _internal } from '../bench-actions.mjs'
 
-test('normalizeSegment keeps scale, offset, unit and alarm limits', () => {
+test('normalizeSegment keeps scale, offset, unit and alarm limits', async () => {
   const seg = normalizeSegment({
-    name: '温度', function: 3, address: 0, count: 2,
-    scale: 0.1, offset: -40, unit: '°C', alarmMin: -10, alarmMax: 85,
+    name: '温度',
+    function: 3,
+    address: 0,
+    count: 2,
+    scale: 0.1,
+    offset: -40,
+    unit: '°C',
+    alarmMin: -10,
+    alarmMax: 85,
   })
   assert.equal(seg.scale, 0.1)
   assert.equal(seg.offset, -40)
@@ -28,7 +35,7 @@ test('normalizeSegment keeps scale, offset, unit and alarm limits', () => {
   assert.equal(bare.alarmMax, null)
 })
 
-test('decodeValue applies scale and offset, passes booleans through', () => {
+test('decodeValue applies scale and offset, passes booleans through', async () => {
   const seg = { scale: 0.5, offset: 10 }
   assert.equal(decodeValue(seg, 4), 12)
   assert.equal(decodeValue({ scale: 2 }, 3), 6)
@@ -36,7 +43,7 @@ test('decodeValue applies scale and offset, passes booleans through', () => {
   assert.equal(decodeValue({}, null), null)
 })
 
-test('evaluateAlarm reports min and max breaches', () => {
+test('evaluateAlarm reports min and max breaches', async () => {
   const seg = { alarmEnabled: true, alarmMin: 10, alarmMax: 90 }
   assert.equal(evaluateAlarm(seg, 5), 'min')
   assert.equal(evaluateAlarm(seg, 95), 'max')
@@ -46,9 +53,19 @@ test('evaluateAlarm reports min and max breaches', () => {
   assert.equal(evaluateAlarm(seg, 'abc'), '')
 })
 
-test('CSV round-trip preserves segment metadata', () => {
+test('CSV round-trip preserves segment metadata', async () => {
   const segments = [
-    { name: '温度', function: 3, address: 0, count: 2, scale: 0.1, offset: -40, unit: '°C', alarmMin: -10, alarmMax: 85 },
+    {
+      name: '温度',
+      function: 3,
+      address: 0,
+      count: 2,
+      scale: 0.1,
+      offset: -40,
+      unit: '°C',
+      alarmMin: -10,
+      alarmMax: 85,
+    },
     { name: '开关', function: 1, address: 10, count: 4, scale: 1, offset: 0, unit: '', alarmMin: null, alarmMax: null },
   ]
   const csv = segmentsToCsv(segments)
@@ -65,7 +82,7 @@ test('CSV round-trip preserves segment metadata', () => {
   assert.equal(back.segments[1].alarmMax, null)
 })
 
-test('csvToSegments rejects empty input and missing columns', () => {
+test('csvToSegments rejects empty input and missing columns', async () => {
   assert.equal(csvToSegments('').ok, false)
   assert.equal(csvToSegments('a,b\n1,2').ok, false)
   const ok = csvToSegments('function,address,count\n3,0,4')
@@ -73,9 +90,23 @@ test('csvToSegments rejects empty input and missing columns', () => {
   assert.equal(ok.segments[0].count, 4)
 })
 
-test('deviceAlarms fires once per breach and clears on recovery', () => {
+test('deviceAlarms fires once per breach and clears on recovery', async () => {
   const device = {
-    segments: [{ id: 's1', name: '压力', function: 3, address: 0, count: 1, scale: 1, offset: 0, unit: 'kPa', alarmEnabled: true, alarmMin: null, alarmMax: 100 }],
+    segments: [
+      {
+        id: 's1',
+        name: '压力',
+        function: 3,
+        address: 0,
+        count: 1,
+        scale: 1,
+        offset: 0,
+        unit: 'kPa',
+        alarmEnabled: true,
+        alarmMin: null,
+        alarmMax: 100,
+      },
+    ],
     values: [],
   }
   const high = [{ key: 's1:3@0', segmentId: 's1', function: 3, address: 0, value: 120, ok: true }]
@@ -92,7 +123,7 @@ test('deviceAlarms fires once per breach and clears on recovery', () => {
   assert.match(label, /压力=120>100/)
 })
 
-test('compactValues decodes with segment metadata for the agent', () => {
+test('compactValues decodes with segment metadata for the agent', async () => {
   const segments = [{ id: 's1', name: '温度', function: 3, address: 0, count: 1, scale: 0.1, offset: 0, unit: '°C' }]
   const values = [{ key: 's1:3@0', segmentId: 's1', function: 3, address: 0, name: '温度', value: 255, ok: true }]
   const out = compactValues(values, segments)

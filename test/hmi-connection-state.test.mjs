@@ -6,12 +6,15 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { listConnectedSerialSources, listConnectionStates } from '../bench-serial-monitor.mjs'
 import { buildFramePortOptions } from '../bench-frames-model.mjs'
+import { listConnectedSerialSources, listConnectionStates } from '../bench-serial-monitor.mjs'
 import { saveWorkspace } from '../bench-store.mjs'
 
 const cfg = (id, mode, port, extra = {}) => ({
-  id, name: id, role: 'client', enabled: true,
+  id,
+  name: id,
+  role: 'client',
+  enabled: true,
   conn: { mode, port, host: mode === 'tcp' ? '192.168.1.50' : '', tcpPort: 502, baudrate: 9600, slave: 1, ...extra },
 })
 
@@ -30,11 +33,7 @@ const fakeTransport = (rows) => ({
 })
 
 test('connectionStates covers every configured RTU/TCP connection with live status', async () => {
-  const { home, cwd } = await setup([
-    cfg('c1', 'rtu', 'COM3'),
-    cfg('c2', 'rtu', 'COM5'),
-    cfg('c3', 'tcp', ''),
-  ])
+  const { home, cwd } = await setup([cfg('c1', 'rtu', 'COM3'), cfg('c2', 'rtu', 'COM5'), cfg('c3', 'tcp', '')])
   const t = fakeTransport([
     { connectionId: 'c1', state: 'connected', connectedAt: 123, epoch: 'e1', error: '' },
     { connectionId: 'c2', state: 'error', error: 'USB 拔出', connectedAt: 0, epoch: 'e2' },
@@ -61,7 +60,11 @@ test('TCP never appears in serialSources even when connected', async () => {
     { connectionId: 'c3', state: 'connected', connectedAt: 2, port: '192.168.1.50' },
   ])
   const ran = await listConnectedSerialSources(home, cwd, { transport: t })
-  assert.deepEqual(ran.sources.map((s) => s.connectionId), ['c1'], 'only the RTU connection is a serial source')
+  assert.deepEqual(
+    ran.sources.map((s) => s.connectionId),
+    ['c1'],
+    'only the RTU connection is a serial source',
+  )
   await rm(home, { recursive: true, force: true })
 })
 
@@ -86,5 +89,9 @@ test('frames port options only offer connected RTU sources (no TCP, no sim, no o
     { connectionId: 'c3', port: '192.168.1.50', state: 'connected' },
     { connectionId: 'c4', port: 'COM7', state: 'connected' },
   ])
-  assert.deepEqual(opts.map((o) => o.value), ['all', 'conn:c1'], 'TCP + sim excluded from 串口报文 source options')
+  assert.deepEqual(
+    opts.map((o) => o.value),
+    ['all', 'conn:c1'],
+    'TCP + sim excluded from 串口报文 source options',
+  )
 })

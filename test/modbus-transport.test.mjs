@@ -9,7 +9,7 @@ import { createModbusTransport, toReadRequest, toWriteRequest } from '../bench-m
 import { modbusRead, modbusWrite } from '../bench-modbus.mjs'
 import { saveWorkspace } from '../bench-store.mjs'
 
-test('toReadRequest copies device unitId and omits it from endpoint fingerprint', () => {
+test('toReadRequest copies device unitId and omits it from endpoint fingerprint', async () => {
   const conn = { id: 'c1', conn: { mode: 'rtu', port: 'COM3', baudrate: 19200, bytesize: 8, parity: 'E', stopbits: 1 } }
   const d1 = { id: 'd1', unitId: 1 }
   const d2 = { id: 'd2', unitId: 2 }
@@ -28,7 +28,12 @@ test('transport assigns a unique request id before validating', async () => {
     broker: {
       request: async (payload) => {
         seen.push(payload)
-        return { ok: true, data: [1], transactionId: 'w:1', frames: { requestHex: '', responseHex: '', frameFormat: 'tcp-normalized' } }
+        return {
+          ok: true,
+          data: [1],
+          transactionId: 'w:1',
+          frames: { requestHex: '', responseHex: '', frameFormat: 'tcp-normalized' },
+        }
       },
       health: async () => ({ ok: true, data: {} }),
     },
@@ -49,18 +54,26 @@ test('transport assigns a unique request id before validating', async () => {
 
 test('10k simulated transaction ids do not collide', async () => {
   const transport = createModbusTransport({
-    broker: { request: async () => { throw new Error('sim must not hit broker') }, health: async () => ({ ok: true, data: {} }) },
+    broker: {
+      request: async () => {
+        throw new Error('sim must not hit broker')
+      },
+      health: async () => ({ ok: true, data: {} }),
+    },
   })
   const ids = new Set()
   for (let i = 0; i < 10000; i++) {
-    const ran = await transport.read({
-      v: 1,
-      op: 'modbus.read',
-      address: i % 10,
-      count: 1,
-      functionCode: 3,
-      endpoint: { mode: 'rtu', port: 'COM3' },
-    }, { sim: true })
+    const ran = await transport.read(
+      {
+        v: 1,
+        op: 'modbus.read',
+        address: i % 10,
+        count: 1,
+        functionCode: 3,
+        endpoint: { mode: 'rtu', port: 'COM3' },
+      },
+      { sim: true },
+    )
     ids.add(ran.transactionId)
   }
   assert.equal(ids.size, 10000)
@@ -68,7 +81,12 @@ test('10k simulated transaction ids do not collide', async () => {
 
 test('toWriteRequest rejects via validate before physical I/O for unit 0', async () => {
   const transport = createModbusTransport({
-    broker: { request: async () => { throw new Error('should not run') }, health: async () => ({ ok: true, data: {} }) },
+    broker: {
+      request: async () => {
+        throw new Error('should not run')
+      },
+      health: async () => ({ ok: true, data: {} }),
+    },
   })
   const req = toWriteRequest({
     cwd: '/ws',

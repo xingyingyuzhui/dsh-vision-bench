@@ -1,7 +1,7 @@
 // Task1/0.19.3: 设备流程 — 创建连接不自动造设备；添加设备必须唯一 Unit ID；
 // 点位归属修复（编辑不移动设备）；CSV 设备作用域。
 import assert from 'node:assert/strict'
-import { mkdirSync, readdirSync, readFileSync as readFileSyncFs } from 'node:fs'
+import { mkdirSync, readFileSync as readFileSyncFs, readdirSync } from 'node:fs'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -14,10 +14,19 @@ import { runVisionBench } from '../bench-tool.mjs'
 function hmiSources() {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..')
   const dir = join(root, 'src/ui/hmi')
-  return readdirSync(dir).filter((f) => f.endsWith('.mjs')).map((f) => readFileSyncFs(join(dir, f), 'utf8')).join('\n')
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.mjs'))
+    .map((f) => readFileSyncFs(join(dir, f), 'utf8'))
+    .join('\n')
 }
 
-const cfg = (id, port = 'COM3') => ({ id, name: id, role: 'client', enabled: true, conn: { mode: 'rtu', port, baudrate: 9600, slave: 1, sim: true } })
+const cfg = (id, port = 'COM3') => ({
+  id,
+  name: id,
+  role: 'client',
+  enabled: true,
+  conn: { mode: 'rtu', port, baudrate: 9600, slave: 1, sim: true },
+})
 
 async function setup(over = {}) {
   const home = await mkdtemp(join(tmpdir(), 'hdf-'))
@@ -35,7 +44,8 @@ async function setup(over = {}) {
         { id: 'p1', connectionId: 'c1', deviceId: 'd1', name: 'HR0-D1', function: 3, address: 0 },
         { id: 'p2', connectionId: 'c1', deviceId: 'd2', name: 'HR0-D2', function: 3, address: 0, trendEnabled: true },
       ],
-      values: [], alarmState: {},
+      values: [],
+      alarmState: {},
       ...over,
     },
   })
@@ -62,7 +72,10 @@ test('设备1与设备2可以分别使用相同功能码和地址（HR0 两设�
   const { home, cwd } = await setup()
   // 服务层允许同地址跨设备；UI 唯一键为 conn+dev+fn+addr（源码断言）
   const src = hmiSources()
-  assert.ok(/saveNewPointDraft/.test(src) && /\(p\.deviceId \|\| ''\) === d\.deviceId/.test(src), '唯一键含 deviceId（行内草稿）')
+  assert.ok(
+    /saveNewPointDraft/.test(src) && /\(p\.deviceId \|\| ''\) === d\.deviceId/.test(src),
+    '唯一键含 deviceId（行内草稿）',
+  )
   const saved = loadWorkspace(home, cwd).modbus
   assert.equal(saved.points.filter((p) => p.address === 0).length, 2, '两个设备各有 HR0')
   await rm(home, { recursive: true, force: true })
@@ -98,5 +111,8 @@ test('CSV 只作用于当前设备：合并 vs 替换（源码契约 + 存储验
 test('删除设备确认包含点位与当前值数量（源码契约）', async () => {
   const src = hmiSources()
   assert.ok(src.includes('将同时删除该设备的'), '删除确认文案存在')
-  assert.ok(src.includes('conf irmDeleteDevice'.replace(' ', '')) || src.includes('confirmDeleteDevice(d)'), '二次确认删除入口')
+  assert.ok(
+    src.includes('conf irmDeleteDevice'.replace(' ', '')) || src.includes('confirmDeleteDevice(d)'),
+    '二次确认删除入口',
+  )
 })

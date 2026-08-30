@@ -55,11 +55,20 @@ function validateVirtualCompat() {
     scrollHeight: 0,
     offsetHeight: h,
     offsetWidth: 300,
-    getBoundingClientRect() { return { width: 300, height: h } },
+    getBoundingClientRect() {
+      return { width: 300, height: h }
+    },
     addEventListener() {},
     removeEventListener() {},
   })
-  const win = { ResizeObserver: class { observe() {} unobserve() {} }, requestAnimationFrame: (cb) => setTimeout(cb, 0), cancelAnimationFrame: () => {} }
+  const win = {
+    ResizeObserver: class {
+      observe() {}
+      unobserve() {}
+    },
+    requestAnimationFrame: (cb) => setTimeout(cb, 0),
+    cancelAnimationFrame: () => {},
+  }
   const sample = (count) => {
     const el = makeEl(300)
     const v = new Virtualizer({
@@ -68,14 +77,26 @@ function validateVirtualCompat() {
       estimateSize: () => 36,
       overscan: 5,
       scrollToFn: () => {},
-      observeElementRect: (_, cb) => { cb({ width: 300, height: 300 }); return () => {} },
-      observeElementOffset: (_, cb) => { cb(0, false); return () => {} },
+      observeElementRect: (_, cb) => {
+        cb({ width: 300, height: 300 })
+        return () => {}
+      },
+      observeElementOffset: (_, cb) => {
+        cb(0, false)
+        return () => {}
+      },
     })
     v.scrollElement = el
     v.targetWindow = win
     v.scrollRect = { width: 300, height: 300 }
     v.scrollOffset = 0
-    v.measurementsCache = Array.from({ length: count }, (_, i) => ({ index: i, start: i * 36, size: 36, end: (i + 1) * 36, key: i }))
+    v.measurementsCache = Array.from({ length: count }, (_, i) => ({
+      index: i,
+      start: i * 36,
+      size: 36,
+      end: (i + 1) * 36,
+      key: i,
+    }))
     // dark mode handled via CSS variables (bench-styles uses var(--dsw...)), not hard-coded
     // dynamic row height via measureElement API
     void v.measureElement
@@ -85,37 +106,41 @@ function validateVirtualCompat() {
   const b = sample(1000)
   const c = sample(5000)
   if (a.length >= 50 || b.length >= 50 || c.length >= 50) throw new Error('Virtualizer DOM should be viewport-limited')
-  if (Math.abs(a.length - b.length) > 5 || Math.abs(b.length - c.length) > 5) throw new Error('500/1000/5000 should have similar viewport DOM count')
-  if (!shouldStickToBottom(700, 1000, 300) || shouldStickToBottom(0, 1000, 300)) throw new Error('autoFollow shouldStickToBottom only at bottom')
+  if (Math.abs(a.length - b.length) > 5 || Math.abs(b.length - c.length) > 5)
+    throw new Error('500/1000/5000 should have similar viewport DOM count')
+  if (!shouldStickToBottom(700, 1000, 300) || shouldStickToBottom(0, 1000, 300))
+    throw new Error('autoFollow shouldStickToBottom only at bottom')
   // prefers-color-scheme / CSS var dark support is verified via bench-styles content at build time (see styles check)
 }
 // Task1: dependency/vendor validation failure MUST fail the build (no swallow).
 validateVirtualCompat()
 
 function stripModule(src) {
-  return src
-    // Aliased specifiers must become REAL bindings: `X as Y` -> var Y = X.
-    // Deleting import blocks outright silently kills aliases (the blank-page
-    // bug of v0.17.0).
-    .replace(/^import\s*\{([^}]*)\}\s*from\s*'[^']+'\n+/gm, (_m, specs) => {
-      const decls = String(specs)
-        .split(',')
-        .map((piece) => piece.trim())
-        .filter(Boolean)
-        .map((spec) => {
-          const mm = spec.match(/^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/)
-          return mm ? `var ${mm[2]} = ${mm[1]};` : null
-        })
-        .filter(Boolean)
-      return decls.length ? decls.join('\n') + '\n' : ''
-    })
-    .replace(/^import\s+([A-Za-z_$][\w$]*)\s+from\s*'[^']+'\n+/gm, 'var $1 = $1;\n')
-    .replace(/^import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s*'[^']+'\n+/gm, '')
-    // Re-exports contribute no new factory-scope bindings: the underlying
-    // symbol already exists in its defining module.
-    .replace(/^export\s*\{[^}]*\}\s*from\s*'[^']+'\n+/gm, '')
-    .replace(/^import[\s\S]*?from '[^']+'\n+/gm, '')
-    .replace(/^export /gm, '')
+  return (
+    src
+      // Aliased specifiers must become REAL bindings: `X as Y` -> var Y = X.
+      // Deleting import blocks outright silently kills aliases (the blank-page
+      // bug of v0.17.0).
+      .replace(/^import\s*\{([^}]*)\}\s*from\s*'[^']+'\n+/gm, (_m, specs) => {
+        const decls = String(specs)
+          .split(',')
+          .map((piece) => piece.trim())
+          .filter(Boolean)
+          .map((spec) => {
+            const mm = spec.match(/^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/)
+            return mm ? `var ${mm[2]} = ${mm[1]};` : null
+          })
+          .filter(Boolean)
+        return decls.length ? decls.join('\n') + '\n' : ''
+      })
+      .replace(/^import\s+([A-Za-z_$][\w$]*)\s+from\s*'[^']+'\n+/gm, 'var $1 = $1;\n')
+      .replace(/^import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s*'[^']+'\n+/gm, '')
+      // Re-exports contribute no new factory-scope bindings: the underlying
+      // symbol already exists in its defining module.
+      .replace(/^export\s*\{[^}]*\}\s*from\s*'[^']+'\n+/gm, '')
+      .replace(/^import[\s\S]*?from '[^']+'\n+/gm, '')
+      .replace(/^export /gm, '')
+  )
 }
 
 function assertUniqueBindings(stripped, file) {
@@ -155,23 +180,32 @@ function assertUniqueBindings(stripped, file) {
   let match
   while ((match = re.exec(stripped))) {
     const names = match[2]
-      ? splitTop(match[2]).map((part) => {
-        const decl = part.trim()
-        const fnLike = decl.match(/^([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\(|function)/)
-        if (fnLike) return fnLike[1]
-        const destructure = decl.match(/^(?:\{([^}]*)\}|\[([^\]]*)\])\s*=/)
-        if (destructure) {
-          return (destructure[1] || destructure[2])
-            .split(',').map((piece) => piece.trim().split(':')[0].trim())
-        }
-        const simple = decl.match(/^([A-Za-z_$][\w$]*)\s*=|^([A-Za-z_$][\w$]*)$/)
-        return simple ? (simple[1] || simple[2]) : []
-      }).flat()
+      ? splitTop(match[2])
+          .map((part) => {
+            const decl = part.trim()
+            const fnLike = decl.match(/^([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\(|function)/)
+            if (fnLike) return fnLike[1]
+            const destructure = decl.match(/^(?:\{([^}]*)\}|\[([^\]]*)\])\s*=/)
+            if (destructure) {
+              return (destructure[1] || destructure[2]).split(',').map((piece) => piece.trim().split(':')[0].trim())
+            }
+            const simple = decl.match(/^([A-Za-z_$][\w$]*)\s*=|^([A-Za-z_$][\w$]*)$/)
+            return simple ? simple[1] || simple[2] : []
+          })
+          .flat()
       : [match[1]]
     for (const name of names.filter(Boolean)) {
       const prev = seen.get(name)
       if (prev) {
-        throw new Error('duplicate binding "' + name + '" in ' + file + ' (already in ' + prev + '); strip-concat is one factory scope')
+        throw new Error(
+          'duplicate binding "' +
+            name +
+            '" in ' +
+            file +
+            ' (already in ' +
+            prev +
+            '); strip-concat is one factory scope',
+        )
       }
       seen.set(name, file)
     }
@@ -191,6 +225,7 @@ const parts = [
   'src/ui/styles/frames.mjs',
   'bench-styles.mjs',
   'bench-settings.mjs',
+  'src/domain/modbus/point-math.mjs',
   'bench-points.mjs',
   'bench-alarm.mjs',
   'bench-devices.mjs',
@@ -223,6 +258,23 @@ const parts = [
   'src/ui/hmi/connection-form.mjs',
   'src/ui/hmi/device-form.mjs',
   'src/ui/hmi/device-card.mjs',
+  'src/ui/hmi/hmi-command-client.mjs',
+  'src/ui/hmi/hooks/use-hmi-state.mjs',
+  'src/ui/hmi/hooks/use-connections.mjs',
+  'src/ui/hmi/hooks/use-points.mjs',
+  'src/ui/hmi/hooks/use-agent-focus.mjs',
+  'src/ui/hmi/hooks/use-pending-writes.mjs',
+  'src/ui/hmi/connection-overview.mjs',
+  'src/ui/hmi/connection-workspace.mjs',
+  'src/ui/hmi/connection-editor.mjs',
+  'src/ui/hmi/device-editor.mjs',
+  'src/ui/hmi/device-section.mjs',
+  'src/ui/hmi/hmi-config-persistence.mjs',
+  'src/ui/hmi/hmi-core-actions.mjs',
+  'src/ui/hmi/hmi-connection-actions.mjs',
+  'src/ui/hmi/hmi-point-actions.mjs',
+  'src/ui/hmi/hmi-live-actions.mjs',
+  'src/ui/hmi/hmi-page-actions.mjs',
   'src/ui/hmi/hmi-page.mjs',
   'bench-hmi.mjs',
   'bench-live.mjs',
@@ -241,7 +293,7 @@ const banner = `// Generated by scripts/build-client.mjs. Do not edit by hand.
 `
 
 async function assembleVendor() {
-  const vendor = await buildVendor(root)   // var DvbVendor = (()=>{...})();
+  const vendor = await buildVendor(root) // var DvbVendor = (()=>{...})();
   const uplotCss = await readUplotCss(root)
   return vendor + '\nvar DvbVendorCss = ' + JSON.stringify('\n' + uplotCss.trim()) + ';'
 }

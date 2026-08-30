@@ -8,11 +8,23 @@ const DISCONNECT_RE = /ECONNRESET|EPIPE|disconnected|socket hang up/i
 
 export const mapDriverError = (error) => {
   if (!error) return ioError('INVALID_RESPONSE', '未知错误')
-  if (error.code && String(error.code).startsWith('IO_') || [
-    'PORT_IN_USE', 'PORT_NOT_FOUND', 'PORT_OPEN_FAILED', 'PORT_DISCONNECTED',
-    'CONNECTION_TIMEOUT', 'MODBUS_TIMEOUT', 'MODBUS_CRC_ERROR', 'MODBUS_EXCEPTION',
-    'INVALID_RESPONSE', 'CANCELLED', 'UNIT_ID_INVALID', 'CONFIG_DRIFT',
-  ].includes(error.code)) {
+  if (
+    (error.code && String(error.code).startsWith('IO_')) ||
+    [
+      'PORT_IN_USE',
+      'PORT_NOT_FOUND',
+      'PORT_OPEN_FAILED',
+      'PORT_DISCONNECTED',
+      'CONNECTION_TIMEOUT',
+      'MODBUS_TIMEOUT',
+      'MODBUS_CRC_ERROR',
+      'MODBUS_EXCEPTION',
+      'INVALID_RESPONSE',
+      'CANCELLED',
+      'UNIT_ID_INVALID',
+      'CONFIG_DRIFT',
+    ].includes(error.code)
+  ) {
     return ioError(error.code, error.message, error.exceptionCode != null ? { exceptionCode: error.exceptionCode } : {})
   }
   const name = String(error.name || '')
@@ -43,15 +55,16 @@ export const mapDriverError = (error) => {
 }
 
 export const buffersToHex = (value) => {
-  const list = Array.isArray(value) ? value : (value ? [value] : [])
+  const list = Array.isArray(value) ? value : value ? [value] : []
   const parts = []
   for (const item of list) {
     if (Buffer.isBuffer(item) || item instanceof Uint8Array) {
       parts.push(Buffer.from(item).toString('hex'))
     } else if (item && item.buffer && (Buffer.isBuffer(item.buffer) || item.buffer instanceof ArrayBuffer)) {
-      const view = item.byteLength != null
-        ? Buffer.from(item.buffer, item.byteOffset || 0, item.byteLength)
-        : Buffer.from(item.buffer)
+      const view =
+        item.byteLength != null
+          ? Buffer.from(item.buffer, item.byteOffset || 0, item.byteLength)
+          : Buffer.from(item.buffer)
       parts.push(view.toString('hex'))
     } else if (typeof item === 'string' && /^[0-9A-Fa-f]+$/.test(item.replace(/\s/g, ''))) {
       parts.push(item.replace(/\s/g, ''))
@@ -62,8 +75,8 @@ export const buffersToHex = (value) => {
 
 export const extractDebugFrames = (result, error) => {
   const src = result || error || {}
-  const request = src.request || src.modbusRequest || error && (error.modbusRequest || error.request)
-  const responses = src.responses || src.modbusResponses || error && (error.modbusResponses || error.responses)
+  const request = src.request || src.modbusRequest || (error && (error.modbusRequest || error.request))
+  const responses = src.responses || src.modbusResponses || (error && (error.modbusResponses || error.responses))
   return {
     requestHex: buffersToHex(request),
     responseHex: buffersToHex(responses),

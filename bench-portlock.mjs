@@ -1,8 +1,9 @@
 // Host-side COM key helper. Physical owner tables live in the I/O Worker.
-const portLocks = new Map()
+import { portKey } from './src/domain/modbus/port-key.mjs'
 
-export const portKey = (port) =>
-  String(port || '').replace(/^\\\\\.\\/, '').trim().toUpperCase()
+export { portKey }
+
+const portLocks = new Map()
 
 export const isPortBusy = (port) => {
   const entry = portLocks.get(portKey(port))
@@ -28,6 +29,8 @@ export const withPortLock = async (port, fn) => {
       throw error
     },
   )
-  entry.chain = settle.catch(() => { /* keep the chain alive */ })
+  entry.chain = settle.catch(() => {
+    /* keep the chain alive */
+  })
   return settle
 }

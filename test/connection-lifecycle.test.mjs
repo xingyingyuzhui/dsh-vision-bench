@@ -12,22 +12,39 @@ function makeClient({ autoError = null } = {}) {
     id: ++clientCount,
     listeners,
     failReads: false,
-    setID() {}, setTimeout() {},
+    setID() {},
+    setTimeout() {},
     isDebugEnabled: true,
-    on(ev, fn) { (listeners[ev] ||= []).push(fn) },
-    removeListener(ev, fn) { listeners[ev] = (listeners[ev] || []).filter((f) => f !== fn) },
-    listenerCount(ev) { return (listeners[ev] || []).length },
+    on(ev, fn) {
+      ;(listeners[ev] ||= []).push(fn)
+    },
+    removeListener(ev, fn) {
+      listeners[ev] = (listeners[ev] || []).filter((f) => f !== fn)
+    },
+    listenerCount(ev) {
+      return (listeners[ev] || []).length
+    },
     connectTCP: async () => {},
     connectRTUBuffered: async () => {},
-    close(cb) { cb && cb() },
+    close(cb) {
+      cb && cb()
+    },
     readHoldingRegisters: async function () {
-      if (this.failReads) { const e = new Error('IO timeout'); e.code = 'ETIMEDOUT'; throw e }
+      if (this.failReads) {
+        const e = new Error('IO timeout')
+        e.code = 'ETIMEDOUT'
+        throw e
+      }
       return { data: [1] }
     },
-    emit(ev, arg) { for (const fn of [...(listeners[ev] || [])]) fn(arg) },
+    emit(ev, arg) {
+      for (const fn of [...(listeners[ev] || [])]) fn(arg)
+    },
   }
   if (autoError) setTimeout(() => client.emit('error', new Error(autoError)), 0)
-  const RTU = function () { return client }
+  const RTU = function () {
+    return client
+  }
   return { client, RTU }
 }
 
@@ -43,7 +60,14 @@ function makeFactory() {
 }
 
 const endpoint = (port = 'COM3') => ({ mode: 'rtu', port, baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1 })
-const req = (over = {}) => ({ cwd: '/ws', connectionId: 'c1', source: 'manual', sessionId: '', toolCallId: '', ...over })
+const req = (over = {}) => ({
+  cwd: '/ws',
+  connectionId: 'c1',
+  source: 'manual',
+  sessionId: '',
+  toolCallId: '',
+  ...over,
+})
 const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms))
 
 test('client error: slot goes error, COM released, worker-side manager stays alive, reconnect works', async () => {

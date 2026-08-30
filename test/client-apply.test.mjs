@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { installDomStub } from './dom-stub.mjs'
 
 // Execute the GENERATED bundle exactly like the DSH web loader would
@@ -18,15 +18,27 @@ function loadBundle() {
     let loaded = null
     const sandboxWindow = {
       __ModuleLoader__: {
-        load(mod) { loaded = mod },
+        load(mod) {
+          loaded = mod
+        },
       },
       dispatchEvent: () => true,
-      addEventListener() {}, removeEventListener() {},
-      CustomEvent: class { constructor(type) { this.type = type } },
+      addEventListener() {},
+      removeEventListener() {},
+      CustomEvent: class {
+        constructor(type) {
+          this.type = type
+        }
+      },
       matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
       devicePixelRatio: 1,
-      ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
-      requestAnimationFrame: (cb) => setTimeout(cb, 0), cancelAnimationFrame: (id) => clearTimeout(id),
+      ResizeObserver: class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+      requestAnimationFrame: (cb) => setTimeout(cb, 0),
+      cancelAnimationFrame: (id) => clearTimeout(id),
       navigator: { userAgent: 'node' },
     }
     new Function('window', src)(sandboxWindow)
@@ -76,21 +88,33 @@ function makeCtx(pages) {
     },
     openTab() {},
     closeTab() {},
-    effect(fn) { return typeof fn === 'function' ? fn() : null },
+    effect(fn) {
+      return typeof fn === 'function' ? fn() : null
+    },
   }
   return {
     pages,
-    get(key) { return key === 'slots' ? slots : null },
+    get(key) {
+      return key === 'slots' ? slots : null
+    },
     locale: { register: () => () => {} },
     inject(_deps, fn) {
-      fn({ betterSidebar: sidebar, effect(fn2) { return fn2 && fn2() } })
+      fn({
+        betterSidebar: sidebar,
+        effect(fn2) {
+          return fn2 && fn2()
+        },
+      })
       return () => {}
     },
-    effect(fn) { const d = typeof fn === 'function' ? fn() : null; void d },
+    effect(fn) {
+      const d = typeof fn === 'function' ? fn() : null
+      void d
+    },
   }
 }
 
-test('every registered bench page mounts without runtime errors', () => {
+test('every registered bench page mounts without runtime errors', async () => {
   const mod = loadBundle()
   const pages = {}
   mod.apply(makeCtx(pages))

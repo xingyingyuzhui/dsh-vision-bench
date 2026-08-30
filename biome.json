@@ -12,7 +12,8 @@
       "runtime/**/*.py",
       "coverage/**",
       "dist/**",
-      "**/*.tgz"
+      "**/*.tgz",
+      "test/fixtures/**"
     ]
   },
   "formatter": {
@@ -38,11 +39,57 @@
   },
   "overrides": [
     {
+      "include": ["src/types/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
       "include": ["src/ui/styles/**", "src/ui/hmi/**"],
       "linter": {
         "rules": {
           "style": {
             "useTemplate": "off"
+          }
+        }
+      }
+    },
+    {
+      "include": ["host.js", "bench-*.mjs", "runtime/**", "src/application/modbus/**"],
+      "organizeImports": {
+        "enabled": false
+      }
+    },
+    {
+      "include": ["host.js", "bench-*.mjs", "runtime/**", "scripts/**", "test/**"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "useOptionalChain": "off",
+            "useLiteralKeys": "off",
+            "useArrowFunction": "off",
+            "noForEach": "off",
+            "useFlatMap": "off",
+            "noUselessConstructor": "off"
+          },
+          "style": {
+            "useTemplate": "off",
+            "useSingleVarDeclarator": "off",
+            "useNumberNamespace": "off",
+            "useConst": "off",
+            "useDefaultParameterLast": "off",
+            "noParameterAssign": "off"
+          },
+          "suspicious": {
+            "noAssignInExpressions": "off",
+            "noShadowRestrictedNames": "off"
+          },
+          "performance": {
+            "noDelete": "off"
           }
         }
       }

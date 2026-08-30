@@ -1,19 +1,19 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import test from 'node:test'
-import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-test('bench-visualization-view must not import bench-live', () => {
+test('bench-visualization-view must not import bench-live', async () => {
   const src = readFileSync(join(root, 'bench-visualization-view.mjs'), 'utf8')
   assert.doesNotMatch(src, /from\s+['"]\.\/bench-live\.mjs['"]/)
   assert.match(src, /from\s+['"]\.\/src\/ui\/common\/session-scope\.mjs['"]/)
 })
 
-test('bench-live and bench-map import sessionCwd from session-scope', () => {
+test('bench-live and bench-map import sessionCwd from session-scope', async () => {
   const live = readFileSync(join(root, 'bench-live.mjs'), 'utf8')
   const map = readFileSync(join(root, 'bench-map.mjs'), 'utf8')
   assert.match(live, /from\s+['"]\.\/src\/ui\/common\/session-scope\.mjs['"]/)
@@ -21,7 +21,7 @@ test('bench-live and bench-map import sessionCwd from session-scope', () => {
   assert.doesNotMatch(live, /export function sessionCwd/)
 })
 
-test('bench-shared is a re-export facade only', () => {
+test('bench-shared is a re-export facade only', async () => {
   const src = readFileSync(join(root, 'bench-shared.mjs'), 'utf8')
   assert.match(src, /Compatibility facade/)
   assert.doesNotMatch(src, /export function subscribeState/)
@@ -29,13 +29,13 @@ test('bench-shared is a re-export facade only', () => {
   assert.match(src, /src\/ui\/common\//)
 })
 
-test('internal runtime uses createVisualizationPage (not createTrendPage)', () => {
+test('internal runtime uses createVisualizationPage (not createTrendPage)', async () => {
   const runtime = readFileSync(join(root, 'bench-runtime.mjs'), 'utf8')
   assert.match(runtime, /createVisualizationPage/)
   assert.doesNotMatch(runtime, /createTrendPage/)
 })
 
-test('dependency-cruiser reports zero circular dependencies for UI graph', () => {
+test('dependency-cruiser reports zero circular dependencies for UI graph', async () => {
   const out = execFileSync(
     process.execPath,
     [

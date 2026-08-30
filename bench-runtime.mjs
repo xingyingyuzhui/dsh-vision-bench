@@ -1,13 +1,21 @@
-import { COPY, NS, interpolate, tWith } from './bench-i18n.mjs'
-import { ATTR, CSS } from './bench-styles.mjs'
-import { createSettingsPage, registerSettings } from './bench-settings.mjs'
+import { createFramesPage } from './bench-frames-view.mjs'
 import { createHmiView } from './bench-hmi.mjs'
+import { COPY, NS, interpolate, tWith } from './bench-i18n.mjs'
 import { closeBetterTab, createAlarmPage, createLogPage, createVisualizationPage, registerLive } from './bench-live.mjs'
 import { createMapView, openProjectTab, registerMap } from './bench-map.mjs'
-import { createDebugView, registerView } from './bench-view.mjs'
-import { createFramesPage } from './bench-frames-view.mjs'
+import { createSettingsPage, registerSettings } from './bench-settings.mjs'
 // Task15: Harness inputActions dispatch in bench-shared, runtime respects focus badgeOnly
-import { getFocusState, shouldHighlightFocus, subscribeFocus, shouldRouteFocus, setActiveScope, clearActiveScope, getActiveScope } from './bench-shared.mjs'
+import {
+  clearActiveScope,
+  getActiveScope,
+  getFocusState,
+  setActiveScope,
+  shouldHighlightFocus,
+  shouldRouteFocus,
+  subscribeFocus,
+} from './bench-shared.mjs'
+import { ATTR, CSS } from './bench-styles.mjs'
+import { createDebugView, registerView } from './bench-view.mjs'
 
 // Task2/0.18.4: a unified sidebar page wrapper that keeps the ACTIVE session
 // cwd authoritative (token-guarded so an unmounting stale session page never
@@ -19,10 +27,12 @@ function scopedSidebarPage(React, Page, pageId) {
       try {
         if (props && props.scope && props.scope.cwd) return props.scope.cwd
         if (props && typeof props.useSessions === 'function') {
-          return props.useSessions((s) => {
-            const cur = s && s.current
-            return (s && s.byId && cur && s.byId[cur] && s.byId[cur].cwd) || ''
-          }) || ''
+          return (
+            props.useSessions((s) => {
+              const cur = s && s.current
+              return (s && s.byId && cur && s.byId[cur] && s.byId[cur].cwd) || ''
+            }) || ''
+          )
         }
       } catch {}
       return ''
@@ -30,7 +40,9 @@ function scopedSidebarPage(React, Page, pageId) {
     const tokenRef = React.useRef('')
     React.useEffect(() => {
       tokenRef.current = setActiveScope('sb-' + String(pageId) + '-' + Math.random().toString(36).slice(2, 8), cwd)
-      return () => { if (tokenRef.current) clearActiveScope(tokenRef.current) }
+      return () => {
+        if (tokenRef.current) clearActiveScope(tokenRef.current)
+      }
     }, [cwd, pageId])
     return Page(props)
   }
@@ -57,7 +69,9 @@ export function apply(ctx) {
     if (ctx.locale && typeof ctx.locale.register === 'function') {
       localeDispose = ctx.locale.register(NS, COPY) || function () {}
     }
-  } catch { /* remount */ }
+  } catch {
+    /* remount */
+  }
 
   function t(key, params) {
     return interpolate(tWith(ctx, key, params), params)
@@ -70,19 +84,31 @@ export function apply(ctx) {
       body: JSON.stringify(payload || {}),
       cache: 'no-store',
       signal: AbortSignal.timeout(timeoutMs || 15000),
-    }).then((res) => res.json().then((data) => {
-      if (!res.ok) throw new Error((data && data.error) || ('http ' + res.status))
-      return data
-    }))
+    }).then((res) =>
+      res.json().then((data) => {
+        if (!res.ok) throw new Error((data && data.error) || 'http ' + res.status)
+        return data
+      }),
+    )
   }
 
   let openProjectImpl = function () {}
   let openHmiImpl = function () {}
   let openFramesImpl = function () {}
   let closeTabImpl = function () {}
-  function openProject() { openProjectImpl() }
-  function openHmi(target) { try { openHmiImpl(target) } catch {} }
-  function openFrames() { try { openFramesImpl() } catch {} }
+  function openProject() {
+    openProjectImpl()
+  }
+  function openHmi(target) {
+    try {
+      openHmiImpl(target)
+    } catch {}
+  }
+  function openFrames() {
+    try {
+      openFramesImpl()
+    } catch {}
+  }
   const SettingsPage = createSettingsPage(React, t, post)
   const DebugView = createDebugView(React, t, post, openProject)
   const HmiView = createHmiView(React, t, post)
@@ -96,19 +122,39 @@ export function apply(ctx) {
       openHmiImpl = function () {
         try {
           const slotsApi = ctx.get ? ctx.get('slots') : null
-          if (slotsApi && typeof slotsApi.select === 'function') slotsApi.select('conversation.view', 'vision-bench-hmi')
+          if (slotsApi && typeof slotsApi.select === 'function')
+            slotsApi.select('conversation.view', 'vision-bench-hmi')
           else if (side && typeof side.openTab === 'function') side.openTab({ type: 'dsh-vision-bench:charts' })
         } catch {}
       }
-      openProjectImpl = function () { openProjectTab(side) }
-      openFramesImpl = function () { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} }
-      closeTabImpl = function (id) { closeBetterTab(side, id) }
+      openProjectImpl = function () {
+        openProjectTab(side)
+      }
+      openFramesImpl = function () {
+        try {
+          side.openTab({ type: 'dsh-vision-bench:frames' })
+        } catch {}
+      }
+      closeTabImpl = function (id) {
+        closeBetterTab(side, id)
+      }
       const FramesPage = createFramesPage(React, t, post, { openHmi })
       const stopLive = registerLive(side, React, t, null, {
         trend: scopedSidebarPage(React, createVisualizationPage(React, t, post, { openHmi }), 'trend'), // dsh-vision-bench:charts 不变的「可视化」页
         alarm: scopedSidebarPage(React, createAlarmPage(React, t, post, { openHmi }), 'alarm'),
         frames: scopedSidebarPage(React, FramesPage, 'frames'),
-        log: scopedSidebarPage(React, createLogPage(React, t, post, { openHmi, openFrames: () => { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} } }), 'log'),
+        log: scopedSidebarPage(
+          React,
+          createLogPage(React, t, post, {
+            openHmi,
+            openFrames: () => {
+              try {
+                side.openTab({ type: 'dsh-vision-bench:frames' })
+              } catch {}
+            },
+          }),
+          'log',
+        ),
       })
       const stopMap = registerMap(side, React, t, scopedSidebarPage(React, MapPage, 'map'))
       // Task1+2/0.18.4: only the ACTIVE session's foreground focus may drive the
@@ -123,13 +169,28 @@ export function apply(ctx) {
         })
         if (!decision.route) return
         lastRouteKey = decision.routeKey
-        if (decision.tab === 'trend') { try { side.openTab({ type: 'dsh-vision-bench:charts' }) } catch {} }
-        else if (decision.tab === 'alarm') { try { side.openTab({ type: 'dsh-vision-bench:alarms' }) } catch {} }
-        else if (decision.tab === 'frames') { try { side.openTab({ type: 'dsh-vision-bench:frames' }) } catch {} }
-        else { openHmi() }
+        if (decision.tab === 'trend') {
+          try {
+            side.openTab({ type: 'dsh-vision-bench:charts' })
+          } catch {}
+        } else if (decision.tab === 'alarm') {
+          try {
+            side.openTab({ type: 'dsh-vision-bench:alarms' })
+          } catch {}
+        } else if (decision.tab === 'frames') {
+          try {
+            side.openTab({ type: 'dsh-vision-bench:frames' })
+          } catch {}
+        } else {
+          openHmi()
+        }
       }
       const focusUnsub = subscribeFocus('', (fs, cwd) => applyFocus(fs, cwd))
-      side.effect(() => () => { try { focusUnsub() } catch {} })
+      side.effect(() => () => {
+        try {
+          focusUnsub()
+        } catch {}
+      })
       side.effect(() => () => {
         if (typeof stopLive === 'function') stopLive()
         if (typeof stopMap === 'function') stopMap()

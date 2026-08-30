@@ -60,6 +60,20 @@ export default {
       to: { path: '(^|/)test/' },
     },
     {
+      name: 'domain-no-bench-facades',
+      severity: 'error',
+      comment: '0.22: domain must not import bench-* facades.',
+      from: { path: '(^|/)src/domain/' },
+      to: { path: '(^|/)bench-' },
+    },
+    {
+      name: 'agent-tool-no-store-or-io',
+      severity: 'error',
+      comment: 'Agent proxy may not import store, broker or transport.',
+      from: { path: '(^|/)bench-tool\\.mjs$' },
+      to: { path: '(^|/)(bench-store|bench-io-broker|bench-modbus-transport|runtime/io/)' },
+    },
+    {
       name: 'not-to-unresolvable',
       severity: 'error',
       comment: 'Harness peer packages (@deepseek-ai/*) resolve at runtime inside DSH, not in this package.',

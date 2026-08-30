@@ -1,17 +1,11 @@
-import {
-  clampTimeoutMs,
-  endpointFingerprint,
-  ioError,
-  toEndpoint,
-  validateIoRequest,
-} from './bench-io-contract.mjs'
-import { getVisionIoBroker } from './bench-io-broker.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
+import { getVisionIoBroker } from './bench-io-broker.mjs'
+import { clampTimeoutMs, endpointFingerprint, ioError, toEndpoint, validateIoRequest } from './bench-io-contract.mjs'
 
 let simSeq = 0
-const nextSimTx = () => 'sim:' + (++simSeq)
+const nextSimTx = () => 'sim:' + ++simSeq
 let reqSeq = 0
-const nextReqId = () => 'req-' + Date.now().toString(36) + '-' + (++reqSeq)
+const nextReqId = () => 'req-' + Date.now().toString(36) + '-' + ++reqSeq
 
 const nowMs = () => {
   if (typeof performance !== 'undefined' && performance.now) return performance.now()
@@ -95,9 +89,8 @@ export function notifyConnectionRelease(cwd, ids, extra = {}) {
 
 export function createModbusTransport({ broker = getVisionIoBroker() } = {}) {
   const call = async (payload, opts) => {
-    const body = payload && typeof payload === 'object'
-      ? (payload.id ? payload : { ...payload, id: nextReqId() })
-      : payload
+    const body =
+      payload && typeof payload === 'object' ? (payload.id ? payload : { ...payload, id: nextReqId() }) : payload
     const checked = validateIoRequest(body)
     if (!checked.ok) return { ok: false, error: checked.error }
     try {
@@ -115,7 +108,8 @@ export function createModbusTransport({ broker = getVisionIoBroker() } = {}) {
     } catch (error) {
       return {
         ok: false,
-        error: error && error.code ? error : ioError('IO_RUNTIME_UNAVAILABLE', String((error && error.message) || error)),
+        error:
+          error && error.code ? error : ioError('IO_RUNTIME_UNAVAILABLE', String((error && error.message) || error)),
         frames: error && error.frames,
         transactionId: error && error.transactionId,
         durationMs: error && error.durationMs,
@@ -192,7 +186,17 @@ export function createModbusTransport({ broker = getVisionIoBroker() } = {}) {
       if (!state || state === 'idle' || state === 'stopped') {
         return { ok: true, data: { open: false, lines: [], lastId: 0 } }
       }
-      return call({ v: 1, op: 'serial.capture.feed', cwd: request.cwd, connectionId: request.connectionId || '', since: request.since, max: request.max }, opts)
+      return call(
+        {
+          v: 1,
+          op: 'serial.capture.feed',
+          cwd: request.cwd,
+          connectionId: request.connectionId || '',
+          since: request.since,
+          max: request.max,
+        },
+        opts,
+      )
     },
     async releaseConnection(request, opts = {}) {
       return this.closeConnection(request, opts)

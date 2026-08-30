@@ -36,9 +36,10 @@ export function buildFramePortOptions(connections, serialPorts, mode, liveSource
 }
 
 export const selectProtocolFrames = (framesByConnection, selection) => {
-  const sel = typeof selection === 'object' && selection !== null
-    ? parseFramePortSelection(selection.value)
-    : parseFramePortSelection(selection)
+  const sel =
+    typeof selection === 'object' && selection !== null
+      ? parseFramePortSelection(selection.value)
+      : parseFramePortSelection(selection)
   const map = framesByConnection && typeof framesByConnection === 'object' ? framesByConnection : {}
   if (sel.kind === 'conn') {
     return Array.isArray(map[sel.connectionId]) ? map[sel.connectionId].slice() : []
@@ -77,9 +78,7 @@ export const countAddedFrameIds = (prevIds, nextFrames) => {
   const prev = prevIds instanceof Set ? prevIds : new Set(prevIds || [])
   let added = 0
   for (const f of Array.isArray(nextFrames) ? nextFrames : []) {
-    const id = typeof f === 'string' || typeof f === 'number'
-      ? String(f)
-      : (f && (f.frameId || f.id))
+    const id = typeof f === 'string' || typeof f === 'number' ? String(f) : f && (f.frameId || f.id)
     if (id != null && id !== '' && !prev.has(String(id))) added += 1
   }
   return added
@@ -91,8 +90,9 @@ export const frameStreamKey = (mode, selection) => {
 }
 
 export const rawLineId = (port, line, index) => {
-  if (line && (line.id != null)) return String(line.connectionId || port || '') + ':' + String(line.epoch || '') + ':' + String(line.id)
-  return String(port || 'raw') + ':' + String(line && (line.t || line.at) || 0) + ':' + String(index || 0)
+  if (line && line.id != null)
+    return String(line.connectionId || port || '') + ':' + String(line.epoch || '') + ':' + String(line.id)
+  return String(port || 'raw') + ':' + String((line && (line.t || line.at)) || 0) + ':' + String(index || 0)
 }
 
 export function resolveFrameSelection(value, connections) {

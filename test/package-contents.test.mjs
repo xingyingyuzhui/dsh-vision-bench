@@ -12,11 +12,20 @@ test('package.json: version tracks package and no legacy python modbus files', a
     assert.ok(!files.some((f) => String(f).indexOf(bad) >= 0), bad + ' must not be packaged')
   }
   // Keil/OpenOCD python must survive this round
-  assert.ok(files.some((f) => String(f).indexOf('keil_build.py') >= 0), 'keil_build.py still packaged')
-  assert.ok(files.some((f) => String(f).indexOf('openocd_flash.py') >= 0), 'openocd_flash.py still packaged')
+  assert.ok(
+    files.some((f) => String(f).indexOf('keil_build.py') >= 0),
+    'keil_build.py still packaged',
+  )
+  assert.ok(
+    files.some((f) => String(f).indexOf('openocd_flash.py') >= 0),
+    'openocd_flash.py still packaged',
+  )
   // 可视化模块必须在发布包内
   for (const want of ['bench-visualization-model.mjs', 'bench-visualization-view.mjs']) {
-    assert.ok(files.some((f) => String(f) === want), want + ' packaged')
+    assert.ok(
+      files.some((f) => String(f) === want),
+      want + ' packaged',
+    )
   }
   // runtime scripts no longer exist on disk
   const { access } = await import('node:fs/promises')
@@ -25,7 +34,10 @@ test('package.json: version tracks package and no legacy python modbus files', a
   }
   // UI 版本 chip 与 package 一致（禁止手改 client.js）
   const hmi = await readFile(new URL('../src/ui/hmi/device-card.mjs', import.meta.url), 'utf8')
-  assert.ok(hmi.includes("'v" + pkg.version + "'") || hmi.includes('"v' + pkg.version + '"'), 'HMI version chip matches package.json')
+  assert.ok(
+    hmi.includes("'v" + pkg.version + "'") || hmi.includes('"v' + pkg.version + '"'),
+    'HMI version chip matches package.json',
+  )
 })
 
 test('bench-run script map keeps Keil/OpenOCD and drops modbus python', async () => {

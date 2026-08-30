@@ -1,9 +1,4 @@
-import {
-  clampTimeoutMs,
-  IO_CONNECT_TIMEOUT_MS,
-  normalizeFrames,
-  rtuParityName,
-} from '../../bench-io-contract.mjs'
+import { IO_CONNECT_TIMEOUT_MS, clampTimeoutMs, normalizeFrames, rtuParityName } from '../../bench-io-contract.mjs'
 import { extractDebugFrames, mapDriverError } from './error-map.mjs'
 
 export async function loadSerialPort() {
@@ -50,7 +45,11 @@ export async function openModbusClient(ModbusRTU, endpoint, signal) {
   client.isDebugEnabled = true
   const connectMs = IO_CONNECT_TIMEOUT_MS
   const timer = setTimeout(() => {
-    try { client.close(() => {}) } catch { /* ignore */ }
+    try {
+      client.close(() => {})
+    } catch {
+      /* ignore */
+    }
   }, connectMs)
   try {
     if (endpoint.mode === 'tcp') {
@@ -64,7 +63,11 @@ export async function openModbusClient(ModbusRTU, endpoint, signal) {
       })
     }
   } catch (error) {
-    try { client.close(() => {}) } catch { /* ignore */ }
+    try {
+      client.close(() => {})
+    } catch {
+      /* ignore */
+    }
     const mapped = mapDriverError(error)
     const err = new Error(mapped.message)
     err.code = mapped.code === 'INVALID_RESPONSE' ? 'CONNECTION_TIMEOUT' : mapped.code
@@ -73,7 +76,11 @@ export async function openModbusClient(ModbusRTU, endpoint, signal) {
     clearTimeout(timer)
   }
   if (signal && signal.aborted) {
-    try { client.close(() => {}) } catch { /* ignore */ }
+    try {
+      client.close(() => {})
+    } catch {
+      /* ignore */
+    }
     const err = new Error('已取消')
     err.code = 'CANCELLED'
     throw err
@@ -104,7 +111,11 @@ export async function runModbusOp(client, request, signal) {
   const fc = Math.trunc(Number(request.functionCode))
   const address = Math.trunc(Number(request.address))
   const abort = () => {
-    try { client.close(() => {}) } catch { /* ignore */ }
+    try {
+      client.close(() => {})
+    } catch {
+      /* ignore */
+    }
   }
   if (signal) {
     if (signal.aborted) {
@@ -141,11 +152,16 @@ export async function runModbusOp(client, request, signal) {
     if (signal) signal.removeEventListener('abort', abort)
   }
   const durationMs = Number(process.hrtime.bigint() - started) / 1e6
-  const data = request.op === 'modbus.read'
-    ? ((fc === 1 || fc === 2) ? asBools(result && result.data).slice(0, Number(request.count)) : asRegs(result && result.data).slice(0, Number(request.count)))
-    : (fc === 5 || fc === 6
-      ? (fc === 5 ? [request.values[0] === true || request.values[0] === 1] : [Number(request.values[0]) & 0xffff])
-      : request.values.length)
+  const data =
+    request.op === 'modbus.read'
+      ? fc === 1 || fc === 2
+        ? asBools(result && result.data).slice(0, Number(request.count))
+        : asRegs(result && result.data).slice(0, Number(request.count))
+      : fc === 5 || fc === 6
+        ? fc === 5
+          ? [request.values[0] === true || request.values[0] === 1]
+          : [Number(request.values[0]) & 0xffff]
+        : request.values.length
   const debug = extractDebugFrames(result, null)
   return {
     data,

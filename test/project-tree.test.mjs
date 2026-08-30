@@ -1,11 +1,11 @@
+import assert from 'node:assert/strict'
 // Task5/0.19.3: 工程结构 — 树渲染（组/文件/函数）、搜索、筛选、源码预览、
 // 编译错误定位（jumpProject）。
-import { beforeEach, afterEach, test } from 'node:test'
-import assert from 'node:assert/strict'
+import { afterEach, beforeEach, test } from 'node:test'
+import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { Window } from 'happy-dom'
 import React from 'react'
 import { createElement } from 'react'
-import { render, cleanup, waitFor, act } from '@testing-library/react'
 import { createMapView } from '../bench-map.mjs'
 
 let win
@@ -13,10 +13,22 @@ beforeEach(async () => {
   win = new Window({ url: 'http://localhost/' })
   globalThis.window = win
   globalThis.document = win.document
-  try { globalThis.navigator = { clipboard: { writeText: async () => {} }, userAgent: 'happy' } } catch {
-    Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText: async () => {} }, userAgent: 'happy' }, configurable: true })
+  try {
+    globalThis.navigator = { clipboard: { writeText: async () => {} }, userAgent: 'happy' }
+  } catch {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { clipboard: { writeText: async () => {} }, userAgent: 'happy' },
+      configurable: true,
+    })
   }
-  globalThis.ResizeObserver = class { constructor(cb) { this.cb = cb } observe() {} unobserve() {} disconnect() {} }
+  globalThis.ResizeObserver = class {
+    constructor(cb) {
+      this.cb = cb
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
   globalThis.Element = win.HTMLElement
   globalThis.HTMLElement = win.HTMLElement
   globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0)
@@ -26,7 +38,9 @@ beforeEach(async () => {
   globalThis.CustomEvent = win.CustomEvent
   globalThis.getComputedStyle = () => ({ getPropertyValue: () => '', setProperty() {}, removeProperty() {} })
 })
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 const MAP_DETAILS = {
   target: 'Debug',
@@ -35,13 +49,32 @@ const MAP_DETAILS = {
     {
       name: 'Source',
       files: [
-        { name: 'main.c', rel: 'src/main.c', inside: true, exists: true, readable: true, functions: [{ name: 'main', line: 12 }, { name: 'setup', line: 37 }] },
+        {
+          name: 'main.c',
+          rel: 'src/main.c',
+          inside: true,
+          exists: true,
+          readable: true,
+          functions: [
+            { name: 'main', line: 12 },
+            { name: 'setup', line: 37 },
+          ],
+        },
         { name: 'missing.c', rel: 'src/missing.c', inside: true, exists: false, readable: false, functions: [] },
       ],
     },
     {
       name: 'Drivers',
-      files: [{ name: 'uart.c', rel: 'drv/uart.c', inside: false, exists: true, readable: true, functions: [{ name: 'uart_init', line: 4 }] }],
+      files: [
+        {
+          name: 'uart.c',
+          rel: 'drv/uart.c',
+          inside: false,
+          exists: true,
+          readable: true,
+          functions: [{ name: 'uart_init', line: 4 }],
+        },
+      ],
     },
   ],
   includes: [{ path: 'inc/', exists: true, inside: true }],
@@ -57,10 +90,23 @@ const makePost = (details = MAP_DETAILS) => {
       return { ok: true, result: { details } }
     }
     if (/\/dsh-vision-bench\/project\/file$/.test(path)) {
-      return { ok: true, rel: String((body && (body.path || body.file)) || ''), text: 'int main(void) { return 0; }\n// setup line', lines: 2, truncated: false }
+      return {
+        ok: true,
+        rel: String((body && (body.path || body.file)) || ''),
+        text: 'int main(void) { return 0; }\n// setup line',
+        lines: 2,
+        truncated: false,
+      }
     }
     if (/\/dsh-vision-bench\/state$/.test(path)) {
-      return { ok: true, workspace: { keil: { project: '/proj/x.uvprojx', target: 'Debug' }, journal: { tasks: [], running: [], timeline: [] }, modbus: { version: 3, connections: [], devices: [], points: [], values: [], alarmState: {} } } }
+      return {
+        ok: true,
+        workspace: {
+          keil: { project: '/proj/x.uvprojx', target: 'Debug' },
+          journal: { tasks: [], running: [], timeline: [] },
+          modbus: { version: 3, connections: [], devices: [], points: [], values: [], alarmState: {} },
+        },
+      }
     }
     return { ok: true }
   }
@@ -69,12 +115,27 @@ const makePost = (details = MAP_DETAILS) => {
 
 test('工程树渲染：组 → 文件 → 函数三级 + 缺失/工作区外标记', async () => {
   const { post } = makePost()
-  const t = (k) => ({ projectMap: '工程结构', mapTruncated: '已截断', mapIncludes: 'Include 路径', mapDefines: '宏', mapIncludesOf: '依赖', loadFail: '加载失败', needWorkspace: '无工作区', projectMapEmpty: '空', opening: '打开中', csvCancel: '关闭' }[k] || k)
+  const t = (k) =>
+    ({
+      projectMap: '工程结构',
+      mapTruncated: '已截断',
+      mapIncludes: 'Include 路径',
+      mapDefines: '宏',
+      mapIncludesOf: '依赖',
+      loadFail: '加载失败',
+      needWorkspace: '无工作区',
+      projectMapEmpty: '空',
+      opening: '打开中',
+      csvCancel: '关闭',
+    })[k] || k
   const Map = createMapView(React, t, post)
   const tree = render(createElement(Map, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
-  await waitFor(() => {
-    assert.ok(tree.container.textContent.includes('Source'), '组名渲染: ' + tree.container.textContent.slice(0, 120))
-  }, { timeout: 6000 })
+  await waitFor(
+    () => {
+      assert.ok(tree.container.textContent.includes('Source'), '组名渲染: ' + tree.container.textContent.slice(0, 120))
+    },
+    { timeout: 6000 },
+  )
   const text = tree.container.textContent
   assert.ok(text.includes('main.c'), '文件名渲染')
   assert.ok(text.includes('缺失'), '缺失标记')
@@ -86,24 +147,34 @@ test('工程树渲染：组 → 文件 → 函数三级 + 缺失/工作区外标
   assert.ok(mainRow, 'main.c 行存在')
   const toggle = mainRow.querySelector('.dvb-map-toggle')
   assert.ok(toggle, '文件可展开')
-  await act(async () => { toggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
-  await waitFor(() => {
-    const t2 = tree.container.textContent
-    assert.ok(t2.includes('main') && t2.includes('line 12'), '函数与行号渲染: ' + t2.slice(0, 200))
-  }, { timeout: 6000 })
+  await act(async () => {
+    toggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+  await waitFor(
+    () => {
+      const t2 = tree.container.textContent
+      assert.ok(t2.includes('main') && t2.includes('line 12'), '函数与行号渲染: ' + t2.slice(0, 200))
+    },
+    { timeout: 6000 },
+  )
   tree.unmount()
 })
 
 test('文件可展开函数列表并可预览源码', async () => {
   const { post } = makePost()
-  const t = (k) => ({ projectMap: '工程结构', csvCancel: '关闭', opening: '打开中' }[k] || k)
+  const t = (k) => ({ projectMap: '工程结构', csvCancel: '关闭', opening: '打开中' })[k] || k
   const Map = createMapView(React, t, post)
   const tree = render(createElement(Map, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('Source')), { timeout: 6000 })
   // 找 main.c 所在行的"预览"按钮
-  const previewBtn = Array.from(tree.container.querySelectorAll('.dvb-map-file-actions button')).find((b) => b.textContent === '预览')
+  const previewBtn = Array.from(tree.container.querySelectorAll('.dvb-map-file-actions button')).find(
+    (b) => b.textContent === '预览',
+  )
   assert.ok(previewBtn, '文件行有预览按钮')
-  await act(async () => { previewBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); await new Promise((r) => setTimeout(r, 30)) })
+  await act(async () => {
+    previewBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 30))
+  })
   await waitFor(() => assert.ok(tree.container.textContent.includes('int main(void)')), { timeout: 6000 })
   tree.unmount()
 })
@@ -131,7 +202,7 @@ test('搜索与筛选控件存在且生效', async () => {
 
 test('编译配置可折叠（Include/宏/依赖）', async () => {
   const { post } = makePost()
-  const t = (k) => ({ mapIncludes: 'Include 路径', mapDefines: '宏', mapIncludesOf: '依赖关系' }[k] || k)
+  const t = (k) => ({ mapIncludes: 'Include 路径', mapDefines: '宏', mapIncludesOf: '依赖关系' })[k] || k
   const Map = createMapView(React, t, post)
   const tree = render(createElement(Map, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('Include 路径')), { timeout: 6000 })
@@ -139,8 +210,13 @@ test('编译配置可折叠（Include/宏/依赖）', async () => {
   assert.ok(tree.container.textContent.includes('USE_HAL') === false || tree.container.textContent.includes('宏'))
   // 展开后明细出现
   const toggle = Array.from(tree.container.querySelectorAll('button')).find((b) => /Include 路径/.test(b.textContent))
-  await act(async () => { toggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
-  await waitFor(() => assert.ok(tree.container.textContent.includes('inc/') && tree.container.textContent.includes('USE_HAL')), { timeout: 6000 })
+  await act(async () => {
+    toggle.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+  await waitFor(
+    () => assert.ok(tree.container.textContent.includes('inc/') && tree.container.textContent.includes('USE_HAL')),
+    { timeout: 6000 },
+  )
   tree.unmount()
 })
 

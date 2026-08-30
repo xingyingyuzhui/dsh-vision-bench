@@ -1,8 +1,12 @@
-// @ts-nocheck
-import { decodeValue, isWritableFunction } from '../../../bench-points.mjs'
+// @ts-check
+import { decodeValue, isWritableFunction } from './point-math.mjs'
 
 export const STALE_MS = 30 * 1000
 
+/**
+ * @param {any} rec
+ * @returns {any}
+ */
 export const isStaleValue = (rec) => {
   if (!rec || rec.ok !== true) return false
   const at = Number(rec.at)
@@ -10,7 +14,16 @@ export const isStaleValue = (rec) => {
   return Date.now() - at > STALE_MS
 }
 
+/**
+ * @param {any} p
+ * @param {any} values
+ * @returns {any}
+ */
 export const compactPointRow = (p, values) => {
+  /**
+   * @param {any} item
+   * @returns {any}
+   */
   const rec = (Array.isArray(values) ? values : []).find((item) => item.key === p.id || item.pointId === p.id)
   return {
     id: p.id,

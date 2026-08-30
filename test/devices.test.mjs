@@ -4,12 +4,19 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { normalizeConn, normalizeModbus, connLabel, patchConn, validateConnections, validateDevices } from '../bench-devices.mjs'
-import { modbusPoll, modbusWrite, modbusRead } from '../bench-modbus.mjs'
+import {
+  connLabel,
+  normalizeConn,
+  normalizeModbus,
+  patchConn,
+  validateConnections,
+  validateDevices,
+} from '../bench-devices.mjs'
+import { modbusPoll, modbusRead, modbusWrite } from '../bench-modbus.mjs'
+import { pointIdOf, setPointValue } from '../bench-points.mjs'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
-import { setPointValue, pointIdOf } from '../bench-points.mjs'
 
-test('normalizeConn applies defaults and clamps', () => {
+test('normalizeConn applies defaults and clamps', async () => {
   const c = normalizeConn({ mode: 'tcp', baudrate: 0, bytesize: 9, parity: 'X', stopbits: 7, slave: 300 })
   assert.equal(c.mode, 'tcp')
   assert.equal(c.baudrate, 9600)
@@ -66,11 +73,11 @@ test('legacy devices+segments workspaces migrate into points', async () => {
     assert.equal(new Set(ids).size, 3)
     for (const id of ids) assert.ok(typeof id === 'string' && id.length >= 2)
     // verify area mapping and addresses
-    const sorted = [...mb.points].sort((a,b)=> a.address - b.address)
+    const sorted = [...mb.points].sort((a, b) => a.address - b.address)
     // addresses 0,1,9 - check areas
-    const p0 = mb.points.find(p=> p.address===0)
-    const p1 = mb.points.find(p=> p.address===1)
-    const p9 = mb.points.find(p=> p.address===9)
+    const p0 = mb.points.find((p) => p.address === 0)
+    const p1 = mb.points.find((p) => p.address === 1)
+    const p9 = mb.points.find((p) => p.address === 9)
     assert.equal(p0.area, 'holdingRegister')
     assert.equal(p1.area, 'holdingRegister')
     assert.equal(p9.area, 'coil')
@@ -80,7 +87,7 @@ test('legacy devices+segments workspaces migrate into points', async () => {
     assert.equal(p9.name, '阀门')
     assert.equal(p0.scale, 0.1)
     // migrated values keep their payload under the new pointId key
-    const valvePoint = mb.points.find(p=> p.area==='coil' && p.address===9)
+    const valvePoint = mb.points.find((p) => p.area === 'coil' && p.address === 9)
     const valve = mb.values.find((v) => v.key === valvePoint.id || v.pointId === valvePoint.id)
     assert.ok(valve && valve.value === 1 && valve.at === 42)
     // qualified values carry redundant connection/device for filtering (may be via point)
@@ -96,7 +103,7 @@ test('legacy devices+segments workspaces migrate into points', async () => {
   }
 })
 
-test('patchConn merges without touching points or values', () => {
+test('patchConn merges without touching points or values', async () => {
   const base = normalizeModbus({
     conn: { port: 'COM3', baudrate: 9600 },
     points: [{ function: 3, address: 1 }],
@@ -110,7 +117,7 @@ test('patchConn merges without touching points or values', () => {
   assert.equal(next.values.length, 1)
 })
 
-test('connLabel renders both modes without Unit ID', () => {
+test('connLabel renders both modes without Unit ID', async () => {
   assert.equal(connLabel(normalizeConn({ port: 'COM3', baudrate: 9600, slave: 2 })), 'COM3 @ 9600')
   assert.equal(connLabel(normalizeConn({ mode: 'tcp', host: '10.0.0.8', tcpPort: 1502, slave: 4 })), '10.0.0.8:1502')
   assert.ok(!/站号/.test(connLabel(normalizeConn({ port: 'COM3', baudrate: 9600, slave: 2 }))))
@@ -185,7 +192,15 @@ test('RTU COM 全局唯一：两条 enabled 连接同 COM3 冲突被 validateCon
     const first = saveWorkspace(home, cwd, {
       modbus: {
         version: 3,
-        connections: [{ id: 'c1', name: '连接1', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM3', baudrate: 9600 } }],
+        connections: [
+          {
+            id: 'c1',
+            name: '连接1',
+            role: 'client',
+            enabled: true,
+            conn: { mode: 'rtu', port: 'COM3', baudrate: 9600 },
+          },
+        ],
         devices: [{ id: 'd1', connectionId: 'c1', name: '设备1', unitId: 1 }],
         points: [],
       },
@@ -206,10 +221,22 @@ test('RTU COM 全局唯一：两条 enabled 连接同 COM3 冲突被 validateCon
   }
 })
 
-test('TCP listenHost:listenPort 唯一，TCP 客户端 host:port 允许复用', () => {
+test('TCP listenHost:listenPort 唯一，TCP 客户端 host:port 允许复用', async () => {
   const serverDup = [
-    { id: 'c1', name: '服务端A', role: 'server', enabled: true, conn: { mode: 'tcp', host: '127.0.0.1', tcpPort: 502 } },
-    { id: 'c2', name: '服务端B', role: 'server', enabled: true, conn: { mode: 'tcp', host: '127.0.0.1', tcpPort: 502 } },
+    {
+      id: 'c1',
+      name: '服务端A',
+      role: 'server',
+      enabled: true,
+      conn: { mode: 'tcp', host: '127.0.0.1', tcpPort: 502 },
+    },
+    {
+      id: 'c2',
+      name: '服务端B',
+      role: 'server',
+      enabled: true,
+      conn: { mode: 'tcp', host: '127.0.0.1', tcpPort: 502 },
+    },
   ]
   const errs = validateConnections(serverDup)
   assert.ok(errs.length >= 1)
@@ -313,11 +340,33 @@ test('同一 RTU 连接下两 Unit ID 同地址点位不串扰（p3_0 在 unit1 
   const cwd = join(home, 'board')
   await mkdir(cwd)
   try {
-    const c1 = { id: 'c1', name: 'COM3', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM3', baudrate: 9600, sim: true } }
+    const c1 = {
+      id: 'c1',
+      name: 'COM3',
+      role: 'client',
+      enabled: true,
+      conn: { mode: 'rtu', port: 'COM3', baudrate: 9600, sim: true },
+    }
     const d1 = { id: 'd1', connectionId: 'c1', name: 'Unit1', unitId: 1 }
     const d2 = { id: 'd2', connectionId: 'c1', name: 'Unit2', unitId: 2 }
-    const p1 = { id: 'p-d1-hr0', connectionId: 'c1', deviceId: 'd1', name: 'U1-HR0', area: 'holdingRegister', function: 3, address: 0 }
-    const p2 = { id: 'p-d2-hr0', connectionId: 'c1', deviceId: 'd2', name: 'U2-HR0', area: 'holdingRegister', function: 3, address: 0 }
+    const p1 = {
+      id: 'p-d1-hr0',
+      connectionId: 'c1',
+      deviceId: 'd1',
+      name: 'U1-HR0',
+      area: 'holdingRegister',
+      function: 3,
+      address: 0,
+    }
+    const p2 = {
+      id: 'p-d2-hr0',
+      connectionId: 'c1',
+      deviceId: 'd2',
+      name: 'U2-HR0',
+      area: 'holdingRegister',
+      function: 3,
+      address: 0,
+    }
     saveWorkspace(home, cwd, {
       modbus: {
         version: 3,
@@ -330,32 +379,50 @@ test('同一 RTU 连接下两 Unit ID 同地址点位不串扰（p3_0 在 unit1 
       },
     })
     // write to d1 HR0 = 111, d2 HR0 should stay isolated
-    const w1 = await modbusWrite(home, cwd, { connectionId: 'c1', deviceId: 'd1', function: 3, address: 0, values: [111], source: 'user' })
+    const w1 = await modbusWrite(home, cwd, {
+      connectionId: 'c1',
+      deviceId: 'd1',
+      function: 3,
+      address: 0,
+      values: [111],
+      source: 'user',
+    })
     assert.equal(w1.ok, true)
     assert.deepEqual(w1.target, [111])
     let ws = loadWorkspace(home, cwd)
-    let rec1 = ws.modbus.values.find(v => v.key === 'p-d1-hr0' || v.pointId === 'p-d1-hr0')
-    let rec2 = ws.modbus.values.find(v => v.key === 'p-d2-hr0' || v.pointId === 'p-d2-hr0')
+    let rec1 = ws.modbus.values.find((v) => v.key === 'p-d1-hr0' || v.pointId === 'p-d1-hr0')
+    let rec2 = ws.modbus.values.find((v) => v.key === 'p-d2-hr0' || v.pointId === 'p-d2-hr0')
     assert.ok(rec1 && rec1.raw === 111)
     assert.ok(!rec2 || rec2.raw !== 111)
     // sim flips to false after local write; re-enable for second write on same connection
     {
       const cur = loadWorkspace(home, cwd)
-      const nextConns = cur.modbus.connections.map(c => c.id === 'c1' ? { ...c, conn: { ...c.conn, sim: true } } : c)
+      const nextConns = cur.modbus.connections.map((c) =>
+        c.id === 'c1' ? { ...c, conn: { ...c.conn, sim: true } } : c,
+      )
       saveWorkspace(home, cwd, { modbus: { connections: nextConns } })
     }
     // write to d2 HR0 = 222, d1 should stay 111
-    const w2 = await modbusWrite(home, cwd, { connectionId: 'c1', deviceId: 'd2', function: 3, address: 0, values: [222], source: 'user' })
+    const w2 = await modbusWrite(home, cwd, {
+      connectionId: 'c1',
+      deviceId: 'd2',
+      function: 3,
+      address: 0,
+      values: [222],
+      source: 'user',
+    })
     assert.equal(w2.ok, true)
     ws = loadWorkspace(home, cwd)
-    rec1 = ws.modbus.values.find(v => v.key === 'p-d1-hr0' || v.pointId === 'p-d1-hr0')
-    rec2 = ws.modbus.values.find(v => v.key === 'p-d2-hr0' || v.pointId === 'p-d2-hr0')
+    rec1 = ws.modbus.values.find((v) => v.key === 'p-d1-hr0' || v.pointId === 'p-d1-hr0')
+    rec2 = ws.modbus.values.find((v) => v.key === 'p-d2-hr0' || v.pointId === 'p-d2-hr0')
     assert.equal(rec1.raw, 111)
     assert.equal(rec2.raw, 222)
     // re-enable sim before reads
     {
       const cur = loadWorkspace(home, cwd)
-      const nextConns = cur.modbus.connections.map(c => c.id === 'c1' ? { ...c, conn: { ...c.conn, sim: true } } : c)
+      const nextConns = cur.modbus.connections.map((c) =>
+        c.id === 'c1' ? { ...c, conn: { ...c.conn, sim: true } } : c,
+      )
       saveWorkspace(home, cwd, { modbus: { connections: nextConns } })
     }
     // verify point lookup isolation via modbusRead pointId
@@ -387,7 +454,7 @@ test('v2→v3 迁移：旧 conn+points 正确迁为 c1/d1', async () => {
       { key: 'p3_1', raw: 456, value: 456, ok: true, at: 1001 },
     ],
     polling: { enabled: true, intervalMs: 2000, lastAt: 999, lastOk: true, error: '' },
-    alarmActive: { 'p3_0': true },
+    alarmActive: { p3_0: true },
     frames: [{ t: 1, label: 'old', request: 'REQ', response: 'RESP', trace: [] }],
   }
   const migrated = normalizeModbus(v2)
@@ -414,11 +481,11 @@ test('v2→v3 迁移：旧 conn+points 正确迁为 c1/d1', async () => {
   // values remapped to new ids
   assert.equal(migrated.values.length, 2)
   for (const v of migrated.values) {
-    assert.ok(migrated.points.some(p => p.id === v.key || p.id === v.pointId))
+    assert.ok(migrated.points.some((p) => p.id === v.key || p.id === v.pointId))
     assert.equal(v.connectionId, 'c1')
     assert.equal(v.deviceId, 'd1')
   }
-  const oldVal = migrated.values.find(v => v.raw === 123)
+  const oldVal = migrated.values.find((v) => v.raw === 123)
   assert.ok(oldVal)
   // pollingByConnection
   assert.ok(migrated.pollingByConnection && migrated.pollingByConnection['c1'])
@@ -429,7 +496,7 @@ test('v2→v3 迁移：旧 conn+points 正确迁为 c1/d1', async () => {
   // alarmState remapped
   assert.equal(Object.keys(migrated.alarmState).length, 1)
   const alarmKey = Object.keys(migrated.alarmState)[0]
-  assert.ok(migrated.points.some(p => p.id === alarmKey))
+  assert.ok(migrated.points.some((p) => p.id === alarmKey))
   // active ids
   assert.equal(migrated.activeConnectionId, 'c1')
   assert.equal(migrated.activeDeviceId, 'd1')

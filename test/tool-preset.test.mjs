@@ -6,10 +6,18 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
-import { apply } from '../host.js'
-import { ensurePresetOverlay, PRESET_BACKUP_FAILED, PRESET_PERSONA, PRESET_RESTORE_FAILED, PRESET_WRITE_FAILED, REBUILD_INSTRUCTIONS, seedVisionBenchPreset } from '../bench-preset.mjs'
-import { runVisionBench } from '../bench-tool.mjs'
+import {
+  PRESET_BACKUP_FAILED,
+  PRESET_PERSONA,
+  PRESET_RESTORE_FAILED,
+  PRESET_WRITE_FAILED,
+  REBUILD_INSTRUCTIONS,
+  ensurePresetOverlay,
+  seedVisionBenchPreset,
+} from '../bench-preset.mjs'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
+import { runVisionBench } from '../bench-tool.mjs'
+import { apply } from '../host.js'
 
 // bench-preset.mjs routes every fs call through createRequire('node:fs'), so
 // patching the shared module object here injects failures into the migration.
@@ -17,29 +25,44 @@ const nodeFs = () => createRequire(import.meta.url)('node:fs')
 function withFsPatched(patches, fn) {
   const fs = nodeFs()
   const saved = {}
-  for (const [k, v] of Object.entries(patches)) { saved[k] = fs[k]; fs[k] = v }
-  try { return fn(fs) } finally { for (const [k, v] of Object.entries(saved)) fs[k] = v }
+  for (const [k, v] of Object.entries(patches)) {
+    saved[k] = fs[k]
+    fs[k] = v
+  }
+  try {
+    return fn(fs)
+  } finally {
+    for (const [k, v] of Object.entries(saved)) fs[k] = v
+  }
 }
 const leftoverTemps = async (dir) => (await readdir(dir)).filter((n) => /\.tmp/.test(n))
-const LEGACY_PERSONA_A = 'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场工程、编译产物和 Modbus 连接以 vision_bench 工具为准：先 action=status，再 ls/select/build/read。不要猜测用户选了哪个工程。'
-const LEGACY_PERSONA_B = 'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场工程、编译产物、进行中任务和时间线以 vision_bench 工具为准：先 action=status，再 map 看当前 Target 的文件树，然后 ls/select/build/read。不要猜测用户选了哪个工程或有哪些源文件。'
-const personaComposition = (text) => ['- id: persona', '  name: x', '  config:', '    text: >-', '      ' + text, ''].join('\n')
+const LEGACY_PERSONA_A =
+  'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场工程、编译产物和 Modbus 连接以 vision_bench 工具为准：先 action=status，再 ls/select/build/read。不要猜测用户选了哪个工程。'
+const LEGACY_PERSONA_B =
+  'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场工程、编译产物、进行中任务和时间线以 vision_bench 工具为准：先 action=status，再 map 看当前 Target 的文件树，然后 ls/select/build/read。不要猜测用户选了哪个工程或有哪些源文件。'
+const personaComposition = (text) =>
+  ['- id: persona', '  name: x', '  config:', '    text: >-', '      ' + text, ''].join('\n')
 
-test('agent role registers vision_bench and skips HTTP routes', () => {
+test('agent role registers vision_bench and skips HTTP routes', async () => {
   const tools = []
-  apply({
-    tools: {
-      register(def) {
-        tools.push(def)
-        return () => {}
+  apply(
+    {
+      tools: {
+        register(def) {
+          tools.push(def)
+          return () => {}
+        },
       },
+      agentPresets: {},
+      webServer: {
+        register() {
+          throw new Error('host routes must not mount on agent plane')
+        },
+      },
+      effect() {},
     },
-    agentPresets: {},
-    webServer: {
-      register() { throw new Error('host routes must not mount on agent plane') },
-    },
-    effect() {},
-  }, { role: 'agent' })
+    { role: 'agent' },
+  )
   assert.equal(tools.length, 1)
   assert.equal(tools[0].name, 'vision_bench')
   assert.equal(tools[0].parameters.type, 'object')
@@ -50,14 +73,17 @@ test('agent role registers vision_bench and skips HTTP routes', () => {
 test('ensurePresetOverlay appends the agent-plane row and persona', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'dvb-preset-'))
   try {
-    await writeFile(join(dir, 'agent.cordis.yml'), [
-      '- id: persona',
-      '  name: \'@deepseek-ai/dsh-persona\'',
-      '  config:',
-      '    text: >-',
-      '      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.',
-      '',
-    ].join('\n'))
+    await writeFile(
+      join(dir, 'agent.cordis.yml'),
+      [
+        '- id: persona',
+        "  name: '@deepseek-ai/dsh-persona'",
+        '  config:',
+        '    text: >-',
+        '      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.',
+        '',
+      ].join('\n'),
+    )
     const out = ensurePresetOverlay(dir)
     assert.equal(out.ok, true)
     const text = await (await import('node:fs/promises')).readFile(join(dir, 'agent.cordis.yml'), 'utf8')
@@ -125,7 +151,9 @@ test('agent single-point read patches the active device address', async () => {
         points: [{ name: 'p', function: 3, address: 0 }],
       },
     })
-    const ran = await runVisionBench(home, { action: 'read', function: 3, address: 10, count: 1 }, cwd, { source: 'agent' })
+    const ran = await runVisionBench(home, { action: 'read', function: 3, address: 10, count: 1 }, cwd, {
+      source: 'agent',
+    })
     assert.equal(ran.ok, true)
     assert.match(ran.summary || ran.result?.summary || ran.summary || '', /读取成功/)
     const ws = loadWorkspace(home, cwd)
@@ -161,7 +189,9 @@ test('preset yaml error does not overwrite', async () => {
     assert.equal(out.ok, false)
     assert.ok(out.rebuildHelp)
     assert.equal(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'), bad)
-  } finally { await rm(dir, { recursive: true, force: true }) }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })
 test('preset backup and write-failure recovery', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'dvb-bak-'))
@@ -190,11 +220,18 @@ test('preset backup and write-failure recovery', async () => {
     let once = true
     // atomic write now writes a `.tmp<rand>` sibling then renames; match by basename prefix
     fs.writeFileSync = (p, ...r) => {
-      if (String(p).includes(dir) && /agent\.cordis\.yml/.test(String(p)) && once) { once = false; throw new Error('x') }
+      if (String(p).includes(dir) && /agent\.cordis\.yml/.test(String(p)) && once) {
+        once = false
+        throw new Error('x')
+      }
       return ow(p, ...r)
     }
     let out2
-    try { out2 = ensurePresetOverlay(dir) } finally { fs.writeFileSync = ow }
+    try {
+      out2 = ensurePresetOverlay(dir)
+    } finally {
+      fs.writeFileSync = ow
+    }
     assert.equal(out2.ok, false, 'write failure must fail the overlay step')
     assert.equal(out2.errorCode, 'PRESET_WRITE_FAILED', 'write failure must carry PRESET_WRITE_FAILED')
     assert.equal(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'), orig, 'agent.cordis.yml restored from backup')
@@ -211,16 +248,24 @@ test('preset backup failure aborts before any write', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'dvb-bakfail-'))
   let bak = null
   try {
-    const legacy = 'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场工程以 vision_bench 工具为准。'
+    const legacy =
+      'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场工程以 vision_bench 工具为准。'
     const before = ['- id: persona', '  name: x', '  config:', '    text: >-', '      ' + legacy, ''].join('\n')
     await writeFile(join(dir, 'agent.cordis.yml'), before)
     await writeFile(join(dir, 'preset.yml'), 'name: old\n')
     const { createRequire } = await import('node:module')
     const fs = createRequire(import.meta.url)('node:fs')
     const oc = fs.copyFileSync
-    fs.copyFileSync = (s) => { if (String(s).endsWith('agent.cordis.yml')) throw new Error('copy-fail') ; return oc(s) }
+    fs.copyFileSync = (s) => {
+      if (String(s).endsWith('agent.cordis.yml')) throw new Error('copy-fail')
+      return oc(s)
+    }
     let out
-    try { out = ensurePresetOverlay(dir) } finally { fs.copyFileSync = oc }
+    try {
+      out = ensurePresetOverlay(dir)
+    } finally {
+      fs.copyFileSync = oc
+    }
     assert.equal(out.ok, false)
     assert.equal(out.errorCode, 'PRESET_BACKUP_FAILED', 'backup failure must be PRESET_BACKUP_FAILED')
     // nothing written
@@ -236,8 +281,12 @@ test('preset write-failure rollback deletes newly-created marker copy', async ()
   const dir = await mkdtemp(join(tmpdir(), 'dvb-marker-'))
   let bak = null
   try {
-    const legacy = 'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场工程以 vision_bench 工具为准。'
-    await writeFile(join(dir, 'agent.cordis.yml'), ['- id: persona', '  name: x', '  config:', '    text: >-', '      ' + legacy, ''].join('\n'))
+    const legacy =
+      'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场工程以 vision_bench 工具为准。'
+    await writeFile(
+      join(dir, 'agent.cordis.yml'),
+      ['- id: persona', '  name: x', '  config:', '    text: >-', '      ' + legacy, ''].join('\n'),
+    )
     await writeFile(join(dir, 'preset.yml'), 'name: old\n')
     // NO marker pre-existing: it will be created during write, then must be removed on rollback
     const { createRequire } = await import('node:module')
@@ -248,7 +297,11 @@ test('preset write-failure rollback deletes newly-created marker copy', async ()
       return ow(p, ...r)
     }
     let out
-    try { out = ensurePresetOverlay(dir) } finally { fs.writeFileSync = ow }
+    try {
+      out = ensurePresetOverlay(dir)
+    } finally {
+      fs.writeFileSync = ow
+    }
     assert.equal(out.ok, false)
     assert.equal(out.errorCode, 'PRESET_WRITE_FAILED')
     // marker was created by intent but rollback should remove it (didn't exist before)
@@ -274,12 +327,16 @@ test('composition write failure restores every file and leaves no temp files', a
     await writeFile(join(dir, '.dsh-vision-bench'), beforeMarker)
     const fs = nodeFs()
     const ow = fs.writeFileSync
-    const out = withFsPatched({
-      writeFileSync(p, ...r) {
-        if (String(p).includes(dir) && /agent\.cordis\.yml\.tmp/.test(String(p))) throw new Error('composition-write-fail')
-        return ow(p, ...r)
+    const out = withFsPatched(
+      {
+        writeFileSync(p, ...r) {
+          if (String(p).includes(dir) && /agent\.cordis\.yml\.tmp/.test(String(p)))
+            throw new Error('composition-write-fail')
+          return ow(p, ...r)
+        },
       },
-    }, () => ensurePresetOverlay(dir))
+      () => ensurePresetOverlay(dir),
+    )
     assert.equal(out.ok, false)
     assert.equal(out.errorCode, PRESET_WRITE_FAILED)
     assert.equal(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'), before, 'composition restored from backup')
@@ -305,12 +362,15 @@ test('preset.yml write failure restores every file and leaves no temp files', as
     await writeFile(join(dir, '.dsh-vision-bench'), beforeMarker)
     const fs = nodeFs()
     const ow = fs.writeFileSync
-    const out = withFsPatched({
-      writeFileSync(p, ...r) {
-        if (String(p).includes(dir) && /preset\.yml\.tmp/.test(String(p))) throw new Error('preset-write-fail')
-        return ow(p, ...r)
+    const out = withFsPatched(
+      {
+        writeFileSync(p, ...r) {
+          if (String(p).includes(dir) && /preset\.yml\.tmp/.test(String(p))) throw new Error('preset-write-fail')
+          return ow(p, ...r)
+        },
       },
-    }, () => ensurePresetOverlay(dir))
+      () => ensurePresetOverlay(dir),
+    )
     assert.equal(out.ok, false)
     assert.equal(out.errorCode, PRESET_WRITE_FAILED)
     assert.equal(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'), before, 'composition restored from backup')
@@ -337,17 +397,24 @@ test('marker write failure rolls back all files and never writes the marker dire
     const fs = nodeFs()
     const ow = fs.writeFileSync
     let directMarkerWrites = 0
-    const out = withFsPatched({
-      writeFileSync(p, ...r) {
-        const s = String(p)
-        if (s.includes(dir) && /\.dsh-vision-bench$/.test(s)) directMarkerWrites++
-        if (s.includes(dir) && /\.dsh-vision-bench\.tmp/.test(s)) throw new Error('marker-write-fail')
-        return ow(p, ...r)
+    const out = withFsPatched(
+      {
+        writeFileSync(p, ...r) {
+          const s = String(p)
+          if (s.includes(dir) && /\.dsh-vision-bench$/.test(s)) directMarkerWrites++
+          if (s.includes(dir) && /\.dsh-vision-bench\.tmp/.test(s)) throw new Error('marker-write-fail')
+          return ow(p, ...r)
+        },
       },
-    }, () => ensurePresetOverlay(dir))
+      () => ensurePresetOverlay(dir),
+    )
     assert.equal(out.ok, false)
     assert.equal(out.errorCode, PRESET_WRITE_FAILED)
-    assert.equal(directMarkerWrites, 0, 'marker must only be written atomically via tmp+rename, never writeFileSync(target)')
+    assert.equal(
+      directMarkerWrites,
+      0,
+      'marker must only be written atomically via tmp+rename, never writeFileSync(target)',
+    )
     assert.equal(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'), before, 'composition restored from backup')
     assert.equal(await readFile(join(dir, 'preset.yml'), 'utf8'), beforePreset, 'preset.yml restored from backup')
     assert.equal(await readFile(join(dir, '.dsh-vision-bench'), 'utf8'), beforeMarker, 'marker restored from backup')
@@ -371,12 +438,15 @@ test('rename failure cleans its temp file and restores all files', async () => {
     await writeFile(join(dir, '.dsh-vision-bench'), beforeMarker)
     const fs = nodeFs()
     const or = fs.renameSync
-    const out = withFsPatched({
-      renameSync(s, d) {
-        if (String(s).includes(dir) && String(s).includes('.tmp')) throw new Error('rename-fail')
-        return or(s, d)
+    const out = withFsPatched(
+      {
+        renameSync(s, d) {
+          if (String(s).includes(dir) && String(s).includes('.tmp')) throw new Error('rename-fail')
+          return or(s, d)
+        },
       },
-    }, () => ensurePresetOverlay(dir))
+      () => ensurePresetOverlay(dir),
+    )
     assert.equal(out.ok, false)
     assert.equal(out.errorCode, PRESET_WRITE_FAILED)
     assert.equal(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'), before, 'composition restored from backup')
@@ -403,18 +473,22 @@ test('rollback copy failure surfaces PRESET_RESTORE_FAILED', async () => {
     const fs = nodeFs()
     const ow = fs.writeFileSync
     const oc = fs.copyFileSync
-    const out = withFsPatched({
-      writeFileSync(p, ...r) {
-        // force the write phase to fail so rollback runs
-        if (String(p).includes(dir) && /\.dsh-vision-bench\.tmp/.test(String(p))) throw new Error('marker-write-fail')
-        return ow(p, ...r)
+    const out = withFsPatched(
+      {
+        writeFileSync(p, ...r) {
+          // force the write phase to fail so rollback runs
+          if (String(p).includes(dir) && /\.dsh-vision-bench\.tmp/.test(String(p))) throw new Error('marker-write-fail')
+          return ow(p, ...r)
+        },
+        copyFileSync(s, d) {
+          // restore direction: source lives in the backup dir, destination in the preset dir
+          if (String(s).includes('.vision-bench.backup.') && String(d).includes(dir))
+            throw new Error('restore-copy-fail')
+          return oc(s, d)
+        },
       },
-      copyFileSync(s, d) {
-        // restore direction: source lives in the backup dir, destination in the preset dir
-        if (String(s).includes('.vision-bench.backup.') && String(d).includes(dir)) throw new Error('restore-copy-fail')
-        return oc(s, d)
-      },
-    }, () => ensurePresetOverlay(dir))
+      () => ensurePresetOverlay(dir),
+    )
     assert.equal(out.ok, false)
     assert.equal(out.errorCode, PRESET_RESTORE_FAILED)
     assert.match(out.error, /回滚失败/)
@@ -435,12 +509,15 @@ test('rollback deletes newly-created preset.yml and marker after a later write f
     await writeFile(join(dir, 'agent.cordis.yml'), before)
     const fs = nodeFs()
     const ow = fs.writeFileSync
-    const out = withFsPatched({
-      writeFileSync(p, ...r) {
-        if (String(p).includes(dir) && /\.dsh-vision-bench\.tmp/.test(String(p))) throw new Error('marker-write-fail')
-        return ow(p, ...r)
+    const out = withFsPatched(
+      {
+        writeFileSync(p, ...r) {
+          if (String(p).includes(dir) && /\.dsh-vision-bench\.tmp/.test(String(p))) throw new Error('marker-write-fail')
+          return ow(p, ...r)
+        },
       },
-    }, () => ensurePresetOverlay(dir))
+      () => ensurePresetOverlay(dir),
+    )
     assert.equal(out.ok, false)
     assert.equal(out.errorCode, PRESET_WRITE_FAILED)
     assert.equal(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'), before, 'composition restored from backup')
@@ -468,17 +545,32 @@ test('user-modified persona is never lost (needsReview keeps it; rollback restor
     // failed migration must roll back to the exact user content
     const fs = nodeFs()
     const ow = fs.writeFileSync
-    const failed = withFsPatched({
-      writeFileSync(p, ...r) {
-        if (String(p).includes(dir) && /\.dsh-vision-bench\.tmp/.test(String(p))) throw new Error('marker-write-fail')
-        return ow(p, ...r)
+    const failed = withFsPatched(
+      {
+        writeFileSync(p, ...r) {
+          if (String(p).includes(dir) && /\.dsh-vision-bench\.tmp/.test(String(p))) throw new Error('marker-write-fail')
+          return ow(p, ...r)
+        },
       },
-    }, () => ensurePresetOverlay(dir))
+      () => ensurePresetOverlay(dir),
+    )
     assert.equal(failed.ok, false)
     assert.equal(failed.errorCode, PRESET_WRITE_FAILED)
-    assert.equal(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'), before, 'user composition byte-identical after rollback')
-    assert.equal(await readFile(join(dir, 'preset.yml'), 'utf8'), beforePreset, 'user preset.yml byte-identical after rollback')
-    assert.equal(await readFile(join(dir, '.dsh-vision-bench'), 'utf8'), beforeMarker, 'marker byte-identical after rollback')
+    assert.equal(
+      await readFile(join(dir, 'agent.cordis.yml'), 'utf8'),
+      before,
+      'user composition byte-identical after rollback',
+    )
+    assert.equal(
+      await readFile(join(dir, 'preset.yml'), 'utf8'),
+      beforePreset,
+      'user preset.yml byte-identical after rollback',
+    )
+    assert.equal(
+      await readFile(join(dir, '.dsh-vision-bench'), 'utf8'),
+      beforeMarker,
+      'marker byte-identical after rollback',
+    )
     // successful run must keep the unknown persona and only report needsReview
     const ok = ensurePresetOverlay(dir)
     assert.equal(ok.ok, false)
@@ -513,12 +605,27 @@ test('fully consistent preset is left untouched (no backup, no writes)', async (
       snapshot[n] = await readFile(join(dir, n), 'utf8')
     }
     const calls = []
-    const out = withFsPatched({
-      writeFileSync() { calls.push('write'); throw new Error('must-not-write') },
-      renameSync() { calls.push('rename'); throw new Error('must-not-rename') },
-      copyFileSync() { calls.push('copy'); throw new Error('must-not-copy') },
-      mkdirSync() { calls.push('mkdir'); throw new Error('must-not-mkdir') },
-    }, () => ensurePresetOverlay(dir))
+    const out = withFsPatched(
+      {
+        writeFileSync() {
+          calls.push('write')
+          throw new Error('must-not-write')
+        },
+        renameSync() {
+          calls.push('rename')
+          throw new Error('must-not-rename')
+        },
+        copyFileSync() {
+          calls.push('copy')
+          throw new Error('must-not-copy')
+        },
+        mkdirSync() {
+          calls.push('mkdir')
+          throw new Error('must-not-mkdir')
+        },
+      },
+      () => ensurePresetOverlay(dir),
+    )
     assert.equal(out.ok, true)
     assert.equal(out.unchanged, true)
     assert.deepEqual(calls, [], 'fully consistent preset must not trigger any write/backup')
@@ -548,19 +655,27 @@ test('invalid or foreign ownership marker fails closed and is never overwritten'
       const fs = nodeFs()
       const ow = fs.writeFileSync
       let writes = 0
-      const out = withFsPatched({
-        writeFileSync(p, ...r) {
-          if (String(p).includes(sub)) { writes++; throw new Error('must not write') }
-          return ow(p, ...r)
+      const out = withFsPatched(
+        {
+          writeFileSync(p, ...r) {
+            if (String(p).includes(sub)) {
+              writes++
+              throw new Error('must not write')
+            }
+            return ow(p, ...r)
+          },
         },
-      }, () => ensurePresetOverlay(sub))
+        () => ensurePresetOverlay(sub),
+      )
       assert.equal(out.ok, false, c.name + ' must fail closed')
       assert.match(out.error, /其他预设占用/)
       assert.equal(writes, 0, c.name + ' must not attempt any write')
       assert.equal(await readFile(join(sub, '.dsh-vision-bench'), 'utf8'), c.marker, c.name + ' marker untouched')
       assert.equal(await readFile(join(sub, 'agent.cordis.yml'), 'utf8'), standard, c.name + ' composition untouched')
     }
-  } finally { await rm(dir, { recursive: true, force: true }) }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })
 
 test('seedVisionBenchPreset fails closed on invalid ownership marker', async () => {
@@ -575,10 +690,12 @@ test('seedVisionBenchPreset fails closed on invalid ownership marker', async () 
     assert.equal(out.ok, false)
     assert.match(out.error, /其他预设占用/)
     assert.equal(await readFile(join(dir, '.dsh-vision-bench'), 'utf8'), marker, 'invalid marker untouched')
-  } finally { await rm(home, { recursive: true, force: true }) }
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
 })
 
-test('P4/0.20.0: visualization action list/get + proposeAdd draft + apply adds component', async () => {
+test('P4/0.22.0: visualization action list/get + add applies component immediately', async () => {
   const { mkdtemp, rm } = await import('node:fs/promises')
   const { mkdirSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
@@ -591,41 +708,67 @@ test('P4/0.20.0: visualization action list/get + proposeAdd draft + apply adds c
       version: 3,
       connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } }],
       devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
-      points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, monitorEnabled: true, alarmEnabled: true }],
+      points: [
+        {
+          id: 'p1',
+          connectionId: 'c1',
+          deviceId: 'd1',
+          name: '温度',
+          function: 3,
+          address: 0,
+          monitorEnabled: true,
+          alarmEnabled: true,
+        },
+      ],
       values: [{ key: 'p1', pointId: 'p1', value: 23.5, ok: true, at: Date.now() }],
       alarmState: {},
     },
   })
-  let res = await runVisionBench(home, { action: 'visualization', op: 'list' }, cwd, { source: 'agent', sessionId: 's1' })
+  let res = await runVisionBench(home, { action: 'visualization', op: 'list' }, cwd, {
+    source: 'agent',
+    sessionId: 's1',
+  })
   assert.equal(res.ok, true)
   assert.ok(Array.isArray(res.components) && res.components.length === 0)
 
-  // proposeAdd → 生成草稿，直接查询看不到组件
-  res = await runVisionBench(home, { action: 'visualization', op: 'proposeAdd', component: { name: '送风趋势', type: 'line', pointIds: ['p1'] } }, cwd, { source: 'agent', sessionId: 's1' })
-  assert.equal(res.ok, true)
-  assert.ok(res.draft && res.draft.id, '生成草稿')
+  const cvBefore = loadWorkspace(home, cwd).modbus.configVersion
+  res = await runVisionBench(
+    home,
+    {
+      action: 'visualization',
+      op: 'add',
+      expectedConfigVersion: cvBefore,
+      component: { name: '送风趋势', type: 'line', pointIds: ['p1'] },
+    },
+    cwd,
+    { source: 'agent', sessionId: 's1' },
+  )
+  assert.equal(res.ok, true, res.error)
   let pack = loadWorkspace(home, cwd).modbus
-  assert.equal((pack.visualization && pack.visualization.components || []).length, 0, '草稿未直接应用')
-  // 应用草稿 → 组件出现且 configVersion 递增
-  const cvBefore = pack.configVersion
-  const { applyConfigDraft } = await import('../bench-store.mjs')
-  const applied = applyConfigDraft(home, cwd, res.draft.id, { source: 'user', sessionId: '' })
-  assert.equal(applied.ok, true, '应用草稿: ' + applied.error)
-  pack = loadWorkspace(home, cwd).modbus
   assert.equal(pack.visualization.components.length, 1)
   assert.equal(pack.visualization.components[0].name, '送风趋势')
   assert.ok(pack.configVersion > cvBefore, '组件修改递增 configVersion')
 
   // get → 组件 + 关联点位当前值
-  res = await runVisionBench(home, { action: 'visualization', op: 'get', visualizationId: pack.visualization.components[0].id }, cwd, { source: 'agent', sessionId: 's1' })
+  res = await runVisionBench(
+    home,
+    { action: 'visualization', op: 'get', visualizationId: pack.visualization.components[0].id },
+    cwd,
+    { source: 'agent', sessionId: 's1' },
+  )
   assert.equal(res.ok, true)
   assert.equal(res.component.pointIds[0], 'p1')
   assert.equal(res.values[0].value, 23.5)
 
-  // proposeRemove → 草稿（仅生成，不直接删除）
-  res = await runVisionBench(home, { action: 'visualization', op: 'proposeRemove', visualizationId: pack.visualization.components[0].id }, cwd, { source: 'agent', sessionId: 's1' })
-  assert.equal(res.ok, true)
-  assert.equal(loadWorkspace(home, cwd).modbus.visualization.components.length, 1, '待审批未删除')
+  res = await runVisionBench(
+    home,
+    { action: 'visualization', op: 'proposeRemove', visualizationId: pack.visualization.components[0].id },
+    cwd,
+    { source: 'agent', sessionId: 's1' },
+  )
+  assert.equal(res.ok, false)
+  assert.equal(res.errorCode, 'OP_REMOVED')
+  assert.equal(loadWorkspace(home, cwd).modbus.visualization.components.length, 1)
   await rm(home, { recursive: true, force: true })
 })
 
@@ -642,11 +785,27 @@ test('P4/0.20.0: 非监视点位不可入库（proposeAdd 被校验拒绝）', a
       version: 3,
       connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } }],
       devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
-      points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '未监视', function: 3, address: 0, monitorEnabled: false }],
-      values: [], alarmState: {},
+      points: [
+        {
+          id: 'p1',
+          connectionId: 'c1',
+          deviceId: 'd1',
+          name: '未监视',
+          function: 3,
+          address: 0,
+          monitorEnabled: false,
+        },
+      ],
+      values: [],
+      alarmState: {},
     },
   })
-  const res = await runVisionBench(home, { action: 'visualization', op: 'proposeAdd', component: { name: 'x', type: 'value', pointIds: ['p1'] } }, cwd, { source: 'agent', sessionId: 's1' })
+  const res = await runVisionBench(
+    home,
+    { action: 'visualization', op: 'add', component: { name: 'x', type: 'value', pointIds: ['p1'] } },
+    cwd,
+    { source: 'agent', sessionId: 's1' },
+  )
   assert.equal(res.ok, false)
   assert.equal(res.errorCode, 'VIZ_INVALID')
   await rm(home, { recursive: true, force: true })
@@ -660,11 +819,15 @@ test('Task3/0.20.1: 工具 Schema 完整开放 visualization / component / op �
   assert.ok(props.visualizationId, 'visualizationId 顶层参数')
   const comp = props.component
   assert.ok(comp, 'component 参数')
-  for (const k of ['id', 'name', 'type', 'pointIds', 'order', 'settings']) assert.ok(k in comp.properties, 'component.' + k)
+  for (const k of ['id', 'name', 'type', 'pointIds', 'order', 'settings'])
+    assert.ok(k in comp.properties, 'component.' + k)
   assert.deepEqual(comp.properties.type.enum, ['line', 'bar', 'value', 'switch'])
   for (const k of ['windowMs', 'confirmWrite']) assert.ok(k in comp.properties.settings.properties, 'settings.' + k)
-  for (const op of ['proposeAdd', 'proposeUpdate', 'proposeRemove']) assert.ok(props.op.enum.includes(op), 'op.enum 含 ' + op)
-  for (const op of ['list', 'get', 'add', 'update', 'remove', 'clear', 'discard']) assert.ok(props.op.enum.includes(op), 'op.enum 含 ' + op)
+  for (const op of ['proposeAdd', 'proposeUpdate', 'proposeRemove', 'discard']) {
+    assert.equal(props.op.enum.includes(op), false, 'op.enum 不含已移除 ' + op)
+  }
+  for (const op of ['list', 'get', 'add', 'update', 'remove', 'clear'])
+    assert.ok(props.op.enum.includes(op), 'op.enum 含 ' + op)
   const pointProps = props.point.properties
   for (const k of ['monitorEnabled', 'alarmEnabled', 'trendEnabled']) assert.ok(k in pointProps, 'point.' + k)
   const itemsProps = props.points.items.properties
@@ -684,7 +847,20 @@ test('Task3/0.20.1: status 点位含 runtimeStatus（复用 pointRuntimeStatus�
       version: 3,
       connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } }],
       devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
-      points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, monitorEnabled: true, alarmEnabled: false, alarmMin: null, alarmMax: 100 }],
+      points: [
+        {
+          id: 'p1',
+          connectionId: 'c1',
+          deviceId: 'd1',
+          name: '温度',
+          function: 3,
+          address: 0,
+          monitorEnabled: true,
+          alarmEnabled: false,
+          alarmMin: null,
+          alarmMax: 100,
+        },
+      ],
       values: [{ key: 'p1', pointId: 'p1', raw: 20, value: 20, ok: true, at: Date.now() }],
       alarmState: {},
     },
@@ -695,11 +871,14 @@ test('Task3/0.20.1: status 点位含 runtimeStatus（复用 pointRuntimeStatus�
   assert.equal(pt.alarmEnabled, false)
   assert.equal(pt.trendEnabled, true)
   assert.ok(pt.runtimeStatus, 'runtimeStatus 存在')
-  assert.ok(['正常', '未读取', '告警', '通信异常', '已断开', '连接异常'].includes(pt.runtimeStatus), '状态值合法: ' + pt.runtimeStatus)
+  assert.ok(
+    ['正常', '未读取', '告警', '通信异常', '已断开', '连接异常'].includes(pt.runtimeStatus),
+    '状态值合法: ' + pt.runtimeStatus,
+  )
   await rm(home, { recursive: true, force: true })
 })
 
-test('Task4/0.20.1: proposeUpdate 保留 ID/order/settings；ID 冲突拒绝；草稿前后行为', async () => {
+test('Task4/0.22.0: visualization update 保留 ID/order/settings；ID 冲突拒绝', async () => {
   const { mkdtemp, rm } = await import('node:fs/promises')
   const { mkdirSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
@@ -712,23 +891,50 @@ test('Task4/0.20.1: proposeUpdate 保留 ID/order/settings；ID 冲突拒绝；�
       version: 3,
       connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } }],
       devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
-      points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, monitorEnabled: true, alarmEnabled: true }],
-      values: [], alarmState: {},
-      visualization: { schemaVersion: 1, components: [
-        { id: 'viz_a', name: '原趋势', type: 'line', pointIds: ['p1'], order: 3, settings: { windowMs: 120000, confirmWrite: true } },
-      ] },
+      points: [
+        {
+          id: 'p1',
+          connectionId: 'c1',
+          deviceId: 'd1',
+          name: '温度',
+          function: 3,
+          address: 0,
+          monitorEnabled: true,
+          alarmEnabled: true,
+        },
+      ],
+      values: [],
+      alarmState: {},
+      visualization: {
+        schemaVersion: 1,
+        components: [
+          {
+            id: 'viz_a',
+            name: '原趋势',
+            type: 'line',
+            pointIds: ['p1'],
+            order: 3,
+            settings: { windowMs: 120000, confirmWrite: true },
+          },
+        ],
+      },
     },
   })
   const cv0 = loadWorkspace(home, cwd).modbus.configVersion
-  // 只传 visualizationId，component 不带 id → 更新名称
-  let res = await runVisionBench(home, { action: 'visualization', op: 'proposeUpdate', visualizationId: 'viz_a', component: { name: '改名趋势' } }, cwd, { source: 'agent', sessionId: 's1' })
-  assert.equal(res.ok, true)
+  let res = await runVisionBench(
+    home,
+    {
+      action: 'visualization',
+      op: 'update',
+      visualizationId: 'viz_a',
+      expectedConfigVersion: cv0,
+      component: { name: '改名趋势' },
+    },
+    cwd,
+    { source: 'agent', sessionId: 's1' },
+  )
+  assert.equal(res.ok, true, res.error)
   let pack = loadWorkspace(home, cwd).modbus
-  assert.equal(pack.visualization.components[0].name, '原趋势', '草稿批准前组件不变')
-  const { applyConfigDraft } = await import('../bench-store.mjs')
-  const applied = applyConfigDraft(home, cwd, res.draft.id, { source: 'user', sessionId: '' })
-  assert.equal(applied.ok, true)
-  pack = loadWorkspace(home, cwd).modbus
   const c = pack.visualization.components[0]
   assert.equal(c.id, 'viz_a', 'ID 不变')
   assert.equal(c.name, '改名趋势', '名称更新')
@@ -736,9 +942,13 @@ test('Task4/0.20.1: proposeUpdate 保留 ID/order/settings；ID 冲突拒绝；�
   assert.deepEqual(c.pointIds, ['p1'], 'pointIds 保留')
   assert.equal(c.order, 3, 'order 保留')
   assert.deepEqual(c.settings, { windowMs: 120000, confirmWrite: true }, 'settings 保留')
-  assert.ok(pack.configVersion > cv0, '批准后 configVersion 增加')
-  // ID 冲突拒绝
-  res = await runVisionBench(home, { action: 'visualization', op: 'proposeUpdate', visualizationId: 'viz_a', component: { id: 'viz_b', name: 'x' } }, cwd, { source: 'agent', sessionId: 's1' })
+  assert.ok(pack.configVersion > cv0, 'configVersion 增加')
+  res = await runVisionBench(
+    home,
+    { action: 'visualization', op: 'update', visualizationId: 'viz_a', component: { id: 'viz_b', name: 'x' } },
+    cwd,
+    { source: 'agent', sessionId: 's1' },
+  )
   assert.equal(res.ok, false)
   assert.equal(res.errorCode, 'VIZ_TARGET_MISMATCH')
   await rm(home, { recursive: true, force: true })

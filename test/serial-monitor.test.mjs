@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -10,8 +10,8 @@ import {
   listConnectedSerialSources,
   openSerialMonitor,
 } from '../bench-serial-monitor.mjs'
-import { findPython } from './python.mjs'
 import { saveWorkspace } from '../bench-store.mjs'
+import { findPython } from './python.mjs'
 
 test('frames layer refuses to open a serial port', async () => {
   const ran = await openSerialMonitor('/tmp/ws', { port: 'COM3' })
@@ -49,7 +49,10 @@ test('listConnectedSerialSources only returns live connected RTU', async () => {
       },
     })
     const listed = await listConnectedSerialSources(home, cwd, { transport: fake })
-    assert.deepEqual(listed.sources.map((s) => s.connectionId), ['c1'])
+    assert.deepEqual(
+      listed.sources.map((s) => s.connectionId),
+      ['c1'],
+    )
     assert.equal(listed.sources[0].port, 'COM3')
   } finally {
     await rm(home, { recursive: true, force: true })
@@ -62,8 +65,14 @@ test('capture feed is read-only and does not require leftover assembly', async (
     { id: 2, at: 2, hex: '6465660A', byteLength: 4, direction: 'rx', connectionId: 'c1', port: 'COM3' },
   ]
   const fake = {
-    captureFeed: async () => ({ ok: true, data: { open: true, lines: chunks, lastId: 2, total: 2, port: 'COM3', state: 'connected' } }),
-    listConnections: async () => ({ ok: true, data: { connections: [{ connectionId: 'c1', port: 'COM3', state: 'connected' }] } }),
+    captureFeed: async () => ({
+      ok: true,
+      data: { open: true, lines: chunks, lastId: 2, total: 2, port: 'COM3', state: 'connected' },
+    }),
+    listConnections: async () => ({
+      ok: true,
+      data: { connections: [{ connectionId: 'c1', port: 'COM3', state: 'connected' }] },
+    }),
     getState: () => 'ready',
   }
   const feed = await feedConnectionFrames('/tmp/ws', { connectionId: 'c1' }, { transport: fake })
@@ -72,7 +81,7 @@ test('capture feed is read-only and does not require leftover assembly', async (
   assert.equal(feed.lines[1].hex, '6465660A')
 })
 
-test('openocd_flash.py validates inputs before spawning', () => {
+test('openocd_flash.py validates inputs before spawning', async () => {
   const pythonBin = findPython()
   if (!pythonBin) return
   const script = new URL('../runtime/openocd_flash.py', import.meta.url).pathname
@@ -81,10 +90,25 @@ test('openocd_flash.py validates inputs before spawning', () => {
       const out = execFileSync(pythonBin, [script, ...args], { encoding: 'utf8', timeout: 15000, windowsHide: true })
       return JSON.parse(out.trim().split('\n').pop())
     } catch (error) {
-      return JSON.parse(String(error.stdout || '{}').trim().split('\n').pop() || '{}')
+      return JSON.parse(
+        String(error.stdout || '{}')
+          .trim()
+          .split('\n')
+          .pop() || '{}',
+      )
     }
   }
-  const base = ['--openocd', '/nonexistent/openocd', '--interface', 'cmsis-dap', '--target', 'stm32f1x', '--file', '/nonexistent.hex', '--json']
+  const base = [
+    '--openocd',
+    '/nonexistent/openocd',
+    '--interface',
+    'cmsis-dap',
+    '--target',
+    'stm32f1x',
+    '--file',
+    '/nonexistent.hex',
+    '--json',
+  ]
   const missing = run(base)
   assert.equal(missing.status, 'error')
   assert.equal(missing.error.code, 'openocd_not_found')

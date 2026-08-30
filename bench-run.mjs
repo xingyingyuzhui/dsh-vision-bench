@@ -27,7 +27,9 @@ const parseJsonStdout = (text) => {
     if (start >= 0 && end > start) {
       try {
         return { data: JSON.parse(raw.slice(start, end + 1)) }
-      } catch { /* fall through */ }
+      } catch {
+        /* fall through */
+      }
     }
     return { error: '脚本输出不是 JSON', preview: raw.slice(0, 400) }
   }
@@ -39,66 +41,77 @@ export const killProcessTree = (pid) => {
     spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
     return
   }
-  try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ }
+  try {
+    process.kill(pid, 'SIGTERM')
+  } catch {
+    /* already gone */
+  }
 }
 
-export const runExecFile = (bin, args, opts = {}) => new Promise((resolve, reject) => {
-  const signal = opts.signal
-  if (signal && signal.aborted) {
-    resolve({
-      exitCode: 1,
-      timedOut: false,
-      cancelled: true,
-      stdout: '',
-      stderr: '已取消',
-    })
-    return
-  }
-  let cancelled = false
-  let timedOut = false
-  let settled = false
-  let child
-  const finish = () => {
-    if (settled) return
-    settled = true
-  }
-  const onAbort = () => {
-    cancelled = true
-    if (child) killProcessTree(child.pid)
-  }
-  if (signal) signal.addEventListener('abort', onAbort, { once: true })
-  // execFile's built-in timeout only kills the direct child; route expiry
-  // through killProcessTree so grandchildren like UV4.exe die with it.
-  const killer = opts.timeoutMs > 0
-    ? setTimeout(() => {
-      timedOut = true
-      if (child) killProcessTree(child.pid)
-    }, opts.timeoutMs)
-    : null
-  child = execFile(bin, args, {
-    maxBuffer: opts.maxBuffer || 1024 * 1024,
-    windowsHide: true,
-    encoding: 'utf8',
-    cwd: opts.cwd,
-    env: opts.env || process.env,
-  }, (error, stdout, stderr) => {
-    if (killer) clearTimeout(killer)
-    if (signal) signal.removeEventListener('abort', onAbort)
-    if (error && error.code === 'ENOENT') {
-      finish()
-      reject(new Error('无法启动: ' + bin))
+export const runExecFile = (bin, args, opts = {}) =>
+  new Promise((resolve, reject) => {
+    const signal = opts.signal
+    if (signal && signal.aborted) {
+      resolve({
+        exitCode: 1,
+        timedOut: false,
+        cancelled: true,
+        stdout: '',
+        stderr: '已取消',
+      })
       return
     }
-    finish()
-    resolve({
-      exitCode: error ? (typeof error.code === 'number' ? error.code : 1) : 0,
-      timedOut,
-      cancelled,
-      stdout: String(stdout || ''),
-      stderr: String(stderr || (error && error.message) || ''),
-    })
+    let cancelled = false
+    let timedOut = false
+    let settled = false
+    let child
+    const finish = () => {
+      if (settled) return
+      settled = true
+    }
+    const onAbort = () => {
+      cancelled = true
+      if (child) killProcessTree(child.pid)
+    }
+    if (signal) signal.addEventListener('abort', onAbort, { once: true })
+    // execFile's built-in timeout only kills the direct child; route expiry
+    // through killProcessTree so grandchildren like UV4.exe die with it.
+    const killer =
+      opts.timeoutMs > 0
+        ? setTimeout(() => {
+            timedOut = true
+            if (child) killProcessTree(child.pid)
+          }, opts.timeoutMs)
+        : null
+    child = execFile(
+      bin,
+      args,
+      {
+        maxBuffer: opts.maxBuffer || 1024 * 1024,
+        windowsHide: true,
+        encoding: 'utf8',
+        cwd: opts.cwd,
+        env: opts.env || process.env,
+      },
+      (error, stdout, stderr) => {
+        if (killer) clearTimeout(killer)
+        if (signal) signal.removeEventListener('abort', onAbort)
+        if (error && error.code === 'ENOENT') {
+          finish()
+          reject(new Error('无法启动: ' + bin))
+          return
+        }
+        finish()
+        resolve({
+          exitCode: error ? (typeof error.code === 'number' ? error.code : 1) : 0,
+          timedOut,
+          cancelled,
+          stdout: String(stdout || ''),
+          stderr: String(stderr || (error && error.message) || ''),
+        })
+      },
+    )
   })
-})
 
 export const runPythonScript = async (pythonBin, scriptName, args, opts = {}) => {
   if (!pythonBin) return { ok: false, error: '未绑定 Python' }

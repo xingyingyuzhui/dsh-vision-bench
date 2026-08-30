@@ -47,8 +47,11 @@ export const normalizeVisualizationComponent = (input) => {
   const raw = input && typeof input === 'object' ? input : {}
   const type = COMPONENT_TYPES.has(raw.type) ? raw.type : 'line'
   const id = String(raw.id || '').trim() || vizGenId('viz_')
-  const name = String(raw.name || '').trim().slice(0, MAX_COMPONENT_NAME) || '未命名组件'
-  const settings = (raw.settings && typeof raw.settings === 'object') ? raw.settings : {}
+  const name =
+    String(raw.name || '')
+      .trim()
+      .slice(0, MAX_COMPONENT_NAME) || '未命名组件'
+  const settings = raw.settings && typeof raw.settings === 'object' ? raw.settings : {}
   const windowMs = vizClampInt(settings.windowMs, 300000, 10000, 3600000)
   return {
     id,
@@ -87,7 +90,10 @@ export const validateVisualizationComponent = (component, points) => {
   const ids = vizIds(c.pointIds)
   if (!ids.length) return { ok: false, error: '请至少关联一个已监视点位' }
   if (ids.length < limit.min || ids.length > limit.max) {
-    return { ok: false, error: '组件类型 ' + type + ' 需要 ' + limit.min + '–' + limit.max + ' 个点位，当前 ' + ids.length }
+    return {
+      ok: false,
+      error: '组件类型 ' + type + ' 需要 ' + limit.min + '–' + limit.max + ' 个点位，当前 ' + ids.length,
+    }
   }
   const byId = new Map((Array.isArray(points) ? points : []).map((p) => [p.id, p]))
   const notMonitored = []
@@ -96,14 +102,21 @@ export const validateVisualizationComponent = (component, points) => {
   const numericFn = (fn) => fn === 3 || fn === 4
   for (const pid of ids) {
     const pt = byId.get(pid)
-    if (!pt) { notMonitored.push(pid); continue }
+    if (!pt) {
+      notMonitored.push(pid)
+      continue
+    }
     if (pt.monitorEnabled !== true) notMonitored.push(pid)
     if ((type === 'line' || type === 'bar') && !numericFn(pt.function)) unsupported.push(pid)
     if (type === 'switch' && pt.function !== 1) unsupported.push(pid)
     if (type === 'value' && ![1, 2, 3, 4].includes(pt.function)) unsupported.push(pid)
   }
   if (unsupported.length) {
-    return { ok: false, error: '组件类型不支持这些点位功能码: ' + unsupported.join(', '), errorCode: 'VIZ_POINT_TYPE_UNSUPPORTED' }
+    return {
+      ok: false,
+      error: '组件类型不支持这些点位功能码: ' + unsupported.join(', '),
+      errorCode: 'VIZ_POINT_TYPE_UNSUPPORTED',
+    }
   }
   if (notMonitored.length) return { ok: false, error: '以下点位未开启监视: ' + notMonitored.join(', ') }
   return { ok: true }
@@ -127,21 +140,26 @@ export const visualizationComponentStatus = (component, points) => {
 
 // 组件编辑器的可选数据源：只列 monitorEnabled 点位，限定路径 连接/设备/点位。
 export const monitoredPointOptions = (pack) => {
-  const conns = new Map((pack && pack.connections || []).map((c) => [c.id, c]))
-  const devs = new Map((pack && pack.devices || []).map((d) => [d.id, d]))
-  const values = new Map((pack && pack.values || []).map((v) => [v.key || v.pointId, v]))
+  const conns = new Map(((pack && pack.connections) || []).map((c) => [c.id, c]))
+  const devs = new Map(((pack && pack.devices) || []).map((d) => [d.id, d]))
+  const values = new Map(((pack && pack.values) || []).map((v) => [v.key || v.pointId, v]))
   const out = []
-  for (const p of pack && pack.points || []) {
+  for (const p of (pack && pack.points) || []) {
     if (p.monitorEnabled !== true) continue
     const conn = conns.get(p.connectionId)
     const dev = devs.get(p.deviceId)
     const rec = values.get(p.id)
     out.push({
       pointId: p.id,
-      name: p.name || (String(p.id)),
+      name: p.name || String(p.id),
       connectionId: p.connectionId,
       deviceId: p.deviceId,
-      path: (conn && conn.name || p.connectionId) + ' / ' + (dev && dev.name || p.deviceId) + ' / ' + (p.name || p.address),
+      path:
+        ((conn && conn.name) || p.connectionId) +
+        ' / ' +
+        ((dev && dev.name) || p.deviceId) +
+        ' / ' +
+        (p.name || p.address),
       function: p.function,
       address: p.address,
       unit: p.unit || '',
@@ -170,10 +188,18 @@ export function formatSwitchWriteNote(data, wantOn) {
       const rb = Array.isArray(rbRaw) ? rbRaw[0] : rbRaw
       return '目标 ' + target + ' → 回读 ' + String(rb) + ' → 不一致'
     }
-    return (data && data.error) ? data.error : '写入失败'
+    return data && data.error ? data.error : '写入失败'
   }
   if (data.outcomeUnknown || data.unknown) return '目标 ' + target + ' → 回读未知 → 结果未知'
   const rbRaw = data.readback
-  const rb = Array.isArray(rbRaw) ? (rbRaw.length ? rbRaw[0] : '—') : (rbRaw != null ? rbRaw : (data.value != null ? data.value : '—'))
+  const rb = Array.isArray(rbRaw)
+    ? rbRaw.length
+      ? rbRaw[0]
+      : '—'
+    : rbRaw != null
+      ? rbRaw
+      : data.value != null
+        ? data.value
+        : '—'
   return '目标 ' + target + ' → 回读 ' + String(rb) + ' → 一致'
 }

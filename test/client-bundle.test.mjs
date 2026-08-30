@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { installDomStub } from './dom-stub.mjs'
 
 const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'client.js'), 'utf8')
 
-test('generated client keeps the factory contract', () => {
+test('generated client keeps the factory contract', async () => {
   assert.match(src, /Do not edit by hand/)
   assert.match(src, /id: 'dsh-vision-bench'/)
   assert.match(src, /inject = \['slots'\]/)
@@ -73,14 +73,16 @@ test('generated client keeps the factory contract', () => {
   assert.doesNotMatch(src, /healthReady\(health\.python\)/)
 })
 
-test('generated client is valid JavaScript', () => {
+test('generated client is valid JavaScript', async () => {
   const restore = installDomStub()
   try {
     assert.doesNotThrow(() => new Function('window', src))
-  } finally { restore() }
+  } finally {
+    restore()
+  }
 })
 
-test('generated client embeds real vendor runtime (uPlot + Virtualizer)', () => {
+test('generated client embeds real vendor runtime (uPlot + Virtualizer)', async () => {
   assert.match(src, /var DvbVendor = /)
   assert.match(src, /DvbVendorCss/)
   // no reliance on host globals for chart creation
@@ -89,7 +91,7 @@ test('generated client embeds real vendor runtime (uPlot + Virtualizer)', () => 
   assert.match(src, /\.u-legend|\.uplot|\.u-axis|u-legend-name/)
 })
 
-test('generated client contains exactly one ModuleLoader registration and no second React', () => {
+test('generated client contains exactly one ModuleLoader registration and no second React', async () => {
   const loads = src.match(/__ModuleLoader__\.load\(/g) || []
   assert.equal(loads.length, 1)
   // harness React comes from require('react'); react-virtual also requires it

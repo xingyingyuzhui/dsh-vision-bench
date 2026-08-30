@@ -4,27 +4,28 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { pushFramesLog, getFramesLog, clearFramesLog } from '../bench-shared.mjs'
-import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
-import { modbusPoll, modbusRead, modbusWrite } from '../bench-modbus.mjs'
 import { normalizeModbus } from '../bench-devices.mjs'
+import { modbusPoll, modbusRead, modbusWrite } from '../bench-modbus.mjs'
+import { clearFramesLog, getFramesLog, pushFramesLog } from '../bench-shared.mjs'
+import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
 
 // ── framesByConnection 分轨：COM3 与 COM4 各自 500 环形互不串扰
 
-test('framesByConnection 分轨：COM3 与 COM4 各自 500 环形互不串扰', () => {
+test('framesByConnection 分轨：COM3 与 COM4 各自 500 环形互不串扰', async () => {
   const cwd = '/tmp/dvb-frames-' + Date.now() + Math.random()
   clearFramesLog(cwd)
   // ensure clean start
   assert.equal(getFramesLog(cwd, 'c1').length, 0)
-  const gen = (prefix, n, cid) => Array.from({ length: n }, (_, i) => ({
-    t: Date.now() + i,
-    label: prefix + i,
-    request: 'REQ ' + i,
-    response: 'RESP ' + i,
-    trace: ['trace' + i],
-    connectionId: cid,
-    deviceId: 'd1',
-  }))
+  const gen = (prefix, n, cid) =>
+    Array.from({ length: n }, (_, i) => ({
+      t: Date.now() + i,
+      label: prefix + i,
+      request: 'REQ ' + i,
+      response: 'RESP ' + i,
+      trace: ['trace' + i],
+      connectionId: cid,
+      deviceId: 'd1',
+    }))
   // push 600 to c1 (COM3) and 600 to c2 (COM4) -> each should cap at 500
   pushFramesLog(cwd, 'c1', gen('c1-', 600, 'c1'))
   pushFramesLog(cwd, 'c2', gen('c2-', 600, 'c2'))
@@ -33,8 +34,8 @@ test('framesByConnection 分轨：COM3 与 COM4 各自 500 环形互不串扰', 
   assert.equal(c1.length, 500)
   assert.equal(c2.length, 500)
   // verify isolation: c1 should contain only c1 labels, lowest kept is 100 (600-500)
-  assert.ok(c1.every(f => f.label.startsWith('c1-')))
-  assert.ok(c2.every(f => f.label.startsWith('c2-')))
+  assert.ok(c1.every((f) => f.label.startsWith('c1-')))
+  assert.ok(c2.every((f) => f.label.startsWith('c2-')))
   assert.equal(c1[0].label, 'c1-100')
   assert.equal(c2[0].label, 'c2-100')
   assert.equal(c1[c1.length - 1].label, 'c1-599')
@@ -51,10 +52,17 @@ test('framesByConnection 分轨：COM3 与 COM4 各自 500 环形互不串扰', 
   assert.equal(getFramesLog(cwd, 'c2').length, 0)
 })
 
-test('framesByConnection 500 环形：单独连接持续追加保持最新 500', () => {
+test('framesByConnection 500 环形：单独连接持续追加保持最新 500', async () => {
   const cwd = '/tmp/dvb-frames2-' + Date.now() + Math.random()
   clearFramesLog(cwd)
-  const gen = (n) => Array.from({ length: n }, (_, i) => ({ t: Date.now()+i, label: 'L'+i, request: 'R'+i, response: 'P'+i, trace: [] }))
+  const gen = (n) =>
+    Array.from({ length: n }, (_, i) => ({
+      t: Date.now() + i,
+      label: 'L' + i,
+      request: 'R' + i,
+      response: 'P' + i,
+      trace: [],
+    }))
   pushFramesLog(cwd, 'c1', gen(300))
   assert.equal(getFramesLog(cwd, 'c1').length, 300)
   pushFramesLog(cwd, 'c1', gen(300)) // now 600 -> capped 500, oldest 100 dropped
@@ -74,9 +82,33 @@ test('多连接轮询：两条 enabled 连接并行 poll，pollingByConnection �
     const c2 = { id: 'c2', name: 'COM4', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM4', sim: true } }
     const d1 = { id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }
     const d2 = { id: 'd2', connectionId: 'c2', name: 'D2', unitId: 2 }
-    const p1 = { id: 'p-c1-hr0', connectionId: 'c1', deviceId: 'd1', name: 'C1-HR0', area: 'holdingRegister', function: 3, address: 0 }
-    const p2 = { id: 'p-c1-hr1', connectionId: 'c1', deviceId: 'd1', name: 'C1-HR1', area: 'holdingRegister', function: 3, address: 1 }
-    const p3 = { id: 'p-c2-hr0', connectionId: 'c2', deviceId: 'd2', name: 'C2-HR0', area: 'holdingRegister', function: 3, address: 10 }
+    const p1 = {
+      id: 'p-c1-hr0',
+      connectionId: 'c1',
+      deviceId: 'd1',
+      name: 'C1-HR0',
+      area: 'holdingRegister',
+      function: 3,
+      address: 0,
+    }
+    const p2 = {
+      id: 'p-c1-hr1',
+      connectionId: 'c1',
+      deviceId: 'd1',
+      name: 'C1-HR1',
+      area: 'holdingRegister',
+      function: 3,
+      address: 1,
+    }
+    const p3 = {
+      id: 'p-c2-hr0',
+      connectionId: 'c2',
+      deviceId: 'd2',
+      name: 'C2-HR0',
+      area: 'holdingRegister',
+      function: 3,
+      address: 10,
+    }
     saveWorkspace(home, cwd, {
       modbus: {
         version: 3,
@@ -100,9 +132,9 @@ test('多连接轮询：两条 enabled 连接并行 poll，pollingByConnection �
     assert.ok(Array.isArray(ran.framesByConnection['c1']))
     assert.ok(Array.isArray(ran.framesByConnection['c2']))
     // values filled for all points
-    assert.equal(ran.values.filter(v=> v.ok).length, 3)
+    assert.equal(ran.values.filter((v) => v.ok).length, 3)
     const ws = loadWorkspace(home, cwd)
-    assert.equal(ws.modbus.values.filter(v=> v.ok).length, 3)
+    assert.equal(ws.modbus.values.filter((v) => v.ok).length, 3)
     assert.equal(ws.modbus.pollingByConnection['c1'].lastOk, true)
     assert.equal(ws.modbus.pollingByConnection['c2'].lastOk, true)
     // targeted poll only one connection
@@ -149,7 +181,15 @@ test('点位归属校验：跨连接点位读需 connId 定向，错 connId 报�
     const c2 = { id: 'c2', name: 'C2', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM4', sim: true } }
     const d1 = { id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }
     const d2 = { id: 'd2', connectionId: 'c2', name: 'D2', unitId: 2 }
-    const p1 = { id: 'p-c1-hr0', connectionId: 'c1', deviceId: 'd1', name: 'C1-HR0', area: 'holdingRegister', function: 3, address: 0 }
+    const p1 = {
+      id: 'p-c1-hr0',
+      connectionId: 'c1',
+      deviceId: 'd1',
+      name: 'C1-HR0',
+      area: 'holdingRegister',
+      function: 3,
+      address: 0,
+    }
     saveWorkspace(home, cwd, {
       modbus: { version: 3, connections: [c1, c2], devices: [d1, d2], points: [p1] },
     })
@@ -181,30 +221,67 @@ test('点位归属校验：跨连接点位写需 connId 定向，错 connId 报�
     const c2 = { id: 'c2', name: 'C2', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM4', sim: true } }
     const d1 = { id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }
     const d2 = { id: 'd2', connectionId: 'c2', name: 'D2', unitId: 2 }
-    const p1 = { id: 'p-c1-hr0', connectionId: 'c1', deviceId: 'd1', name: 'C1-HR0', area: 'holdingRegister', function: 3, address: 0 }
+    const p1 = {
+      id: 'p-c1-hr0',
+      connectionId: 'c1',
+      deviceId: 'd1',
+      name: 'C1-HR0',
+      area: 'holdingRegister',
+      function: 3,
+      address: 0,
+    }
     saveWorkspace(home, cwd, {
       modbus: { version: 3, connections: [c1, c2], devices: [d1, d2], points: [p1] },
     })
     // correct write ok (sim)
-    const ok = await modbusWrite(home, cwd, { connectionId: 'c1', deviceId: 'd1', function: 3, address: 0, values: [99], source: 'user' })
+    const ok = await modbusWrite(home, cwd, {
+      connectionId: 'c1',
+      deviceId: 'd1',
+      function: 3,
+      address: 0,
+      values: [99],
+      source: 'user',
+    })
     assert.equal(ok.ok, true)
     assert.equal(ok.connectionId, 'c1')
     // re-enable c1 sim for subsequent writes (local write flips sim to false)
     {
       const cur = loadWorkspace(home, cwd)
-      const nextConns = cur.modbus.connections.map(c => c.id === 'c1' ? { ...c, conn: { ...c.conn, sim: true } } : c)
+      const nextConns = cur.modbus.connections.map((c) =>
+        c.id === 'c1' ? { ...c, conn: { ...c.conn, sim: true } } : c,
+      )
       saveWorkspace(home, cwd, { modbus: { connections: nextConns } })
     }
     // wrong connId write should fail 不在点表
-    const wrongConn = await modbusWrite(home, cwd, { connectionId: 'c2', deviceId: 'd2', function: 3, address: 0, values: [1], source: 'user' })
+    const wrongConn = await modbusWrite(home, cwd, {
+      connectionId: 'c2',
+      deviceId: 'd2',
+      function: 3,
+      address: 0,
+      values: [1],
+      source: 'user',
+    })
     assert.equal(wrongConn.ok, false)
     assert.match(wrongConn.error, /不在点表/)
     // wrong connId but correct address should still fail because point not in c2
-    const wrongAlias = await modbusWrite(home, cwd, { connId: 'c2', function: 3, address: 0, values: [1], source: 'user' })
+    const wrongAlias = await modbusWrite(home, cwd, {
+      connId: 'c2',
+      function: 3,
+      address: 0,
+      values: [1],
+      source: 'user',
+    })
     assert.equal(wrongAlias.ok, false)
     assert.match(wrongAlias.error, /不在点表/)
     // correct alias via connId (c1 sim re-enabled)
-    const okAlias = await modbusWrite(home, cwd, { connId: 'c1', deviceId: 'd1', function: 3, address: 0, values: [101], source: 'user' })
+    const okAlias = await modbusWrite(home, cwd, {
+      connId: 'c1',
+      deviceId: 'd1',
+      function: 3,
+      address: 0,
+      values: [101],
+      source: 'user',
+    })
     assert.equal(okAlias.ok, true)
   } finally {
     await rm(home, { recursive: true, force: true })
@@ -225,16 +302,30 @@ test('跨连接点位读写隔离：c1 点位不影响 c2 同地址点位', asyn
     saveWorkspace(home, cwd, {
       modbus: { version: 3, connections: [c1, c2], devices: [d1, d2], points: [p1, p2] },
     })
-    await modbusWrite(home, cwd, { connectionId: 'c1', deviceId: 'd1', function: 3, address: 0, values: [555], source: 'user' })
+    await modbusWrite(home, cwd, {
+      connectionId: 'c1',
+      deviceId: 'd1',
+      function: 3,
+      address: 0,
+      values: [555],
+      source: 'user',
+    })
     let ws = loadWorkspace(home, cwd)
-    let r1 = ws.modbus.values.find(v=> v.key==='p1')
-    let r2 = ws.modbus.values.find(v=> v.key==='p2')
+    let r1 = ws.modbus.values.find((v) => v.key === 'p1')
+    let r2 = ws.modbus.values.find((v) => v.key === 'p2')
     assert.equal(r1.raw, 555)
     assert.ok(!r2 || r2.raw !== 555)
-    await modbusWrite(home, cwd, { connectionId: 'c2', deviceId: 'd2', function: 3, address: 0, values: [777], source: 'user' })
+    await modbusWrite(home, cwd, {
+      connectionId: 'c2',
+      deviceId: 'd2',
+      function: 3,
+      address: 0,
+      values: [777],
+      source: 'user',
+    })
     ws = loadWorkspace(home, cwd)
-    r1 = ws.modbus.values.find(v=> v.key==='p1')
-    r2 = ws.modbus.values.find(v=> v.key==='p2')
+    r1 = ws.modbus.values.find((v) => v.key === 'p1')
+    r2 = ws.modbus.values.find((v) => v.key === 'p2')
     assert.equal(r1.raw, 555)
     assert.equal(r2.raw, 777)
   } finally {
@@ -255,15 +346,31 @@ test('connId 与 deviceId 别名一致：connId/deviceId 均支持', async () =>
     const rAlias = await modbusRead(home, cwd, { connId: 'c1', deviceId: 'd1', pointId: 'p1' })
     assert.equal(rConnId.ok, true)
     assert.equal(rAlias.ok, true)
-    const wConnId = await modbusWrite(home, cwd, { connectionId: 'c1', deviceId: 'd1', function: 3, address: 7, values: [10], source: 'user' })
+    const wConnId = await modbusWrite(home, cwd, {
+      connectionId: 'c1',
+      deviceId: 'd1',
+      function: 3,
+      address: 7,
+      values: [10],
+      source: 'user',
+    })
     assert.equal(wConnId.ok, true)
     // re-enable sim after local write
     {
       const cur = loadWorkspace(home, cwd)
-      const nextConns = cur.modbus.connections.map(c => c.id === 'c1' ? { ...c, conn: { ...c.conn, sim: true } } : c)
+      const nextConns = cur.modbus.connections.map((c) =>
+        c.id === 'c1' ? { ...c, conn: { ...c.conn, sim: true } } : c,
+      )
       saveWorkspace(home, cwd, { modbus: { connections: nextConns } })
     }
-    const wAlias = await modbusWrite(home, cwd, { connId: 'c1', deviceId: 'd1', function: 3, address: 7, values: [11], source: 'user' })
+    const wAlias = await modbusWrite(home, cwd, {
+      connId: 'c1',
+      deviceId: 'd1',
+      function: 3,
+      address: 7,
+      values: [11],
+      source: 'user',
+    })
     assert.equal(wAlias.ok, true)
   } finally {
     await rm(home, { recursive: true, force: true })
@@ -282,13 +389,23 @@ test('点位表同连接同设备同地址重复被拒绝，跨设备同地址�
     saveWorkspace(home, cwd, { modbus: { version: 3, connections: [c1], devices: [d1, d2], points: [p1] } })
     const { pointsOp } = await import('../bench-modbus.mjs')
     // same connection+device+function+address duplicate should be rejected
-    const dup = pointsOp(home, cwd, { op: 'add', connectionId: 'c1', deviceId: 'd1', points: [{ function: 3, address: 5 }] })
+    const dup = await pointsOp(home, cwd, {
+      op: 'add',
+      connectionId: 'c1',
+      deviceId: 'd1',
+      points: [{ function: 3, address: 5 }],
+    })
     assert.equal(dup.ok, false)
     assert.match(dup.error, /已存在/)
     // same connection different device same address should be allowed
-    const okCross = pointsOp(home, cwd, { op: 'add', connectionId: 'c1', deviceId: 'd2', points: [{ function: 3, address: 5, name: 'cross' }] })
+    const okCross = await pointsOp(home, cwd, {
+      op: 'add',
+      connectionId: 'c1',
+      deviceId: 'd2',
+      points: [{ function: 3, address: 5, name: 'cross' }],
+    })
     assert.equal(okCross.ok, true)
-    assert.ok(okCross.points.some(p => p.deviceId === 'd2' && p.address === 5))
+    assert.ok(okCross.points.some((p) => p.deviceId === 'd2' && p.address === 5))
     // verify total points now 2
     const ws = loadWorkspace(home, cwd)
     assert.equal(ws.modbus.points.length, 2)
@@ -307,14 +424,23 @@ test('framesByConnection 持久化：500 环形写入后隔离保存', async () 
     const d1 = { id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }
     const d2 = { id: 'd2', connectionId: 'c2', name: 'D2', unitId: 1 }
     // generate 600 frames per connection
-    const gen = (prefix) => Array.from({ length: 600 }, (_, i) => ({ t: Date.now()+i, label: prefix+i, request: 'REQ'+i, response: 'RESP'+i, trace: [] }))
+    const gen = (prefix) =>
+      Array.from({ length: 600 }, (_, i) => ({
+        t: Date.now() + i,
+        label: prefix + i,
+        request: 'REQ' + i,
+        response: 'RESP' + i,
+        trace: [],
+      }))
     const fbc = { c1: gen('c1-'), c2: gen('c2-') }
-    saveWorkspace(home, cwd, { modbus: { version: 3, connections: [c1, c2], devices: [d1, d2], points: [], framesByConnection: fbc } })
+    saveWorkspace(home, cwd, {
+      modbus: { version: 3, connections: [c1, c2], devices: [d1, d2], points: [], framesByConnection: fbc },
+    })
     const ws = loadWorkspace(home, cwd)
     assert.equal(ws.modbus.framesByConnection['c1'].length, 500)
     assert.equal(ws.modbus.framesByConnection['c2'].length, 500)
-    assert.ok(ws.modbus.framesByConnection['c1'].every(f => f.label.startsWith('c1-')))
-    assert.ok(ws.modbus.framesByConnection['c2'].every(f => f.label.startsWith('c2-')))
+    assert.ok(ws.modbus.framesByConnection['c1'].every((f) => f.label.startsWith('c1-')))
+    assert.ok(ws.modbus.framesByConnection['c2'].every((f) => f.label.startsWith('c2-')))
   } finally {
     await rm(home, { recursive: true, force: true })
   }
@@ -330,7 +456,13 @@ test('pollingByConnection 启用状态 per-connection 隔离', async () => {
     const d1 = { id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }
     const d2 = { id: 'd2', connectionId: 'c2', name: 'D2', unitId: 2 }
     saveWorkspace(home, cwd, {
-      modbus: { version: 3, connections: [c1, c2], devices: [d1, d2], points: [], pollingByConnection: { c1: { enabled: true, intervalMs: 500 }, c2: { enabled: false, intervalMs: 1000 } } },
+      modbus: {
+        version: 3,
+        connections: [c1, c2],
+        devices: [d1, d2],
+        points: [],
+        pollingByConnection: { c1: { enabled: true, intervalMs: 500 }, c2: { enabled: false, intervalMs: 1000 } },
+      },
     })
     const ws = loadWorkspace(home, cwd)
     assert.equal(ws.modbus.pollingByConnection['c1'].enabled, true)
@@ -342,7 +474,7 @@ test('pollingByConnection 启用状态 per-connection 隔离', async () => {
   }
 })
 
-test('v2→v3 迁移旧 points 带 scale/offset/unit 保留', () => {
+test('v2→v3 迁移旧 points 带 scale/offset/unit 保留', async () => {
   const v2 = {
     version: 2,
     conn: { mode: 'rtu', port: 'COM7', slave: 9, sim: false },

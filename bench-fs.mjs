@@ -13,8 +13,7 @@ const ARTIFACT_FILE = {
   elf: 'elf_file',
 }
 
-export const normalizeArtifact = (value) =>
-  ARTIFACTS.indexOf(value) >= 0 ? value : 'hex'
+export const normalizeArtifact = (value) => (ARTIFACTS.indexOf(value) >= 0 ? value : 'hex')
 
 export const pickArtifact = (details, wanted) => {
   const format = normalizeArtifact(wanted)
@@ -60,7 +59,9 @@ export const listWorkspaceDir = (cwd, requested) => {
       const st = statSync(real)
       isDir = st.isDirectory()
       isFile = st.isFile()
-    } catch { continue }
+    } catch {
+      continue
+    }
     if (isDir) {
       if (SKIP.has(name)) continue
       dirs.push({ name, path: full })
@@ -84,7 +85,23 @@ export const listWorkspaceDir = (cwd, requested) => {
 export const LOG_TAIL_BYTES = 256 * 1024
 
 // Task5/0.19.3: 只读源码预览 — 工作区内、拒绝符号链接逃逸、扩展名白名单、256KB 上限
-export const PROJECT_READ_EXT = new Set(['.c', '.h', '.hpp', '.cpp', '.cc', '.cxx', '.s', '.asm', '.S', '.ld', '.icf', '.sct', '.txt', '.md', '.inc'])
+export const PROJECT_READ_EXT = new Set([
+  '.c',
+  '.h',
+  '.hpp',
+  '.cpp',
+  '.cc',
+  '.cxx',
+  '.s',
+  '.asm',
+  '.S',
+  '.ld',
+  '.icf',
+  '.sct',
+  '.txt',
+  '.md',
+  '.inc',
+])
 export const PROJECT_READ_MAX = 256 * 1024
 
 export const readProjectFile = (cwd, file) => {
@@ -178,7 +195,8 @@ export const artifactInfo = (cwd, requested) => {
     return { ok: false, error: '产物不可读' }
   }
   if (!stat.isFile()) return { ok: false, error: '不是固件文件' }
-  if (stat.size > HASH_FILE) return { ok: true, path: real, name: basename(real), size: stat.size, mtime: stat.mtimeMs, sha256: '' }
+  if (stat.size > HASH_FILE)
+    return { ok: true, path: real, name: basename(real), size: stat.size, mtime: stat.mtimeMs, sha256: '' }
   const hash = createHash('sha256')
   hash.update(readFileSync(real))
   return {

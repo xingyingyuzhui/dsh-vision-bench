@@ -14,17 +14,10 @@ import {
   normalizeTimelineEvent,
   runningTasks,
 } from '../bench-journal.mjs'
-import {
-  finishTask,
-  journalView,
-  loadWorkspace,
-  openTask,
-  saveBindings,
-  saveWorkspace,
-} from '../bench-store.mjs'
+import { finishTask, journalView, loadWorkspace, openTask, saveBindings, saveWorkspace } from '../bench-store.mjs'
 import { runVisionBench, sessionIdOf } from '../bench-tool.mjs'
 
-test('normalizeOrigin and task defaults', () => {
+test('normalizeOrigin and task defaults', async () => {
   assert.deepEqual(normalizeOrigin({ source: 'agent', sessionId: ' s1 ' }), {
     source: 'agent',
     sessionId: 's1',
@@ -37,30 +30,46 @@ test('normalizeOrigin and task defaults', () => {
   assert.equal(normalizeTimelineEvent({ kind: 'build-start' }).ok, null)
 })
 
-test('compact helpers cap and keep running', () => {
+test('compact helpers cap and keep running', async () => {
   const tasks = [
-    { id: 'a', type: 'build', source: 'agent', sessionId: 's', status: 'running', startedAt: 1, endedAt: null, summary: 'go' },
+    {
+      id: 'a',
+      type: 'build',
+      source: 'agent',
+      sessionId: 's',
+      status: 'running',
+      startedAt: 1,
+      endedAt: null,
+      summary: 'go',
+    },
     { id: 'b', type: 'read', source: 'user', sessionId: '', status: 'ok', startedAt: 1, endedAt: 2, summary: 'done' },
   ]
   assert.equal(runningTasks(tasks).length, 1)
   assert.equal(compactTasks(tasks)[0].id, 'a')
-  const kept = compactTasks([{
-    id: 'c',
-    type: 'build',
-    source: 'agent',
-    sessionId: 's',
-    status: 'error',
-    startedAt: 1,
-    endedAt: 2,
-    summary: '编译失败',
-    logFile: '/tmp/t.log',
-    phase: 'compile',
-    errors: ['main.c(12): error: foo'],
-  }])[0]
+  const kept = compactTasks([
+    {
+      id: 'c',
+      type: 'build',
+      source: 'agent',
+      sessionId: 's',
+      status: 'error',
+      startedAt: 1,
+      endedAt: 2,
+      summary: '编译失败',
+      logFile: '/tmp/t.log',
+      phase: 'compile',
+      errors: ['main.c(12): error: foo'],
+    },
+  ])[0]
   assert.equal(kept.logFile, '/tmp/t.log')
   assert.equal(kept.phase, 'compile')
   assert.deepEqual(kept.errors, ['main.c(12): error: foo'])
-  assert.equal(compactTimeline([{ id: 'e', at: 1, kind: 'build-end', source: 'user', sessionId: '', taskId: 'b', ok: true, summary: 'ok' }])[0].kind, 'build-end')
+  assert.equal(
+    compactTimeline([
+      { id: 'e', at: 1, kind: 'build-end', source: 'user', sessionId: '', taskId: 'b', ok: true, summary: 'ok' },
+    ])[0].kind,
+    'build-end',
+  )
 })
 
 test('openTask and finishTask persist a shared journal', async () => {
@@ -70,7 +79,7 @@ test('openTask and finishTask persist a shared journal', async () => {
   try {
     const project = join(cwd, 'app.uvprojx')
     saveWorkspace(home, cwd, { keil: { project, target: 'Debug' } })
-    const task = openTask(home, cwd, {
+    const task = await openTask(home, cwd, {
       type: 'build',
       source: 'agent',
       sessionId: 'sess-1',
@@ -83,7 +92,7 @@ test('openTask and finishTask persist a shared journal', async () => {
     assert.equal(mid.timeline[0].source, 'agent')
     assert.equal(journalView(mid).running.length, 1)
 
-    finishTask(home, cwd, task.id, { ok: true, summary: '编译成功', keil: { download: join(cwd, 'app.hex') } })
+    await finishTask(home, cwd, task.id, { ok: true, summary: '编译成功', keil: { download: join(cwd, 'app.hex') } })
     const done = loadWorkspace(home, cwd)
     assert.equal(done.tasks[0].status, 'ok')
     assert.equal(done.keil.download, join(cwd, 'app.hex'))
@@ -129,7 +138,12 @@ test('keilBuild rejects a second running build and keeps the first task', async 
     const project = join(cwd, 'app.uvprojx')
     await writeFile(project, '<Project/>')
     saveWorkspace(home, cwd, { keil: { project, target: 'Debug' } })
-    const task = openTask(home, cwd, { type: 'build', source: 'agent', sessionId: 'sess-2', summary: '编译 Debug' })
+    const task = await openTask(home, cwd, {
+      type: 'build',
+      source: 'agent',
+      sessionId: 'sess-2',
+      summary: '编译 Debug',
+    })
     const blocked = await keilBuild(home, cwd, { source: 'user', sessionId: 'ui' })
     assert.equal(blocked.ok, false)
     assert.match(blocked.error, /进行中/)
@@ -174,8 +188,8 @@ test('finishTask stores logFile, phase and errors for Agent builds', async () =>
   const cwd = join(home, 'board')
   await mkdir(cwd)
   try {
-    const task = openTask(home, cwd, { type: 'build', source: 'agent', sessionId: 's', summary: '编译 Debug' })
-    finishTask(home, cwd, task.id, {
+    const task = await openTask(home, cwd, { type: 'build', source: 'agent', sessionId: 's', summary: '编译 Debug' })
+    await finishTask(home, cwd, task.id, {
       ok: false,
       summary: '编译失败 identifier foo',
       logFile: '/tmp/vision-bench/logs/t9.log',
@@ -195,8 +209,17 @@ test('finishTask stores logFile, phase and errors for Agent builds', async () =>
   }
 })
 
-test('capTasks keeps running tasks across the recency cap', () => {
-  const mk = (i, status) => ({ id: 't' + i, type: 'read', source: 'user', sessionId: '', status, startedAt: i, endedAt: null, summary: '' })
+test('capTasks keeps running tasks across the recency cap', async () => {
+  const mk = (i, status) => ({
+    id: 't' + i,
+    type: 'read',
+    source: 'user',
+    sessionId: '',
+    status,
+    startedAt: i,
+    endedAt: null,
+    summary: '',
+  })
   const tasks = [mk('build', 'running')]
   for (let i = 0; i < 25; i++) tasks.push(mk(i, 'ok'))
   const capped = capTasks(tasks)
@@ -209,10 +232,10 @@ test('openTask never evicts a long-running build under read pressure', async () 
   const cwd = join(home, 'board')
   await mkdir(cwd)
   try {
-    const buildTask = openTask(home, cwd, { type: 'build', source: 'agent', sessionId: 's', summary: '长编译' })
+    const buildTask = await openTask(home, cwd, { type: 'build', source: 'agent', sessionId: 's', summary: '长编译' })
     for (let i = 0; i < 25; i++) {
-      const t = openTask(home, cwd, { type: 'read', source: 'user', sessionId: '', summary: '读' + i })
-      finishTask(home, cwd, t.id, { ok: true, summary: '完成' })
+      const t = await openTask(home, cwd, { type: 'read', source: 'user', sessionId: '', summary: '读' + i })
+      await finishTask(home, cwd, t.id, { ok: true, summary: '完成' })
     }
     const ws = loadWorkspace(home, cwd)
     const stillRunning = ws.tasks.find((item) => item.id === buildTask.id)

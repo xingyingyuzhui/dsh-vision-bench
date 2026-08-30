@@ -20,7 +20,7 @@ const localImportsOf = (file) => {
   return out
 }
 
-test('every shipped module is listed in package.json files', () => {
+test('every shipped module is listed in package.json files', async () => {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
   const files = new Set(pkg.files)
   const seen = new Set(['host.js'])

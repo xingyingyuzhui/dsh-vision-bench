@@ -1,40 +1,60 @@
-import { listPendingWrites, keilBuild, keilMap, keilScan, keilTargets, listDir, listFrames, modbusPoll, modbusRead, modbusWrite, openocdDownload, pointsOp, connectOp, requestFocus, resolvePendingWrite } from './bench-actions.mjs'
+import {
+  connectOp,
+  keilBuild,
+  keilMap,
+  keilScan,
+  keilTargets,
+  listDir,
+  listFrames,
+  listPendingWrites,
+  modbusPoll,
+  modbusRead,
+  modbusWrite,
+  openocdDownload,
+  pointsOp,
+  requestFocus,
+  resolvePendingWrite,
+} from './bench-actions.mjs'
 import { runSelfCheck } from './bench-check.mjs'
+import { normalizeModbus } from './bench-devices.mjs'
 import { artifactInfo, readBuildLog, readProjectFile } from './bench-fs.mjs'
+import { getVisionIoBroker, stopVisionIoBroker } from './bench-io-broker.mjs'
+import { toEndpoint } from './bench-io-contract.mjs'
+import { changedConnectionIds, notifyConnectionRelease } from './bench-modbus-transport.mjs'
+import { migrateLegacyDisabled } from './bench-modbus.mjs'
+import { maybeNotifyResult, notifyBenchEvent, setAgentsRegistry } from './bench-notify.mjs'
+import { requireWorkspaceCwd } from './bench-paths.mjs'
+import { ensurePolling, pollingStatus, startPolling, stopAllPolling, stopPolling } from './bench-polling-service.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
+import { VISION_GUIDANCE } from './bench-preset.mjs'
+import {
+  clearSerialMonitorState,
+  closeConnectionLink,
+  feedConnectionFrames,
+  listConnectedSerialSources,
+  listConnectionStates,
+  openConnectionLink,
+} from './bench-serial-monitor.mjs'
+import { listSerialPorts } from './bench-serial.mjs'
 import {
   appendEvidence,
-  applyConfigDraft,
-  createConfigDraft,
   createManualRequest,
   defaultDshHome,
-  discardConfigDraft,
-  getConfigDraft,
   journalView,
-  listConfigDrafts,
   loadBindings,
   loadWorkspace,
   patchPointFlags,
   probeBindings,
   resolveManualRequest,
   saveBindings,
-  saveWorkspace,
+  saveWorkspaceAsync,
   sweepStaleTasks,
   touchServiceSession,
 } from './bench-store.mjs'
-import { maybeNotifyResult, notifyBenchEvent, setAgentsRegistry } from './bench-notify.mjs'
-import { requireWorkspaceCwd } from './bench-paths.mjs'
-import { normalizeModbus } from './bench-devices.mjs'
 import { clearFramesByConnection } from './bench-store.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
-import { listSerialPorts } from './bench-serial.mjs'
-import { clearSerialMonitorState, closeConnectionLink, feedConnectionFrames, listConnectedSerialSources, listConnectionStates, openConnectionLink } from './bench-serial-monitor.mjs'
-import { ensurePolling, pollingStatus, startPolling, stopAllPolling, stopPolling } from './bench-polling-service.mjs'
-import { migrateLegacyDisabled } from './bench-modbus.mjs'
-import { getVisionIoBroker, stopVisionIoBroker } from './bench-io-broker.mjs'
-import { changedConnectionIds, notifyConnectionRelease } from './bench-modbus-transport.mjs'
-import { toEndpoint } from './bench-io-contract.mjs'
-import { VISION_GUIDANCE } from './bench-preset.mjs'
+import { registerVisionHost } from './src/infrastructure/host/vision-host-client.mjs'
+import { createVisionCommandDispatcher, handleCommand } from './src/interfaces/http/vision-command-routes.mjs'
 
 export const name = 'dsh-vision-bench'
 export const inject = ['webServer', 'tools', 'agentPresets', 'systemPrompt']
@@ -42,6 +62,7 @@ export const inject = ['webServer', 'tools', 'agentPresets', 'systemPrompt']
 const BODY_CAP = 65536
 const LOOPBACK_ORIGIN = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/
 const CSRF = 'x-dsh-vision-bench'
+const WORKSPACE_CONFIG_KEYS = new Set(['conn', 'connections', 'devices', 'points', 'visualization'])
 
 let dshHome = defaultDshHome()
 
@@ -50,33 +71,37 @@ const writeJson = (res, status, body) => {
   res.end(JSON.stringify(body))
 }
 
-const readJsonBody = (req, cap = BODY_CAP) => new Promise((resolveBody, reject) => {
-  let size = 0
-  const chunks = []
-  req.on('data', (chunk) => {
-    size += chunk.length
-    if (size > cap) {
-      reject(new Error('body too large'))
-      req.destroy()
-      return
-    }
-    chunks.push(chunk)
+const readJsonBody = (req, cap = BODY_CAP) =>
+  new Promise((resolveBody, reject) => {
+    let size = 0
+    const chunks = []
+    req.on('data', (chunk) => {
+      size += chunk.length
+      if (size > cap) {
+        reject(new Error('body too large'))
+        req.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => {
+      try {
+        const text = Buffer.concat(chunks).toString('utf8').trim()
+        resolveBody(text.length === 0 ? {} : JSON.parse(text))
+      } catch {
+        reject(new Error('invalid json body'))
+      }
+    })
+    req.on('error', reject)
   })
-  req.on('end', () => {
-    try {
-      const text = Buffer.concat(chunks).toString('utf8').trim()
-      resolveBody(text.length === 0 ? {} : JSON.parse(text))
-    } catch {
-      reject(new Error('invalid json body'))
-    }
-  })
-  req.on('error', reject)
-})
 
 /** 带 sessionId 的请求自动归属当前 Session（后台告警通知目标）。 */
 const readBodyAndTouchSession = async (req) => {
   const body = await readJsonBody(req)
-  if (body && body.cwd && body.sessionId) touchServiceSession(dshHome, body.cwd, body.sessionId)
+  const action = body && (body.action || body.payload?.action)
+  if (action !== 'system.ping' && body && body.cwd && body.sessionId) {
+    await touchServiceSession(dshHome, body.cwd, body.sessionId)
+  }
   return body
 }
 
@@ -109,9 +134,17 @@ const snapshot = async (cwd) => {
   const room = cwd ? requireWorkspaceCwd(cwd) : { error: 'no-cwd' }
   if (!room.error) {
     // Task1/0.19.3: 旧版 enabled 禁用态 → 停止该连接自动采集并清理字段（一次性迁移）
-    try { migrateLegacyDisabled(dshHome, room.cwd) } catch { /* 迁移尽力而为 */ }
+    try {
+      await migrateLegacyDisabled(dshHome, room.cwd)
+    } catch {
+      /* 迁移尽力而为 */
+    }
     // Task2/0.19.3: Host 后台采集协调器按需续跑
-    try { ensurePolling(dshHome, room.cwd) } catch { /* 采集尽力而为 */ }
+    try {
+      ensurePolling(dshHome, room.cwd)
+    } catch {
+      /* 采集尽力而为 */
+    }
     const workspace = loadWorkspace(dshHome, room.cwd)
     body.workspace = workspace
     body.journal = journalView(body.workspace)
@@ -171,11 +204,12 @@ export function apply(ctx, config = {}) {
     let stopGuidance = () => {}
     try {
       if (ctx.systemPrompt && typeof ctx.systemPrompt.section === 'function') {
-        stopGuidance = ctx.systemPrompt.section({
-          name: 'vision-bench:guidance',
-          order: 20,
-          text: () => VISION_GUIDANCE,
-        }) || (() => {})
+        stopGuidance =
+          ctx.systemPrompt.section({
+            name: 'vision-bench:guidance',
+            order: 20,
+            text: () => VISION_GUIDANCE,
+          }) || (() => {})
       }
     } catch {}
     ctx.effect(() => () => {
@@ -184,13 +218,15 @@ export function apply(ctx, config = {}) {
     })
     return
   }
-  try {
-    sweepStaleTasks(dshHome)
-  } catch { /* sweep is best-effort */ }
+  void sweepStaleTasks(dshHome).catch(() => {})
   // Lazy resolver: the agents service may register after this plugin applies.
   try {
     setAgentsRegistry(() => (ctx.get ? ctx.get('agents') : null))
-  } catch { /* agent registry is optional */ }
+  } catch {
+    /* agent registry is optional */
+  }
+  const commandDispatcher = createVisionCommandDispatcher(dshHome)
+  const stopHost = registerVisionHost(commandDispatcher)
   const rows = [
     route('/dsh-vision-bench/state', async (req) => {
       const body = await readBodyAndTouchSession(req)
@@ -206,8 +242,16 @@ export function apply(ctx, config = {}) {
       const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
+      const modbus = body && body.modbus
+      if (modbus && Object.keys(modbus).some((key) => WORKSPACE_CONFIG_KEYS.has(key))) {
+        return {
+          ok: false,
+          errorCode: 'CONFIG_COMMAND_REQUIRED',
+          error: '连接、设备、点位与可视化配置必须使用增量配置命令',
+        }
+      }
       const prev = loadWorkspace(dshHome, room.cwd)
-      const saved = saveWorkspace(dshHome, room.cwd, {
+      const saved = await saveWorkspaceAsync(dshHome, room.cwd, {
         keil: body && body.keil,
         modbus: body && body.modbus,
       })
@@ -317,7 +361,7 @@ export function apply(ctx, config = {}) {
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
       const ev = body && (body.evidence || body.evidences || body.item)
-      const list = Array.isArray(ev) ? ev : (ev ? [ev] : [])
+      const list = Array.isArray(ev) ? ev : ev ? [ev] : []
       if (!list.length) return { ok: false, error: '缺少 evidence' }
       return appendEvidence(dshHome, room.cwd, list)
     }),
@@ -325,11 +369,15 @@ export function apply(ctx, config = {}) {
       const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
-      const ran = resolveManualRequest(dshHome, room.cwd, body && body.id, body && body.done !== false)
+      const ran = await resolveManualRequest(dshHome, room.cwd, body && body.id, body && body.done !== false)
       if (ran.ok && ran.request) {
-        void notifyBenchEvent(dshHome, room.cwd,
+        void notifyBenchEvent(
+          dshHome,
+          room.cwd,
           '人工操作' + (ran.request.status === 'done' ? '已完成' : '无法完成') + '：' + ran.request.text,
-          '', { sessionId: ran.request.sessionId }).catch(() => {})
+          '',
+          { sessionId: ran.request.sessionId },
+        ).catch(() => {})
       }
       return ran
     }),
@@ -388,50 +436,15 @@ export function apply(ctx, config = {}) {
       if (room.error) return { ok: false, error: room.error }
       return feedConnectionFrames(room.cwd, { connectionId: body.connectionId || '', since: body.since })
     }),
-    route('/dsh-vision-bench/config/draft', async (req) => {
-      const body = await readBodyAndTouchSession(req)
-      const room = requireWorkspaceCwd(body && body.cwd)
-      if (room.error) return { ok: false, error: room.error }
-      const op = typeof body.op === 'string' ? body.op.trim() : (body.patch || body.target ? 'create' : 'list')
-      if (op === 'list' || op === '') return listConfigDrafts(dshHome, room.cwd)
-      if (op === 'get') return getConfigDraft(dshHome, room.cwd, body.draftId || body.id)
-      if (op === 'discard') {
-        const ran = discardConfigDraft(dshHome, room.cwd, body.draftId || body.id)
-        if (ran.ok) {
-          void notifyBenchEvent(dshHome, room.cwd, '已丢弃配置草稿 ' + (body.draftId || body.id), '', { sessionId: body.sessionId || '' }).catch(() => {})
-        }
-        return ran
-      }
-      // create
-      const ran = createConfigDraft(dshHome, room.cwd, {
-        baseConfigVersion: body.baseConfigVersion ?? body.configVersion,
-        patch: body.patch || body.operations || body.ops,
-        target: body.target,
-        source: body.source || 'user',
-        sessionId: body.sessionId || '',
-      })
-      if (ran.ok) {
-        void notifyBenchEvent(dshHome, room.cwd, '创建配置草稿 ' + ran.draft.id + '（影响 ' + (ran.summary && ran.summary.affectedPoints || 0) + ' 点）', '', { sessionId: body.sessionId || '' }).catch(() => {})
-      }
-      return ran
-    }),
-    route('/dsh-vision-bench/config/draft/apply', async (req) => {
-      const body = await readBodyAndTouchSession(req)
-      const room = requireWorkspaceCwd(body && body.cwd)
-      if (room.error) return { ok: false, error: room.error }
-      const ran = applyConfigDraft(dshHome, room.cwd, body.draftId || body.id, { source: 'user', sessionId: body.sessionId || '' })
-      if (ran.ok) {
-        void notifyBenchEvent(dshHome, room.cwd, '配置草稿已应用 ' + (body.draftId || body.id) + ' → v' + ran.nextVersion, '', { sessionId: body.sessionId || '' }).catch(() => {})
-      } else if (ran.errorCode === 'CONFIG_DRIFT') {
-        void notifyBenchEvent(dshHome, room.cwd, '配置草稿漂移 ' + (body.draftId || body.id) + ': ' + ran.error, '', { sessionId: body.sessionId || '' }).catch(() => {})
-      }
-      return ran
-    }),
+    route('/dsh-vision-bench/command', async (req) => handleCommand(dshHome, req, readBodyAndTouchSession)),
   ]
   const disposers = rows.map((entry) => ctx.webServer.register(entry))
-  void seedVisionBenchPreset(ctx.agentPresets, dshHome).catch(() => { /* roster copy is best-effort */ })
+  void seedVisionBenchPreset(ctx.agentPresets, dshHome).catch(() => {
+    /* roster copy is best-effort */
+  })
   ctx.effect(() => () => {
     for (const dispose of disposers) dispose()
+    stopHost()
     clearSerialMonitorState()
     stopAllPolling()
     void stopVisionIoBroker('plugin-dispose')
@@ -439,8 +452,12 @@ export function apply(ctx, config = {}) {
 }
 
 export const _internal = {
-  setDshHome(dir) { dshHome = dir },
-  getDshHome() { return dshHome },
+  setDshHome(dir) {
+    dshHome = dir
+  },
+  getDshHome() {
+    return dshHome
+  },
   guard,
   snapshot,
   cwdOf,

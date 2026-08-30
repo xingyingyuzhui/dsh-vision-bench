@@ -31,6 +31,8 @@ export type Device = {
 export type Point = {
   id: string
   connectionId: string
+  /** @deprecated use connectionId */
+  connId?: string
   deviceId: string
   name: string
   function: number
@@ -56,6 +58,20 @@ export type PointValue = {
   error?: string
 }
 
+export type TaskRecord = {
+  id: string
+  type?: string
+  startedAt?: number
+  endedAt?: number
+  [key: string]: unknown
+}
+
+export type TimelineRecord = {
+  id?: string
+  at?: number
+  [key: string]: unknown
+}
+
 export type AlarmState = Record<
   string,
   {
@@ -79,7 +95,6 @@ export type WorkspaceConfig = {
   layoutVersion?: number
   keil?: Record<string, unknown>
   session?: { boundId?: string }
-  configDrafts?: unknown[]
   modbus: {
     version: number
     configVersion: number
@@ -93,18 +108,47 @@ export type WorkspaceConfig = {
   }
 }
 
+export type TrendSample = {
+  at: number
+  value?: number | boolean | null
+  raw?: number | null
+  ok?: boolean
+}
+
+export type TrendSeries = {
+  pointId: string
+  samples?: TrendSample[]
+}
+
+export type FrameRecord = {
+  id?: string
+  frameId?: string
+  transactionId?: string
+  t?: number
+  at?: number
+  connectionId?: string
+  deviceId?: string
+  direction?: 'tx' | 'rx' | string
+  function?: number
+  ok?: boolean
+  raw?: string
+  decoded?: string
+}
+
 export type WorkspaceRuntime = {
   layoutVersion?: number
   modbus: {
     values?: PointValue[]
     alarmState?: AlarmState
     alarmActive?: AlarmState
-    framesByConnection?: Record<string, unknown[]>
-    trend?: Record<string, unknown>
+    framesByConnection?: Record<string, FrameRecord[]>
+    trend?: Record<string, TrendSeries | TrendSample[] | unknown>
   }
   focus?: unknown
-  tasks?: unknown[]
+  tasks?: TaskRecord[]
   log?: unknown[]
-  timeline?: unknown[]
+  timeline?: TimelineRecord[]
   manualRequests?: unknown[]
 }
+
+export type VisionWorkspace = WorkspaceConfig & WorkspaceRuntime

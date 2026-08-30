@@ -12,16 +12,26 @@ test('Task5: 已有中文输入不被覆盖 — dispatch appends after newline',
   let draft = '用户已输入的中文草稿'
   const bridge = {
     currentDraft: draft,
-    setDraft(t) { draft = t },
+    setDraft(t) {
+      draft = t
+    },
   }
   const r = await dispatchAgentRef(ref, bridge)
   assert.equal(r.mode, 'input')
   assert.equal(r.status, '已加入输入框')
   assert.ok(draft.startsWith('用户已输入的中文草稿\n'), 'existing user draft must be kept, ref appended on a new line')
-  assert.ok(draft.indexOf('"pointId": "p1"') > draft.indexOf('用户已输入的中文草稿'), 'serialized ref must follow the draft')
+  assert.ok(
+    draft.indexOf('"pointId": "p1"') > draft.indexOf('用户已输入的中文草稿'),
+    'serialized ref must follow the draft',
+  )
   // empty draft -> plain replace, no leading newline
   let empty = ''
-  await dispatchAgentRef(ref, { currentDraft: '', setDraft(t) { empty = t } })
+  await dispatchAgentRef(ref, {
+    currentDraft: '',
+    setDraft(t) {
+      empty = t
+    },
+  })
   assert.ok(empty.startsWith('{'), 'empty draft is set directly')
   assert.equal(empty.startsWith('\n'), false)
 })
@@ -34,7 +44,12 @@ test('Task5: 连续追加按序 — sequential dispatches stay ordered and never
     buildAgentRef('alarm', { alarmId: 'a1', connectionId: 'c1' }, { configVersion: 2 }),
   ]
   for (const r of refs) {
-    const res = await dispatchAgentRef(r, { currentDraft: draft, setDraft(t) { draft = t } })
+    const res = await dispatchAgentRef(r, {
+      currentDraft: draft,
+      setDraft(t) {
+        draft = t
+      },
+    })
     assert.equal(res.mode, 'input')
   }
   const pos = (needle) => draft.indexOf(needle)
@@ -49,7 +64,9 @@ test('Task5: 只有 opts.send 才调 submit；发送成功枚举 sent', async ()
   const bridge = {
     currentDraft: '',
     setDraft() {},
-    submit() { submitted += 1 },
+    submit() {
+      submitted += 1
+    },
   }
   const noSend = await dispatchAgentRef(ref, bridge)
   assert.equal(noSend.mode, 'input')
@@ -63,7 +80,17 @@ test('Task5: 只有 opts.send 才调 submit；发送成功枚举 sent', async ()
 test('Task5: 无写接口时剪贴板回退 mode copied；剪贴板不可用则 failed', async () => {
   const prevNav = globalThis.navigator
   try {
-    Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText() { return Promise.resolve() } } }, configurable: true, writable: true })
+    Object.defineProperty(globalThis, 'navigator', {
+      value: {
+        clipboard: {
+          writeText() {
+            return Promise.resolve()
+          },
+        },
+      },
+      configurable: true,
+      writable: true,
+    })
     const r = await dispatchAgentRef(ref, { currentDraft: '', setDraft: null })
     assert.equal(r.mode, 'copied', 'no writer -> clipboard fallback')
     assert.equal(r.status, '已复制组件引用')
@@ -87,7 +114,10 @@ test('Task5: 不产生 Invalid Hook Call — dispatch 是纯命令函数，不�
     currentDraft: '已有文本',
     setDraft() {},
     // a hook-shaped trap: dispatch must never touch it (hooks only run at component render top-level)
-    useInput() { hookCalls += 1; throw new Error('Invalid hook call') },
+    useInput() {
+      hookCalls += 1
+      throw new Error('Invalid hook call')
+    },
   }
   const r = await dispatchAgentRef(ref, poisoned)
   assert.equal(r.mode, 'input')
@@ -95,20 +125,30 @@ test('Task5: 不产生 Invalid Hook Call — dispatch 是纯命令函数，不�
 
   // legacy props-shaped objects are not accepted as bridges anymore: no inputActions magic
   let written = null
-  const legacy = { inputActions: { setDraft(t) { written = t } }, useInput: () => { hookCalls += 1; throw new Error('Invalid hook call') } }
+  const legacy = {
+    inputActions: {
+      setDraft(t) {
+        written = t
+      },
+    },
+    useInput: () => {
+      hookCalls += 1
+      throw new Error('Invalid hook call')
+    },
+  }
   await dispatchAgentRef(ref, legacy)
   assert.equal(written, null, 'props.inputActions must not be reachable from inside dispatch')
   assert.equal(hookCalls, 0)
 })
 
-test('Task5: hasHarnessInput 仍只认写入者（reader-only 不算）', () => {
+test('Task5: hasHarnessInput 仍只认写入者（reader-only 不算）', async () => {
   assert.equal(hasHarnessInput({}), false)
   assert.equal(hasHarnessInput({ useInput: () => {} }), false, 'reader-only must not claim harness input')
   assert.equal(hasHarnessInput({ inputActions: { setDraft() {} } }), true)
   assert.equal(hasHarnessInput({ session: { inputActions: { setDraft() {} } } }), true)
 })
 
-test('Task5: buildAgentRef point 引用保持稳定 ID+configVersion+timeRange', () => {
+test('Task5: buildAgentRef point 引用保持稳定 ID+configVersion+timeRange', async () => {
   assert.equal(ref.kind, 'point')
   assert.equal(ref.pointId, 'p1')
   assert.equal(ref.configVersion, 2)

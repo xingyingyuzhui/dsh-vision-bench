@@ -1,10 +1,10 @@
-// TaskP2/0.20.0: 可视化侧边栏 — 组件为中心、编辑器、保存即时渲染、degraded 修复入口。
-import { beforeEach, afterEach, test } from 'node:test'
 import assert from 'node:assert/strict'
+// TaskP2/0.20.0: 可视化侧边栏 — 组件为中心、编辑器、保存即时渲染、degraded 修复入口。
+import { afterEach, beforeEach, test } from 'node:test'
+import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { Window } from 'happy-dom'
 import React from 'react'
 import { createElement } from 'react'
-import { render, cleanup, waitFor, act } from '@testing-library/react'
 import { createVisualizationPage } from '../bench-visualization-view.mjs'
 
 let win
@@ -12,10 +12,22 @@ beforeEach(async () => {
   win = new Window({ url: 'http://localhost/' })
   globalThis.window = win
   globalThis.document = win.document
-  try { globalThis.navigator = { clipboard: { writeText: async () => {} }, userAgent: 'happy' } } catch {
-    Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText: async () => {} }, userAgent: 'happy' }, configurable: true })
+  try {
+    globalThis.navigator = { clipboard: { writeText: async () => {} }, userAgent: 'happy' }
+  } catch {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { clipboard: { writeText: async () => {} }, userAgent: 'happy' },
+      configurable: true,
+    })
   }
-  globalThis.ResizeObserver = class { constructor(cb) { this.cb = cb } observe() {} unobserve() {} disconnect() {} }
+  globalThis.ResizeObserver = class {
+    constructor(cb) {
+      this.cb = cb
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
   globalThis.Element = win.HTMLElement
   globalThis.HTMLElement = win.HTMLElement
   globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0)
@@ -25,7 +37,9 @@ beforeEach(async () => {
   globalThis.CustomEvent = win.CustomEvent
   globalThis.getComputedStyle = () => ({ getPropertyValue: () => '', setProperty() {}, removeProperty() {} })
 })
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 const MB = {
   version: 3,
@@ -33,14 +47,44 @@ const MB = {
   connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } }],
   devices: [{ id: 'd1', connectionId: 'c1', name: '设备1', unitId: 1 }],
   points: [
-    { id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, monitorEnabled: true, alarmEnabled: true },
-    { id: 'p2', connectionId: 'c1', deviceId: 'd1', name: '压力', function: 3, address: 1, monitorEnabled: true, alarmEnabled: false },
-    { id: 'p3', connectionId: 'c1', deviceId: 'd1', name: '未监视', function: 3, address: 2, monitorEnabled: false, alarmEnabled: false },
+    {
+      id: 'p1',
+      connectionId: 'c1',
+      deviceId: 'd1',
+      name: '温度',
+      function: 3,
+      address: 0,
+      monitorEnabled: true,
+      alarmEnabled: true,
+    },
+    {
+      id: 'p2',
+      connectionId: 'c1',
+      deviceId: 'd1',
+      name: '压力',
+      function: 3,
+      address: 1,
+      monitorEnabled: true,
+      alarmEnabled: false,
+    },
+    {
+      id: 'p3',
+      connectionId: 'c1',
+      deviceId: 'd1',
+      name: '未监视',
+      function: 3,
+      address: 2,
+      monitorEnabled: false,
+      alarmEnabled: false,
+    },
   ],
-  values: [
-    { key: 'p1', pointId: 'p1', value: 23.5, ok: true, at: Date.now() },
-  ],
-  trend: { p1: [[Date.now() - 1000, 23], [Date.now(), 23.5]] },
+  values: [{ key: 'p1', pointId: 'p1', value: 23.5, ok: true, at: Date.now() }],
+  trend: {
+    p1: [
+      [Date.now() - 1000, 23],
+      [Date.now(), 23.5],
+    ],
+  },
   alarmState: {},
   visualization: { schemaVersion: 1, components: [] },
 }
@@ -48,10 +92,30 @@ const MB = {
 const makePost = (mb = JSON.parse(JSON.stringify(MB))) => {
   const saved = []
   const post = async (path, body) => {
-    if (/\/state$/.test(path)) return { ok: true, workspace: { modbus: mb, focus: null }, journal: { tasks: [], running: [], timeline: [] }, health: {}, pendingWrites: [] }
-    if (/\/workspace$/.test(path)) {
+    if (/\/state$/.test(path))
+      return {
+        ok: true,
+        workspace: { modbus: mb, focus: null },
+        journal: { tasks: [], running: [], timeline: [] },
+        health: {},
+        pendingWrites: [],
+      }
+    if (/\/command$/.test(path) && body.action === 'visualization') {
       saved.push(body)
-      if (body.modbus && body.modbus.visualization) mb = { ...mb, visualization: body.modbus.visualization }
+      const payload = body.payload || {}
+      const current = mb.visualization || { schemaVersion: 1, components: [] }
+      let components = current.components.slice()
+      if (payload.op === 'add') components.push(payload.component)
+      if (payload.op === 'update') {
+        components = components.map((component) =>
+          component.id === payload.visualizationId
+            ? { ...component, ...payload.component, id: component.id }
+            : component,
+        )
+      }
+      if (payload.op === 'remove')
+        components = components.filter((component) => component.id !== payload.visualizationId)
+      mb = { ...mb, configVersion: (mb.configVersion || 1) + 1, visualization: { schemaVersion: 1, components } }
       return { ok: true, workspace: { modbus: mb } }
     }
     return { ok: true }
@@ -59,7 +123,19 @@ const makePost = (mb = JSON.parse(JSON.stringify(MB))) => {
   return { post, saved, state: () => mb }
 }
 
-const t = (k) => ({ liveChart: '可视化', vizNew: '新建组件', vizEdit: '编辑组件', vizName: '组件名称', vizType: '组件类型', vizSearch: '搜索', vizCreate: '创建组件', vizSave: '保存修改', savePoint: '保存', csvCancel: '取消' }[k] || k)
+const t = (k) =>
+  ({
+    liveChart: '可视化',
+    vizNew: '新建组件',
+    vizEdit: '编辑组件',
+    vizName: '组件名称',
+    vizType: '组件类型',
+    vizSearch: '搜索',
+    vizCreate: '创建组件',
+    vizSave: '保存修改',
+    savePoint: '保存',
+    csvCancel: '取消',
+  })[k] || k
 
 test('挂载无错误；默认不展开已监视点位列表（空状态只提示新建）', async () => {
   const { post } = makePost()
@@ -90,7 +166,9 @@ test('新建组件：编辑器勾选监视点位（限定路径）→ 保存后�
   await waitFor(() => assert.ok(tree.container.textContent.includes('新建组件')), { timeout: 6000 })
   // 点击 新建组件
   const newBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent.includes('新建组件'))
-  await act(async () => { newBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
+  await act(async () => {
+    newBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
   await waitFor(() => assert.ok(tree.container.textContent.includes('组件名称')), { timeout: 6000 })
   // 只列出监视点位（p1/p2），p3 不出现；路径包含 连接/设备/点位
   const picker = tree.container.querySelector('.dvb-viz-picker-list')
@@ -98,40 +176,60 @@ test('新建组件：编辑器勾选监视点位（限定路径）→ 保存后�
   const pickerText = picker.textContent
   assert.ok(pickerText.includes('温度') && pickerText.includes('压力'), '只列监视点位')
   assert.ok(!pickerText.includes('未监视'), '非监视点位不出现')
-  assert.ok(pickerText.includes('C1') && pickerText.includes('设备1') && pickerText.includes('温度'), '限定路径 连接/设备/点位')
+  assert.ok(
+    pickerText.includes('C1') && pickerText.includes('设备1') && pickerText.includes('温度'),
+    '限定路径 连接/设备/点位',
+  )
   // 勾选 p1（checkbox click 触发 React onChange）
-  const p1box = Array.from(picker.querySelectorAll('label')).find((l) => l.textContent.includes('温度')).querySelector('input')
+  const p1box = Array.from(picker.querySelectorAll('label'))
+    .find((l) => l.textContent.includes('温度'))
+    .querySelector('input')
   await act(async () => {
     p1box.checked = true
     p1box.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
   })
   await waitFor(() => assert.ok(tree.container.textContent.includes('已选 1 个点位')), { timeout: 6000 })
   // 保存
-  const saveBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '创建组件' || b.textContent === '保存修改' || b.textContent === '保存')
+  const saveBtn = Array.from(tree.container.querySelectorAll('button')).find(
+    (b) => b.textContent === '创建组件' || b.textContent === '保存修改' || b.textContent === '保存',
+  )
   assert.ok(saveBtn, '保存/创建按钮存在')
-  await act(async () => { saveBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); await new Promise((r) => setTimeout(r, 60)) })
+  await act(async () => {
+    saveBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 60))
+  })
   assert.ok(saved.length >= 1, '保存提交 visualization')
   const viz = state().visualization
   assert.equal(viz.components.length, 1)
   assert.equal(viz.components[0].type, 'line')
   assert.deepEqual(viz.components[0].pointIds, ['p1'])
-  await waitFor(() => {
-    const card = Array.from(tree.container.querySelectorAll('.dvb-viz-card')).find((c) => c.textContent.includes('组件1'))
-    assert.ok(card, '保存后组件卡片立即渲染')
-  }, { timeout: 6000 })
+  await waitFor(
+    () => {
+      const card = Array.from(tree.container.querySelectorAll('.dvb-viz-card')).find((c) =>
+        c.textContent.includes('组件1'),
+      )
+      assert.ok(card, '保存后组件卡片立即渲染')
+    },
+    { timeout: 6000 },
+  )
   tree.unmount()
 })
 
 test('编辑图标恢复组件草稿；类型与关联点位回显', async () => {
   const mb = JSON.parse(JSON.stringify(MB))
-  mb.visualization = { schemaVersion: 1, components: [{ id: 'viz_x', name: '我的数值卡', type: 'value', pointIds: ['p1'] }] }
+  mb.visualization = {
+    schemaVersion: 1,
+    components: [{ id: 'viz_x', name: '我的数值卡', type: 'value', pointIds: ['p1'] }],
+  }
   const { post } = makePost(mb)
   const Viz = createVisualizationPage(React, t, post, {})
   const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('我的数值卡')), { timeout: 6000 })
   const editBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '编辑')
   assert.ok(editBtn)
-  await act(async () => { editBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
+  await act(async () => {
+    editBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
   await waitFor(() => assert.ok(tree.container.textContent.includes('编辑组件')), { timeout: 6000 })
   const nameInput = Array.from(tree.container.querySelectorAll('input')).find((i) => i.value === '我的数值卡')
   assert.ok(nameInput, '组件名称回显')
@@ -152,21 +250,42 @@ test('degraded 组件显示修复入口；关闭监视/删除点位不删除组�
   assert.ok(card.querySelector('.dvb-viz-degraded') || card.className.includes('dvb-viz-degraded'), 'degraded 样式')
   assert.ok(card.textContent.includes('修复'), '修复入口存在')
   const fixBtn = Array.from(card.querySelectorAll('button')).find((b) => b.textContent === '修复')
-  await act(async () => { fixBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
+  await act(async () => {
+    fixBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
   await waitFor(() => assert.ok(tree.container.textContent.includes('编辑组件')), { timeout: 6000 })
   tree.unmount()
 })
 test('Task10/0.20.1: 柱状图柱长按比例 + 正负方向 + null 显示 —', async () => {
   const mb = JSON.parse(JSON.stringify(MB))
-  mb.points.push({ id: 'p4', connectionId: 'c1', deviceId: 'd1', name: '负值', function: 3, address: 3, monitorEnabled: true })
-  mb.points.push({ id: 'p5', connectionId: 'c1', deviceId: 'd1', name: '坏值', function: 3, address: 4, monitorEnabled: true })
+  mb.points.push({
+    id: 'p4',
+    connectionId: 'c1',
+    deviceId: 'd1',
+    name: '负值',
+    function: 3,
+    address: 3,
+    monitorEnabled: true,
+  })
+  mb.points.push({
+    id: 'p5',
+    connectionId: 'c1',
+    deviceId: 'd1',
+    name: '坏值',
+    function: 3,
+    address: 4,
+    monitorEnabled: true,
+  })
   mb.values = [
     { key: 'p1', pointId: 'p1', value: 10, ok: true, at: Date.now() },
     { key: 'p2', pointId: 'p2', value: 50, ok: true, at: Date.now() },
     { key: 'p4', pointId: 'p4', value: -100, ok: true, at: Date.now() },
     { key: 'p5', pointId: 'p5', value: null, ok: false, error: '超时', at: Date.now() },
   ]
-  mb.visualization = { schemaVersion: 1, components: [{ id: 'viz_bar', name: '柱', type: 'bar', pointIds: ['p1', 'p2', 'p4', 'p5'] }] }
+  mb.visualization = {
+    schemaVersion: 1,
+    components: [{ id: 'viz_bar', name: '柱', type: 'bar', pointIds: ['p1', 'p2', 'p4', 'p5'] }],
+  }
   const { post } = makePost(mb)
   const Viz = createVisualizationPage(React, t, post, {})
   const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
@@ -195,7 +314,10 @@ test('Task10b/0.20.1: 柱状图小数比例不强制 maxAbs=1', async () => {
     { key: 'p1', pointId: 'p1', value: 0.2, ok: true, at: Date.now() },
     { key: 'p2', pointId: 'p2', value: 0.5, ok: true, at: Date.now() },
   ]
-  mb.visualization = { schemaVersion: 1, components: [{ id: 'viz_bar_f', name: '小数柱', type: 'bar', pointIds: ['p1', 'p2'] }] }
+  mb.visualization = {
+    schemaVersion: 1,
+    components: [{ id: 'viz_bar_f', name: '小数柱', type: 'bar', pointIds: ['p1', 'p2'] }],
+  }
   const { post } = makePost(mb)
   const Viz = createVisualizationPage(React, t, post, {})
   const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
@@ -210,14 +332,30 @@ test('Task10b/0.20.1: 柱状图小数比例不强制 maxAbs=1', async () => {
 
 test('Task8/0.20.1: 编辑保留 ID/order/windowMs/confirmWrite 且排列不变（索引替换）', async () => {
   const mb = JSON.parse(JSON.stringify(MB))
-  mb.visualization = { schemaVersion: 1, components: [
-    { id: 'viz_x', name: '第一', type: 'line', pointIds: ['p1'], order: 2, settings: { windowMs: 120000, confirmWrite: false } },
-    { id: 'viz_y', name: '第二', type: 'value', pointIds: ['p2'], order: 5, settings: { windowMs: 60000, confirmWrite: true } },
-  ] }
-  const saved = []
+  mb.visualization = {
+    schemaVersion: 1,
+    components: [
+      {
+        id: 'viz_x',
+        name: '第一',
+        type: 'line',
+        pointIds: ['p1'],
+        order: 2,
+        settings: { windowMs: 120000, confirmWrite: false },
+      },
+      {
+        id: 'viz_y',
+        name: '第二',
+        type: 'value',
+        pointIds: ['p2'],
+        order: 5,
+        settings: { windowMs: 60000, confirmWrite: true },
+      },
+    ],
+  }
   const base = makePost(mb)
+  const saved = base.saved
   const post = async (path, body) => {
-    if (path === '/dsh-vision-bench/workspace') saved.push(body)
     return base.post(path, body)
   }
   const Viz = createVisualizationPage(React, t, post, {})
@@ -226,16 +364,29 @@ test('Task8/0.20.1: 编辑保留 ID/order/windowMs/confirmWrite 且排列不变�
   const cards = Array.from(tree.container.querySelectorAll('.dvb-viz-card'))
   assert.equal(cards.length, 2, '两个组件')
   const editFirst = Array.from(cards[0].querySelectorAll('button')).find((b) => b.textContent === '编辑')
-  await act(async () => { editFirst.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
+  await act(async () => {
+    editFirst.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
   await waitFor(() => assert.ok(tree.container.textContent.includes('编辑组件')), { timeout: 6000 })
   // 保存（名称空不变更时，norm 后同值）→ 索引替换
-  const saveBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '保存修改' || b.textContent === '创建组件' || b.textContent === '保存')
+  const saveBtn = Array.from(tree.container.querySelectorAll('button')).find(
+    (b) => b.textContent === '保存修改' || b.textContent === '创建组件' || b.textContent === '保存',
+  )
   assert.ok(saveBtn, '保存修改按钮存在')
-  await act(async () => { saveBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); await new Promise((r) => setTimeout(r, 60)) })
-  const vizPayload = saved.length && saved[saved.length - 1].modbus.visualization
-  assert.ok(vizPayload, '保存提交')
+  await act(async () => {
+    saveBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 60))
+  })
+  const commandPayload = saved.length && saved[saved.length - 1].payload
+  assert.ok(commandPayload, '保存提交')
+  assert.equal(commandPayload.op, 'update')
+  const vizPayload = base.state().visualization
   assert.equal(vizPayload.components.length, 2, '仍两个组件')
-  assert.deepEqual(vizPayload.components.map((c) => c.id), ['viz_x', 'viz_y'], '排列不变')
+  assert.deepEqual(
+    vizPayload.components.map((c) => c.id),
+    ['viz_x', 'viz_y'],
+    '排列不变',
+  )
   const c0 = vizPayload.components[0]
   assert.equal(c0.id, 'viz_x', 'ID 不变')
   assert.equal(c0.order, 2, 'order 不变')

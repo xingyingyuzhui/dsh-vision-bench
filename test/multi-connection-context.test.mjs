@@ -10,25 +10,45 @@ function makeClient({ failReads = false } = {}) {
   const client = {
     listeners,
     failReads,
-    setID() {}, setTimeout() {},
+    setID() {},
+    setTimeout() {},
     isDebugEnabled: true,
-    on(ev, fn) { (listeners[ev] ||= []).push(fn) },
-    removeListener(ev, fn) { listeners[ev] = (listeners[ev] || []).filter((f) => f !== fn) },
+    on(ev, fn) {
+      ;(listeners[ev] ||= []).push(fn)
+    },
+    removeListener(ev, fn) {
+      listeners[ev] = (listeners[ev] || []).filter((f) => f !== fn)
+    },
     connectTCP: async () => {},
     connectRTUBuffered: async () => {},
-    close(cb) { cb && cb() },
+    close(cb) {
+      cb && cb()
+    },
     readHoldingRegisters: async function () {
-      if (this.failReads) { const e = new Error('IO timeout'); e.code = 'ETIMEDOUT'; throw e }
+      if (this.failReads) {
+        const e = new Error('IO timeout')
+        e.code = 'ETIMEDOUT'
+        throw e
+      }
       return { data: [1, 2, 3] }
     },
   }
-  const RTU = function () { return client }
+  const RTU = function () {
+    return client
+  }
   return { client, RTU }
 }
 
 const endpoint = { mode: 'rtu', port: 'COM3', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1 }
 const endpoint2 = { mode: 'rtu', port: 'COM4', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1 }
-const req = (over = {}) => ({ cwd: '/ws', connectionId: 'c1', source: 'manual', sessionId: '', toolCallId: '', ...over })
+const req = (over = {}) => ({
+  cwd: '/ws',
+  connectionId: 'c1',
+  source: 'manual',
+  sessionId: '',
+  toolCallId: '',
+  ...over,
+})
 
 test('two concurrent connections: all-feed is seq-ordered, per-conn feeds stay isolated', async () => {
   const fake = makeClient()
@@ -47,7 +67,11 @@ test('two concurrent connections: all-feed is seq-ordered, per-conn feeds stay i
   sb.capture.push({ direction: 'rx', hex: 'BB', byteLength: 1, connectionId: 'c2', port: 'COM4', seq: 2 })
   sa.capture.push({ direction: 'rx', hex: 'CC', byteLength: 1, connectionId: 'c1', port: 'COM3', seq: 3 })
   const all = mgr.feedCapture('/ws', '', 0, 50)
-  assert.deepEqual(all.items.map((i) => i.port), ['COM3', 'COM4', 'COM3'], 'all-feed ordered by seq, ties broken stably')
+  assert.deepEqual(
+    all.items.map((i) => i.port),
+    ['COM3', 'COM4', 'COM3'],
+    'all-feed ordered by seq, ties broken stably',
+  )
   assert.equal(all.hasMore, false)
   const only3 = mgr.feedCapture('/ws', 'c1', 0, 50)
   assert.equal(only3.items.length, 2)
@@ -65,7 +89,14 @@ test('same-millisecond frames across connections never collide in the projection
   await mgr.openConnection(req({ connectionId: 'c2' }), endpoint2, undefined)
   const ring = createFrameRing()
   for (let i = 0; i < 40; i++) {
-    ring.push({ direction: 'tx', hex: 'AA', byteLength: 1, connectionId: i % 2 ? 'c2' : 'c1', port: i % 2 ? 'COM4' : 'COM3', seq: i + 1 })
+    ring.push({
+      direction: 'tx',
+      hex: 'AA',
+      byteLength: 1,
+      connectionId: i % 2 ? 'c2' : 'c1',
+      port: i % 2 ? 'COM4' : 'COM3',
+      seq: i + 1,
+    })
   }
   // projection semantics: a global cursor must page along seq
   const p1 = ring.feed(0, 20)
@@ -83,7 +114,11 @@ test('failed op clears slot context; a later request mints a fresh transaction',
   const slot = mgr.connections.get('/ws\0c1')
   const readReq = { ...req(), op: 'modbus.read', unitId: 1, functionCode: 3, address: 0, count: 3 }
   let err = null
-  try { await mgr.modbus(readReq, endpoint, undefined) } catch (e) { err = e }
+  try {
+    await mgr.modbus(readReq, endpoint, undefined)
+  } catch (e) {
+    err = e
+  }
   assert.ok(err, 'failed read rejects')
   assert.equal(slot.activeContext, null, 'context cleared by the enclosing finally after failure')
   fake.client.failReads = false
@@ -93,7 +128,7 @@ test('failed op clears slot context; a later request mints a fresh transaction',
   await mgr.stop()
 })
 
-test('manager exposes no shared mutable source/transaction (per-slot only)', () => {
+test('manager exposes no shared mutable source/transaction (per-slot only)', async () => {
   const mgr = createConnectionManager({ ModbusRTU: makeClient().RTU })
   // legacy no-op kept for back-compat: setting it must not affect framestamping
   mgr.setSource('agent')

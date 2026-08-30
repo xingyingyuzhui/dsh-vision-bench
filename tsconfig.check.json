@@ -1,9 +1,10 @@
 {
   "compilerOptions": {
     "allowJs": true,
-    "checkJs": true,
+    "checkJs": false,
     "noEmit": true,
     "strict": true,
+    "noImplicitAny": true,
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "ES2022",
@@ -13,7 +14,10 @@
     "types": ["node"]
   },
   "include": [
-    "src/domain/modbus/errors.mjs",
+    "src/domain/**/*.mjs",
+    "src/application/**/*.mjs",
+    "src/infrastructure/**/*.mjs",
+    "src/interfaces/**/*.mjs",
     "src/types/**/*.d.ts"
   ],
   "exclude": [
@@ -21,7 +25,6 @@
     "client.js",
     "test",
     "coverage",
-    "src/application/**",
     "bench-*.mjs"
   ]
 }

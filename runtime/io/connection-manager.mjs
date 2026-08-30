@@ -1,7 +1,7 @@
 import { endpointFingerprint, ioError, normalizeCom } from '../../bench-io-contract.mjs'
+import { createFrameRing } from './frame-ring.mjs'
 import { closeModbusClient, openModbusClient, runModbusOp } from './modbus-driver.mjs'
 import { attachRtuCapture } from './rtu-capture-adapter.mjs'
-import { createFrameRing } from './frame-ring.mjs'
 
 export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = {}) {
   const connections = new Map()
@@ -13,7 +13,7 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
   let captureSeq = 0
   const epochBase = Date.now().toString(36)
 
-  const nextTxId = () => epochBase + ':' + (++seq)
+  const nextTxId = () => epochBase + ':' + ++seq
 
   const slotKey = (cwd, connectionId) => String(cwd) + '\0' + String(connectionId)
 
@@ -79,7 +79,7 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
   const liveOf = (slot) => ({
     connectionId: slot.connectionId,
     cwd: slot.cwd,
-    mode: slot.endpoint && slot.endpoint.mode || 'rtu',
+    mode: (slot.endpoint && slot.endpoint.mode) || 'rtu',
     port: slot.ownedPort || (slot.endpoint && slot.endpoint.port) || '',
     state: slot.liveState,
     connectedAt: slot.connectedAt,
@@ -90,7 +90,11 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
 
   const detach = (slot) => {
     if (slot.detachCapture) {
-      try { slot.detachCapture() } catch { /* ignore */ }
+      try {
+        slot.detachCapture()
+      } catch {
+        /* ignore */
+      }
       slot.detachCapture = null
     }
   }
@@ -121,7 +125,11 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
     if (!slot || slot.finalized) return
     slot.finalized = true
     if (slot.lifecycleDisposer) {
-      try { slot.lifecycleDisposer() } catch { /* ignore */ }
+      try {
+        slot.lifecycleDisposer()
+      } catch {
+        /* ignore */
+      }
       slot.lifecycleDisposer = null
     }
     detach(slot)
@@ -134,7 +142,11 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
     const reason = opts.reason || 'disconnecting'
     if (!opts.expected) {
       slot.liveState = 'error'
-      slot.liveError = opts.error ? String(opts.error.message || opts.error) : (reason === 'error' ? '连接异常' : slot.liveError)
+      slot.liveError = opts.error
+        ? String(opts.error.message || opts.error)
+        : reason === 'error'
+          ? '连接异常'
+          : slot.liveError
     } else {
       slot.liveState = 'disconnected'
       slot.liveError = ''
@@ -166,8 +178,16 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
     client.on('error', onError)
     client.on('close', onClose)
     slot.lifecycleDisposer = () => {
-      try { client.removeListener('error', onError) } catch { /* ignore */ }
-      try { client.removeListener('close', onClose) } catch { /* ignore */ }
+      try {
+        client.removeListener('error', onError)
+      } catch {
+        /* ignore */
+      }
+      try {
+        client.removeListener('close', onClose)
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -221,8 +241,8 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
       slot.activeContext = {
         transactionId,
         source: request.source || 'manual',
-        sessionId: (request && request.sessionId) ? String(request.sessionId).slice(0, 64) : '',
-        toolCallId: (request && request.toolCallId) ? String(request.toolCallId).slice(0, 64) : '',
+        sessionId: request && request.sessionId ? String(request.sessionId).slice(0, 64) : '',
+        toolCallId: request && request.toolCallId ? String(request.toolCallId).slice(0, 64) : '',
       }
       try {
         if (signal && signal.aborted) {
@@ -299,7 +319,19 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
       const cap = Math.min(500, Math.max(1, Math.trunc(Number(max) || 200)))
       if (connectionId) {
         const slot = connections.get(slotKey(cwd, connectionId))
-        if (!slot) return { open: false, lines: [], items: [], cursor: 0, lastId: 0, hasMore: false, dropped: 0, total: 0, port: '', state: 'disconnected' }
+        if (!slot)
+          return {
+            open: false,
+            lines: [],
+            items: [],
+            cursor: 0,
+            lastId: 0,
+            hasMore: false,
+            dropped: 0,
+            total: 0,
+            port: '',
+            state: 'disconnected',
+          }
         const fed = slot.capture.feed(since, cap)
         return {
           open: slot.liveState === 'connected',
@@ -334,7 +366,7 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
           rows.push({ ...item, _seq: s })
         }
       }
-      rows.sort((a, b) => (a._seq - b._seq) || String(a.connectionId).localeCompare(String(b.connectionId)))
+      rows.sort((a, b) => a._seq - b._seq || String(a.connectionId).localeCompare(String(b.connectionId)))
       let dropped = 0
       if (after > 0 && after < oldestSeq && oldestSeq !== Infinity && oldestSeq > 1) {
         dropped = Math.max(0, oldestSeq - 1 - after)
@@ -363,12 +395,20 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
       const slot = connections.get(slotKey(cwd, connectionId))
       if (!slot || slot.held) return
       slot.expectedClose = true
-      try { await finalizeSlot(slot, { reason: 'cancel', expected: true }) } finally { slot.expectedClose = false }
+      try {
+        await finalizeSlot(slot, { reason: 'cancel', expected: true })
+      } finally {
+        slot.expectedClose = false
+      }
     },
     async stop() {
       for (const slot of [...connections.values()]) {
         slot.expectedClose = true
-        try { await finalizeSlot(slot, { reason: 'stop', expected: true }) } finally { slot.expectedClose = false }
+        try {
+          await finalizeSlot(slot, { reason: 'stop', expected: true })
+        } finally {
+          slot.expectedClose = false
+        }
       }
       connections.clear()
       portOwners.clear()

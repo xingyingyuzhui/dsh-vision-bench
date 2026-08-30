@@ -6,7 +6,10 @@ export const emptyLog = () => []
 
 export const normalizeEvent = (input) => {
   const action = input && ACTIONS.has(input.action) ? input.action : 'build'
-  const summary = String((input && input.summary) || '').replace(/\s+/g, ' ').trim().slice(0, SUMMARY_CAP)
+  const summary = String((input && input.summary) || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, SUMMARY_CAP)
   const at = Number(input && input.at)
   return {
     at: Number.isFinite(at) && at > 0 ? at : Date.now(),

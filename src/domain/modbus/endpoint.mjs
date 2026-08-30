@@ -1,4 +1,5 @@
-// @ts-nocheck
+// @ts-check
+/** @param {any} conn @param {any} dev */
 export const endpointFingerprint = (conn, dev) => ({
   mode: conn.mode,
   port: (conn.port || '').trim(),
@@ -12,9 +13,11 @@ export const endpointFingerprint = (conn, dev) => ({
   unitId: Math.min(247, Math.max(0, Math.trunc(Number(dev?.unitId) || 0))),
 })
 
+/** @param {any} conn */
 export const endpointLabelText = (conn) =>
   conn.mode === 'tcp' ? `${conn.host || '?'}:${conn.tcpPort}` : `${conn.port || '?'} @ ${conn.baudrate}`
 
+/** @param {any} a @param {any} b */
 export const sameEndpoint = (a, b) =>
   !!a &&
   !!b &&

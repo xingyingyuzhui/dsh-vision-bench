@@ -1,19 +1,22 @@
-// TaskP1/0.20.0: 上位机点位表 UX — 行内编辑/行内写入/状态列/开关/草稿归属。
-import { beforeEach, afterEach, test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readdirSync, readFileSync as rfs } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+// TaskP1/0.20.0: 上位机点位表 UX — 行内编辑/行内写入/状态列/开关/草稿归属。
+import { afterEach, beforeEach, test } from 'node:test'
+import { fileURLToPath } from 'node:url'
+import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { Window } from 'happy-dom'
 import React from 'react'
 import { createElement } from 'react'
-import { render, cleanup, waitFor, act } from '@testing-library/react'
 import { createHmiView } from '../bench-hmi.mjs'
-import { readdirSync, readFileSync as rfs } from 'node:fs'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
 function hmiSources() {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..')
   const dir = join(root, 'src/ui/hmi')
-  return readdirSync(dir).filter((f) => f.endsWith('.mjs')).map((f) => rfs(join(dir, f), 'utf8')).join('\n')
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.mjs'))
+    .map((f) => rfs(join(dir, f), 'utf8'))
+    .join('\n')
 }
 
 let win
@@ -21,10 +24,22 @@ beforeEach(async () => {
   win = new Window({ url: 'http://localhost/' })
   globalThis.window = win
   globalThis.document = win.document
-  try { globalThis.navigator = { clipboard: { writeText: async () => {} }, userAgent: 'happy' } } catch {
-    Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText: async () => {} }, userAgent: 'happy' }, configurable: true })
+  try {
+    globalThis.navigator = { clipboard: { writeText: async () => {} }, userAgent: 'happy' }
+  } catch {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { clipboard: { writeText: async () => {} }, userAgent: 'happy' },
+      configurable: true,
+    })
   }
-  globalThis.ResizeObserver = class { constructor(cb) { this.cb = cb } observe() {} unobserve() {} disconnect() {} }
+  globalThis.ResizeObserver = class {
+    constructor(cb) {
+      this.cb = cb
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
   globalThis.Element = win.HTMLElement
   globalThis.HTMLElement = win.HTMLElement
   globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0)
@@ -35,26 +50,70 @@ beforeEach(async () => {
   globalThis.getComputedStyle = () => ({ getPropertyValue: () => '', setProperty() {}, removeProperty() {} })
   globalThis.scrollTo = () => {}
 })
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 const MB = {
   version: 3,
   configVersion: 7,
   connections: [
-    { id: 'c1', name: 'C1', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM3', baudrate: 9600, slave: 1, sim: true } },
+    {
+      id: 'c1',
+      name: 'C1',
+      role: 'client',
+      enabled: true,
+      conn: { mode: 'rtu', port: 'COM3', baudrate: 9600, slave: 1, sim: true },
+    },
   ],
   devices: [
     { id: 'd1', connectionId: 'c1', name: '设备1', unitId: 1 },
     { id: 'd2', connectionId: 'c1', name: '设备2', unitId: 2 },
   ],
   points: [
-    { id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, scale: 0.1, offset: 0, unit: '℃', monitorEnabled: true, alarmEnabled: true, alarmMin: 18, alarmMax: 30 },
-    { id: 'p2', connectionId: 'c1', deviceId: 'd2', name: '开关', function: 1, address: 0, scale: 1, offset: 0, unit: '', monitorEnabled: false, alarmEnabled: false },
-    { id: 'p3', connectionId: 'c1', deviceId: 'd1', name: '压力', function: 3, address: 1, scale: 1, offset: 0, unit: 'kPa', monitorEnabled: true, alarmEnabled: false },
+    {
+      id: 'p1',
+      connectionId: 'c1',
+      deviceId: 'd1',
+      name: '温度',
+      function: 3,
+      address: 0,
+      scale: 0.1,
+      offset: 0,
+      unit: '℃',
+      monitorEnabled: true,
+      alarmEnabled: true,
+      alarmMin: 18,
+      alarmMax: 30,
+    },
+    {
+      id: 'p2',
+      connectionId: 'c1',
+      deviceId: 'd2',
+      name: '开关',
+      function: 1,
+      address: 0,
+      scale: 1,
+      offset: 0,
+      unit: '',
+      monitorEnabled: false,
+      alarmEnabled: false,
+    },
+    {
+      id: 'p3',
+      connectionId: 'c1',
+      deviceId: 'd1',
+      name: '压力',
+      function: 3,
+      address: 1,
+      scale: 1,
+      offset: 0,
+      unit: 'kPa',
+      monitorEnabled: true,
+      alarmEnabled: false,
+    },
   ],
-  values: [
-    { key: 'p1', pointId: 'p1', raw: 235, value: 23.5, ok: true, at: Date.now() },
-  ],
+  values: [{ key: 'p1', pointId: 'p1', raw: 235, value: 23.5, ok: true, at: Date.now() }],
   alarmState: {},
   pollingByConnection: { c1: { enabled: false, intervalMs: 1000 } },
   framesByConnection: {},
@@ -65,25 +124,73 @@ const makePost = (mb = MB) => {
   const post = async (path, body) => {
     posts.push([path, body || {}])
     if (/\/dsh-vision-bench\/state$/.test(path)) {
-      return { ok: true, workspace: { modbus: mb, focus: null }, journal: { tasks: [], running: [], timeline: [] }, health: {}, pendingWrites: [], connectionStates: [{ connectionId: 'c1', status: 'connected' }] }
+      return {
+        ok: true,
+        workspace: { modbus: mb, focus: null },
+        journal: { tasks: [], running: [], timeline: [] },
+        health: {},
+        pendingWrites: [],
+        connectionStates: [{ connectionId: 'c1', status: 'connected' }],
+      }
     }
     if (/\/dsh-vision-bench\/serial\/ports$/.test(path)) return { ok: true, ports: ['COM3'] }
     if (/\/dsh-vision-bench\/modbus\/write$/.test(path)) {
-      return { ok: true, values: [{ key: body.pointId, pointId: body.pointId, raw: 300, value: 30, ok: true, at: Date.now() }], framesLog: [] }
+      return {
+        ok: true,
+        values: [{ key: body.pointId, pointId: body.pointId, raw: 300, value: 30, ok: true, at: Date.now() }],
+        framesLog: [],
+      }
     }
     return { ok: true }
   }
   return { post, posts }
 }
 
-
 async function selectConn(tree) {
   const connTab = Array.from(tree.container.querySelectorAll('.dvb-tab')).find((b) => b.textContent.includes('C1'))
-  if (connTab) { await act(async () => { connTab.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) }) }
+  if (connTab) {
+    await act(async () => {
+      connTab.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    })
+  }
   await new Promise((r) => setTimeout(r, 30))
 }
 
-const t = (k) => ({ addPoint: '添加点位', batchAdd: '批量添加', batchGenerate: '生成', batchPrefix: '前缀', batchStart: '起始', batchCount: '数量', ptName: '名称', ptNamePh: '名称', ptFc: '功能码', ptAddr: '地址', ptUnit: '单位', colName: '名称', colFn: '功能码', colAddr: '地址', monitorOn: '监视', alarmOn: '告警', ptAlarmMin: '下限', ptAlarmMax: '上限', savePoint: '保存', csvCancel: '取消', csvImport: '导入 CSV', csvExport: '导出 CSV', readAll: '读取', devEdit: '编辑设备', ptEdit: '编辑点位', ptSave: '保存', devSave: '保存', editing: '编辑', deleteSegment: '删除', noPoints: '暂无点位', writing: '写入中…', quickWrite: '写入' }[k] || k)
+const t = (k) =>
+  ({
+    addPoint: '添加点位',
+    batchAdd: '批量添加',
+    batchGenerate: '生成',
+    batchPrefix: '前缀',
+    batchStart: '起始',
+    batchCount: '数量',
+    ptName: '名称',
+    ptNamePh: '名称',
+    ptFc: '功能码',
+    ptAddr: '地址',
+    ptUnit: '单位',
+    colName: '名称',
+    colFn: '功能码',
+    colAddr: '地址',
+    monitorOn: '监视',
+    alarmOn: '告警',
+    ptAlarmMin: '下限',
+    ptAlarmMax: '上限',
+    savePoint: '保存',
+    csvCancel: '取消',
+    csvImport: '导入 CSV',
+    csvExport: '导出 CSV',
+    readAll: '读取',
+    devEdit: '编辑设备',
+    ptEdit: '编辑点位',
+    ptSave: '保存',
+    devSave: '保存',
+    editing: '编辑',
+    deleteSegment: '删除',
+    noPoints: '暂无点位',
+    writing: '写入中…',
+    quickWrite: '写入',
+  })[k] || k
 
 test('点位表不存在更新时间与独立写入/读取/编辑/删除文字列（源码契约）', async () => {
   const src = hmiSources()
@@ -109,22 +216,34 @@ test('编辑设备只改设备栏；编辑点位才进入点位行内编辑', as
   assert.ok(cards.length >= 2, '两个设备卡片渲染')
   const editDev = Array.from(cards[0].querySelectorAll('button')).find((b) => b.textContent === '编辑设备')
   assert.ok(editDev, '设备1有编辑设备按钮')
-  await act(async () => { editDev.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
+  await act(async () => {
+    editDev.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
   await waitFor(() => assert.ok(cards[0].querySelector('.dvb-dev-edit-row')), { timeout: 6000 })
   const d1TempRow = Array.from(cards[0].querySelectorAll('tr')).find((r) => r.textContent.includes('温度'))
   assert.ok(d1TempRow, '设备1温度行存在')
   assert.equal(d1TempRow.querySelectorAll('input.dvb-input').length, 0, '编辑设备不进入点位行内编辑')
-  assert.ok(d1TempRow.textContent.includes('03') || d1TempRow.querySelector('.dvb-val')?.textContent === '03', '功能码显示两位数字')
+  assert.ok(
+    d1TempRow.textContent.includes('03') || d1TempRow.querySelector('.dvb-val')?.textContent === '03',
+    '功能码显示两位数字',
+  )
   // 取消设备编辑后进入点位编辑
   const cancel = Array.from(cards[0].querySelectorAll('button')).find((b) => b.textContent === '取消')
-  await act(async () => { cancel.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
+  await act(async () => {
+    cancel.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
   const editPts = Array.from(cards[0].querySelectorAll('button')).find((b) => b.textContent === '编辑点位')
   assert.ok(editPts, '设备1有编辑点位按钮')
-  await act(async () => { editPts.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
-  await waitFor(() => {
-    const row = Array.from(cards[0].querySelectorAll('tr')).find((r) => r.getAttribute('data-editing') === 'true')
-    assert.ok(row, '点位行进入编辑态')
-  }, { timeout: 6000 })
+  await act(async () => {
+    editPts.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+  await waitFor(
+    () => {
+      const row = Array.from(cards[0].querySelectorAll('tr')).find((r) => r.getAttribute('data-editing') === 'true')
+      assert.ok(row, '点位行进入编辑态')
+    },
+    { timeout: 6000 },
+  )
   // 设备2卡片的点行仍然文本展示（无 input 行内编辑）
   const d2Row = Array.from(cards[1].querySelectorAll('tr')).find((r) => r.textContent.includes('开关'))
   assert.ok(d2Row, '设备2=开关行存在')
@@ -133,10 +252,10 @@ test('编辑设备只改设备栏；编辑点位才进入点位行内编辑', as
 })
 
 test('添加点位草稿插入当前设备表格内部并固定到该设备', async () => {
-  const workspaceSaves = []
+  const configCommands = []
   const base = makePost()
   const post = (path, body) => {
-    if (/\/workspace$/.test(path)) workspaceSaves.push(body)
+    if (/\/command$/.test(path) && body.action === 'config') configCommands.push(body)
     return base.post(path, body)
   }
   const Hmi = createHmiView(React, t, post)
@@ -148,15 +267,22 @@ test('添加点位草稿插入当前设备表格内部并固定到该设备', as
   const d2 = cards[1]
   const addBtn = Array.from(d2.querySelectorAll('button')).find((b) => b.textContent === '添加点位')
   assert.ok(addBtn, '设备2有添加点位按钮')
-  await act(async () => { addBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
+  await act(async () => {
+    addBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
   await waitFor(() => assert.ok(d2.querySelector('.dvb-newpoint-row')), { timeout: 6000 })
   const draftRow = d2.querySelector('.dvb-newpoint-row')
-  const saveBtn = Array.from(draftRow.querySelectorAll('button')).find((b) => b.textContent === '✓' || (b.getAttribute('aria-label') || '').includes('保存'))
+  const saveBtn = Array.from(draftRow.querySelectorAll('button')).find(
+    (b) => b.textContent === '✓' || (b.getAttribute('aria-label') || '').includes('保存'),
+  )
   assert.ok(saveBtn, '草稿行有保存按钮')
-  await act(async () => { saveBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); await new Promise((r) => setTimeout(r, 50)) })
-  const saved = workspaceSaves.find((s) => s.modbus && Array.isArray(s.modbus.points))
+  await act(async () => {
+    saveBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 50))
+  })
+  const saved = configCommands.find((item) => item.payload?.operation === 'points.add')
   assert.ok(saved, '持久化调用存在')
-  const added = saved.modbus.points.find((p) => p.deviceId === 'd2' && p.name !== '开关')
+  const added = saved.payload.value.points.find((p) => p.deviceId === 'd2' && p.name !== '开关')
   assert.ok(added, '新增点位归属设备2')
   assert.equal(added.connectionId, 'c1')
   tree.unmount()
@@ -166,11 +292,23 @@ test('当前值行内写入：点击值单元格只在该行打开编辑器，�
   const writes = []
   const mb = { ...MB, values: [{ key: 'p1', pointId: 'p1', raw: 235, value: 23.5, ok: true, at: Date.now() }] }
   const post = async (path, body) => {
-    if (/\/dsh-vision-bench\/state$/.test(path)) return { ok: true, workspace: { modbus: mb, focus: null }, journal: { tasks: [], running: [], timeline: [] }, health: {}, pendingWrites: [], connectionStates: [{ connectionId: 'c1', status: 'connected' }] }
+    if (/\/dsh-vision-bench\/state$/.test(path))
+      return {
+        ok: true,
+        workspace: { modbus: mb, focus: null },
+        journal: { tasks: [], running: [], timeline: [] },
+        health: {},
+        pendingWrites: [],
+        connectionStates: [{ connectionId: 'c1', status: 'connected' }],
+      }
     if (/\/serial\/ports$/.test(path)) return { ok: true, ports: ['COM3'] }
     if (/\/dsh-vision-bench\/modbus\/write$/.test(path)) {
       writes.push(body)
-      return { ok: true, values: [{ key: body.pointId, pointId: body.pointId, raw: 240, value: 24, ok: true, at: Date.now() }], framesLog: [] }
+      return {
+        ok: true,
+        values: [{ key: body.pointId, pointId: body.pointId, raw: 240, value: 24, ok: true, at: Date.now() }],
+        framesLog: [],
+      }
     }
     if (/\/dsh-vision-bench\/workspace$/.test(path)) {
       // 持久化点列表
@@ -185,14 +323,23 @@ test('当前值行内写入：点击值单元格只在该行打开编辑器，�
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   await selectConn(tree)
   await waitFor(() => assert.ok(tree.container.textContent.includes('23.5')), { timeout: 8000 })
-  const valueCell = Array.from(tree.container.querySelectorAll('.dvb-cell-writable')).find((c) => c.textContent === '23.5')
+  const valueCell = Array.from(tree.container.querySelectorAll('.dvb-cell-writable')).find(
+    (c) => c.textContent === '23.5',
+  )
   assert.ok(valueCell, '可写点位值单元格可点击')
-  await act(async () => { valueCell.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
+  await act(async () => {
+    valueCell.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
   await waitFor(() => assert.ok(tree.container.querySelector('.dvb-inline-write')), { timeout: 6000 })
   // FC03 编辑器默认携带工程值（23.5）；直接 确定 → encodeValue(23.5/scale0.1)=235
-  const okBtn = Array.from(tree.container.querySelectorAll('.dvb-inline-write button')).find((b) => b.textContent === '确定')
+  const okBtn = Array.from(tree.container.querySelectorAll('.dvb-inline-write button')).find(
+    (b) => b.textContent === '确定',
+  )
   assert.ok(okBtn, 'FC03 行内编辑器有确定按钮')
-  await act(async () => { okBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); await new Promise((r) => setTimeout(r, 60)) })
+  await act(async () => {
+    okBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 60))
+  })
   assert.equal(writes.length, 1)
   assert.equal(writes[0].connectionId, 'c1', '写请求固定 connectionId')
   assert.equal(writes[0].deviceId, 'd1', '写请求固定 deviceId')
@@ -205,9 +352,24 @@ test('FC01 开关行内写入：确认写入固定到设备2（p2）', async () 
   const writes = []
   const mb = { ...MB }
   const post = async (path, body) => {
-    if (/\/dsh-vision-bench\/state$/.test(path)) return { ok: true, workspace: { modbus: mb, focus: null }, journal: { tasks: [], running: [], timeline: [] }, health: {}, pendingWrites: [], connectionStates: [{ connectionId: 'c1', status: 'connected' }] }
+    if (/\/dsh-vision-bench\/state$/.test(path))
+      return {
+        ok: true,
+        workspace: { modbus: mb, focus: null },
+        journal: { tasks: [], running: [], timeline: [] },
+        health: {},
+        pendingWrites: [],
+        connectionStates: [{ connectionId: 'c1', status: 'connected' }],
+      }
     if (/\/serial\/ports$/.test(path)) return { ok: true, ports: ['COM3'] }
-    if (/\/dsh-vision-bench\/modbus\/write$/.test(path)) { writes.push(body); return { ok: true, values: [{ key: body.pointId, pointId: body.pointId, raw: 1, value: 1, ok: true, at: Date.now() }], framesLog: [] } }
+    if (/\/dsh-vision-bench\/modbus\/write$/.test(path)) {
+      writes.push(body)
+      return {
+        ok: true,
+        values: [{ key: body.pointId, pointId: body.pointId, raw: 1, value: 1, ok: true, at: Date.now() }],
+        framesLog: [],
+      }
+    }
     return { ok: true }
   }
   const Hmi = createHmiView(React, t, post)
@@ -215,15 +377,28 @@ test('FC01 开关行内写入：确认写入固定到设备2（p2）', async () 
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   await selectConn(tree)
   await waitFor(() => assert.ok(tree.container.textContent.includes('开关')), { timeout: 8000 })
-  const coilCell = Array.from(tree.container.querySelectorAll('.dvb-cell-writable')).find((c) => c.closest('tr') && c.closest('tr').textContent.includes('开关'))
+  const coilCell = Array.from(tree.container.querySelectorAll('.dvb-cell-writable')).find(
+    (c) => c.closest('tr') && c.closest('tr').textContent.includes('开关'),
+  )
   assert.ok(coilCell, 'FC01 点位值单元格可点击')
-  await act(async () => { coilCell.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
+  await act(async () => {
+    coilCell.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
   await waitFor(() => assert.ok(tree.container.querySelector('.dvb-inline-write')), { timeout: 6000 })
-  const onBtn = Array.from(tree.container.querySelectorAll('.dvb-inline-write button')).find((b) => b.textContent === '开')
+  const onBtn = Array.from(tree.container.querySelectorAll('.dvb-inline-write button')).find(
+    (b) => b.textContent === '开',
+  )
   assert.ok(onBtn, 'FC01 有开按钮')
-  await act(async () => { onBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })) })
-  const confirmBtn = Array.from(tree.container.querySelectorAll('.dvb-inline-write button')).find((b) => b.textContent === '确认')
-  await act(async () => { confirmBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); await new Promise((r) => setTimeout(r, 60)) })
+  await act(async () => {
+    onBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+  const confirmBtn = Array.from(tree.container.querySelectorAll('.dvb-inline-write button')).find(
+    (b) => b.textContent === '确认',
+  )
+  await act(async () => {
+    confirmBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 60))
+  })
   assert.equal(writes.length, 1)
   assert.equal(writes[0].connectionId, 'c1')
   assert.equal(writes[0].deviceId, 'd2', '开/关写入固定到设备2')
@@ -233,9 +408,31 @@ test('FC01 开关行内写入：确认写入固定到设备2（p2）', async () 
 })
 
 test('只读点位当前值不可点击（FC02/FC04/FC211）', async () => {
-  const mb = { ...MB, points: [ { id: 'pr', connectionId: 'c1', deviceId: 'd1', name: '输入', function: 4, address: 2, monitorEnabled: true, alarmEnabled: false } ] }
+  const mb = {
+    ...MB,
+    points: [
+      {
+        id: 'pr',
+        connectionId: 'c1',
+        deviceId: 'd1',
+        name: '输入',
+        function: 4,
+        address: 2,
+        monitorEnabled: true,
+        alarmEnabled: false,
+      },
+    ],
+  }
   const post = async (path) => {
-    if (/\/state$/.test(path)) return { ok: true, workspace: { modbus: mb, focus: null }, journal: { tasks: [], running: [], timeline: [] }, health: {}, pendingWrites: [], connectionStates: [] }
+    if (/\/state$/.test(path))
+      return {
+        ok: true,
+        workspace: { modbus: mb, focus: null },
+        journal: { tasks: [], running: [], timeline: [] },
+        health: {},
+        pendingWrites: [],
+        connectionStates: [],
+      }
     return { ok: true }
   }
   const Hmi = createHmiView(React, t, post)
@@ -250,17 +447,38 @@ test('只读点位当前值不可点击（FC02/FC04/FC211）', async () => {
   tree.unmount()
 })
 
-
 test('非编辑态也可切换监视/告警开关并立即持久化', async () => {
   const flagPosts = []
   const mb = {
     ...MB,
     points: [
-      { id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, scale: 0.1, offset: 0, unit: '℃', monitorEnabled: false, alarmEnabled: true, alarmMin: 18, alarmMax: 30 },
+      {
+        id: 'p1',
+        connectionId: 'c1',
+        deviceId: 'd1',
+        name: '温度',
+        function: 3,
+        address: 0,
+        scale: 0.1,
+        offset: 0,
+        unit: '℃',
+        monitorEnabled: false,
+        alarmEnabled: true,
+        alarmMin: 18,
+        alarmMax: 30,
+      },
     ],
   }
   const post = async (path, body) => {
-    if (/\/state$/.test(path)) return { ok: true, workspace: { modbus: mb, focus: null }, journal: { tasks: [], running: [], timeline: [] }, health: {}, pendingWrites: [], connectionStates: [] }
+    if (/\/state$/.test(path))
+      return {
+        ok: true,
+        workspace: { modbus: mb, focus: null },
+        journal: { tasks: [], running: [], timeline: [] },
+        health: {},
+        pendingWrites: [],
+        connectionStates: [],
+      }
     if (/\/serial\/ports$/.test(path)) return { ok: true, ports: ['COM3'] }
     if (/\/points\/flags$/.test(path)) {
       flagPosts.push(body)
@@ -273,7 +491,12 @@ test('非编辑态也可切换监视/告警开关并立即持久化', async () =
       }
       if (body.alarmEnabled !== undefined) pt.alarmEnabled = body.alarmEnabled === true
       mb.configVersion = (mb.configVersion || 7) + 1
-      return { ok: true, point: { ...pt }, configVersion: mb.configVersion, workspace: { modbus: { ...mb, points: [{ ...pt }] } } }
+      return {
+        ok: true,
+        point: { ...pt },
+        configVersion: mb.configVersion,
+        workspace: { modbus: { ...mb, points: [{ ...pt }] } },
+      }
     }
     if (/\/workspace$/.test(path)) return { ok: true, workspace: { modbus: mb } }
     return { ok: true }
@@ -296,19 +519,25 @@ test('非编辑态也可切换监视/告警开关并立即持久化', async () =
     mon.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
     await new Promise((r) => setTimeout(r, 80))
   })
-  await waitFor(() => {
-    const hit = flagPosts.find((s) => s.monitorEnabled === true && s.pointId === 'p1')
-    assert.ok(hit, '监视开关走点位 flags 接口')
-  }, { timeout: 6000 })
+  await waitFor(
+    () => {
+      const hit = flagPosts.find((s) => s.monitorEnabled === true && s.pointId === 'p1')
+      assert.ok(hit, '监视开关走点位 flags 接口')
+    },
+    { timeout: 6000 },
+  )
   await waitFor(() => assert.equal(mon.getAttribute('aria-pressed'), 'true'), { timeout: 6000 })
   await act(async () => {
     alm.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
     await new Promise((r) => setTimeout(r, 80))
   })
-  await waitFor(() => {
-    const hit = flagPosts.find((s) => s.alarmEnabled === false && s.pointId === 'p1')
-    assert.ok(hit, '告警开关走点位 flags 接口')
-  }, { timeout: 6000 })
+  await waitFor(
+    () => {
+      const hit = flagPosts.find((s) => s.alarmEnabled === false && s.pointId === 'p1')
+      assert.ok(hit, '告警开关走点位 flags 接口')
+    },
+    { timeout: 6000 },
+  )
   tree.unmount()
 })
 
@@ -316,17 +545,42 @@ test('编辑点位态与新增草稿态开关可点；点轨道也可触发', as
   const mb = {
     ...MB,
     points: [
-      { id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, scale: 0.1, offset: 0, unit: '℃', monitorEnabled: false, alarmEnabled: false, alarmMin: 1, alarmMax: 9 },
+      {
+        id: 'p1',
+        connectionId: 'c1',
+        deviceId: 'd1',
+        name: '温度',
+        function: 3,
+        address: 0,
+        scale: 0.1,
+        offset: 0,
+        unit: '℃',
+        monitorEnabled: false,
+        alarmEnabled: false,
+        alarmMin: 1,
+        alarmMax: 9,
+      },
     ],
   }
   const flagPosts = []
   const post = async (path, body) => {
-    if (/\/state$/.test(path)) return { ok: true, workspace: { modbus: mb, focus: null }, journal: { tasks: [], running: [], timeline: [] }, health: {}, pendingWrites: [], connectionStates: [] }
+    if (/\/state$/.test(path))
+      return {
+        ok: true,
+        workspace: { modbus: mb, focus: null },
+        journal: { tasks: [], running: [], timeline: [] },
+        health: {},
+        pendingWrites: [],
+        connectionStates: [],
+      }
     if (/\/serial\/ports$/.test(path)) return { ok: true, ports: ['COM3'] }
     if (/\/points\/flags$/.test(path)) {
       flagPosts.push(body)
       const pt = mb.points[0]
-      if (body.monitorEnabled !== undefined) { pt.monitorEnabled = body.monitorEnabled === true; pt.trendEnabled = pt.monitorEnabled }
+      if (body.monitorEnabled !== undefined) {
+        pt.monitorEnabled = body.monitorEnabled === true
+        pt.trendEnabled = pt.monitorEnabled
+      }
       if (body.alarmEnabled !== undefined) pt.alarmEnabled = body.alarmEnabled === true
       mb.configVersion = (mb.configVersion || 7) + 1
       return { ok: true, point: { ...pt }, configVersion: mb.configVersion, workspace: { modbus: { ...mb } } }
@@ -341,9 +595,14 @@ test('编辑点位态与新增草稿态开关可点；点轨道也可触发', as
   // 进入编辑点位
   const editPt = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '编辑点位')
   assert.ok(editPt)
-  await act(async () => { editPt.click(); await new Promise((r) => setTimeout(r, 40)) })
+  await act(async () => {
+    editPt.click()
+    await new Promise((r) => setTimeout(r, 40))
+  })
   await waitFor(() => assert.ok(tree.container.querySelector('tr[data-editing="true"]')), { timeout: 6000 })
-  let mon = Array.from(tree.container.querySelectorAll('button.dvb-switch')).find((b) => (b.getAttribute('aria-label') || '').includes('可视化'))
+  let mon = Array.from(tree.container.querySelectorAll('button.dvb-switch')).find((b) =>
+    (b.getAttribute('aria-label') || '').includes('可视化'),
+  )
   assert.ok(mon)
   const track = mon.querySelector('.dvb-switch-track')
   assert.ok(track)
@@ -354,7 +613,10 @@ test('编辑点位态与新增草稿态开关可点；点轨道也可触发', as
   await waitFor(() => assert.ok(flagPosts.some((s) => s.monitorEnabled === true)), { timeout: 6000 })
   // 新增草稿
   const addBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '添加点位')
-  await act(async () => { addBtn.click(); await new Promise((r) => setTimeout(r, 40)) })
+  await act(async () => {
+    addBtn.click()
+    await new Promise((r) => setTimeout(r, 40))
+  })
   await waitFor(() => assert.ok(tree.container.querySelector('.dvb-newpoint-row')), { timeout: 6000 })
   const draftSwitches = Array.from(tree.container.querySelectorAll('.dvb-newpoint-row button.dvb-switch'))
   assert.ok(draftSwitches.length >= 2)
@@ -363,7 +625,9 @@ test('编辑点位态与新增草稿态开关可点；点轨道也可触发', as
     draftSwitches[0].dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
     await new Promise((r) => setTimeout(r, 40))
   })
-  const after = Array.from(tree.container.querySelectorAll('.dvb-newpoint-row button.dvb-switch'))[0].getAttribute('aria-pressed')
+  const after = Array.from(tree.container.querySelectorAll('.dvb-newpoint-row button.dvb-switch'))[0].getAttribute(
+    'aria-pressed',
+  )
   assert.notEqual(before, after, '草稿开关可本地切换')
   tree.unmount()
 })
@@ -372,12 +636,34 @@ test('flags 保存失败会回滚且不影响另一开关', async () => {
   const mb = {
     ...MB,
     points: [
-      { id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度', function: 3, address: 0, scale: 1, offset: 0, unit: '', monitorEnabled: false, alarmEnabled: true, alarmMin: 1, alarmMax: 9 },
+      {
+        id: 'p1',
+        connectionId: 'c1',
+        deviceId: 'd1',
+        name: '温度',
+        function: 3,
+        address: 0,
+        scale: 1,
+        offset: 0,
+        unit: '',
+        monitorEnabled: false,
+        alarmEnabled: true,
+        alarmMin: 1,
+        alarmMax: 9,
+      },
     ],
   }
   let failMon = true
   const post = async (path, body) => {
-    if (/\/state$/.test(path)) return { ok: true, workspace: { modbus: mb, focus: null }, journal: { tasks: [], running: [], timeline: [] }, health: {}, pendingWrites: [], connectionStates: [] }
+    if (/\/state$/.test(path))
+      return {
+        ok: true,
+        workspace: { modbus: mb, focus: null },
+        journal: { tasks: [], running: [], timeline: [] },
+        health: {},
+        pendingWrites: [],
+        connectionStates: [],
+      }
     if (/\/serial\/ports$/.test(path)) return { ok: true, ports: ['COM3'] }
     if (/\/points\/flags$/.test(path)) {
       if (body.monitorEnabled !== undefined && failMon) return { ok: false, error: 'boom' }
@@ -393,16 +679,29 @@ test('flags 保存失败会回滚且不影响另一开关', async () => {
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   await selectConn(tree)
   await waitFor(() => assert.ok(tree.container.textContent.includes('温度')), { timeout: 8000 })
-  const mon = Array.from(tree.container.querySelectorAll('button.dvb-switch')).find((b) => (b.getAttribute('aria-label') || '').includes('可视化'))
-  const alm = Array.from(tree.container.querySelectorAll('button.dvb-switch')).find((b) => (b.getAttribute('aria-label') || '').includes('告警'))
-  await act(async () => { mon.click(); await new Promise((r) => setTimeout(r, 100)) })
-  await waitFor(() => {
-    assert.equal(mon.getAttribute('aria-pressed'), 'false', '监视失败回滚')
-    assert.ok(tree.container.textContent.includes('监视状态保存失败'), '显示错误')
-  }, { timeout: 6000 })
+  const mon = Array.from(tree.container.querySelectorAll('button.dvb-switch')).find((b) =>
+    (b.getAttribute('aria-label') || '').includes('可视化'),
+  )
+  const alm = Array.from(tree.container.querySelectorAll('button.dvb-switch')).find((b) =>
+    (b.getAttribute('aria-label') || '').includes('告警'),
+  )
+  await act(async () => {
+    mon.click()
+    await new Promise((r) => setTimeout(r, 100))
+  })
+  await waitFor(
+    () => {
+      assert.equal(mon.getAttribute('aria-pressed'), 'false', '监视失败回滚')
+      assert.ok(tree.container.textContent.includes('监视状态保存失败'), '显示错误')
+    },
+    { timeout: 6000 },
+  )
   assert.equal(alm.getAttribute('aria-pressed'), 'true', '告警不受影响')
   failMon = false
-  await act(async () => { alm.click(); await new Promise((r) => setTimeout(r, 100)) })
+  await act(async () => {
+    alm.click()
+    await new Promise((r) => setTimeout(r, 100))
+  })
   await waitFor(() => assert.equal(alm.getAttribute('aria-pressed'), 'false'), { timeout: 6000 })
   tree.unmount()
 })

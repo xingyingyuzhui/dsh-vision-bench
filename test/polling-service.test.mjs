@@ -19,15 +19,30 @@ async function setup() {
     modbus: {
       version: 3,
       connections: [
-        { id: 'c1', name: 'C1', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM3', baudrate: 9600, slave: 1, sim: true } },
-        { id: 'c2', name: 'C2', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM4', baudrate: 9600, slave: 1, sim: true } },
+        {
+          id: 'c1',
+          name: 'C1',
+          role: 'client',
+          enabled: true,
+          conn: { mode: 'rtu', port: 'COM3', baudrate: 9600, slave: 1, sim: true },
+        },
+        {
+          id: 'c2',
+          name: 'C2',
+          role: 'client',
+          enabled: true,
+          conn: { mode: 'rtu', port: 'COM4', baudrate: 9600, slave: 1, sim: true },
+        },
       ],
       devices: [
         { id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 },
         { id: 'd2', connectionId: 'c2', name: 'D2', unitId: 1 },
       ],
-      points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: 'P1', function: 3, address: 0, trendEnabled: true }],
-      values: [], alarmState: {},
+      points: [
+        { id: 'p1', connectionId: 'c1', deviceId: 'd1', name: 'P1', function: 3, address: 0, trendEnabled: true },
+      ],
+      values: [],
+      alarmState: {},
     },
   })
   return { home, cwd }
@@ -48,7 +63,7 @@ test('startPolling 持久化 enabled 并启动协调器；stopPolling 停止该�
   void after
   const mb = loadWorkspace(home, cwd).modbus
   assert.ok((mb.values || []).length >= 1, '采集产生了值: ' + JSON.stringify(mb.values))
-  assert.ok((mb.trend && mb.trend.p1 || []).length >= 1, '趋势采样随采集产生')
+  assert.ok(((mb.trend && mb.trend.p1) || []).length >= 1, '趋势采样随采集产生')
   const stop = await stopPolling(home, cwd, { connectionId: 'c1' })
   assert.equal(stop.enabled, false)
   assert.equal(pollingStatus(home, cwd).connections.c1.running, false, '停止后 timer 清理')
@@ -81,11 +96,16 @@ test('stopAllPolling 后任何 ensurePolling 不再启动新计时器', async ()
 test('停用的连接不进入协调器（旧 enabled=false 迁移语义）', async () => {
   const { home, cwd } = await setup()
   const { migrateLegacyDisabled } = await import('../bench-modbus.mjs')
-  saveWorkspace(home, cwd, { modbus: { connections: [
-    { id: 'c1', name: 'C1', enabled: false, conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } },
-    { id: 'c2', name: 'C2', enabled: true, conn: { mode: 'rtu', port: 'COM4', slave: 1, sim: true } },
-  ], version: 3 } })
-  const migrated = migrateLegacyDisabled(home, cwd)
+  saveWorkspace(home, cwd, {
+    modbus: {
+      connections: [
+        { id: 'c1', name: 'C1', enabled: false, conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } },
+        { id: 'c2', name: 'C2', enabled: true, conn: { mode: 'rtu', port: 'COM4', slave: 1, sim: true } },
+      ],
+      version: 3,
+    },
+  })
+  const migrated = await migrateLegacyDisabled(home, cwd)
   assert.equal(migrated.migrated, true)
   const mb = loadWorkspace(home, cwd).modbus
   assert.equal(mb.pollingByConnection.c1.enabled, false, '自动采集被停止')

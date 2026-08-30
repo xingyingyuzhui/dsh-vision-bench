@@ -1,21 +1,21 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { writeJsonAtomicSync, readJsonSync } from '../../src/infrastructure/persistence/atomic-json.mjs'
+import { loadWorkspace, normalizeWorkspace, saveWorkspace, workspaceKey } from '../../bench-store.mjs'
+import { readJsonSync, writeJsonAtomicSync } from '../../src/infrastructure/persistence/atomic-json.mjs'
 import { runExclusive } from '../../src/infrastructure/persistence/workspace-lock.mjs'
 import {
-  migrateLegacyWorkspace,
-  loadV4Workspace,
-  splitWorkspaceParts,
-  mergeWorkspaceParts,
   legacyWorkspaceFile,
+  loadV4Workspace,
+  mergeWorkspaceParts,
+  migrateLegacyWorkspace,
+  splitWorkspaceParts,
   workspaceDir,
 } from '../../src/infrastructure/persistence/workspace-migration.mjs'
 import { createWorkspaceRepository } from '../../src/infrastructure/persistence/workspace-repository.mjs'
-import { loadWorkspace, saveWorkspace, workspaceKey, normalizeWorkspace } from '../../bench-store.mjs'
 
 test('atomic-write: writes JSON that can be re-read', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'dvb-atom-'))
@@ -58,7 +58,9 @@ test('migration-v3-v4: legacy file migrates with backup and loads via v4', async
       modbus: {
         version: 3,
         configVersion: 2,
-        connections: [{ id: 'c1', name: 'C1', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM3', sim: true } }],
+        connections: [
+          { id: 'c1', name: 'C1', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM3', sim: true } },
+        ],
         devices: [{ id: 'd1', connectionId: 'c1', name: 'Dev', unitId: 1 }],
         points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: 'T', function: 3, address: 0 }],
         values: [{ key: 'p1', pointId: 'p1', value: 1, ok: true, at: 1 }],
@@ -85,7 +87,9 @@ test('workspace-isolation: different keys do not share config', async () => {
   saveWorkspace(home, a, {
     modbus: {
       version: 3,
-      connections: [{ id: 'c1', name: 'Alpha', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM1', sim: true } }],
+      connections: [
+        { id: 'c1', name: 'Alpha', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM1', sim: true } },
+      ],
       devices: [],
       points: [],
     },
@@ -93,7 +97,9 @@ test('workspace-isolation: different keys do not share config', async () => {
   saveWorkspace(home, b, {
     modbus: {
       version: 3,
-      connections: [{ id: 'c1', name: 'Beta', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM2', sim: true } }],
+      connections: [
+        { id: 'c1', name: 'Beta', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM2', sim: true } },
+      ],
       devices: [],
       points: [],
     },
@@ -123,7 +129,7 @@ test('crash-recovery: corrupt v4 without marker falls back to legacy', async () 
   assert.ok(existsSync(legacy))
   await rm(home, { recursive: true, force: true })
 })
-test('split/merge workspace parts round-trips config vs runtime', () => {
+test('split/merge workspace parts round-trips config vs runtime', async () => {
   const ws = normalizeWorkspace({
     keil: { project: 'p.uvprojx' },
     modbus: {

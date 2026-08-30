@@ -3,9 +3,9 @@ import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { dirname } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { dirname } from 'node:path'
 import { findPython } from './python.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')

@@ -1,6 +1,6 @@
 // Task5/0.19.3: /project/file — 工作区内、拒绝符号链接逃逸、扩展名白名单、256KB 上限。
 import assert from 'node:assert/strict'
-import { mkdirSync, writeFileSync, symlinkSync } from 'node:fs'
+import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -20,7 +20,11 @@ async function setup() {
   writeFileSync(outside, 'TOP SECRET\n')
   // 工作区内指向外部的符号链接
   const linkPath = join(cwd, 'src', 'evil.c')
-  try { symlinkSync(outside, linkPath) } catch { /* 平台可能不允许 */ }
+  try {
+    symlinkSync(outside, linkPath)
+  } catch {
+    /* 平台可能不允许 */
+  }
   // 敏感扩展名
   writeFileSync(join(cwd, 'src', 'pass.sh'), '#!/bin/sh\n')
   return { home, cwd }
@@ -34,7 +38,10 @@ const wsFile = (cwd, name) => {
 
 test('工作区内 C 源码可读，返回相对路径/行数/内容', async () => {
   const { home, cwd } = await setup()
-  writeFileSync(wsFile(cwd, 'a.json'), JSON.stringify({ modbus: { version: 3, connections: [], devices: [], points: [], values: [], alarmState: {} } }))
+  writeFileSync(
+    wsFile(cwd, 'a.json'),
+    JSON.stringify({ modbus: { version: 3, connections: [], devices: [], points: [], values: [], alarmState: {} } }),
+  )
   const ran = readProjectFile(cwd, 'src/main.c')
   assert.equal(ran.ok, true)
   assert.ok(ran.text.includes('int main'), '内容返回')

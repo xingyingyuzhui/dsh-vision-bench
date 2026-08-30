@@ -13,21 +13,23 @@ const seedV3 = (home, cwd) => {
       version: 3,
       connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } }],
       devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
-      points: [{
-        id: 'p1',
-        connectionId: 'c1',
-        deviceId: 'd1',
-        name: '温度',
-        function: 3,
-        address: 0,
-        scale: 0.1,
-        offset: 0,
-        unit: '℃',
-        monitorEnabled: false,
-        alarmEnabled: true,
-        alarmMin: 18,
-        alarmMax: 30,
-      }],
+      points: [
+        {
+          id: 'p1',
+          connectionId: 'c1',
+          deviceId: 'd1',
+          name: '温度',
+          function: 3,
+          address: 0,
+          scale: 0.1,
+          offset: 0,
+          unit: '℃',
+          monitorEnabled: false,
+          alarmEnabled: true,
+          alarmMin: 18,
+          alarmMax: 30,
+        },
+      ],
       values: [],
       alarmState: {},
     },
@@ -45,7 +47,7 @@ test('patchPointFlags flips monitorEnabled, syncs trendEnabled, bumps configVers
     assert.equal(ws0.modbus.points[0].monitorEnabled, false)
     assert.equal(ws0.modbus.points[0].alarmEnabled, true)
 
-    const ran = patchPointFlags(home, cwd, 'p1', { monitorEnabled: true }, { expectedConfigVersion: cv0 })
+    const ran = await patchPointFlags(home, cwd, 'p1', { monitorEnabled: true }, { expectedConfigVersion: cv0 })
     assert.equal(ran.ok, true)
     assert.equal(ran.point.monitorEnabled, true)
     assert.equal(ran.point.trendEnabled, true)
@@ -73,24 +75,30 @@ test('patchPointFlags rejects CONFIG_DRIFT / missing point / empty patch', async
     const ws0 = seedV3(home, cwd)
     const cv0 = ws0.modbus.configVersion
 
-    const drift = patchPointFlags(home, cwd, 'p1', { monitorEnabled: true }, { expectedConfigVersion: cv0 + 99 })
+    const drift = await patchPointFlags(home, cwd, 'p1', { monitorEnabled: true }, { expectedConfigVersion: cv0 + 99 })
     assert.equal(drift.ok, false)
     assert.equal(drift.errorCode, 'CONFIG_DRIFT')
     assert.match(drift.error, /刷新/)
 
-    const missing = patchPointFlags(home, cwd, 'no-such', { alarmEnabled: false }, { expectedConfigVersion: cv0 })
+    const missing = await patchPointFlags(home, cwd, 'no-such', { alarmEnabled: false }, { expectedConfigVersion: cv0 })
     assert.equal(missing.ok, false)
     assert.equal(missing.errorCode, 'NOT_FOUND')
     assert.match(missing.error, /点位不存在/)
 
-    const empty = patchPointFlags(home, cwd, 'p1', {}, { expectedConfigVersion: cv0 })
+    const empty = await patchPointFlags(home, cwd, 'p1', {}, { expectedConfigVersion: cv0 })
     assert.equal(empty.ok, false)
     assert.match(empty.error, /monitorEnabled|alarmEnabled/)
 
-    const neither = patchPointFlags(home, cwd, 'p1', { monitorEnabled: undefined, alarmEnabled: undefined }, { expectedConfigVersion: cv0 })
+    const neither = await patchPointFlags(
+      home,
+      cwd,
+      'p1',
+      { monitorEnabled: undefined, alarmEnabled: undefined },
+      { expectedConfigVersion: cv0 },
+    )
     assert.equal(neither.ok, false)
 
-    const badType = patchPointFlags(home, cwd, 'p1', { monitorEnabled: 'yes' }, { expectedConfigVersion: cv0 })
+    const badType = await patchPointFlags(home, cwd, 'p1', { monitorEnabled: 'yes' }, { expectedConfigVersion: cv0 })
     assert.equal(badType.ok, false)
     assert.match(badType.error, /布尔/)
   } finally {
@@ -104,7 +112,7 @@ test('patchPointFlags can flip alarmEnabled alone without touching monitor', asy
   try {
     const ws0 = seedV3(home, cwd)
     const cv0 = ws0.modbus.configVersion
-    const ran = patchPointFlags(home, cwd, 'p1', { alarmEnabled: false }, { expectedConfigVersion: cv0 })
+    const ran = await patchPointFlags(home, cwd, 'p1', { alarmEnabled: false }, { expectedConfigVersion: cv0 })
     assert.equal(ran.ok, true)
     assert.equal(ran.point.alarmEnabled, false)
     assert.equal(ran.point.monitorEnabled, false)

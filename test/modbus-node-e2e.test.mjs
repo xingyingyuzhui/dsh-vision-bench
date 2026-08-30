@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
-import net from 'node:net'
 import { mkdir, rm } from 'node:fs/promises'
 import { mkdtemp } from 'node:fs/promises'
+import net from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { createVisionIoBroker } from '../bench-io-broker.mjs'
 import { createModbusTransport } from '../bench-modbus-transport.mjs'
 import { modbusRead } from '../bench-modbus.mjs'
@@ -135,26 +135,31 @@ test('local TCP server round-trip through Node transport', async () => {
 
 test('failed TCP read still returns transactionId and frames', async () => {
   const server = net.createServer((socket) => {
-    socket.on('data', () => { /* drop */ })
+    socket.on('data', () => {
+      /* drop */
+    })
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const port = server.address().port
   const broker = createVisionIoBroker()
   const transport = createModbusTransport({ broker })
   try {
-    const ran = await transport.read({
-      v: 1,
-      op: 'modbus.read',
-      cwd: '/tmp/tcp-fail',
-      connectionId: 'c1',
-      deviceId: 'd1',
-      unitId: 1,
-      functionCode: 3,
-      address: 0,
-      count: 1,
-      timeoutMs: 80,
-      endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: port },
-    }, { timeoutMs: 80 })
+    const ran = await transport.read(
+      {
+        v: 1,
+        op: 'modbus.read',
+        cwd: '/tmp/tcp-fail',
+        connectionId: 'c1',
+        deviceId: 'd1',
+        unitId: 1,
+        functionCode: 3,
+        address: 0,
+        count: 1,
+        timeoutMs: 80,
+        endpoint: { mode: 'tcp', host: '127.0.0.1', tcpPort: port },
+      },
+      { timeoutMs: 80 },
+    )
     assert.equal(ran.ok, false)
     assert.ok(ran.transactionId || (ran.error && ran.error.transactionId) || ran.error)
     assert.equal((ran.frames && ran.frames.frameFormat) || 'tcp-normalized', 'tcp-normalized')

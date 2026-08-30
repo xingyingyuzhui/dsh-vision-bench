@@ -1,8 +1,8 @@
 import { join } from 'node:path'
 import { pickArtifact } from './bench-fs.mjs'
+import { aborted, hasRunning, originOf, signalOf } from './bench-journal.mjs'
 import { requireKeilProject, requireWorkspaceCwd } from './bench-paths.mjs'
 import { finishTask, loadBindings, loadWorkspace, openTask, pruneBuildLogs } from './bench-store.mjs'
-import { aborted, hasRunning, originOf, signalOf } from './bench-journal.mjs'
 
 import { runPythonScript } from './bench-run.mjs'
 import { storeDir } from './bench-store.mjs'
@@ -56,13 +56,16 @@ export const keilMap = async (home, cwd, project, target, opts) => {
   const keil = requireKeilProject(room.cwd, picked)
   if (keil.error) return { ok: false, error: keil.error }
   const name = (target || (workspace.keil && workspace.keil.target) || '').trim()
-  return runPythonScript(bindings.python, 'keil_project.py', [
-    'map', '--project', keil.project, '--target', name, '--root', room.cwd, '--json',
-  ], {
-    cwd: room.cwd,
-    timeoutMs: 20000,
-    signal: signalOf(null, opts),
-  })
+  return runPythonScript(
+    bindings.python,
+    'keil_project.py',
+    ['map', '--project', keil.project, '--target', name, '--root', room.cwd, '--json'],
+    {
+      cwd: room.cwd,
+      timeoutMs: 20000,
+      signal: signalOf(null, opts),
+    },
+  )
 }
 
 export const keilBuild = async (home, cwd, body, opts) => {
@@ -76,37 +79,49 @@ export const keilBuild = async (home, cwd, body, opts) => {
   const target = (body && body.target) || workspace.keil.target
   const artifact = (body && body.artifact) || workspace.keil.artifact
   const keil = requireKeilProject(room.cwd, project)
-  if (keil.error) return { ok: false, error: keil.error === '工程必须是绝对路径' ? '请先在工作区里选择 Keil 工程' : keil.error }
+  if (keil.error)
+    return { ok: false, error: keil.error === '工程必须是绝对路径' ? '请先在工作区里选择 Keil 工程' : keil.error }
   if (hasRunning(workspace, 'build')) {
     return { ok: false, error: '已有编译任务进行中' }
   }
   const signal = signalOf(body, opts)
   if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
   const origin = originOf(body)
-  const task = openTask(home, room.cwd, {
+  const task = await openTask(home, room.cwd, {
     type: 'build',
     source: origin.source,
     sessionId: origin.sessionId,
     summary: '编译 ' + (target || keil.project),
   })
-  const ran = await runPythonScript(bindings.python, 'keil_build.py', [
-    '--uv4', bindings.uv4,
-    '--project', keil.project,
-    '--target', target || '',
-    '--log-dir', join(storeDir(home), 'logs'),
-    '--task-id', task.id,
-    '--json',
-  ], { cwd: room.cwd, timeoutMs: 620000, signal })
+  const ran = await runPythonScript(
+    bindings.python,
+    'keil_build.py',
+    [
+      '--uv4',
+      bindings.uv4,
+      '--project',
+      keil.project,
+      '--target',
+      target || '',
+      '--log-dir',
+      join(storeDir(home), 'logs'),
+      '--task-id',
+      task.id,
+      '--json',
+    ],
+    { cwd: room.cwd, timeoutMs: 620000, signal },
+  )
   if (ran.cancelled) {
-    finishTask(home, room.cwd, task.id, { cancelled: true, summary: '编译已取消' })
+    await finishTask(home, room.cwd, task.id, { cancelled: true, summary: '编译已取消' })
     return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source }
   }
   const details = ran.result && ran.result.details ? ran.result.details : {}
   const download = pickArtifact(details, artifact)
   const ok = ran.ok && (!ran.result || ran.result.status !== 'error')
-  const summary = ((ran.result && ran.result.summary) || (ok ? '编译成功' : ('编译失败 ' + (ran.error || ''))))
-    + (download.path ? ' → ' + download.path : '')
-  finishTask(home, room.cwd, task.id, {
+  const summary =
+    ((ran.result && ran.result.summary) || (ok ? '编译成功' : '编译失败 ' + (ran.error || ''))) +
+    (download.path ? ' → ' + download.path : '')
+  await finishTask(home, room.cwd, task.id, {
     ok,
     summary,
     logFile: details.log_file || '',
@@ -116,7 +131,9 @@ export const keilBuild = async (home, cwd, body, opts) => {
   })
   try {
     pruneBuildLogs(home)
-  } catch { /* retention is best-effort */ }
+  } catch {
+    /* retention is best-effort */
+  }
   if (!ok) {
     return {
       ...ran,

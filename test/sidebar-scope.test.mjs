@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  setSidebarPin,
   clearSidebarPin,
-  resolveSidebarScope,
   filterByScope,
+  resolveSidebarScope,
+  setSidebarPin,
   shouldRouteFocus,
 } from '../src/ui/common/sidebar-scope.mjs'
 
-test('resolveSidebarScope follows HMI active ids when unpinned', () => {
+test('resolveSidebarScope follows HMI active ids when unpinned', async () => {
   clearSidebarPin('/ws')
   assert.deepEqual(resolveSidebarScope('/ws', 'c1', 'd1'), {
     connectionId: 'c1',
@@ -18,7 +18,7 @@ test('resolveSidebarScope follows HMI active ids when unpinned', () => {
   })
 })
 
-test('resolveSidebarScope prefers pinned connection', () => {
+test('resolveSidebarScope prefers pinned connection', async () => {
   setSidebarPin('/ws', { pinned: true, connectionId: 'c9', deviceId: 'd9' })
   assert.deepEqual(resolveSidebarScope('/ws', 'c1', 'd1'), {
     connectionId: 'c9',
@@ -29,7 +29,7 @@ test('resolveSidebarScope prefers pinned connection', () => {
   clearSidebarPin('/ws')
 })
 
-test('filterByScope keeps matching connection/device rows', () => {
+test('filterByScope keeps matching connection/device rows', async () => {
   const rows = [
     { connectionId: 'c1', deviceId: 'd1', id: 'a' },
     { connectionId: 'c1', deviceId: 'd2', id: 'b' },
@@ -45,7 +45,7 @@ test('filterByScope keeps matching connection/device rows', () => {
   )
 })
 
-test('shouldRouteFocus routes visualization to trend tab once per key', () => {
+test('shouldRouteFocus routes visualization to trend tab once per key', async () => {
   const focus = {
     badgeOnly: false,
     request: { kind: 'visualization', visualizationId: 'viz_1', connectionId: 'c1' },

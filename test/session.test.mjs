@@ -4,14 +4,8 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import {
-  MAX_TIMELINE,
-  isMajorKind,
-  isTaskType,
-  normalizeTask,
-  taskTypeLabel,
-  trimTimeline,
-} from '../bench-journal.mjs'
+import { MAX_TIMELINE, isMajorKind, isTaskType, normalizeTask, taskTypeLabel, trimTimeline } from '../bench-journal.mjs'
+import { _internal, notifyBenchEvent, setAgentsRegistry } from '../bench-notify.mjs'
 import {
   bindSession,
   createManualRequest,
@@ -21,9 +15,8 @@ import {
   resolveManualRequest,
   unbindSession,
 } from '../bench-store.mjs'
-import { notifyBenchEvent, setAgentsRegistry, _internal } from '../bench-notify.mjs'
 
-test('task type registry accepts reserved types and rejects unknown ones', () => {
+test('task type registry accepts reserved types and rejects unknown ones', async () => {
   assert.equal(isTaskType('download'), true)
   assert.equal(isTaskType('verify'), true)
   assert.equal(isTaskType('write'), true)
@@ -37,9 +30,18 @@ test('task type registry accepts reserved types and rejects unknown ones', () =>
   assert.equal(clamped.progress, null)
 })
 
-test('trimTimeline keeps newest events and drops oldest minors first', () => {
+test('trimTimeline keeps newest events and drops oldest minors first', async () => {
   // Timeline is stored newest-first: index 0 is the most recent event.
-  const event = (i, kind) => ({ id: 'e' + i, at: i, kind, source: 'user', sessionId: '', taskId: '', ok: true, summary: '' })
+  const event = (i, kind) => ({
+    id: 'e' + i,
+    at: i,
+    kind,
+    source: 'user',
+    sessionId: '',
+    taskId: '',
+    ok: true,
+    summary: '',
+  })
   const events = []
   for (let i = 199; i >= 0; i--) {
     // Push oldest first so the array ends up newest-first like prepend().
@@ -71,7 +73,16 @@ test('trimTimeline keeps newest events and drops oldest minors first', () => {
   // Once full, fresh minor events must not be evicted in favour of old ones:
   // simulate a saturated list and prepend a brand-new minor.
   const saturated = allMinor
-  const fresh = { id: 'fresh', at: 500, kind: 'read-start', source: 'user', sessionId: '', taskId: '', ok: true, summary: '' }
+  const fresh = {
+    id: 'fresh',
+    at: 500,
+    kind: 'read-start',
+    source: 'user',
+    sessionId: '',
+    taskId: '',
+    ok: true,
+    summary: '',
+  }
   const after = trimTimeline([fresh].concat(saturated))
   assert.equal(after[0].id, 'fresh')
 })
@@ -146,14 +157,19 @@ test('touchServiceSession 自动归属：Agent/UI 触达后告警可通知', asy
     setAgentsRegistry({
       get(id) {
         if (id !== 'sess-auto') return null
-        return { followup(message) { delivered.push(message); return Promise.resolve() } }
+        return {
+          followup(message) {
+            delivered.push(message)
+            return Promise.resolve()
+          },
+        }
       },
     })
     assert.equal((await notifyBenchEvent(home, cwd, '告警')).skipped, 'unbound')
-    const touched = touchServiceSession(home, cwd, 'sess-auto')
+    const touched = await touchServiceSession(home, cwd, 'sess-auto')
     assert.equal(touched.ok, true)
     assert.equal(loadWorkspace(home, cwd).session.boundId, 'sess-auto')
-    const again = touchServiceSession(home, cwd, 'sess-auto')
+    const again = await touchServiceSession(home, cwd, 'sess-auto')
     assert.equal(again.unchanged, true)
     const ran = await notifyBenchEvent(home, cwd, '越限告警：温度')
     assert.equal(ran.ok, true)
@@ -169,7 +185,7 @@ test('openTask accepts reserved types into the shared journal', async () => {
   const cwd = join(home, 'board')
   await mkdir(cwd)
   try {
-    const task = openTask(home, cwd, { type: 'download', source: 'agent', sessionId: 's', summary: '下载固件' })
+    const task = await openTask(home, cwd, { type: 'download', source: 'agent', sessionId: 's', summary: '下载固件' })
     assert.equal(task.type, 'download')
     const ws = loadWorkspace(home, cwd)
     assert.equal(ws.tasks[0].type, 'download')
@@ -195,23 +211,23 @@ test('manual requests persist, resolve and notify', async () => {
   const cwd = join(home, 'board')
   await mkdir(cwd)
   try {
-    const missing = createManualRequest(home, cwd, { text: '' })
+    const missing = await createManualRequest(home, cwd, { text: '' })
     assert.equal(missing.ok, false)
-    const created = createManualRequest(home, cwd, { text: '请断电后重新上电', sessionId: 's1', source: 'agent' })
+    const created = await createManualRequest(home, cwd, { text: '请断电后重新上电', sessionId: 's1', source: 'agent' })
     assert.equal(created.ok, true)
     let ws = loadWorkspace(home, cwd)
     assert.equal(ws.manualRequests.length, 1)
     assert.equal(ws.manualRequests[0].status, 'pending')
     assert.ok(ws.timeline.some((item) => item.kind === 'manual-request'))
-    const again = resolveManualRequest(home, cwd, 'nope', true)
+    const again = await resolveManualRequest(home, cwd, 'nope', true)
     assert.equal(again.ok, false)
-    const done = resolveManualRequest(home, cwd, created.request.id, true)
+    const done = await resolveManualRequest(home, cwd, created.request.id, true)
     assert.equal(done.ok, true)
     assert.equal(done.request.status, 'done')
     ws = loadWorkspace(home, cwd)
     assert.equal(ws.manualRequests[0].status, 'done')
     assert.ok(ws.timeline.some((item) => item.kind === 'manual-done' && item.ok === true))
-    const twice = resolveManualRequest(home, cwd, created.request.id, false)
+    const twice = await resolveManualRequest(home, cwd, created.request.id, false)
     assert.equal(twice.ok, false)
   } finally {
     await rm(home, { recursive: true, force: true })
@@ -227,7 +243,12 @@ test('explicit origin sessionId wins over the workspace binding', async () => {
     const registry = {
       get(id) {
         if (id !== 'sess-origin') return null
-        return { followup(message) { delivered.push({ to: id, message }); return Promise.resolve() } }
+        return {
+          followup(message) {
+            delivered.push({ to: id, message })
+            return Promise.resolve()
+          },
+        }
       },
     }
     setAgentsRegistry(registry)
@@ -240,7 +261,11 @@ test('explicit origin sessionId wins over the workspace binding', async () => {
     setAgentsRegistry({
       get(id) {
         if (id !== 'sess-other') return null
-        return { followup() { return Promise.resolve() } }
+        return {
+          followup() {
+            return Promise.resolve()
+          },
+        }
       },
     })
     const fallback = await notifyBenchEvent(home, cwd, '台架告警')
@@ -251,7 +276,11 @@ test('explicit origin sessionId wins over the workspace binding', async () => {
     setAgentsRegistry({
       get(id) {
         if (id !== 'sess-other') return null
-        return { followup() { return Promise.resolve() } }
+        return {
+          followup() {
+            return Promise.resolve()
+          },
+        }
       },
     })
     const miss = await notifyBenchEvent(home, cwd, 'x', '', { sessionId: 'sess-gone' })

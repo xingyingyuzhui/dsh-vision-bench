@@ -9,7 +9,7 @@
 // → bench-tool/host); the browser bundle never references it.
 import { normalizeModbus } from './bench-devices.mjs'
 import { functionTag } from './bench-points.mjs'
-import { loadWorkspace, saveWorkspace } from './bench-store.mjs'
+import { loadWorkspace, saveWorkspaceAsync } from './bench-store.mjs'
 
 export const TREND_KEEP = 600
 
@@ -22,7 +22,7 @@ export const normalizeTrendByPoint = (input) => {
     for (const sample of list) {
       const t = Number(sample && (sample.t ?? sample[0]))
       if (!Number.isFinite(t) || t <= 0) continue
-      const v = sample == null ? null : (sample.v !== undefined ? sample.v : sample[1])
+      const v = sample == null ? null : sample.v !== undefined ? sample.v : sample[1]
       clean.push([t, v === null || v === undefined ? null : Number(v)])
     }
     if (clean.length) out[pid] = clean.slice(-TREND_KEEP)
@@ -44,7 +44,7 @@ export const sampleTrendValues = (trendIn, pointValues, pointsById) => {
     let val = null
     if (rec.ok !== false) {
       const n = Number(rec.value)
-      val = Number.isFinite(n) ? n : (Number.isFinite(Number(rec.raw)) ? Number(rec.raw) : null)
+      val = Number.isFinite(n) ? n : Number.isFinite(Number(rec.raw)) ? Number(rec.raw) : null
     }
     list.push([Number(rec.at) || now, val])
     if (list.length > TREND_KEEP) list = list.slice(list.length - TREND_KEEP)
@@ -56,9 +56,13 @@ export const sampleTrendValues = (trendIn, pointValues, pointsById) => {
 export const readTrendSeries = (home, cwd, opts = {}) => {
   const pack = normalizeModbus(loadWorkspace(home, cwd).modbus || {})
   const trend = pack.trend || {}
-  const ids = (Array.isArray(opts.pointIds) && opts.pointIds.length)
-    ? opts.pointIds
-    : pack.points.filter((p) => p.monitorEnabled === true).slice(0, 8).map((p) => p.id)
+  const ids =
+    Array.isArray(opts.pointIds) && opts.pointIds.length
+      ? opts.pointIds
+      : pack.points
+          .filter((p) => p.monitorEnabled === true)
+          .slice(0, 8)
+          .map((p) => p.id)
   const from = Number(opts.start) || 0
   const to = Number(opts.end) || Date.now()
   return ids.map((pid) => {
@@ -66,7 +70,7 @@ export const readTrendSeries = (home, cwd, opts = {}) => {
     const list = Array.isArray(trend[pid]) ? trend[pid] : []
     return {
       pointId: pid,
-      name: pt ? (pt.name || functionTag(pt.function) + pt.address) : pid,
+      name: pt ? pt.name || functionTag(pt.function) + pt.address : pid,
       connectionId: pt ? pt.connectionId : '',
       deviceId: pt ? pt.deviceId : '',
       unit: pt ? pt.unit : '',
@@ -76,10 +80,10 @@ export const readTrendSeries = (home, cwd, opts = {}) => {
   })
 }
 
-export const clearTrendByPoint = (home, cwd, pointIds) => {
+export const clearTrendByPoint = async (home, cwd, pointIds) => {
   const pack = normalizeModbus(loadWorkspace(home, cwd).modbus || {})
   const trend = { ...(pack.trend || {}) }
   for (const pid of Array.isArray(pointIds) ? pointIds : []) delete trend[pid]
-  saveWorkspace(home, cwd, { modbus: { trend, version: 3 } })
+  await saveWorkspaceAsync(home, cwd, { modbus: { trend, version: 3 } })
   return { ok: true }
 }

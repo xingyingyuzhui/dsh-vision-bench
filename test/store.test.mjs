@@ -16,7 +16,7 @@ import {
   validateBindings,
 } from '../bench-store.mjs'
 
-test('normalizeBindings keeps only python/uv4/openocd strings', () => {
+test('normalizeBindings keeps only python/uv4/openocd strings', async () => {
   assert.deepEqual(normalizeBindings(null), emptyBindings())
   assert.deepEqual(normalizeBindings({ python: ' /bin/python3 ', extra: 1, uv4: 3 }), {
     python: '/bin/python3',
@@ -25,12 +25,12 @@ test('normalizeBindings keeps only python/uv4/openocd strings', () => {
   })
 })
 
-test('validateBindings rejects relative paths', () => {
+test('validateBindings rejects relative paths', async () => {
   assert.deepEqual(validateBindings(emptyBindings()), [])
   assert.ok(validateBindings({ python: 'python3', uv4: '', openocd: '' }).length > 0)
 })
 
-test('probeBindings reports unbound vs missing vs ready', () => {
+test('probeBindings reports unbound vs missing vs ready', async () => {
   const exists = (p) => p === '/bin/python3'
   const health = probeBindings({ python: '/bin/python3', uv4: '/no/uv4', openocd: '' }, exists)
   assert.deepEqual(health.python, { bound: true, exists: true })
@@ -90,8 +90,20 @@ test('P0/0.20.0: visualization round-trip, configVersion bump, old workspace mig
       version: 3,
       connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', slave: 1, sim: true } }],
       devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
-      points: [{ id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '旧', function: 3, address: 0, trendEnabled: true, alarmMin: 10 }],
-      values: [], alarmState: {},
+      points: [
+        {
+          id: 'p1',
+          connectionId: 'c1',
+          deviceId: 'd1',
+          name: '旧',
+          function: 3,
+          address: 0,
+          trendEnabled: true,
+          alarmMin: 10,
+        },
+      ],
+      values: [],
+      alarmState: {},
     },
   })
   const w1 = loadWorkspace(home, cwd)
@@ -117,7 +129,10 @@ test('P0/0.20.0: visualization round-trip, configVersion bump, old workspace mig
   const cv2 = w2.modbus.configVersion
   saveWorkspace(home, cwd, {
     modbus: {
-      visualization: { schemaVersion: 1, components: [{ id: 'viz_1', name: '趋势2', type: 'line', pointIds: ['p1'], settings: { windowMs: 120000 } }] },
+      visualization: {
+        schemaVersion: 1,
+        components: [{ id: 'viz_1', name: '趋势2', type: 'line', pointIds: ['p1'], settings: { windowMs: 120000 } }],
+      },
       version: 3,
     },
   })

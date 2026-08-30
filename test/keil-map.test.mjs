@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { execFileSync } from 'node:child_process'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { keilMap } from '../bench-actions.mjs'
@@ -62,7 +62,10 @@ async function makeProject(root) {
   await mkdir(join(cwd, 'inc'), { recursive: true })
   await writeFile(join(cwd, 'app.uvprojx'), UVPROJX)
   await writeFile(join(cwd, 'inc', 'app.h'), '#pragma once\nvoid setup(void);\n')
-  await writeFile(join(cwd, 'src', 'main.c'), '#include "app.h"\n\nvoid setup(void)\n{\n}\n\nint main(void)\n{\n  setup();\n  return 0;\n}\n')
+  await writeFile(
+    join(cwd, 'src', 'main.c'),
+    '#include "app.h"\n\nvoid setup(void)\n{\n}\n\nint main(void)\n{\n  setup();\n  return 0;\n}\n',
+  )
   await writeFile(join(cwd, 'src', 'secret.c'), Buffer.from([0, 1, 2, 3, 0, 255, 0]))
   return cwd
 }

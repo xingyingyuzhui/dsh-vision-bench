@@ -14,12 +14,10 @@ export const idleIoSnapshot = () => ({
 })
 
 export const capabilitiesFromHealth = (data) => {
-  const tcp = data && data.tcp === true
-    ? 'ready'
-    : (data && (data.tcp === false || data.tcpError) ? 'unavailable' : 'unknown')
-  const rtu = data && data.rtu === true
-    ? 'ready'
-    : (data && (data.rtu === false || data.rtuError) ? 'unavailable' : 'unknown')
+  const tcp =
+    data && data.tcp === true ? 'ready' : data && (data.tcp === false || data.tcpError) ? 'unavailable' : 'unknown'
+  const rtu =
+    data && data.rtu === true ? 'ready' : data && (data.rtu === false || data.rtuError) ? 'unavailable' : 'unknown'
   return {
     modbusTcp: tcp,
     modbusRtu: rtu,
@@ -43,7 +41,7 @@ export const canUseSerialMonitor = (ioRuntime) => capOf(ioRuntime, 'serialMonito
 
 export const ioRuntimeStatus = (ioRuntime, connectionMode) => {
   const state = ioRuntime && ioRuntime.state ? ioRuntime.state : 'idle'
-  const key = connectionMode === 'tcp' ? 'modbusTcp' : (connectionMode === 'raw' ? 'serialMonitor' : 'modbusRtu')
+  const key = connectionMode === 'tcp' ? 'modbusTcp' : connectionMode === 'raw' ? 'serialMonitor' : 'modbusRtu'
   const value = capOf(ioRuntime, key)
   if (value === 'unavailable' || state === 'unhealthy') {
     return { kind: 'missing', labelKey: 'ioUnavailable', value: 'unavailable' }
