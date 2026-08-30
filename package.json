@@ -198,9 +198,9 @@
   "scripts": {
     "build": "node scripts/build-client.mjs",
     "build:check": "node scripts/build-client.mjs --check",
-    "lint": "biome ci host.js bench-*.mjs src runtime scripts test docs/architecture",
+    "lint": "node scripts/run-with-bench.mjs lint",
     "typecheck": "tsc -p tsconfig.check.json && node scripts/check-typecheck-files.mjs",
-    "deps:check": "depcruise --config dependency-cruiser.config.mjs src bench-*.mjs host.js runtime/io",
+    "deps:check": "node scripts/run-with-bench.mjs deps",
     "test:unit": "node scripts/run-tests.mjs",
     "test:coverage": "c8 --check-coverage --statements 75 --branches 60 --functions 60 --lines 75 --reporter=text-summary --reporter=html node scripts/run-tests.mjs",
     "pack:check": "node scripts/check-package.mjs",
