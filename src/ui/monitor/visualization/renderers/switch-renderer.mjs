@@ -20,7 +20,8 @@ export function renderSwitchRenderer(el, spec) {
         {
           type: 'button',
           className: 'dvb-btn dvb-btn-sm dvb-btn-primary',
-          disabled: !cwd || !pt.function || busy,
+          disabled: !cwd || !pt.function || busy || spec.readOnly,
+          title: spec.readOnlyTitle,
           onClick() {
             if (typeof onToggle === 'function') onToggle(true)
           },
@@ -32,7 +33,8 @@ export function renderSwitchRenderer(el, spec) {
         {
           type: 'button',
           className: 'dvb-btn dvb-btn-sm',
-          disabled: !cwd || !pt.function || busy,
+          disabled: !cwd || !pt.function || busy || spec.readOnly,
+          title: spec.readOnlyTitle,
           onClick() {
             if (typeof onToggle === 'function') onToggle(false)
           },

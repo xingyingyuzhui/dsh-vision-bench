@@ -151,6 +151,9 @@ const t = (k) =>
     vizSave: '保存修改',
     savePoint: '保存',
     csvCancel: '取消',
+    vizReadOnlyTitle: '可视化配置为只读',
+    vizReadOnlyHint: '当前可以查看组件和实时数据，但不能修改布局、组件配置或执行组件控制。请升级插件后再编辑。',
+    vizReadOnlyAction: '当前配置由更高版本插件创建，无法修改',
   })[k] || k
 
 test('挂载无错误；默认不展开已监视点位列表（空状态只提示新建）', async () => {
@@ -420,5 +423,78 @@ test('Task1/0.20.1: 无图表运行时 → 曲线卡片显示渲染失败 + 重�
   const btns = Array.from(tree.container.querySelectorAll('button')).map((b) => b.textContent)
   assert.ok(btns.includes('重试'), '重试入口')
   assert.ok(btns.includes('编辑'), '编辑入口')
+  tree.unmount()
+})
+
+test('未来 schema 进入只读模式：可查看、不可改、不发写请求', async () => {
+  const mb = JSON.parse(JSON.stringify(MB))
+  mb.points = mb.points.map((pt) => (pt.id === 'p2' ? { ...pt, function: 1 } : pt))
+  mb.visualization = {
+    schemaVersion: 9,
+    minimumPluginVersion: '9.0.0',
+    unsupported: true,
+    errorCode: 'VIZ_SCHEMA_UNSUPPORTED',
+    error: '需要插件 9.0.0 或更高，当前只读',
+    columns: 12,
+    components: [
+      {
+        id: 'viz_future',
+        name: '未来版本组件',
+        type: 'value',
+        pointIds: ['p1'],
+        layout: { x: 0, y: 0, w: 3, h: 3 },
+      },
+      {
+        id: 'viz_sw',
+        name: '未来开关',
+        type: 'switch',
+        pointIds: ['p2'],
+        layout: { x: 3, y: 0, w: 3, h: 3 },
+      },
+    ],
+  }
+  const base = makePost(mb)
+  const writes = []
+  const post = async (path, body) => {
+    if (/\/modbus\/write$/.test(path)) writes.push(body)
+    return base.post(path, body)
+  }
+  const Viz = createVisualizationPage(React, t, post, {})
+  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  await waitFor(() => assert.ok(tree.container.textContent.includes('未来版本组件')), { timeout: 6000 })
+  assert.ok(tree.container.querySelector('.dvb-viz-readonly'), '只读横幅')
+  assert.ok(tree.container.textContent.includes('可视化配置为只读'))
+  assert.ok(
+    tree.container.textContent.includes('不支持的可视化 schemaVersion 9，当前只读') ||
+      tree.container.textContent.includes('需要插件 9.0.0 或更高，当前只读'),
+    '显示只读原因',
+  )
+  assert.ok(tree.container.textContent.includes('但不能修改布局、组件配置或执行组件控制'))
+  const newBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '新建组件')
+  const editBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '编辑')
+  const delBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '删除')
+  assert.ok(newBtn && newBtn.disabled, '新建 disabled')
+  assert.ok(editBtn && editBtn.disabled, '编辑 disabled')
+  assert.ok(delBtn && delBtn.disabled, '删除 disabled')
+  await act(async () => {
+    editBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    newBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+  assert.equal(tree.container.textContent.includes('编辑组件'), false, '点击 disabled 不打开编辑器')
+  const agentBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '复制引用')
+  assert.ok(agentBtn && !agentBtn.disabled, '复制引用仍可用')
+  await act(async () => {
+    agentBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+  const onBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '开')
+  const offBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '关')
+  assert.ok(onBtn && onBtn.disabled, '开关开 disabled')
+  assert.ok(offBtn && offBtn.disabled, '开关关 disabled')
+  await act(async () => {
+    onBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+  assert.equal(base.saved.length, 0, '不产生 visualization command')
+  assert.equal(writes.length, 0, '不产生设备写入')
+  assert.equal(base.state().visualization.schemaVersion, 9)
   tree.unmount()
 })

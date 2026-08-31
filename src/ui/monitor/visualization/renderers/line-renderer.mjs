@@ -39,6 +39,8 @@ export function renderLineRenderer(el, spec) {
             {
               type: 'button',
               className: 'dvb-btn dvb-btn-sm',
+              disabled: spec.readOnly,
+              title: spec.readOnly ? spec.t('vizReadOnlyAction') : undefined,
               onClick() {
                 openEditor(comp)
               },

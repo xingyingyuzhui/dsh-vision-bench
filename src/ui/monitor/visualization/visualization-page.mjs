@@ -97,6 +97,8 @@ export function createVisualizationPage(React, t, post, hooks) {
     const packRef = React.useRef(null)
     const switchDraft = React.useRef(null)
     const copyToken = React.useRef(0)
+    const vizReadOnlyRef = React.useRef(false)
+    const vizReadOnlyReasonRef = React.useRef('')
 
     React.useEffect(() => {
       if (!cwd || !post) return undefined
@@ -140,6 +142,10 @@ export function createVisualizationPage(React, t, post, hooks) {
     const viz = pack
       ? pack.visualization || { schemaVersion: 2, columns: VIZ_GRID_COLUMNS, components: [] }
       : { schemaVersion: 2, columns: VIZ_GRID_COLUMNS, components: [] }
+    const vizReadOnly = viz?.unsupported === true
+    const vizReadOnlyReason = vizReadOnly ? viz.error || '当前可视化配置由更高版本插件创建，只能查看' : ''
+    vizReadOnlyRef.current = vizReadOnly
+    vizReadOnlyReasonRef.current = vizReadOnlyReason
     const components = viz && Array.isArray(viz.components) ? viz.components : []
     const values = pack ? pack.values || [] : []
     const trendStore = pack ? pack.trend || {} : {}
@@ -176,6 +182,25 @@ export function createVisualizationPage(React, t, post, hooks) {
       }
     }, [components, points])
 
+    React.useEffect(() => {
+      if (!vizReadOnly) return
+      setEditor(null)
+      setDeleteId('')
+      switchDraft.current = null
+      layoutDraft.current = null
+      layoutQueued.current = false
+      if (layoutTimer.current) {
+        clearTimeout(layoutTimer.current)
+        layoutTimer.current = 0
+      }
+    }, [vizReadOnly])
+
+    function rejectIfReadOnly() {
+      if (!vizReadOnlyRef.current) return false
+      setNote(vizReadOnlyReasonRef.current || '当前为只读模式')
+      return true
+    }
+
     function editorValidation(ed) {
       const cur = ed || editor
       if (!cur) return { ok: false, reason: '' }
@@ -187,6 +212,7 @@ export function createVisualizationPage(React, t, post, hooks) {
     }
 
     function persistViz(op, component, visualizationId = '') {
+      if (rejectIfReadOnly()) return Promise.resolve(false)
       return post('/dsh-vision-bench/command', {
         cwd,
         sessionId: props?.sessionId || '',
@@ -215,6 +241,7 @@ export function createVisualizationPage(React, t, post, hooks) {
     }
 
     function persistLayout(items) {
+      if (vizReadOnlyRef.current) return
       if (!cwd || !pack || !Array.isArray(items) || !items.length) return
       const draft = { ...(layoutDraft.current || {}) }
       for (const item of items) {
@@ -230,6 +257,11 @@ export function createVisualizationPage(React, t, post, hooks) {
     }
 
     function flushLayout() {
+      if (vizReadOnlyRef.current) {
+        layoutDraft.current = null
+        layoutQueued.current = false
+        return
+      }
       if (!aliveRef.current) return
       if (layoutInflight.current) {
         layoutQueued.current = true
@@ -294,6 +326,7 @@ export function createVisualizationPage(React, t, post, hooks) {
     }
 
     function saveComponent() {
+      if (rejectIfReadOnly()) return
       if (!editor || saving) return
       const check = editorValidation()
       if (!check.ok) {
@@ -317,6 +350,7 @@ export function createVisualizationPage(React, t, post, hooks) {
     }
 
     function removeComponent(id) {
+      if (rejectIfReadOnly()) return
       persistViz('remove', {}, id).then((ok) => {
         if (ok) destroyChart(id)
       })
@@ -324,6 +358,7 @@ export function createVisualizationPage(React, t, post, hooks) {
     }
 
     function openEditor(comp) {
+      if (rejectIfReadOnly()) return
       setNote('')
       if (comp) setEditor({ ...comp, pointIds: (comp.pointIds || []).slice(), search: '' })
       else
@@ -339,6 +374,7 @@ export function createVisualizationPage(React, t, post, hooks) {
     }
 
     function toggleSwitch(comp, point, wantOn) {
+      if (rejectIfReadOnly()) return
       if (!cwd || switchDraft.current?.busy) return
       const settings = comp.settings || {}
       const desiredValue = wantOn ? 1 : 0
@@ -666,6 +702,8 @@ export function createVisualizationPage(React, t, post, hooks) {
             {
               type: 'button',
               className: 'dvb-btn dvb-btn-sm',
+              disabled: vizReadOnly,
+              title: vizReadOnly ? t('vizReadOnlyAction') : undefined,
               onClick() {
                 openEditor(comp)
               },
@@ -684,6 +722,7 @@ export function createVisualizationPage(React, t, post, hooks) {
           setChartErrors,
           setTick,
           t,
+          readOnly: vizReadOnly,
         })
       }
       if (comp.type === 'bar')
@@ -709,6 +748,8 @@ export function createVisualizationPage(React, t, post, hooks) {
           busy,
           confirmHint,
           cwd,
+          readOnly: vizReadOnly,
+          readOnlyTitle: vizReadOnly ? t('vizReadOnlyAction') : undefined,
           onToggle(wantOn) {
             toggleSwitch(
               comp,
@@ -775,6 +816,8 @@ export function createVisualizationPage(React, t, post, hooks) {
               {
                 type: 'button',
                 className: 'dvb-btn dvb-btn-sm',
+                disabled: vizReadOnly,
+                title: vizReadOnly ? t('vizReadOnlyAction') : undefined,
                 onClick() {
                   openEditor(comp)
                 },
@@ -790,6 +833,8 @@ export function createVisualizationPage(React, t, post, hooks) {
                     {
                       type: 'button',
                       className: 'dvb-btn dvb-btn-sm dvb-btn-danger',
+                      disabled: vizReadOnly,
+                      title: vizReadOnly ? t('vizReadOnlyAction') : undefined,
                       onClick() {
                         removeComponent(comp.id)
                       },
@@ -813,6 +858,8 @@ export function createVisualizationPage(React, t, post, hooks) {
                   {
                     type: 'button',
                     className: 'dvb-btn dvb-btn-sm dvb-btn-danger',
+                    disabled: vizReadOnly,
+                    title: vizReadOnly ? t('vizReadOnlyAction') : undefined,
                     onClick() {
                       setDeleteId(comp.id)
                     },
@@ -878,7 +925,8 @@ export function createVisualizationPage(React, t, post, hooks) {
               {
                 type: 'button',
                 className: 'dvb-btn dvb-btn-primary',
-                disabled: !cwd,
+                disabled: !cwd || vizReadOnly,
+                title: vizReadOnly ? t('vizReadOnlyAction') : undefined,
                 onClick() {
                   openEditor(null)
                 },
@@ -889,12 +937,26 @@ export function createVisualizationPage(React, t, post, hooks) {
       ),
       copied ? el('div', { className: 'dvb-hint' }, copied) : null,
       note ? el('div', { className: 'dvb-hint' }, note) : null,
+      vizReadOnly
+        ? el(
+            'div',
+            {
+              className: 'dvb-panel dvb-viz-readonly',
+              role: 'status',
+              'aria-live': 'polite',
+            },
+            el('div', { className: 'dvb-viz-readonly-title' }, t('vizReadOnlyTitle')),
+            vizReadOnlyReason ? el('div', { className: 'dvb-hint' }, vizReadOnlyReason) : null,
+            el('div', { className: 'dvb-hint' }, t('vizReadOnlyHint')),
+          )
+        : null,
       el(
         VizGrid,
         {
           columns: viz.columns || VIZ_GRID_COLUMNS,
           items: components.map((c) => ({ id: c.id, ...layoutOf(c) })),
-          onLayout: persistLayout,
+          readOnly: vizReadOnly,
+          onLayout: vizReadOnly ? undefined : persistLayout,
         },
         components.map((comp) => {
           const lay = layoutOf(comp)
@@ -931,7 +993,8 @@ export function createVisualizationPage(React, t, post, hooks) {
               {
                 type: 'button',
                 className: 'dvb-btn dvb-btn-primary',
-                disabled: !cwd || !pointOptions.length,
+                disabled: !cwd || !pointOptions.length || vizReadOnly,
+                title: vizReadOnly ? t('vizReadOnlyAction') : undefined,
                 onClick() {
                   openEditor(null)
                 },
@@ -1083,7 +1146,8 @@ export function createVisualizationPage(React, t, post, hooks) {
                 {
                   type: 'button',
                   className: 'dvb-btn dvb-btn-primary',
-                  disabled: saving || !editorCheck.ok,
+                  disabled: saving || !editorCheck.ok || vizReadOnly,
+                  title: vizReadOnly ? t('vizReadOnlyAction') : undefined,
                   onClick: saveComponent,
                 },
                 saving ? '保存中…' : editor.id ? t('vizSave') || '保存修改' : t('vizCreate') || '创建组件',

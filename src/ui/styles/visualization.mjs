@@ -78,6 +78,10 @@ export const VISUALIZATION_CSS = [
     ATTR +
     '] .dvb-viz-picker-opt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 2px;font-size:12px}',
   'body[' + ATTR + '] .dvb-viz-grid{min-height:120px}',
+  'body[' +
+    ATTR +
+    '] .dvb-viz-readonly{display:flex;flex-direction:column;gap:4px;border-color:rgba(180,83,9,.45);background:rgba(180,83,9,.06)}',
+  'body[' + ATTR + '] .dvb-viz-readonly-title{font-size:13px;font-weight:600}',
   'body[' + ATTR + '] .dvb-viz-grid-fallback{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:8px}',
   'body[' + ATTR + '] .dvb-viz-grid-fallback > .grid-stack-item{grid-column:span var(--dvb-w,6);min-width:0}',
   'body[' +

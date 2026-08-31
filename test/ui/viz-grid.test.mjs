@@ -59,8 +59,9 @@ function installFake() {
     },
   }
   const GridStack = {
-    init() {
-      calls.push(['init'])
+    init(opts) {
+      calls.push(['init', opts])
+      grid.lastOpts = opts
       return grid
     },
   }
@@ -114,6 +115,48 @@ test('external sync does not echo onLayout; drag does submit layout', () => {
   tree.unmount()
   assert.ok(calls.some((row) => row[0] === 'off'))
   assert.ok(calls.some((row) => row[0] === 'destroy' && row[1] === false))
+})
+
+test('readOnly=true initializes GridStack as static', () => {
+  const { calls, grid } = installFake()
+  const Grid = createVizGrid(React)
+  const tree = render(
+    createElement(
+      Grid,
+      { columns: 12, readOnly: true, items: [{ id: 'a', x: 0, y: 0, w: 3, h: 3 }], onLayout() {} },
+      createElement('div', { className: 'grid-stack-item', 'gs-id': 'a' }),
+    ),
+  )
+  const init = calls.find((row) => row[0] === 'init')
+  assert.equal(init[1].staticGrid, true)
+  assert.equal(init[1].disableDrag, true)
+  assert.equal(init[1].disableResize, true)
+  assert.equal(grid.lastOpts.staticGrid, true)
+  assert.equal(tree.container.querySelector('.dvb-viz-grid').getAttribute('data-readonly'), 'true')
+  tree.unmount()
+})
+
+test('readOnly GridStack ignores change events', () => {
+  const { grid } = installFake()
+  const layouts = []
+  const Grid = createVizGrid(React)
+  const tree = render(
+    createElement(
+      Grid,
+      {
+        columns: 12,
+        readOnly: true,
+        items: [{ id: 'a', x: 0, y: 0, w: 3, h: 3 }],
+        onLayout(items) {
+          layouts.push(items)
+        },
+      },
+      createElement('div', { className: 'grid-stack-item', 'gs-id': 'a' }),
+    ),
+  )
+  grid.emit([{ id: 'a', x: 4, y: 0, w: 3, h: 3, el: tree.container.querySelector('.grid-stack-item') }])
+  assert.equal(layouts.length, 0)
+  tree.unmount()
 })
 
 test('removing a component uses removeWidget(el, false)', () => {

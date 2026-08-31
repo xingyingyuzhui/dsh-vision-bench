@@ -18,6 +18,8 @@ export function createVizGrid(React) {
     const onLayoutRef = React.useRef(props.onLayout)
     onLayoutRef.current = props.onLayout
     const syncingRef = React.useRef(false)
+    const readOnlyRef = React.useRef(props.readOnly === true)
+    readOnlyRef.current = props.readOnly === true
     const items = Array.isArray(props.items) ? props.items : []
     const signature = layoutSignature(items)
 
@@ -34,11 +36,15 @@ export function createVizGrid(React) {
           animate: false,
           handle: '.dvb-viz-drag',
           disableOneColumnMode: false,
+          staticGrid: props.readOnly === true,
+          disableDrag: props.readOnly === true,
+          disableResize: props.readOnly === true,
         },
         host,
       )
       gridRef.current = grid
       const onChange = (_ev, changed) => {
+        if (readOnlyRef.current) return
         if (syncingRef.current) return
         if (typeof onLayoutRef.current !== 'function' || !changed || !changed.length) return
         onLayoutRef.current(
@@ -61,7 +67,7 @@ export function createVizGrid(React) {
         } catch {}
         gridRef.current = null
       }
-    }, [props.columns])
+    }, [props.columns, props.readOnly])
 
     useLayout(() => {
       const grid = gridRef.current
@@ -97,6 +103,8 @@ export function createVizGrid(React) {
       {
         className: GridStack ? 'grid-stack dvb-viz-grid' : 'dvb-viz-grid dvb-viz-grid-fallback',
         ref: hostRef,
+        'data-readonly': props.readOnly ? 'true' : 'false',
+        'aria-readonly': props.readOnly ? 'true' : undefined,
       },
       props.children,
     )
