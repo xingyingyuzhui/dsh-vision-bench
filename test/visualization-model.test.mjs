@@ -7,9 +7,11 @@ import {
   defaultComponentLayout,
   emptyVisualization,
   findComponent,
+  migrateVisualizationToV2,
   monitoredPointOptions,
   normalizeVisualization,
   normalizeVisualizationComponent,
+  normalizeVisualizationForRead,
   parseVisualizationLayoutItems,
   validateVisualizationComponent,
   visualizationComponentStatus,
@@ -157,6 +159,7 @@ test('monitoredPointOptions 只列监视点位并带限定路径', async () => {
 test('emptyVisualization / componentUsesPoint', async () => {
   const v = emptyVisualization()
   assert.equal(v.schemaVersion, 2)
+  assert.equal(v.minimumPluginVersion, '0.25.1')
   assert.equal(v.columns, 12)
   assert.deepEqual(v.components, [])
   assert.equal(componentUsesPoint({ pointIds: ['p1', 'p2'] }, 'p2'), true)
@@ -171,13 +174,17 @@ test('schema v1 migrates to v2 with default layout; modbus version is not visual
       { id: 'viz_b', name: '数值', type: 'value', pointIds: ['p2'] },
     ],
   }
-  const v2 = normalizeVisualization(v1, pts([{ id: 'p1' }, { id: 'p2' }]))
+  const read = normalizeVisualizationForRead(v1, pts([{ id: 'p1' }, { id: 'p2' }]))
+  assert.equal(read.schemaVersion, 1, 'read path must not rewrite v1 to v2')
+  assert.deepEqual(read.components[0].layout, defaultComponentLayout(0, 'line'))
+  const v2 = migrateVisualizationToV2(v1, pts([{ id: 'p1' }, { id: 'p2' }]))
   assert.equal(v2.schemaVersion, 2)
   assert.equal(v2.columns, 12)
+  assert.equal(v2.minimumPluginVersion, '0.25.1')
   assert.equal(v2.components[0].id, 'viz_a')
   assert.deepEqual(v2.components[0].layout, defaultComponentLayout(0, 'line'))
   assert.deepEqual(v2.components[1].layout, defaultComponentLayout(1, 'value'))
-  const kept = normalizeVisualization(
+  const kept = normalizeVisualizationForRead(
     {
       schemaVersion: 2,
       components: [{ id: 'viz_a', type: 'line', pointIds: ['p1'], layout: { x: 3, y: 2, w: 4, h: 5 } }],

@@ -7,11 +7,12 @@ import { requireWorkspaceCwd } from '../../../bench-paths.mjs'
 import { listConnectionStates } from '../../../bench-serial-monitor.mjs'
 import { normalizeWorkspace, workspaceKey } from '../../../bench-store.mjs'
 import {
+  migrateVisualizationToV2,
   normalizeComponentLayout,
-  normalizeVisualization,
   normalizeVisualizationComponent,
   parseVisualizationLayoutItems,
   validateVisualizationComponent,
+  visualizationSchemaGuard,
 } from '../../../bench-visualization-model.mjs'
 import { explicitId, parseOperation } from '../../domain/config/config-operation.mjs'
 import { ERROR_CODES, fail } from '../../domain/modbus/errors.mjs'
@@ -387,7 +388,11 @@ function finishPoints(workspace, changedPointIds, summary) {
  */
 function applyVisualization(workspace, op, target, value) {
   const pack = workspace.modbus
-  const viz = normalizeVisualization(pack.visualization, pack.points)
+  const guard = visualizationSchemaGuard(pack.visualization)
+  if (!guard.ok) return { ok: false, errorCode: guard.errorCode, error: guard.error }
+  const migrated = migrateVisualizationToV2(pack.visualization, pack.points)
+  if (migrated && migrated.ok === false) return migrated
+  const viz = migrated
   const id = explicitId(target.visualizationId || value.visualizationId || value.id || value.component?.id)
   if (op === 'add') {
     const cand = normalizeVisualizationComponent({ ...(value.component || value), id: '' })

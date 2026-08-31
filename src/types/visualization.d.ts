@@ -11,8 +11,12 @@ export type VisualizationLayoutBox = {
 
 export type VisualizationDocument = {
   schemaVersion: number
+  minimumPluginVersion?: string
   columns?: number
   components: VisualizationComponent[]
+  unsupported?: boolean
+  errorCode?: string
+  error?: string
 }
 
 export type VisualizationLayoutItem = VisualizationLayoutBox & {

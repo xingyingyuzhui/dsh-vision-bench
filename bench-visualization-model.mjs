@@ -6,6 +6,7 @@
 // 类型：line（1–8 个监视点位）/ bar（1–16）/ value（1）/ switch（1 个可写 FC01 点位）。
 // 组件引用使用稳定 pointId；点位关闭监视或被删除时组件保留并进入 degraded 状态。
 export const VISUALIZATION_SCHEMA_VERSION = 2
+export const VISUALIZATION_MINIMUM_PLUGIN_VERSION = '0.25.1'
 export const VIZ_GRID_COLUMNS = 12
 export const MAX_COMPONENTS = 32
 export const MAX_COMPONENT_NAME = 40
@@ -36,9 +37,101 @@ const vizIds = (value) => {
 
 export const emptyVisualization = () => ({
   schemaVersion: VISUALIZATION_SCHEMA_VERSION,
+  minimumPluginVersion: VISUALIZATION_MINIMUM_PLUGIN_VERSION,
   columns: VIZ_GRID_COLUMNS,
   components: [],
 })
+
+function cmpPluginVersion(a, b) {
+  const pa = String(a || '0')
+    .split('.')
+    .map((n) => parseInt(n, 10) || 0)
+  const pb = String(b || '0')
+    .split('.')
+    .map((n) => parseInt(n, 10) || 0)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0)
+    if (d) return d
+  }
+  return 0
+}
+
+export function visualizationSchemaGuard(input) {
+  const src = input && typeof input === 'object' ? input : {}
+  const ver = Number(src.schemaVersion) || 1
+  if (ver > VISUALIZATION_SCHEMA_VERSION) {
+    return {
+      ok: false,
+      errorCode: 'VIZ_SCHEMA_UNSUPPORTED',
+      error: `不支持的可视化 schemaVersion ${ver}，当前只读`,
+    }
+  }
+  const min = String(src.minimumPluginVersion || '').trim()
+  if (min && cmpPluginVersion(min, VISUALIZATION_MINIMUM_PLUGIN_VERSION) > 0) {
+    return {
+      ok: false,
+      errorCode: 'VIZ_SCHEMA_UNSUPPORTED',
+      error: `需要插件 ${min} 或更高，当前只读`,
+    }
+  }
+  return { ok: true, schemaVersion: ver }
+}
+
+function componentsForRead(src) {
+  const components = Array.isArray(src.components) ? src.components : []
+  const seen = new Set()
+  const out = []
+  for (const raw of components) {
+    const c = normalizeVisualizationComponent(raw, out.length)
+    if (seen.has(c.id)) continue
+    seen.add(c.id)
+    out.push(c)
+    if (out.length >= MAX_COMPONENTS) break
+  }
+  return out
+}
+
+/** Read path: keep v1 on disk shape, only fill in-memory layouts. Never writes schemaVersion 2. */
+export function normalizeVisualizationForRead(input, points) {
+  void points
+  const src = input && typeof input === 'object' ? input : {}
+  const guard = visualizationSchemaGuard(src)
+  if (!guard.ok) {
+    return {
+      schemaVersion: Number(src.schemaVersion) || 1,
+      minimumPluginVersion: src.minimumPluginVersion || '',
+      columns: Number(src.columns) || VIZ_GRID_COLUMNS,
+      components: Array.isArray(src.components) ? src.components : [],
+      unsupported: true,
+      errorCode: guard.errorCode,
+      error: guard.error,
+    }
+  }
+  const components = componentsForRead(src)
+  if (guard.schemaVersion <= 1) {
+    return { schemaVersion: 1, components }
+  }
+  return {
+    schemaVersion: VISUALIZATION_SCHEMA_VERSION,
+    minimumPluginVersion: src.minimumPluginVersion || VISUALIZATION_MINIMUM_PLUGIN_VERSION,
+    columns: VIZ_GRID_COLUMNS,
+    components,
+  }
+}
+
+/** Explicit config write path: v1 → v2 with columns and minimumPluginVersion. */
+export function migrateVisualizationToV2(input, points) {
+  const src = input && typeof input === 'object' ? input : {}
+  const guard = visualizationSchemaGuard(src)
+  if (!guard.ok) return { ok: false, errorCode: guard.errorCode, error: guard.error }
+  const read = normalizeVisualizationForRead(src, points)
+  return {
+    schemaVersion: VISUALIZATION_SCHEMA_VERSION,
+    minimumPluginVersion: VISUALIZATION_MINIMUM_PLUGIN_VERSION,
+    columns: VIZ_GRID_COLUMNS,
+    components: read.components || [],
+  }
+}
 
 export function defaultComponentLayout(index, type) {
   const i = Number.isInteger(index) && index >= 0 ? index : 0
@@ -144,21 +237,8 @@ export const normalizeVisualizationComponent = (input, index = 0) => {
   }
 }
 
-export const normalizeVisualization = (input, points) => {
-  const src = input && typeof input === 'object' ? input : {}
-  const components = Array.isArray(src.components) ? src.components : []
-  const seen = new Set()
-  const out = []
-  for (const raw of components) {
-    const c = normalizeVisualizationComponent(raw, out.length)
-    if (seen.has(c.id)) continue
-    seen.add(c.id)
-    out.push(c)
-    if (out.length >= MAX_COMPONENTS) break
-  }
-  void points
-  return { schemaVersion: VISUALIZATION_SCHEMA_VERSION, columns: VIZ_GRID_COLUMNS, components: out }
-}
+/** @deprecated Use normalizeVisualizationForRead for loads and migrateVisualizationToV2 for writes. */
+export const normalizeVisualization = (input, points) => normalizeVisualizationForRead(input, points)
 
 // 校验：类型数量限制、switch 只接受可写 FC01 监视点位、只关联已监视点位。
 export const validateVisualizationComponent = (component, points) => {

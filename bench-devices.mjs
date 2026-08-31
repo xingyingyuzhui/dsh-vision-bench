@@ -3,7 +3,7 @@
 
 import { normalizeAlarmState } from './bench-alarm.mjs'
 import { functionTag, normalizePoints, normalizeValueRec } from './bench-points.mjs'
-import { emptyVisualization, normalizeVisualization } from './bench-visualization-model.mjs'
+import { emptyVisualization, normalizeVisualizationForRead } from './bench-visualization-model.mjs'
 const TREND_KEEP_LOCAL = 600
 const normalizeTrendByPoint = (input) => {
   if (!input || typeof input !== 'object') return {}
@@ -649,7 +649,7 @@ export function normalizeModbus(input) {
     // TaskP0/0.20.0: 可视化组件（缺失/失效引用只做诊断，不清除用户配置）
     const visualization =
       src.visualization && typeof src.visualization === 'object'
-        ? normalizeVisualization(src.visualization, points)
+        ? normalizeVisualizationForRead(src.visualization, points)
         : emptyVisualization()
     // active ids
     let activeConnectionId = devText(src.activeConnectionId, '')

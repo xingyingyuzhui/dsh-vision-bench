@@ -3,10 +3,13 @@ import { existsSync } from 'node:fs'
 import { backupFileSync, readJsonSync, writeJsonAtomicSync } from './atomic-json.mjs'
 import { runExclusive, runExclusiveSync } from './workspace-lock.mjs'
 import {
+  backupPreVisualizationV2,
   legacyWorkspaceFile,
   listWorkspaceKeys as listKeysOnDisk,
   loadV4Workspace,
   migrateLegacyWorkspace,
+  migrationMarkerPath,
+  saveV4Runtime,
   saveV4Workspace,
   workspaceDir,
 } from './workspace-migration.mjs'
@@ -54,7 +57,18 @@ export function createWorkspaceRepository(deps) {
     }
     const dir = workspaceDir(home, key)
     saveV4Workspace(dir, workspace)
-    writeJsonAtomicSync(legacyWorkspaceFile(home, key), workspace)
+    if (!existsSync(migrationMarkerPath(dir))) {
+      writeJsonAtomicSync(legacyWorkspaceFile(home, key), workspace)
+    }
+  }
+
+  const persistRuntime = (key, workspace) => {
+    const dir = workspaceDir(home, key)
+    if (existsSync(migrationMarkerPath(dir))) {
+      saveV4Runtime(dir, workspace)
+      return
+    }
+    persist(key, workspace)
   }
 
   /** @param {any} key */
@@ -146,6 +160,26 @@ export function createWorkspaceRepository(deps) {
       const normalized = normalizeWorkspace(workspace)
       const nextVersion = previousConfigVersion + 1
       normalized.modbus = { ...normalized.modbus, configVersion: nextVersion }
+      const prevViz = Number(current?.modbus?.visualization?.schemaVersion) || 1
+      const nextViz = Number(normalized?.modbus?.visualization?.schemaVersion) || 1
+      if (normalized?.modbus?.visualization?.unsupported) {
+        const { unsupported, errorCode, error, ...viz } = normalized.modbus.visualization
+        void unsupported
+        void errorCode
+        void error
+        normalized.modbus.visualization = viz
+      }
+      if (prevViz < 2 && nextViz >= 2) {
+        const backed = backupPreVisualizationV2(workspaceDir(home, key), current)
+        if (!backed.ok) {
+          return {
+            ok: false,
+            errorCode: 'VIZ_MIGRATION_BACKUP_FAILED',
+            error: backed.error || '可视化 v2 备份失败',
+            previousConfigVersion,
+          }
+        }
+      }
       try {
         persist(key, normalized)
       } catch (error) {
@@ -186,9 +220,13 @@ export function createWorkspaceRepository(deps) {
     const raw = next.workspace || next
     const merged = applyRuntimeOnly(current, raw)
     const workspace = normalizeWorkspace(merged)
-    workspace.modbus = { ...workspace.modbus, configVersion: previousConfigVersion }
+    workspace.modbus = {
+      ...workspace.modbus,
+      configVersion: previousConfigVersion,
+      visualization: current.modbus?.visualization,
+    }
     try {
-      persist(key, workspace)
+      persistRuntime(key, workspace)
     } catch (error) {
       return {
         ok: false,

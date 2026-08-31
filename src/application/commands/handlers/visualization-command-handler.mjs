@@ -17,6 +17,14 @@ export async function handleVisualizationCommand(home, args, room, origin, opts)
   const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
   const cv = pack.configVersion || 1
   const viz = pack.visualization || { schemaVersion: 2, components: [] }
+  if (viz.unsupported) {
+    return {
+      ok: false,
+      action,
+      errorCode: viz.errorCode || 'VIZ_SCHEMA_UNSUPPORTED',
+      error: viz.error || '可视化 schema 只读',
+    }
+  }
   const op = String(args.op || 'list')
   const id = String(args.visualizationId || args.id || '').trim()
   const byId = new Map(pack.points.map((/** @type {any} */ x) => [x.id, x]))

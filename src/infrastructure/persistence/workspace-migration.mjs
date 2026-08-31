@@ -1,7 +1,13 @@
 // @ts-check
-import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { backupFileSync, readJsonSync, writeJsonAtomicSync, writeTextAtomicSync } from './atomic-json.mjs'
+import {
+  backupFileOnceSync,
+  backupFileSync,
+  readJsonSync,
+  writeJsonAtomicSync,
+  writeTextAtomicSync,
+} from './atomic-json.mjs'
 
 export const WORKSPACE_LAYOUT_VERSION = 4
 
@@ -10,6 +16,26 @@ export const WORKSPACE_LAYOUT_VERSION = 4
  * @param {any} workspace
  * @returns {any}
  */
+function persistableVisualization(viz) {
+  const src = viz && typeof viz === 'object' ? viz : { schemaVersion: 1, components: [] }
+  if (Number(src.schemaVersion) > 1) {
+    const { unsupported, error, errorCode, ...out } = src
+    void unsupported
+    void error
+    void errorCode
+    return out
+  }
+  return {
+    schemaVersion: 1,
+    components: (Array.isArray(src.components) ? src.components : []).map((item) => {
+      if (!item || typeof item !== 'object') return item
+      const { layout, ...rest } = item
+      void layout
+      return rest
+    }),
+  }
+}
+
 export function splitWorkspaceParts(workspace) {
   const modbus = workspace?.modbus || {}
   const config = {
@@ -23,7 +49,7 @@ export function splitWorkspaceParts(workspace) {
       devices: modbus.devices || [],
       points: modbus.points || [],
       pollingByConnection: modbus.pollingByConnection || {},
-      visualization: modbus.visualization || { schemaVersion: 2, columns: 12, components: [] },
+      visualization: persistableVisualization(modbus.visualization),
       activeConnectionId: modbus.activeConnectionId || '',
       activeDeviceId: modbus.activeDeviceId || '',
     },
@@ -193,6 +219,50 @@ export function saveV4Workspace(dir, workspace) {
   }
   const journal = join(dir, 'journal.jsonl')
   if (!existsSync(journal)) writeTextAtomicSync(journal, '')
+}
+
+export function saveV4Runtime(dir, workspace) {
+  mkdirSync(dir, { recursive: true })
+  const { runtime } = splitWorkspaceParts(workspace)
+  writeJsonAtomicSync(join(dir, 'runtime.json'), runtime)
+}
+
+export function preVisualizationV2BackupPath(dir) {
+  return join(dir, 'config.pre-visualization-v2.bak.json')
+}
+
+export function backupPreVisualizationV2(dir, currentWorkspace) {
+  const bak = preVisualizationV2BackupPath(dir)
+  try {
+    if (existsSync(bak) && !statSync(bak).isFile()) {
+      return { ok: false, errorCode: 'VIZ_MIGRATION_BACKUP_FAILED', error: 'backup path is not a file', path: bak }
+    }
+  } catch {
+    return { ok: false, errorCode: 'VIZ_MIGRATION_BACKUP_FAILED', error: 'backup path unreadable', path: bak }
+  }
+  if (existsSync(bak)) return { ok: true, existed: true, path: bak }
+  mkdirSync(dir, { recursive: true })
+  const configPath = join(dir, 'config.json')
+  try {
+    if (existsSync(configPath)) {
+      const copied = backupFileOnceSync(configPath, bak)
+      if (!copied.ok) return { ok: false, errorCode: 'VIZ_MIGRATION_BACKUP_FAILED', error: copied.error, path: bak }
+    } else {
+      const { config } = splitWorkspaceParts(currentWorkspace)
+      writeJsonAtomicSync(bak, config)
+    }
+    if (!existsSync(bak)) {
+      return { ok: false, errorCode: 'VIZ_MIGRATION_BACKUP_FAILED', error: 'backup missing after copy', path: bak }
+    }
+    return { ok: true, existed: false, path: bak }
+  } catch (error) {
+    return {
+      ok: false,
+      errorCode: 'VIZ_MIGRATION_BACKUP_FAILED',
+      error: error instanceof Error ? error.message : String(error),
+      path: bak,
+    }
+  }
 }
 
 /**

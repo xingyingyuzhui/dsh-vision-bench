@@ -1,5 +1,5 @@
 // @ts-check
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync } from 'node:fs'
 import { dirname } from 'node:path'
 import writeFileAtomic from 'write-file-atomic'
 
@@ -49,6 +49,33 @@ export function backupFileSync(filePath, bakPath) {
   mkdirSync(dirname(bakPath), { recursive: true })
   copyFileSync(filePath, bakPath)
   return true
+}
+
+/** Atomic copy that never overwrites an existing backup. */
+function isRegularFile(filePath) {
+  try {
+    return statSync(filePath).isFile()
+  } catch {
+    return false
+  }
+}
+
+export function backupFileOnceSync(filePath, bakPath) {
+  if (isRegularFile(bakPath)) return { ok: true, existed: true }
+  if (existsSync(bakPath)) return { ok: false, error: 'backup path is not a file' }
+  if (!existsSync(filePath)) return { ok: false, error: 'source missing' }
+  mkdirSync(dirname(bakPath), { recursive: true })
+  const tmp = `${bakPath}.${process.pid}.tmp`
+  copyFileSync(filePath, tmp)
+  if (existsSync(bakPath)) {
+    try {
+      unlinkSync(tmp)
+    } catch {}
+    return { ok: true, existed: true }
+  }
+  renameSync(tmp, bakPath)
+  if (!existsSync(bakPath)) return { ok: false, error: 'backup missing after copy' }
+  return { ok: true, existed: false }
 }
 
 /**
