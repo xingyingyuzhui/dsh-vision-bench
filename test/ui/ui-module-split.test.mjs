@@ -25,6 +25,10 @@ test('UI facades re-export split pages', () => {
   assert.match(map, /src\/ui\/debug\/project\/project-page\.mjs/)
   assert.match(live, /src\/ui\/monitor\/alarms\/alarm-page\.mjs/)
   assert.match(live, /src\/ui\/monitor\/journal\/journal-page\.mjs/)
+  assert.doesNotMatch(live, /betterSidebar/)
+  assert.doesNotMatch(live, /registerLive/)
+  assert.doesNotMatch(map, /betterSidebar/)
+  assert.doesNotMatch(map, /registerMap/)
 })
 
 test('viz grid and echarts runtimes do not talk to Host or wrap React DOM', () => {

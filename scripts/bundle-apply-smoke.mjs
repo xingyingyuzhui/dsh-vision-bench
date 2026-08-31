@@ -83,28 +83,14 @@ const slots = {
     return () => {}
   },
 }
-const sidebar = {
-  registerTab(def) {
-    pages['tab:' + def.id] = def
-    return () => {}
-  },
-  openTab() {},
-  closeTab() {},
-  effect(fn) {
-    const d = typeof fn === 'function' ? fn() : null
-    return d
-  },
-}
-
 const ctx = {
   get(key) {
     if (key === 'slots') return slots
     return null
   },
   locale: { register: () => () => {} },
-  inject(deps, fn) {
+  inject(_deps, fn) {
     fn({
-      betterSidebar: sidebar,
       effect(fn2) {
         return fn2 && fn2()
       },

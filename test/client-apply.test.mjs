@@ -81,17 +81,6 @@ function makeCtx(pages) {
       return () => {}
     },
   }
-  const sidebar = {
-    registerTab(def) {
-      pages['tab:' + def.id] = def.component
-      return () => {}
-    },
-    openTab() {},
-    closeTab() {},
-    effect(fn) {
-      return typeof fn === 'function' ? fn() : null
-    },
-  }
   return {
     pages,
     get(key) {
@@ -100,7 +89,6 @@ function makeCtx(pages) {
     locale: { register: () => () => {} },
     inject(_deps, fn) {
       fn({
-        betterSidebar: sidebar,
         effect(fn2) {
           return fn2 && fn2()
         },

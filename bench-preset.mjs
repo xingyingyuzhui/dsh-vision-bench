@@ -92,7 +92,7 @@ export const VISION_GUIDANCE = [
   '- TCP frames are protocol-normalized, not raw MBAP.',
   '- Use an existing HMI serial connection. If it is disconnected, call connect first. Never open a second serial port just to view frames; TX/RX from user, polling and Agent I/O already appear on the frames page.',
   '- Points have two independent switches: monitorEnabled (visualization data source; enable it then associate the point in a visualization component) and alarmEnabled (threshold alarms). Never conflate them.',
-  '- Visualization components are read via action=visualization (list/get) and mutated via add/update/remove. Old propose* ops return OP_REMOVED.',
+  '- Visualization components are read via action=visualization (list/get) and mutated via add/update/remove/layout. layout requires expectedConfigVersion and items[{id,x,y,w,h}]. Old propose* ops return OP_REMOVED.',
   '- Switch component writes are high-impact: they still require user confirmation and readback, exactly like point writes.',
 ].join('\n')
 
