@@ -56,8 +56,7 @@ export function createDebugWorkspace(React, t, post) {
       el(
         'div',
         { className: 'dvb-ws-body' },
-        el('div', { className: 'dvb-ws-pane', hidden: section !== DEBUG_SECTIONS.WORKBENCH }, el(WorkbenchPage, props)),
-        el('div', { className: 'dvb-ws-pane', hidden: section !== DEBUG_SECTIONS.PROJECT }, el(ProjectPage, props)),
+        section === DEBUG_SECTIONS.WORKBENCH ? el(WorkbenchPage, props) : el(ProjectPage, props),
       ),
     )
   }

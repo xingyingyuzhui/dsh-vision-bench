@@ -44,3 +44,22 @@ test('debug workspace tab click uses manual nav source', () => {
   )
   assert.match(src, /source: 'manual'/)
 })
+
+test('inactive debug section is unmounted, not hidden', () => {
+  clearNavStore()
+  const src = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../../src/ui/workspace/debug-workspace.mjs'),
+    'utf8',
+  )
+  assert.match(src, /section === DEBUG_SECTIONS.WORKBENCH/)
+  assert.doesNotMatch(src, /hidden:/)
+  const React = makeReact()
+  const Page = createDebugWorkspace(
+    React,
+    (key) => key,
+    async () => ({}),
+  )
+  const tree = Page({ sessionId: 's1', scope: { cwd: '/tmp' } })
+  const body = tree.children[1]
+  assert.equal((body.children || []).length, 1)
+})
