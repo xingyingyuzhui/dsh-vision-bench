@@ -1,52 +1,14 @@
-import { createFramesPage } from './bench-frames-view.mjs'
 import { createHmiView } from './bench-hmi.mjs'
 import { COPY, NS, interpolate, tWith } from './bench-i18n.mjs'
-import { closeBetterTab, createAlarmPage, createLogPage, createVisualizationPage, registerLive } from './bench-live.mjs'
-import { createMapView, openProjectTab, registerMap } from './bench-map.mjs'
 import { createSettingsPage, registerSettings } from './bench-settings.mjs'
-// Task15: Harness inputActions dispatch in bench-shared, runtime respects focus badgeOnly
-import {
-  clearActiveScope,
-  getActiveScope,
-  getFocusState,
-  setActiveScope,
-  shouldHighlightFocus,
-  shouldRouteFocus,
-  subscribeFocus,
-} from './bench-shared.mjs'
+import { getActiveScope, subscribeFocus } from './bench-shared.mjs'
 import { ATTR, CSS } from './bench-styles.mjs'
-import { createDebugView, registerView } from './bench-view.mjs'
-
-// Task2/0.18.4: a unified sidebar page wrapper that keeps the ACTIVE session
-// cwd authoritative (token-guarded so an unmounting stale session page never
-// wipes a newer session's scope).
-function scopedSidebarPage(React, Page, pageId) {
-  return function ScopedSidebarPage(props) {
-    const el = React.createElement
-    const cwd = (() => {
-      try {
-        if (props && props.scope && props.scope.cwd) return props.scope.cwd
-        if (props && typeof props.useSessions === 'function') {
-          return (
-            props.useSessions((s) => {
-              const cur = s && s.current
-              return (s && s.byId && cur && s.byId[cur] && s.byId[cur].cwd) || ''
-            }) || ''
-          )
-        }
-      } catch {}
-      return ''
-    })()
-    const tokenRef = React.useRef('')
-    React.useEffect(() => {
-      tokenRef.current = setActiveScope('sb-' + String(pageId) + '-' + Math.random().toString(36).slice(2, 8), cwd)
-      return () => {
-        if (tokenRef.current) clearActiveScope(tokenRef.current)
-      }
-    }, [cwd, pageId])
-    return Page(props)
-  }
-}
+import { registerView } from './bench-view.mjs'
+import { wrapVisionPage } from './src/ui/workspace/vision-page-boundary.mjs'
+import { navigate } from './src/ui/workspace/vision-navigation-store.mjs'
+import { MONITOR_SECTIONS, VIEW_HMI, VIEW_MONITOR, shouldRouteFocus } from './src/ui/workspace/vision-route.mjs'
+import { createDebugWorkspace } from './src/ui/workspace/debug-workspace.mjs'
+import { createMonitorWorkspace } from './src/ui/workspace/monitor-workspace.mjs'
 
 export function apply(ctx) {
   const React = require('react')
@@ -92,114 +54,58 @@ export function apply(ctx) {
     )
   }
 
-  let openProjectImpl = function () {}
-  let openHmiImpl = function () {}
-  let openFramesImpl = function () {}
-  let closeTabImpl = function () {}
-  function openProject() {
-    openProjectImpl()
-  }
-  function openHmi(target) {
+  function selectView(viewId) {
     try {
-      openHmiImpl(target)
+      const slotsApi = ctx.get ? ctx.get('slots') : null
+      if (slotsApi && typeof slotsApi.select === 'function') slotsApi.select('conversation.view', viewId)
     } catch {}
   }
-  function openFrames() {
-    try {
-      openFramesImpl()
-    } catch {}
-  }
-  const SettingsPage = createSettingsPage(React, t, post)
-  const DebugView = createDebugView(React, t, post, openProject)
-  const HmiView = createHmiView(React, t, post)
-  const MapPage = createMapView(React, t, post)
-  const stopSettings = registerSettings(ctx, React, t, SettingsPage)
-  const stopView = registerView(ctx, React, t, DebugView, HmiView)
 
-  if (typeof ctx.inject === 'function') {
-    ctx.inject(['betterSidebar'], (side) => {
-      // Task2/0.19.3: 上位机是会话区页面（conversation.view），尽力切换；失败静默
-      openHmiImpl = function () {
-        try {
-          const slotsApi = ctx.get ? ctx.get('slots') : null
-          if (slotsApi && typeof slotsApi.select === 'function')
-            slotsApi.select('conversation.view', 'vision-bench-hmi')
-          else if (side && typeof side.openTab === 'function') side.openTab({ type: 'dsh-vision-bench:charts' })
-        } catch {}
-      }
-      openProjectImpl = function () {
-        openProjectTab(side)
-      }
-      openFramesImpl = function () {
-        try {
-          side.openTab({ type: 'dsh-vision-bench:frames' })
-        } catch {}
-      }
-      closeTabImpl = function (id) {
-        closeBetterTab(side, id)
-      }
-      const FramesPage = createFramesPage(React, t, post, { openHmi })
-      const stopLive = registerLive(side, React, t, null, {
-        trend: scopedSidebarPage(React, createVisualizationPage(React, t, post, { openHmi }), 'trend'), // dsh-vision-bench:charts 不变的「可视化」页
-        alarm: scopedSidebarPage(React, createAlarmPage(React, t, post, { openHmi }), 'alarm'),
-        frames: scopedSidebarPage(React, FramesPage, 'frames'),
-        log: scopedSidebarPage(
-          React,
-          createLogPage(React, t, post, {
-            openHmi,
-            openFrames: () => {
-              try {
-                side.openTab({ type: 'dsh-vision-bench:frames' })
-              } catch {}
-            },
-          }),
-          'log',
-        ),
-      })
-      const stopMap = registerMap(side, React, t, scopedSidebarPage(React, MapPage, 'map'))
-      // Task1+2/0.18.4: only the ACTIVE session's foreground focus may drive the
-      // sidebar; routeKey dedup stops repeated polls from toggling tabs.
-      let lastRouteKey = ''
-      const applyFocus = (fs, changedCwd) => {
-        const decision = shouldRouteFocus({
-          activeCwd: getActiveScope().cwd,
-          changedCwd,
-          focus: fs,
-          previousRouteKey: lastRouteKey,
-        })
-        if (!decision.route) return
-        lastRouteKey = decision.routeKey
-        if (decision.tab === 'trend') {
-          try {
-            side.openTab({ type: 'dsh-vision-bench:charts' })
-          } catch {}
-        } else if (decision.tab === 'alarm') {
-          try {
-            side.openTab({ type: 'dsh-vision-bench:alarms' })
-          } catch {}
-        } else if (decision.tab === 'frames') {
-          try {
-            side.openTab({ type: 'dsh-vision-bench:frames' })
-          } catch {}
-        } else {
-          openHmi()
-        }
-      }
-      const focusUnsub = subscribeFocus('', (fs, cwd) => applyFocus(fs, cwd))
-      side.effect(() => () => {
-        try {
-          focusUnsub()
-        } catch {}
-      })
-      side.effect(() => () => {
-        if (typeof stopLive === 'function') stopLive()
-        if (typeof stopMap === 'function') stopMap()
-      })
-    })
+  function openHmi(target) {
+    const cwd = getActiveScope().cwd
+    navigate('', cwd, { viewId: VIEW_HMI, section: '', target: target || {} })
+    selectView(VIEW_HMI)
   }
+
+  function openFrames() {
+    const cwd = getActiveScope().cwd
+    navigate('', cwd, { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES })
+    selectView(VIEW_MONITOR)
+  }
+
+  const SettingsPage = createSettingsPage(React, t, post)
+  const DebugWorkspace = wrapVisionPage(React, createDebugWorkspace(React, t, post), 'debug')
+  const HmiView = wrapVisionPage(React, createHmiView(React, t, post), 'hmi')
+  const MonitorWorkspace = wrapVisionPage(
+    React,
+    createMonitorWorkspace(React, t, post, { openHmi, openFrames }),
+    'monitor',
+  )
+  const stopSettings = registerSettings(ctx, React, t, SettingsPage)
+  const stopView = registerView(ctx, React, t, DebugWorkspace, HmiView, MonitorWorkspace)
+
+  let lastRouteKey = ''
+  const applyFocus = (fs, changedCwd) => {
+    const active = getActiveScope()
+    const decision = shouldRouteFocus({
+      activeCwd: active.cwd,
+      changedCwd,
+      focus: fs,
+      previousRouteKey: lastRouteKey,
+    })
+    if (!decision.route) return
+    lastRouteKey = decision.routeKey
+    const sessionId = (fs && (fs.sessionId || (fs.request && fs.request.sessionId))) || ''
+    navigate(sessionId, active.cwd, decision)
+    selectView(decision.viewId)
+  }
+  const focusUnsub = subscribeFocus('', (fs, cwd) => applyFocus(fs, cwd))
 
   ctx.effect(() => {
     return function () {
+      try {
+        focusUnsub()
+      } catch {}
       localeDispose()
       if (typeof stopSettings === 'function') stopSettings()
       if (typeof stopView === 'function') stopView()

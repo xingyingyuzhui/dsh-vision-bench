@@ -122,8 +122,9 @@ test('frames view wires identity + virtualizer via build pipeline', async () => 
   assert.match(src, /mergeFramesDedup/, 'view should merge persisted + memory by frameId')
   assert.match(src, /vendorVirtualizer/, 'view should consume bundled Virtualizer')
   assert.match(src, /getVirtualItems|getTotalSize|measureElement/, 'view should use real Virtualizer API')
-  const build = readFileSync(join(root, 'scripts/build-client.mjs'), 'utf8')
-  assert.ok(build.indexOf('bench-frames-model.mjs') >= 0, 'build should include frames model module')
+  const client = readFileSync(join(root, 'client.js'), 'utf8')
+  assert.ok(client.indexOf('全部串口') >= 0, 'generated client includes frames model copy')
+  assert.ok(client.indexOf('vision-bench-monitor') >= 0, 'generated client includes monitor workspace')
 })
 
 test('cli wiring: frames/clear route exists in host', async () => {

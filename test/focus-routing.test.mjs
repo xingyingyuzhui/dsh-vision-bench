@@ -19,6 +19,8 @@ test('active=A, A foreground frame → opens frames once', async () => {
   const d1 = shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: f, previousRouteKey: '' })
   assert.equal(d1.route, true)
   assert.equal(d1.tab, 'frames')
+  assert.equal(d1.viewId, 'vision-bench-monitor')
+  assert.equal(d1.section, 'frames')
   assert.ok(d1.routeKey.includes('/w/a'))
   // identical target polled again → no re-route
   const d2 = shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/a', focus: f, previousRouteKey: d1.routeKey })
@@ -78,6 +80,14 @@ test('A and B sharing the same pointId never cross-judge', async () => {
 })
 
 test('kind mapping: point/connection/device→table, trend→trend, alarm→alarm, frame→frames', async () => {
+  const pointRoute = shouldRouteFocus({
+    activeCwd: '/w/a',
+    changedCwd: '/w/a',
+    focus: focus({ request: { pointId: 'p' } }),
+    previousRouteKey: '',
+  })
+  assert.equal(pointRoute.tab, 'table')
+  assert.equal(pointRoute.viewId, 'vision-bench-hmi')
   assert.equal(
     shouldRouteFocus({
       activeCwd: '/w/a',
@@ -149,6 +159,8 @@ test('P4/0.20.0: visualizationId routes to the charts tab (trend bucket)', async
   const d1 = shouldRouteFocus({ activeCwd: 'A', changedCwd: 'A', focus: fs, previousRouteKey: '' })
   assert.equal(d1.route, true)
   assert.equal(d1.tab, 'trend', 'visualization 路由到 charts tab')
+  assert.equal(d1.viewId, 'vision-bench-monitor')
+  assert.equal(d1.section, 'visualization')
   const d2 = shouldRouteFocus({ activeCwd: 'A', changedCwd: 'A', focus: fs, previousRouteKey: d1.routeKey })
   assert.equal(d2.route, false, '同一 visualizationId 去重')
 })

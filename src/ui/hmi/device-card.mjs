@@ -65,7 +65,7 @@ export function renderDeviceCards(el, t, ctx) {
       'div',
       { className: 'dvb-panel-head' },
       el('span', { className: 'dvb-panel-title' }, '设备 · ' + (activeConnObj ? activeConnObj.name : '')),
-      el('span', { className: 'dvb-tag', title: '插件版本；改 client 后需重启 dsh web' }, 'v0.22.0'),
+      el('span', { className: 'dvb-tag', title: '插件版本；改 client 后需重启 dsh web' }, 'v0.23.0'),
       el('span', { className: 'dvb-tag' }, activeDevices.length + ' 个设备 · ' + points.length + ' 个点位'),
       el(
         'button',

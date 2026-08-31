@@ -31,8 +31,11 @@ test('bench-shared is a re-export facade only', async () => {
 
 test('internal runtime uses createVisualizationPage (not createTrendPage)', async () => {
   const runtime = readFileSync(join(root, 'bench-runtime.mjs'), 'utf8')
-  assert.match(runtime, /createVisualizationPage/)
+  const monitor = readFileSync(join(root, 'src/ui/workspace/monitor-workspace.mjs'), 'utf8')
+  assert.match(monitor, /createVisualizationPage/)
   assert.doesNotMatch(runtime, /createTrendPage/)
+  assert.doesNotMatch(runtime, /betterSidebar/)
+  assert.match(runtime, /vision-bench-monitor|VIEW_MONITOR|createMonitorWorkspace/)
 })
 
 test('dependency-cruiser reports zero circular dependencies for UI graph', async () => {

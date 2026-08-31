@@ -119,7 +119,15 @@ test('every registered bench page mounts without runtime errors', async () => {
   const pages = {}
   mod.apply(makeCtx(pages))
   const mounted = Object.entries(pages).filter(([, comp]) => typeof comp === 'function')
-  assert.ok(mounted.length >= 7, 'expected at least 7 mounted pages, got ' + mounted.length)
+  assert.ok(pages['vision-bench-debug'], 'debug workspace registered')
+  assert.ok(pages['vision-bench-hmi'], 'hmi workspace registered')
+  assert.ok(pages['vision-bench-monitor'], 'monitor workspace registered')
+  assert.equal(
+    Object.keys(pages).filter((id) => id.startsWith('tab:')).length,
+    0,
+    'must not register Vision sidebar tabs',
+  )
+  assert.ok(mounted.length >= 3, 'expected at least 3 mounted pages, got ' + mounted.length)
   for (const [id, comp] of mounted) {
     let tree = null
     assert.doesNotThrow(() => {

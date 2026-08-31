@@ -1103,7 +1103,7 @@ export function createDebugView(React, t, post, openProject) {
   }
 }
 
-export function registerView(ctx, React, t, DebugPage, HmiPage) {
+export function registerView(ctx, React, t, DebugPage, HmiPage, MonitorPage) {
   const slots = ctx.get ? ctx.get('slots') : ctx.slots
   if (slots == null || React == null) return function () {}
   const stopDebug = slots.inject('conversation.view', function () {
@@ -1134,8 +1134,25 @@ export function registerView(ctx, React, t, DebugPage, HmiPage) {
       HmiPage,
     )
   })
+  const stopMonitor =
+    MonitorPage &&
+    slots.inject('conversation.view', function () {
+      return slots.register(
+        {
+          name: 'conversation.view',
+          id: 'vision-bench-monitor',
+          order: 22,
+          locale: NS,
+          label() {
+            return t('tabMonitor')
+          },
+        },
+        MonitorPage,
+      )
+    })
   return function () {
     if (typeof stopDebug === 'function') stopDebug()
     if (typeof stopHmi === 'function') stopHmi()
+    if (typeof stopMonitor === 'function') stopMonitor()
   }
 }

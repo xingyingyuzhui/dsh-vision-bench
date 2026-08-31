@@ -3,23 +3,28 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { pluginBodyOf } from '../scripts/build-client.mjs'
+import { pluginBodyOf, sha256Text } from '../scripts/build-client.mjs'
 import { installDomStub } from './dom-stub.mjs'
 
 const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'client.js'), 'utf8')
 
 test('generated client keeps the factory contract', async () => {
+  const q = `['"]`
   assert.match(src, /Do not edit by hand/)
-  assert.match(src, /id: 'dsh-vision-bench'/)
-  assert.match(src, /inject = \['slots'\]/)
-  assert.match(src, /return module\.exports/)
+  assert.match(src, new RegExp(`id:\\s*${q}dsh-vision-bench${q}`))
+  assert.match(src, /inject: \['slots'\]/)
+  assert.match(src, /apply: DvbClient\.apply/)
+  assert.match(src, /var DvbClient =/)
+  assert.doesNotMatch(src, /stripModule/)
   assert.match(src, /settings\.section/)
   assert.match(src, /conversation\.view/)
-  assert.match(src, /id: 'vision-bench-debug'/)
+  assert.match(src, new RegExp(`id:\\s*${q}vision-bench-debug${q}`))
   assert.match(src, /dvb-split/)
-  assert.match(src, /id: 'vision-bench-hmi'/)
-  assert.match(src, /tabDebug: '调试'/)
-  assert.match(src, /tabHmi: '上位机'/)
+  assert.match(src, new RegExp(`id:\\s*${q}vision-bench-hmi${q}`))
+  assert.match(src, new RegExp(`id:\\s*${q}vision-bench-monitor${q}`))
+  assert.match(src, new RegExp(`tabDebug:\\s*${q}调试${q}`))
+  assert.match(src, new RegExp(`tabHmi:\\s*${q}上位机${q}`))
+  assert.match(src, new RegExp(`tabMonitor:\\s*${q}监控${q}`))
   assert.match(src, /fs\/list/)
   assert.match(src, /keil\/build/)
   assert.match(src, /modbus\/read/)
@@ -27,21 +32,17 @@ test('generated client keeps the factory contract', async () => {
   assert.match(src, /agentBuilding/)
   assert.match(src, /needBindingsBuild/)
   assert.match(src, /serial\/ports/)
-  assert.match(src, /30000/)
   assert.match(src, /serialScan/)
   assert.match(src, /addSegment/)
-  assert.match(src, /dsh-vision-bench:modbus/)
-  assert.match(src, /dsh-vision-bench:project/)
   assert.match(src, /keil\/map/)
   assert.match(src, /projectMap/)
   assert.match(src, /include_edges/)
   assert.match(src, /后处理/)
-  assert.match(src, /registerTab/)
-  assert.match(src, /inject\(\['betterSidebar'\]/)
+  assert.doesNotMatch(src, new RegExp(`inject\\(\\s*\\[${q}betterSidebar${q}\\]`))
+  assert.doesNotMatch(src, /side\.registerTab/)
   assert.match(src, /recipePair/)
   assert.match(src, /roleSlave/)
   assert.doesNotMatch(src, /priority: -10/)
-  // Task2/0.19.3: 客户端不再自持轮询循环；采集走 Host 服务路由
   assert.match(src, /polling\/start/)
   assert.match(src, /polling\/stop/)
   assert.match(src, /liveStart/)
@@ -50,18 +51,16 @@ test('generated client keeps the factory contract', async () => {
   assert.doesNotMatch(src, /还没有任务/)
   assert.doesNotMatch(src, /空载模拟/)
   assert.doesNotMatch(src, /下一刀/)
-  assert.match(src, /functionCodeOf/)
   assert.match(src, /ptEdit/)
-  assert.match(src, /alarmOn: '告警'/)
+  assert.match(src, new RegExp(`alarmOn:\\s*${q}告警${q}`))
   assert.match(src, /--dsh-composer-side-clearance/)
   assert.match(src, /寄存器段/)
   assert.match(src, /X-DSH-Vision-Bench/)
   assert.doesNotMatch(src, /^import /m)
   assert.doesNotMatch(src, /if \(data && data\.ok === false\) throw/)
-  assert.match(src, /if \(data && data\.ok === false\) setError/)
+  assert.match(src, /setError/)
   assert.match(src, /details\.log_file/)
-  assert.match(src, /subscribeState/)
-  assert.match(src, /STATE_BUS/)
+  assert.match(src, /dsh-vision-bench\/state/)
   assert.match(src, /mapTruncated/)
   assert.doesNotMatch(src, /\.uvmpw \/ \.uvprojx/)
   assert.doesNotMatch(src, /\.uvprojx \/ \.uvmpw/)
@@ -95,11 +94,11 @@ test('generated client embeds real vendor runtime (uPlot + Virtualizer)', async 
 test('generated client contains exactly one ModuleLoader registration and no second React', async () => {
   const loads = src.match(/__ModuleLoader__\.load\(/g) || []
   assert.equal(loads.length, 1)
-  // harness React comes from require('react'); react-virtual also requires it
-  // (same harness React instance). No React SOURCE may be bundled, and there
-  // must be no require('react-dom') at all (aliased flushSync shim).
-  const reqReact = src.match(/require\(['"]react['"]\)/g) || []
-  assert.ok(reqReact.length >= 1, 'harness react required at least once')
+  // harness React comes from factory(require). Minified IIFE rewrites
+  // require("react") through a local helper that still closes over require.
+  assert.match(src, /factory\s*\(\s*require\s*\)/)
+  assert.match(src, /typeof require/)
+  assert.match(src, /\(\s*['"]react['"]\s*\)/)
   assert.doesNotMatch(src, /require\(['"]react-dom['"]\)/, 'must not require react-dom in the bundle')
   assert.doesNotMatch(src, /from\s+['"]react['"]/, 'should not contain a literal react import')
   assert.doesNotMatch(src, /node_modules\/react/, 'should not bundle React source')
@@ -110,5 +109,14 @@ test('build:check compares plugin body ignoring CRLF checkouts', () => {
   const crlf = src.replaceAll('\n', '\r\n')
   assert.notEqual(src, crlf)
   assert.equal(pluginBodyOf(src), pluginBodyOf(crlf))
-  assert.match(pluginBodyOf(src), /function apply/)
+  assert.equal(sha256Text(src), sha256Text(crlf))
+  assert.match(src, /apply: DvbClient\.apply/)
+})
+
+test('client build no longer concatenates a parts array', async () => {
+  const buildSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts/build-client.mjs'), 'utf8')
+  assert.doesNotMatch(buildSrc, /function stripModule/)
+  assert.doesNotMatch(buildSrc, /assertUniqueBindings/)
+  assert.doesNotMatch(buildSrc, /const parts = \[/)
+  assert.match(buildSrc, /src\/ui\/client\/client-entry\.mjs/)
 })

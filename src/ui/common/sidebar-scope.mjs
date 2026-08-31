@@ -45,44 +45,4 @@ export function filterByScope(list, scope, getIds) {
   })
 }
 
-export function shouldRouteFocus({ activeCwd, changedCwd, focus, previousRouteKey }) {
-  if (!activeCwd) return { route: false, routeKey: '', tab: '' }
-  if (changedCwd && changedCwd !== activeCwd) return { route: false, routeKey: previousRouteKey || '', tab: '' }
-  const fs = focus || {}
-  const req = fs.request
-  if (!req || typeof req !== 'object') return { route: false, routeKey: previousRouteKey || '', tab: '' }
-  if (fs.badgeOnly === true) return { route: false, routeKey: previousRouteKey || '', tab: '' }
-  if (fs.foreground === false && req.foreground === undefined)
-    return { route: false, routeKey: previousRouteKey || '', tab: '' }
-  // specific target ids win over the generic connection/point bucket
-  const kind =
-    fs.kind ||
-    req.kind ||
-    '' ||
-    (req.frameId ? 'frame' : '') ||
-    (req.visualizationId ? 'visualization' : '') ||
-    (req.trendKey ? 'trend' : '') ||
-    (req.alarmId ? 'alarm' : '') ||
-    (req.pointId || req.connectionId || req.deviceId ? 'point' : '') ||
-    'point'
-  // routeKey MUST include cwd and every target id so same-target polls are
-  // deduplicated and different cwds with identical ids never collide.
-  const routeKey = [
-    activeCwd,
-    kind,
-    String(req.connectionId || ''),
-    String(req.deviceId || ''),
-    String(req.pointId || ''),
-    String(req.frameId || ''),
-    String(req.trendKey || ''),
-    String(req.visualizationId || ''),
-    String(req.alarmId || ''),
-  ].join('|')
-  if (previousRouteKey && previousRouteKey === routeKey) return { route: false, routeKey, tab: '' }
-  let tab = ''
-  if (kind === 'trend' || kind === 'visualization') tab = 'trend'
-  else if (kind === 'alarm') tab = 'alarm'
-  else if (kind === 'frame') tab = 'frames'
-  else tab = 'table'
-  return { route: true, routeKey, tab }
-}
+export { shouldRouteFocus } from '../workspace/vision-route.mjs'

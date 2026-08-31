@@ -5,6 +5,8 @@ export const COPY = {
     nav: 'Vision',
     tabDebug: '调试',
     tabHmi: '上位机',
+    tabMonitor: '监控',
+    sectionWorkbench: '工作台',
     settingsTitle: '本机程序',
     settingsHint: 'Keil 仍绑定本机 UV4/Python；Modbus 与串口监视使用插件内置 Node 运行时，无需 pymodbus。',
     python: 'Python（Keil 工程脚本，可选）',
@@ -332,6 +334,8 @@ export const COPY = {
     nav: 'Vision',
     tabDebug: 'Debug',
     tabHmi: 'HMI',
+    tabMonitor: 'Monitor',
+    sectionWorkbench: 'Workbench',
     settingsTitle: 'Local programs',
     settingsHint:
       'Keil still binds local UV4/Python. Modbus and serial monitoring use the bundled Node runtime; pymodbus is not required.',

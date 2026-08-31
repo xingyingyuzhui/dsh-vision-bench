@@ -34,6 +34,7 @@ async function stylesBundle() {
     'src/ui/styles/sidebar.mjs',
     'src/ui/styles/visualization.mjs',
     'src/ui/styles/frames.mjs',
+    'src/ui/styles/workspace.mjs',
   ]
   const parts = await Promise.all(files.map((f) => src(f)))
   return parts.join('\n')
@@ -63,7 +64,14 @@ test('页面契约：无绑定 UI、无大块聚焦面板、无完整时间线�
   // Task9: full journal timeline removed from debug/hmi pages
   assert.ok(!/journalPanel\(el, t, journal\)/.test(hmi), 'hmi has no full timeline panel')
   assert.ok(!/journalPanel\(el, t, journal\)/.test(view), 'debug has no full timeline panel')
-  assert.ok(/createLogPage/.test(live), 'sidebar operation log page exists')
+  assert.ok(/createLogPage/.test(live), 'operation log page exists')
+  const runtime = await src('bench-runtime.mjs')
+  assert.ok(!/betterSidebar/.test(runtime), 'runtime no longer injects betterSidebar')
+  const monitor = await src('src/ui/workspace/monitor-workspace.mjs')
+  assert.ok(/MONITOR_SECTIONS/.test(monitor), 'monitor workspace owns sections')
+  const debugWs = await src('src/ui/workspace/debug-workspace.mjs')
+  assert.ok(/DEBUG_SECTIONS/.test(debugWs), 'debug workspace owns sections')
+  assert.ok(!/LOG:\s*'log'/.test(debugWs), 'build log stays in workbench, not a debug section')
   // Task4.3: frames page never opens a port
   assert.ok(!/\/connection\/open/.test(frames), 'frames page has no open-port call')
   assert.ok(!/打开串口/.test(frames), 'frames page has no 打开串口 button text')

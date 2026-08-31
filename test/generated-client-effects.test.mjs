@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 // rendering (non-zero rows < 50, no second React, no hook/scroll warnings).
 import { after, before, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { act, cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { Window } from 'happy-dom'
 import React from 'react'
 import { createElement } from 'react'
@@ -224,44 +224,35 @@ frames = { c1: makeFrames(5000) }
 
 test('Task10: generated client renders the real frames tab with 5000 rows (1–49) and no warnings', async () => {
   stateCalls = 0
-  // drive the REAL apply() with a fake betterSidebar to obtain the actual
-  // registered tab components from the GENERATED bundle
-  let framesPage = null
+  let monitorPage = null
   const slots = {
     inject(_name, fn) {
       const d = fn()
       return typeof d === 'function' ? d : () => {}
     },
     register(def, comp) {
-      if (def && def.id === 'dsh-vision-bench:frames') framesPage = comp
+      if (def && def.id === 'vision-bench-monitor') monitorPage = comp
       return () => {}
     },
-  }
-  const sidebar = {
-    registerTab(def) {
-      if (def && def.id === 'dsh-vision-bench:frames') framesPage = def.component
-      return () => {}
-    },
-    openTab() {},
-    closeTab() {},
-    effect() {},
   }
   const ctx = {
     get(key) {
       return key === 'slots' ? slots : null
     },
     locale: { register: () => () => {} },
-    inject(_deps, fn) {
-      fn({ betterSidebar: sidebar, effect() {} })
+    inject() {
       return () => {}
     },
     effect() {},
   }
   factoryMod.apply(ctx)
-  assert.ok(framesPage, 'generated bundle registered dsh-vision-bench:frames')
-  assert.equal(typeof framesPage, 'function')
+  assert.ok(monitorPage, 'generated bundle registered vision-bench-monitor')
+  assert.equal(typeof monitorPage, 'function')
 
-  const tree = render(createElement(framesPage, { sessionId: 's1', scope: { cwd: '/tmp/gen' }, useSessions: noop }))
+  const tree = render(createElement(monitorPage, { sessionId: 's1', scope: { cwd: '/tmp/gen' }, useSessions: noop }))
+  const framesBtn = tree.container.querySelector('[data-section="frames"]')
+  assert.ok(framesBtn, 'monitor workspace exposes frames section tab')
+  fireEvent.click(framesBtn)
   await waitFor(
     () => {
       assert.ok(stateCalls >= 1, 'generated page polls state')

@@ -53,6 +53,8 @@ test('shouldRouteFocus routes visualization to trend tab once per key', async ()
   const first = shouldRouteFocus({ activeCwd: '/ws', changedCwd: '/ws', focus, previousRouteKey: '' })
   assert.equal(first.route, true)
   assert.equal(first.tab, 'trend')
+  assert.equal(first.viewId, 'vision-bench-monitor')
+  assert.equal(first.section, 'visualization')
   const second = shouldRouteFocus({
     activeCwd: '/ws',
     changedCwd: '/ws',
