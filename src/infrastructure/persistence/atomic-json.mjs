@@ -52,6 +52,7 @@ export function backupFileSync(filePath, bakPath) {
 }
 
 /** Atomic copy that never overwrites an existing backup. */
+/** @param {any} filePath */
 function isRegularFile(filePath) {
   try {
     return statSync(filePath).isFile()
@@ -60,6 +61,7 @@ function isRegularFile(filePath) {
   }
 }
 
+/** @param {any} filePath @param {any} bakPath */
 export function backupFileOnceSync(filePath, bakPath) {
   if (isRegularFile(bakPath)) return { ok: true, existed: true }
   if (existsSync(bakPath)) return { ok: false, error: 'backup path is not a file' }

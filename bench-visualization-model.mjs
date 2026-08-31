@@ -177,12 +177,20 @@ export function validateLayoutBox(raw) {
   return { ok: true, layout: normalizeComponentLayout({ x, y, w, h }, 0, 'value') }
 }
 
+/**
+ * @param {any} items
+ * @param {any} components
+ * @returns {{ ok: true, items: { id: string, layout: { x: number, y: number, w: number, h: number } }[] } | { ok: false, errorCode: string, error: string }}
+ */
 export function parseVisualizationLayoutItems(items, components) {
   if (!Array.isArray(items) || items.length === 0) {
     return { ok: false, errorCode: 'LAYOUT_REQUIRED', error: 'layout 必须携带 items' }
   }
-  const known = new Set((Array.isArray(components) ? components : []).map((c) => c && c.id).filter(Boolean))
+  const known = new Set(
+    (Array.isArray(components) ? components : []).map((/** @type {any} */ c) => c && c.id).filter(Boolean),
+  )
   const seen = new Set()
+  /** @type {{ id: string, layout: { x: number, y: number, w: number, h: number } }[]} */
   const parsed = []
   for (const item of items) {
     const id = String((item && (item.id || item.visualizationId)) || '').trim()
@@ -191,7 +199,7 @@ export function parseVisualizationLayoutItems(items, components) {
     seen.add(id)
     const box = item && item.layout && typeof item.layout === 'object' ? item.layout : item
     const checked = validateLayoutBox(box)
-    if (!checked.ok) return checked
+    if (!checked.ok) return { ok: false, errorCode: checked.errorCode, error: checked.error }
     parsed.push({ id, layout: checked.layout })
   }
   const missing = parsed.filter((row) => !known.has(row.id))

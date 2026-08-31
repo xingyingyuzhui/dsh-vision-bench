@@ -62,7 +62,12 @@ export function createWorkspaceRepository(deps) {
     }
   }
 
+  /** @param {any} key @param {any} workspace */
   const persistRuntime = (key, workspace) => {
+    if (typeof deps.persistWorkspace === 'function') {
+      deps.persistWorkspace(key, workspace)
+      return
+    }
     const dir = workspaceDir(home, key)
     if (existsSync(migrationMarkerPath(dir))) {
       saveV4Runtime(dir, workspace)

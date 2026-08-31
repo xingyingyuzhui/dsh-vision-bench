@@ -12,10 +12,7 @@ import {
 export const WORKSPACE_LAYOUT_VERSION = 4
 
 /** Split a normalized workspace into config vs recoverable runtime. */
-/**
- * @param {any} workspace
- * @returns {any}
- */
+/** @param {any} viz @returns {any} */
 function persistableVisualization(viz) {
   const src = viz && typeof viz === 'object' ? viz : { schemaVersion: 1, components: [] }
   if (Number(src.schemaVersion) > 1) {
@@ -27,7 +24,7 @@ function persistableVisualization(viz) {
   }
   return {
     schemaVersion: 1,
-    components: (Array.isArray(src.components) ? src.components : []).map((item) => {
+    components: (Array.isArray(src.components) ? src.components : []).map((/** @type {any} */ item) => {
       if (!item || typeof item !== 'object') return item
       const { layout, ...rest } = item
       void layout
@@ -36,6 +33,7 @@ function persistableVisualization(viz) {
   }
 }
 
+/** @param {any} workspace @returns {any} */
 export function splitWorkspaceParts(workspace) {
   const modbus = workspace?.modbus || {}
   const config = {
@@ -62,6 +60,7 @@ export function splitWorkspaceParts(workspace) {
       alarmActive: modbus.alarmActive || {},
       framesByConnection: modbus.framesByConnection || {},
       trend: modbus.trend || {},
+      pollingByConnection: modbus.pollingByConnection || {},
     },
     focus: workspace?.focus || null,
     tasks: workspace?.tasks || [],
@@ -94,7 +93,7 @@ export function mergeWorkspaceParts(config, runtime) {
       connections: cfgMb.connections || [],
       devices: cfgMb.devices || [],
       points: cfgMb.points || [],
-      pollingByConnection: cfgMb.pollingByConnection || {},
+      pollingByConnection: rtMb.pollingByConnection || cfgMb.pollingByConnection || {},
       visualization: cfgMb.visualization || { schemaVersion: 2, columns: 12, components: [] },
       activeConnectionId: cfgMb.activeConnectionId || '',
       activeDeviceId: cfgMb.activeDeviceId || '',
@@ -221,16 +220,19 @@ export function saveV4Workspace(dir, workspace) {
   if (!existsSync(journal)) writeTextAtomicSync(journal, '')
 }
 
+/** @param {any} dir @param {any} workspace */
 export function saveV4Runtime(dir, workspace) {
   mkdirSync(dir, { recursive: true })
   const { runtime } = splitWorkspaceParts(workspace)
   writeJsonAtomicSync(join(dir, 'runtime.json'), runtime)
 }
 
+/** @param {any} dir */
 export function preVisualizationV2BackupPath(dir) {
   return join(dir, 'config.pre-visualization-v2.bak.json')
 }
 
+/** @param {any} dir @param {any} currentWorkspace */
 export function backupPreVisualizationV2(dir, currentWorkspace) {
   const bak = preVisualizationV2BackupPath(dir)
   try {
