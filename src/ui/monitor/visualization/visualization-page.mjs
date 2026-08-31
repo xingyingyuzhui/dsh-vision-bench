@@ -65,6 +65,9 @@ export function createVisualizationPage(React, t, post, hooks) {
     const [saving, setSaving] = React.useState(false)
     const aliveRef = React.useRef(true)
     const copyClearTimer = React.useRef(0)
+    const layoutTimer = React.useRef(0)
+    const layoutInflight = React.useRef(false)
+    const layoutQueued = React.useRef(false)
     React.useEffect(() => {
       aliveRef.current = true
       return () => {
@@ -72,6 +75,10 @@ export function createVisualizationPage(React, t, post, hooks) {
         if (copyClearTimer.current) {
           clearTimeout(copyClearTimer.current)
           copyClearTimer.current = 0
+        }
+        if (layoutTimer.current) {
+          clearTimeout(layoutTimer.current)
+          layoutTimer.current = 0
         }
       }
     }, [])
@@ -87,6 +94,7 @@ export function createVisualizationPage(React, t, post, hooks) {
     const uplotRefs = React.useRef({})
     const echartRefs = React.useRef({})
     const layoutDraft = React.useRef(null)
+    const packRef = React.useRef(null)
     const switchDraft = React.useRef(null)
     const copyToken = React.useRef(0)
 
@@ -127,6 +135,7 @@ export function createVisualizationPage(React, t, post, hooks) {
         return null
       }
     })()
+    packRef.current = pack
     const points = pack ? pack.points || [] : []
     const viz = pack
       ? pack.visualization || { schemaVersion: 2, columns: VIZ_GRID_COLUMNS, components: [] }
@@ -213,6 +222,25 @@ export function createVisualizationPage(React, t, post, hooks) {
         draft[item.id] = { x: item.x, y: item.y, w: item.w, h: item.h }
       }
       layoutDraft.current = draft
+      if (layoutTimer.current) clearTimeout(layoutTimer.current)
+      layoutTimer.current = setTimeout(() => {
+        layoutTimer.current = 0
+        flushLayout()
+      }, 300)
+    }
+
+    function flushLayout() {
+      if (!aliveRef.current) return
+      if (layoutInflight.current) {
+        layoutQueued.current = true
+        return
+      }
+      const draft = layoutDraft.current
+      if (!draft || !Object.keys(draft).length) return
+      const items = Object.keys(draft).map((id) => ({ id, ...draft[id] }))
+      const sent = { ...draft }
+      const version = packRef.current?.configVersion || 1
+      layoutInflight.current = true
       post('/dsh-vision-bench/command', {
         cwd,
         sessionId: props?.sessionId || '',
@@ -221,20 +249,44 @@ export function createVisualizationPage(React, t, post, hooks) {
         payload: {
           action: 'visualization',
           op: 'layout',
-          items: Object.keys(draft).map((id) => ({ id, ...draft[id] })),
-          expectedConfigVersion: pack.configVersion || 1,
+          items,
+          expectedConfigVersion: version,
         },
       })
         .then((data) => {
+          if (!aliveRef.current) return
           if (data && data.ok === false) {
-            setNote(
-              data.errorCode === 'CONFIG_DRIFT' ? '配置已被其他操作更新，请刷新后重试' : data.error || '布局保存失败',
-            )
+            if (data.errorCode === 'CONFIG_DRIFT') {
+              return post('/dsh-vision-bench/state', { cwd, sessionId: props?.sessionId || '' }).then((fresh) => {
+                if (!aliveRef.current) return
+                if (fresh?.workspace?.modbus) setMb(fresh.workspace.modbus)
+                layoutQueued.current = true
+              })
+            }
+            setNote(data.error || '布局保存失败')
             return
           }
           if (data?.workspace?.modbus) setMb(data.workspace.modbus)
+          const cur = layoutDraft.current || {}
+          const next = {}
+          for (const id of Object.keys(cur)) {
+            const a = cur[id]
+            const b = sent[id]
+            if (a && b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h) continue
+            next[id] = a
+          }
+          layoutDraft.current = Object.keys(next).length ? next : null
         })
-        .catch((err) => setNote(String(err?.message || '布局保存失败')))
+        .catch((err) => {
+          if (aliveRef.current) setNote(String(err?.message || '布局保存失败'))
+        })
+        .finally(() => {
+          layoutInflight.current = false
+          if (layoutQueued.current && aliveRef.current) {
+            layoutQueued.current = false
+            flushLayout()
+          }
+        })
     }
 
     function layoutOf(comp) {
@@ -841,7 +893,7 @@ export function createVisualizationPage(React, t, post, hooks) {
         VizGrid,
         {
           columns: viz.columns || VIZ_GRID_COLUMNS,
-          itemIds: components.map((c) => c.id),
+          items: components.map((c) => ({ id: c.id, ...layoutOf(c) })),
           onLayout: persistLayout,
         },
         components.map((comp) => {

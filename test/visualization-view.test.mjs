@@ -115,6 +115,22 @@ const makePost = (mb = JSON.parse(JSON.stringify(MB))) => {
       }
       if (payload.op === 'remove')
         components = components.filter((component) => component.id !== payload.visualizationId)
+      if (payload.op === 'layout' && Array.isArray(payload.items)) {
+        const byId = new Map(payload.items.map((item) => [item.id, item]))
+        components = components.map((component) =>
+          byId.has(component.id)
+            ? {
+                ...component,
+                layout: {
+                  x: byId.get(component.id).x,
+                  y: byId.get(component.id).y,
+                  w: byId.get(component.id).w,
+                  h: byId.get(component.id).h,
+                },
+              }
+            : component,
+        )
+      }
       mb = { ...mb, configVersion: (mb.configVersion || 1) + 1, visualization: { schemaVersion: 1, components } }
       return { ok: true, workspace: { modbus: mb } }
     }

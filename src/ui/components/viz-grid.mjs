@@ -1,5 +1,13 @@
 import { getGridStack } from '../vendor/grid-runtime.mjs'
 
+export function layoutSignature(items) {
+  const list = Array.isArray(items) ? items : []
+  return list
+    .map((n) => `${String(n.id || '')}:${Number(n.x) || 0}:${Number(n.y) || 0}:${Number(n.w) || 0}:${Number(n.h) || 0}`)
+    .sort()
+    .join('|')
+}
+
 /** React owns the item DOM. GridStack only decorate/update existing items. */
 export function createVizGrid(React) {
   const el = React.createElement
@@ -9,7 +17,9 @@ export function createVizGrid(React) {
     const gridRef = React.useRef(null)
     const onLayoutRef = React.useRef(props.onLayout)
     onLayoutRef.current = props.onLayout
-    const ids = Array.isArray(props.itemIds) ? props.itemIds.join('\0') : ''
+    const syncingRef = React.useRef(false)
+    const items = Array.isArray(props.items) ? props.items : []
+    const signature = layoutSignature(items)
 
     useLayout(() => {
       const GridStack = getGridStack()
@@ -28,10 +38,11 @@ export function createVizGrid(React) {
         host,
       )
       gridRef.current = grid
-      const onChange = (_ev, items) => {
-        if (typeof onLayoutRef.current !== 'function' || !items || !items.length) return
+      const onChange = (_ev, changed) => {
+        if (syncingRef.current) return
+        if (typeof onLayoutRef.current !== 'function' || !changed || !changed.length) return
         onLayoutRef.current(
-          items.map((n) => ({
+          changed.map((n) => ({
             id: String(n.id || n.el?.getAttribute('gs-id') || ''),
             x: n.x,
             y: n.y,
@@ -56,15 +67,29 @@ export function createVizGrid(React) {
       const grid = gridRef.current
       const host = hostRef.current
       if (!grid || !host) return
-      const live = new Set()
-      for (const item of host.querySelectorAll(':scope > .grid-stack-item')) {
-        live.add(item)
-        if (!item.gridstackNode) grid.makeWidget(item)
+      const wanted = new Map(items.map((item) => [String(item.id), item]))
+      const live = new Map()
+      for (const node of host.querySelectorAll(':scope > .grid-stack-item')) {
+        live.set(String(node.getAttribute('gs-id') || ''), node)
       }
-      for (const node of [...(grid.engine?.nodes ? grid.engine.nodes : [])]) {
-        if (node.el && !live.has(node.el)) grid.removeWidget(node.el, false)
+      syncingRef.current = true
+      try {
+        if (typeof grid.batchUpdate === 'function') grid.batchUpdate()
+        for (const [id, spec] of wanted) {
+          const node = live.get(id)
+          if (!node) continue
+          if (!node.gridstackNode) grid.makeWidget(node)
+          grid.update(node, { x: spec.x, y: spec.y, w: spec.w, h: spec.h })
+        }
+        for (const node of [...(grid.engine?.nodes || [])]) {
+          const id = String(node.id || node.el?.getAttribute('gs-id') || '')
+          if (!wanted.has(id) && node.el) grid.removeWidget(node.el, false)
+        }
+        if (typeof grid.commit === 'function') grid.commit()
+      } finally {
+        syncingRef.current = false
       }
-    }, [ids])
+    }, [signature])
 
     const GridStack = getGridStack()
     return el(
