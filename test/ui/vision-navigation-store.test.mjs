@@ -11,8 +11,10 @@ import {
   getNav,
   isManualNavLeaseActive,
   navigate,
+  restoreNav,
   setNavNow,
   setNavStorage,
+  subscribeNav,
 } from '../../src/ui/workspace/vision-navigation-store.mjs'
 import { MONITOR_SECTIONS, VIEW_HMI, VIEW_MONITOR } from '../../src/ui/workspace/vision-route.mjs'
 
@@ -47,10 +49,15 @@ test('nav store persists to sessionStorage and never mentions localStorage', () 
   assert.doesNotMatch(storeSrc, /localStorage/)
   const mem = memoryStorage()
   setNavStorage(mem)
-  navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES })
+  navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES }, { source: 'manual' })
   const dumped = JSON.parse(mem.getItem(NAV_STORAGE_KEY))
   assert.equal(dumped.v, 1)
   assert.ok(dumped.items.some((item) => item.key === 's1\0/ws'))
+  assert.equal(
+    dumped.items.some((item) => item.key === '\0/ws'),
+    false,
+    'must not mirror named session onto the empty-session key',
+  )
   const snapshot = mem.getItem(NAV_STORAGE_KEY)
   clearNavStore()
   setNavStorage(mem)
@@ -59,10 +66,45 @@ test('nav store persists to sessionStorage and never mentions localStorage', () 
   assert.equal(getNav('s1', '/ws').preferred.section, MONITOR_SECTIONS.FRAMES)
 })
 
-test('manual nav lease blocks Agent apply for 10s and keeps preferred', () => {
+test('Session A navigation does not notify Session B subscribers', () => {
+  const seenB = []
+  const stopB = subscribeNav('sB', '/ws', (nav) => seenB.push(nav))
+  navigate('sA', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.ALARMS }, { source: 'manual' })
+  assert.equal(getNav('sA', '/ws').section, MONITOR_SECTIONS.ALARMS)
+  assert.equal(getNav('sB', '/ws'), null)
+  assert.equal(seenB.length, 0)
+  stopB()
+})
+
+test('Session B first open defaults independently and does not inherit Session A', () => {
+  navigate('sA', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.ALARMS }, { source: 'manual' })
+  assert.equal(getNav('sB', '/ws'), null)
+  const initB = navigate(
+    'sB',
+    '/ws',
+    { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.VISUALIZATION },
+    { source: 'init' },
+  )
+  assert.equal(initB.applied, true)
+  assert.equal(getNav('sB', '/ws').section, MONITOR_SECTIONS.VISUALIZATION)
+  assert.equal(getNav('sA', '/ws').section, MONITOR_SECTIONS.ALARMS)
+  assert.equal(getNav('', '/ws'), null, 'anonymous scope must not absorb named sessions')
+})
+
+test('init only fills a missing record and does not start a lease', () => {
+  const first = navigate('s1', '/ws', { viewId: VIEW_HMI, section: '' }, { source: 'init' })
+  assert.equal(first.applied, true)
+  assert.equal(isManualNavLeaseActive('s1', '/ws'), false)
+  const second = navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES }, { source: 'init' })
+  assert.equal(second.applied, false)
+  assert.equal(getNav('s1', '/ws').viewId, VIEW_HMI)
+  assert.equal(getNav('s1', '/ws').preferred.viewId, VIEW_HMI)
+})
+
+test('manual nav lease blocks Agent without mutating active or preferred', () => {
   let now = 1_000_000
   setNavNow(() => now)
-  navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.VISUALIZATION }, { source: 'agent' })
+  navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.VISUALIZATION }, { source: 'init' })
   const manual = navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.ALARMS }, { source: 'manual' })
   assert.equal(manual.applied, true)
   assert.equal(getNav('s1', '/ws').section, MONITOR_SECTIONS.ALARMS)
@@ -71,7 +113,9 @@ test('manual nav lease blocks Agent apply for 10s and keeps preferred', () => {
   const blocked = navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES }, { source: 'agent' })
   assert.equal(blocked.applied, false)
   assert.equal(getNav('s1', '/ws').section, MONITOR_SECTIONS.ALARMS)
-  assert.equal(getNav('s1', '/ws').preferred.section, MONITOR_SECTIONS.FRAMES)
+  assert.equal(getNav('s1', '/ws').active.section, MONITOR_SECTIONS.ALARMS)
+  assert.equal(getNav('s1', '/ws').preferred.section, MONITOR_SECTIONS.ALARMS)
+  assert.equal(getNav('s1', '/ws').agentReturn, null)
 
   now += MANUAL_NAV_LEASE_MS - 1
   assert.equal(isManualNavLeaseActive('s1', '/ws'), true)
@@ -80,6 +124,45 @@ test('manual nav lease blocks Agent apply for 10s and keeps preferred', () => {
   const after = navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES }, { source: 'agent' })
   assert.equal(after.applied, true)
   assert.equal(getNav('s1', '/ws').section, MONITOR_SECTIONS.FRAMES)
+  assert.equal(getNav('s1', '/ws').active.section, MONITOR_SECTIONS.FRAMES)
+  assert.equal(getNav('s1', '/ws').preferred.section, MONITOR_SECTIONS.ALARMS, 'agent must not rewrite preferred')
+  assert.equal(getNav('s1', '/ws').agentReturn.section, MONITOR_SECTIONS.ALARMS)
+})
+
+test('restore returns the user location and then clears agentReturn', () => {
+  let now = 2_000_000
+  setNavNow(() => now)
+  navigate('s1', '/ws', { viewId: VIEW_HMI, section: '' }, { source: 'manual' })
+  now += MANUAL_NAV_LEASE_MS + 1
+  navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES }, { source: 'agent' })
+  assert.equal(getNav('s1', '/ws').active.section, MONITOR_SECTIONS.FRAMES)
+  assert.equal(getNav('s1', '/ws').preferred.viewId, VIEW_HMI)
+  const restored = restoreNav('s1', '/ws')
+  assert.equal(restored.applied, true)
+  assert.equal(getNav('s1', '/ws').active.viewId, VIEW_HMI)
+  assert.equal(getNav('s1', '/ws').preferred.viewId, VIEW_HMI)
+  assert.equal(getNav('s1', '/ws').agentReturn, null)
+})
+
+test('user opens HMI then Agent focuses frames: active is monitor frames, preferred stays HMI', () => {
+  let now = 3_000_000
+  setNavNow(() => now)
+  navigate('s1', '/ws', { viewId: VIEW_HMI, section: '' }, { source: 'manual' })
+  now += MANUAL_NAV_LEASE_MS + 1
+  const jumped = navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES }, { source: 'agent' })
+  assert.equal(jumped.applied, true)
+  const nav = getNav('s1', '/ws')
+  assert.equal(nav.active.viewId, VIEW_MONITOR)
+  assert.equal(nav.active.section, MONITOR_SECTIONS.FRAMES)
+  assert.equal(nav.preferred.viewId, VIEW_HMI)
+  assert.equal(nav.agentReturn.viewId, VIEW_HMI)
+})
+
+test('anonymous nav key is independent of named sessions on the same cwd', () => {
+  navigate('', '/ws', { viewId: VIEW_HMI, section: '' }, { source: 'manual' })
+  navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.ALARMS }, { source: 'manual' })
+  assert.equal(getNav('', '/ws').viewId, VIEW_HMI)
+  assert.equal(getNav('s1', '/ws').section, MONITOR_SECTIONS.ALARMS)
 })
 
 test('LRU drops the oldest of 64 session keys', () => {

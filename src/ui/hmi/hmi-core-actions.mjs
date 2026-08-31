@@ -10,6 +10,7 @@ import {
   postEvidence,
   setTempWatch,
 } from '../../../bench-shared.mjs'
+import { restoreUserLocation } from '../workspace/vision-navigation-store.mjs'
 import { persistHmiPatch } from './hmi-config-persistence.mjs'
 
 function snapshotModbusPack(pack) {
@@ -38,6 +39,7 @@ export function createHmiCoreActions(ctx) {
     t,
     post,
     cwd,
+    sessionId,
     props,
     agentBridge,
     commandClient,
@@ -195,6 +197,7 @@ export function createHmiCoreActions(ctx) {
       '/dsh-vision-bench/focus',
       {
         cwd,
+        sessionId: sessionId || '',
         target: target || {},
         tempWatchIds: options?.tempWatchIds || [],
         evidence: options?.evidence || [],
@@ -206,6 +209,7 @@ export function createHmiCoreActions(ctx) {
   }
 
   function returnToPrevFocus() {
+    restoreUserLocation(sessionId || '', cwd)
     if (focusState?.prev) requestFocusUi(focusState.prev, { badgeOnly: false })
   }
 

@@ -10,6 +10,7 @@ const LISTENERS = new Map()
 let hydrated = false
 let storageOverride = null
 let nowFn = () => Date.now()
+let viewSelector = null
 
 export function navKey(sessionId, cwd) {
   return `${String(sessionId || '')}\0${String(cwd || '')}`
@@ -22,6 +23,10 @@ export function setNavNow(fn) {
 export function setNavStorage(storage) {
   storageOverride = storage || null
   hydrated = false
+}
+
+export function setNavViewSelector(fn) {
+  viewSelector = typeof fn === 'function' ? fn : null
 }
 
 function currentNow(opts) {
@@ -72,15 +77,36 @@ function normalizeRoute(route) {
   return { viewId, section, target }
 }
 
+function emptyRoute() {
+  return { viewId: '', section: '', target: {} }
+}
+
+function cloneRoute(route) {
+  const value = normalizeRoute(route)
+  return { viewId: value.viewId, section: value.section, target: { ...(value.target || {}) } }
+}
+
 function shape(rec) {
-  const active = rec.active || { viewId: '', section: '', target: {} }
+  const active = rec.active || emptyRoute()
   return {
     viewId: active.viewId,
     section: active.section,
     target: active.target,
     preferred: rec.preferred || active,
     active,
+    agentReturn: rec.agentReturn || null,
     leaseUntil: Number(rec.leaseUntil) || 0,
+    at: rec.at || 0,
+  }
+}
+
+function blankRec(now) {
+  return {
+    preferred: emptyRoute(),
+    active: emptyRoute(),
+    agentReturn: null,
+    leaseUntil: 0,
+    at: now,
   }
 }
 
@@ -101,6 +127,7 @@ function persist() {
     key,
     preferred: rec.preferred,
     active: rec.active,
+    agentReturn: rec.agentReturn || null,
     leaseUntil: rec.leaseUntil || 0,
     at: rec.at || 0,
   }))
@@ -123,9 +150,13 @@ function hydrate() {
   if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.items)) return
   for (const item of parsed.items) {
     if (!item || typeof item.key !== 'string') continue
+    const preferred = normalizeRoute(item.preferred || item)
+    const active = normalizeRoute(item.active || item)
+    const agentReturn = item.agentReturn ? normalizeRoute(item.agentReturn) : null
     NAV.set(item.key, {
-      preferred: normalizeRoute(item.preferred || item),
-      active: normalizeRoute(item.active || item),
+      preferred,
+      active,
+      agentReturn: agentReturn?.viewId ? agentReturn : null,
       leaseUntil: Number(item.leaseUntil) || 0,
       at: Number(item.at) || 0,
     })
@@ -133,85 +164,126 @@ function hydrate() {
   trimLru()
 }
 
+function commit(key, rec) {
+  NAV.set(key, rec)
+  persist()
+  const payload = shape(rec)
+  notify([key], payload)
+  return payload
+}
+
 export function getNav(sessionId, cwd) {
   hydrate()
   const exact = NAV.get(navKey(sessionId, cwd))
-  if (exact) return shape(exact)
-  if (sessionId) {
-    const fallback = NAV.get(navKey('', cwd))
-    if (fallback) return shape(fallback)
-  }
-  return null
+  return exact ? shape(exact) : null
 }
 
 export function isManualNavLeaseActive(sessionId, cwd, now) {
   hydrate()
-  const rec = NAV.get(navKey(sessionId, cwd)) || (sessionId ? NAV.get(navKey('', cwd)) : null)
+  const rec = NAV.get(navKey(sessionId, cwd))
   if (!rec) return false
   const t = typeof now === 'number' ? now : nowFn()
   return Number(rec.leaseUntil) > t
 }
 
+function sourceOf(opts) {
+  const source = opts?.source
+  if (source === 'manual' || source === 'init' || source === 'restore' || source === 'agent') return source
+  return 'agent'
+}
+
 export function navigate(sessionId, cwd, route, opts = {}) {
   hydrate()
   const now = currentNow(opts)
-  const source = opts.source === 'manual' ? 'manual' : 'agent'
+  const source = sourceOf(opts)
   const value = normalizeRoute(route)
+  const key = navKey(sessionId, cwd)
+  const existing = NAV.get(key)
+
+  if (source === 'init') {
+    if (existing) return { ...shape(existing), applied: false }
+    if (!value.viewId) return null
+    const rec = {
+      preferred: cloneRoute(value),
+      active: cloneRoute(value),
+      agentReturn: null,
+      leaseUntil: 0,
+      at: now,
+    }
+    return { ...commit(key, rec), applied: true }
+  }
+
+  if (source === 'restore') {
+    return restoreNav(sessionId, cwd, opts)
+  }
+
   if (!value.viewId) {
-    const current = getNav(sessionId, cwd)
+    const current = existing ? shape(existing) : null
     return current ? { ...current, applied: false } : null
   }
 
-  const key = navKey(sessionId, cwd)
-  const rec = NAV.get(key) || {
-    preferred: value,
-    active: value,
-    leaseUntil: 0,
-    at: now,
-  }
-  rec.preferred = value
-  rec.at = now
-
-  let applied = true
   if (source === 'manual') {
-    rec.active = value
+    const rec = existing || blankRec(now)
+    rec.preferred = cloneRoute(value)
+    rec.active = cloneRoute(value)
+    rec.agentReturn = null
     rec.leaseUntil = now + MANUAL_NAV_LEASE_MS
-  } else if (Number(rec.leaseUntil) > now) {
-    applied = false
-  } else {
-    rec.active = value
-    rec.leaseUntil = 0
+    rec.at = now
+    return { ...commit(key, rec), applied: true }
   }
 
-  NAV.set(key, rec)
-  const keys = [key]
-  if (sessionId) {
-    const fallback = navKey('', cwd)
-    NAV.set(fallback, {
-      preferred: rec.preferred,
-      active: rec.active,
-      leaseUntil: rec.leaseUntil,
-      at: rec.at,
-    })
-    keys.push(fallback)
+  // Agent: blocked requests must not mutate any location fields.
+  if (existing && Number(existing.leaseUntil) > now) {
+    return { ...shape(existing), applied: false }
   }
-  persist()
-  const payload = shape(rec)
-  notify(keys, payload)
-  return { ...payload, applied }
+
+  const rec = existing || blankRec(now)
+  if (!rec.agentReturn) {
+    const from = rec.active?.viewId ? rec.active : rec.preferred
+    rec.agentReturn = from?.viewId ? cloneRoute(from) : null
+  }
+  rec.active = cloneRoute(value)
+  rec.leaseUntil = 0
+  rec.at = now
+  return { ...commit(key, rec), applied: true }
+}
+
+export function restoreNav(sessionId, cwd, opts = {}) {
+  hydrate()
+  const now = currentNow(opts)
+  const key = navKey(sessionId, cwd)
+  const rec = NAV.get(key)
+  if (!rec) return null
+  const target = rec.agentReturn || rec.preferred
+  const value = normalizeRoute(target)
+  rec.agentReturn = null
+  rec.at = now
+  if (!value.viewId) {
+    return { ...commit(key, rec), applied: false }
+  }
+  rec.active = cloneRoute(value)
+  rec.leaseUntil = now + MANUAL_NAV_LEASE_MS
+  return { ...commit(key, rec), applied: true }
+}
+
+export function restoreUserLocation(sessionId, cwd, opts = {}) {
+  const restored = restoreNav(sessionId, cwd, opts)
+  if (restored?.applied && restored.viewId && typeof viewSelector === 'function') {
+    try {
+      viewSelector(restored.viewId)
+    } catch {}
+  }
+  return restored
 }
 
 export function subscribeNav(sessionId, cwd, fn) {
   if (typeof fn !== 'function') return () => {}
   hydrate()
-  const keys = [navKey(sessionId, cwd)]
-  if (sessionId) keys.push(navKey('', cwd))
-  for (const key of keys) listenersOf(key).add(fn)
+  const key = navKey(sessionId, cwd)
+  listenersOf(key).add(fn)
   return () => {
-    for (const key of keys) {
-      const set = LISTENERS.get(key)
-      if (set) set.delete(fn)
-    }
+    const set = LISTENERS.get(key)
+    if (set) set.delete(fn)
   }
 }
 

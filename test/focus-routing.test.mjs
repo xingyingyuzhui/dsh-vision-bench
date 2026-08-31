@@ -28,6 +28,18 @@ test('active=A, A foreground frame → opens frames once', async () => {
   assert.equal(d2.routeKey, d1.routeKey)
 })
 
+test('same cwd different Session Focus does not steal the current page', async () => {
+  const f = focus({ sessionId: 'sA', request: { frameId: 'f1', connectionId: 'c1' } })
+  const d = shouldRouteFocus({
+    activeCwd: '/w/shared',
+    activeSessionId: 'sB',
+    changedCwd: '/w/shared',
+    focus: f,
+    previousRouteKey: '',
+  })
+  assert.equal(d.route, false)
+})
+
 test('active=A, a B foreground alarm → no route', async () => {
   const f = focus({ request: { alarmId: 'a1', connectionId: 'c2' } })
   const d = shouldRouteFocus({ activeCwd: '/w/a', changedCwd: '/w/b', focus: f, previousRouteKey: '' })

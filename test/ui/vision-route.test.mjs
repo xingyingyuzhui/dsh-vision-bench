@@ -63,14 +63,38 @@ test('shouldRouteFocus returns viewId/section and still exposes tab alias', () =
   assert.equal(d.target.frameId, 'f1')
 })
 
-test('nav store is keyed by sessionId\\0cwd with empty-session fallback', () => {
+test('nav store is keyed by exact sessionId\\0cwd with no empty-session fallback', () => {
   clearNavStore()
   const seen = []
   const stop = subscribeNav('s1', '/w', (nav) => seen.push(nav))
-  navigate('s1', '/w', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.ALARMS })
+  navigate('s1', '/w', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.ALARMS }, { source: 'manual' })
   assert.equal(getNav('s1', '/w').section, MONITOR_SECTIONS.ALARMS)
-  assert.equal(getNav('', '/w').section, MONITOR_SECTIONS.ALARMS)
+  assert.equal(getNav('', '/w'), null)
   assert.equal(seen.length, 1)
   stop()
   clearNavStore()
+})
+
+test('background Session Focus does not steal the current page', () => {
+  const d = shouldRouteFocus({
+    activeCwd: '/w',
+    activeSessionId: 'sB',
+    changedCwd: '/w',
+    focus: { sessionId: 'sA', request: { frameId: 'f1', connectionId: 'c1' }, badgeOnly: false },
+    previousRouteKey: '',
+  })
+  assert.equal(d.route, false)
+})
+
+test('matching Session Focus for frames lands on monitor serial frames', () => {
+  const d = shouldRouteFocus({
+    activeCwd: '/w',
+    activeSessionId: 's1',
+    changedCwd: '/w',
+    focus: { sessionId: 's1', request: { frameId: 'f1', connectionId: 'c1' }, badgeOnly: false },
+    previousRouteKey: '',
+  })
+  assert.equal(d.route, true)
+  assert.equal(d.viewId, VIEW_MONITOR)
+  assert.equal(d.section, MONITOR_SECTIONS.FRAMES)
 })

@@ -1,13 +1,27 @@
-// Per-cwd shared /state poller (split from bench-shared).
+// Per-session+cwd shared /state poller (split from bench-shared).
 export const POLL_MS = 2000
 
-const STATE_BUSES = new Map() // cwd -> { cwd, data, subs:Set, timer, seq, post }
+const STATE_BUSES = new Map() // sessionId\0cwd -> { key, cwd, sessionId, data, subs, timer, seq, post }
 
-function busEntry(post, cwd) {
-  let e = STATE_BUSES.get(cwd)
+export function stateBusKey(sessionId, cwd) {
+  return `${String(sessionId || '')}\0${String(cwd || '')}`
+}
+
+function busEntry(post, cwd, sessionId) {
+  const key = stateBusKey(sessionId, cwd)
+  let e = STATE_BUSES.get(key)
   if (!e) {
-    e = { cwd, data: null, subs: new Set(), timer: 0, seq: 0, post: null, sessionId: '' }
-    STATE_BUSES.set(cwd, e)
+    e = {
+      key,
+      cwd: String(cwd || ''),
+      sessionId: String(sessionId || ''),
+      data: null,
+      subs: new Set(),
+      timer: 0,
+      seq: 0,
+      post: null,
+    }
+    STATE_BUSES.set(key, e)
   }
   // keep the freshest post fn (hot reload must not hold a stale closure)
   if (typeof post === 'function') e.post = post
@@ -23,7 +37,7 @@ function busPull(e) {
   post('/dsh-vision-bench/state', payload)
     .then((data) => {
       // unsubscribed (map entry gone) or a newer request superseded this one
-      if (!STATE_BUSES.has(e.cwd) || seq !== e.seq) return
+      if (!STATE_BUSES.has(e.key) || seq !== e.seq) return
       e.data = data
       for (const sub of Array.from(e.subs)) {
         try {
@@ -43,9 +57,8 @@ export function subscribeState(post, cwd, cb, opts) {
     cb(null)
     return () => {}
   }
-  const e = busEntry(post, cwd)
   const sid = opts?.sessionId ? String(opts.sessionId) : ''
-  if (sid) e.sessionId = sid
+  const e = busEntry(post, cwd, sid)
   // register BEFORE the first pull so an extremely fast response can't miss us
   e.subs.add(cb)
   if (e.subs.size === 1) {
@@ -62,14 +75,14 @@ export function subscribeState(post, cwd, cb, opts) {
     }
   }
   return () => {
-    const cur = STATE_BUSES.get(cwd)
+    const cur = STATE_BUSES.get(e.key)
     if (!cur || cur !== e) return
     cur.subs.delete(cb)
     if (cur.subs.size === 0) {
       clearInterval(cur.timer)
       cur.timer = 0
       cur.seq++ // in-flight responses must not deliver after final unsubscribe
-      STATE_BUSES.delete(cwd)
+      STATE_BUSES.delete(e.key)
     }
   }
 }

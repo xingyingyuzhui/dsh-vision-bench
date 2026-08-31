@@ -54,6 +54,15 @@ test('Task14: Agent focus 只有 foreground=true 才抢焦点 badgeOnly=true 不
     })
     assert.equal(fg.ok, true)
     assert.equal(fg.badgeOnly, false, 'foreground=true should clear badgeOnly')
+    const withSession = await requestFocus(home, cwd, {
+      source: 'agent',
+      sessionId: 's-focus',
+      target: { connectionId: 'c1', pointId: 'p1' },
+      foreground: true,
+    })
+    assert.equal(withSession.ok, true)
+    assert.equal(withSession.sessionId, 's-focus')
+    assert.equal(loadWorkspace(home, cwd).focus.sessionId, 's-focus')
     // badgeOnly true even with foreground true? badgeOnly wins
     const both = await requestFocus(home, cwd, {
       source: 'agent',

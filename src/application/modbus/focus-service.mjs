@@ -150,8 +150,10 @@ export const requestFocus = async (home, cwd, body) => {
   const evidence = Array.isArray(body.evidence) ? body.evidence.slice(0, 20) : []
   const wantForeground = body.foreground === true
   const badgeOnly = !!(body.badgeOnly === true || (origin.source === 'agent' && !wantForeground))
+  const sessionId = String(origin.sessionId || body.sessionId || '')
   const saved = await saveWorkspaceAsync(home, room.cwd, {
     focus: {
+      sessionId,
       request: nextReq,
       prev: prev || null,
       tempWatchIds,
@@ -178,5 +180,14 @@ export const requestFocus = async (home, cwd, body) => {
       { source: origin.source, sessionId: origin.sessionId },
     )
   } catch {}
-  return { ok: true, focus: nextReq, prev, tempWatchIds, badgeOnly, evidence, configVersion: pack.configVersion || 1 }
+  return {
+    ok: true,
+    sessionId,
+    focus: nextReq,
+    prev,
+    tempWatchIds,
+    badgeOnly,
+    evidence,
+    configVersion: pack.configVersion || 1,
+  }
 }

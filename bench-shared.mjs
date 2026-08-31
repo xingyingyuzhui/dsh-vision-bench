@@ -18,7 +18,7 @@ export {
   journalPanel,
   lineKind,
 } from './src/ui/common/ui-format.mjs'
-export { POLL_MS, subscribeState } from './src/ui/common/state-subscription.mjs'
+export { POLL_MS, stateBusKey, subscribeState } from './src/ui/common/state-subscription.mjs'
 export { pushFramesLog, getFramesLog, clearFramesLog, framesLogCount } from './src/ui/common/frame-cache.mjs'
 export {
   getSidebarPin,
@@ -56,6 +56,7 @@ export {
 } from './src/ui/common/agent-reference.mjs'
 export {
   sessionCwd,
+  pageSessionId,
   useSessionCwd,
   setActiveScope,
   clearActiveScope,

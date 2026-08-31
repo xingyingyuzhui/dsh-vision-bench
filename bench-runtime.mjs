@@ -5,7 +5,7 @@ import { getActiveScope, subscribeFocus } from './bench-shared.mjs'
 import { ATTR, CSS } from './bench-styles.mjs'
 import { registerView } from './bench-view.mjs'
 import { wrapVisionPage } from './src/ui/workspace/vision-page-boundary.mjs'
-import { navigate } from './src/ui/workspace/vision-navigation-store.mjs'
+import { navigate, setNavViewSelector } from './src/ui/workspace/vision-navigation-store.mjs'
 import { MONITOR_SECTIONS, VIEW_HMI, VIEW_MONITOR, shouldRouteFocus } from './src/ui/workspace/vision-route.mjs'
 import { createDebugWorkspace } from './src/ui/workspace/debug-workspace.mjs'
 import { createMonitorWorkspace } from './src/ui/workspace/monitor-workspace.mjs'
@@ -62,16 +62,28 @@ export function apply(ctx) {
   }
 
   function openHmi(target) {
-    const cwd = getActiveScope().cwd
-    navigate('', cwd, { viewId: VIEW_HMI, section: '', target: target || {} }, { source: 'manual' })
+    const active = getActiveScope()
+    navigate(
+      active.sessionId,
+      active.cwd,
+      { viewId: VIEW_HMI, section: '', target: target || {} },
+      { source: 'manual' },
+    )
     selectView(VIEW_HMI)
   }
 
   function openFrames() {
-    const cwd = getActiveScope().cwd
-    navigate('', cwd, { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES }, { source: 'manual' })
+    const active = getActiveScope()
+    navigate(
+      active.sessionId,
+      active.cwd,
+      { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES },
+      { source: 'manual' },
+    )
     selectView(VIEW_MONITOR)
   }
+
+  setNavViewSelector(selectView)
 
   const SettingsPage = createSettingsPage(React, t, post)
   const DebugWorkspace = wrapVisionPage(React, createDebugWorkspace(React, t, post), 'debug')
@@ -87,15 +99,17 @@ export function apply(ctx) {
   let lastRouteKey = ''
   const applyFocus = (fs, changedCwd) => {
     const active = getActiveScope()
+    const focusSessionId = String((fs && fs.sessionId) || '')
+    if (focusSessionId !== String(active.sessionId || '')) return
     const decision = shouldRouteFocus({
       activeCwd: active.cwd,
+      activeSessionId: active.sessionId,
       changedCwd,
       focus: fs,
       previousRouteKey: lastRouteKey,
     })
     if (!decision.route) return
-    const sessionId = (fs && (fs.sessionId || (fs.request && fs.request.sessionId))) || ''
-    const result = navigate(sessionId, active.cwd, decision, { source: 'agent' })
+    const result = navigate(active.sessionId, active.cwd, decision, { source: 'agent' })
     if (!result || result.applied === false) return
     lastRouteKey = decision.routeKey
     selectView(decision.viewId)

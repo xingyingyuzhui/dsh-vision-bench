@@ -111,6 +111,7 @@ export const saveBindings = (home, input) => {
 }
 
 export const emptyFocusState = () => ({
+  sessionId: '',
   request: null,
   prev: null,
   tempWatchIds: [],
@@ -143,6 +144,7 @@ export const normalizeFocusState = (input) => {
   if (!input || typeof input !== 'object') return out
   const req = normalizeFocusRequest(input.request || input)
   const prev = normalizeFocusRequest(input.prev)
+  out.sessionId = typeof input.sessionId === 'string' ? input.sessionId.trim().slice(0, 128) : ''
   out.request = req
   out.prev = prev
   if (Array.isArray(input.tempWatchIds)) {

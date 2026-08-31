@@ -95,6 +95,7 @@ export function createHmiView(React, t, post) {
       React,
       cwd,
       workspace.focus,
+      sessionId,
     )
     const { resolveWrite } = usePendingWrites(React, post, cwd, setPending, setJournal, setWorkspace, setError, t)
     const commandClient = createHmiCommandClient(post, cwd, sessionId)

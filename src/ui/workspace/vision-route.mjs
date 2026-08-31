@@ -78,7 +78,7 @@ export function routeForKind(kind) {
  * Foreground Agent focus → native workspace + section.
  * `tab` is a compatibility alias for the old sidebar names.
  */
-export function shouldRouteFocus({ activeCwd, changedCwd, focus, previousRouteKey }) {
+export function shouldRouteFocus({ activeCwd, activeSessionId, changedCwd, focus, previousRouteKey }) {
   if (!activeCwd) return { route: false, routeKey: '', tab: '', viewId: '', section: '', target: targetOf(null) }
   if (changedCwd && changedCwd !== activeCwd) {
     return {
@@ -92,6 +92,17 @@ export function shouldRouteFocus({ activeCwd, changedCwd, focus, previousRouteKe
   }
   const fs = focus || {}
   const req = fs.request
+  const focusSessionId = String(fs.sessionId || req?.sessionId || '')
+  if (activeSessionId != null && focusSessionId !== String(activeSessionId || '')) {
+    return {
+      route: false,
+      routeKey: previousRouteKey || '',
+      tab: '',
+      viewId: '',
+      section: '',
+      target: targetOf(req),
+    }
+  }
   if (!req || typeof req !== 'object') {
     return {
       route: false,
@@ -125,6 +136,7 @@ export function shouldRouteFocus({ activeCwd, changedCwd, focus, previousRouteKe
   const kind = focusKindOf(fs)
   const target = targetOf(req)
   const routeKey = [
+    String(activeSessionId == null ? '' : activeSessionId),
     activeCwd,
     kind,
     target.connectionId,

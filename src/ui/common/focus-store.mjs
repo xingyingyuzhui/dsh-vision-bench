@@ -2,7 +2,14 @@
 const FOCUS_BY_CWD = new Map() // cwd -> { request, prev, tempWatchIds, badgeOnly, evidence, subs:Set }
 const FOCUS_WILDCARD = new Set() // global subscribers get (focus, cwd)
 
-const emptyFocus = () => ({ request: null, prev: null, tempWatchIds: [], badgeOnly: false, evidence: [] })
+const emptyFocus = () => ({
+  sessionId: '',
+  request: null,
+  prev: null,
+  tempWatchIds: [],
+  badgeOnly: false,
+  evidence: [],
+})
 
 function focusEntry(cwd) {
   if (!cwd) return null
@@ -18,6 +25,7 @@ export function getFocusState(cwd) {
   const e = FOCUS_BY_CWD.get(cwd)
   if (!e) return emptyFocus()
   return {
+    sessionId: e.sessionId || '',
     request: e.request,
     prev: e.prev,
     tempWatchIds: (e.tempWatchIds || []).slice(),
@@ -32,6 +40,7 @@ export function setFocusState(cwd, focus) {
   if (!focus || typeof focus !== 'object') {
     Object.assign(e, emptyFocus())
   } else {
+    e.sessionId = focus.sessionId ? String(focus.sessionId) : ''
     e.request = focus.request || null
     e.prev = focus.prev || null
     e.tempWatchIds = Array.isArray(focus.tempWatchIds) ? focus.tempWatchIds.slice(0, 32) : []
@@ -42,6 +51,7 @@ export function setFocusState(cwd, focus) {
   // Task2/0.18.4: identical normalized focus must not re-broadcast every
   // /state poll (drives wildcard listeners repeatedly)
   const sig = JSON.stringify([
+    snapshot.sessionId,
     snapshot.request,
     snapshot.prev,
     snapshot.tempWatchIds,

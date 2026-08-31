@@ -18,15 +18,21 @@ export function createLogPage(React, t, post, helpers = {}) {
   ]
   return function LogPage(props) {
     const cwd = props?.scope?.cwd || props?.cwd || ''
+    const sessionId = props?.sessionId || ''
     const [journal, setJournal] = React.useState({ tasks: [], running: [], timeline: [] })
     const [filter, setFilter] = React.useState('all')
     const [note, setNote] = React.useState('')
     React.useEffect(
       () =>
-        subscribeState(post, cwd, (data) => {
-          if (data?.journal) setJournal(data.journal)
-        }),
-      [cwd, post],
+        subscribeState(
+          post,
+          cwd,
+          (data) => {
+            if (data?.journal) setJournal(data.journal)
+          },
+          { sessionId },
+        ),
+      [cwd, post, sessionId],
     )
     const tasks = journal && Array.isArray(journal.tasks) ? journal.tasks : []
     const timeline = journal && Array.isArray(journal.timeline) ? journal.timeline : []

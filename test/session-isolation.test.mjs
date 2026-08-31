@@ -62,6 +62,23 @@ test('A and B subscribe different cwds; each only receives its own data', async 
   for (const d of gotB) assert.equal(d.byCwd, 'B', 'B must never receive A data')
 })
 
+test('same cwd different sessions keep separate /state pollers with their own sessionId', async () => {
+  const posts = []
+  const post = async (path, body) => {
+    posts.push({ path, ...body })
+    return { workspace: { id: body.sessionId }, sessionId: body.sessionId }
+  }
+  const gotA = []
+  const gotB = []
+  track(subscribeState(post, '/work/shared', (d) => gotA.push(d), { sessionId: 'sA' }))
+  track(subscribeState(post, '/work/shared', (d) => gotB.push(d), { sessionId: 'sB' }))
+  await wait(80)
+  assert.equal(posts.length, 2, 'two sessions must not share one poller')
+  assert.deepEqual(posts.map((p) => p.sessionId).sort(), ['sA', 'sB'])
+  for (const d of gotA) assert.equal(d.sessionId, 'sA')
+  for (const d of gotB) assert.equal(d.sessionId, 'sB')
+})
+
 test('same cwd multiple subscribers share ONE poller', async () => {
   let pulls = 0
   const post = async (path, body) => {
