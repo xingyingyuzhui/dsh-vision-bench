@@ -13,7 +13,7 @@ function initialSection(sessionId, cwd) {
 
 export function createDebugWorkspace(React, t, post) {
   const openProjectRef = { current: () => {} }
-  const WorkbenchPage = createDebugView(React, t, post, () => openProjectRef.current())
+  const WorkbenchPage = createDebugView(React, t, post, (target) => openProjectRef.current(target))
   const ProjectPage = createMapView(React, t, post)
   const labels = {
     [DEBUG_SECTIONS.WORKBENCH]: t('sectionWorkbench') || t('tabDebug'),
@@ -26,9 +26,14 @@ export function createDebugWorkspace(React, t, post) {
     const sessionId = props?.sessionId || ''
     const cwd = sessionCwd(props)
     const [section, setSection] = React.useState(() => initialSection(sessionId, cwd))
-    openProjectRef.current = () => {
+    openProjectRef.current = (target) => {
+      const next = {
+        viewId: VIEW_DEBUG,
+        section: DEBUG_SECTIONS.PROJECT,
+        target: target && typeof target === 'object' ? { file: target.file || '', line: target.line || 0 } : {},
+      }
       setSection(DEBUG_SECTIONS.PROJECT)
-      navigate(sessionId, cwd, { viewId: VIEW_DEBUG, section: DEBUG_SECTIONS.PROJECT }, { source: 'manual' })
+      navigate(sessionId, cwd, next, { source: 'manual' })
     }
     React.useEffect(() => {
       setSection(initialSection(sessionId, cwd))

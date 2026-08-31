@@ -236,20 +236,9 @@ export const emptyWorkspace = () => ({
   manualRequests: [],
   modbus: normalizeModbus({ version: 3, configVersion: 1 }),
   focus: emptyFocusState(),
-  // Task5/0.19.3: 编译错误定位目标（调试页写入，工程结构页消费）
-  jumpProject: null,
 })
 
 const MANUAL_STATUSES = new Set(['pending', 'done', 'rejected'])
-
-const normalizeProjectJump = (input) => {
-  if (!input || typeof input !== 'object' || typeof input.file !== 'string' || !input.file.trim()) return null
-  return {
-    file: String(input.file).slice(0, 400),
-    line: Math.max(0, Math.trunc(Number(input.line) || 0)),
-    at: Date.now(),
-  }
-}
 
 const normalizeManualRequests = (list) => {
   if (!Array.isArray(list)) return []
@@ -532,7 +521,6 @@ export const applyWorkspacePatch = (prev, input) => {
     session: { ...prev.session, ...(input && input.session) },
     manualRequests: input && input.manualRequests !== undefined ? input.manualRequests : prev.manualRequests,
     focus: input && input.focus !== undefined ? normalizeFocusState(input.focus) : prev.focus,
-    jumpProject: input && input.jumpProject !== undefined ? normalizeProjectJump(input.jumpProject) : prev.jumpProject,
   }
   const workspace = normalizeWorkspace(merged)
   // auto-bump configVersion when connections/devices/points changed vs prev

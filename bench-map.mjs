@@ -1,4 +1,4 @@
-export { TAB_MAP, createMapView, getTargetJump, setTargetJump } from './src/ui/debug/project/project-page.mjs'
+export { TAB_MAP, createMapView } from './src/ui/debug/project/project-page.mjs'
 
 export function registerMap(ctx, React, t, MapPage) {
   const bs = ctx.betterSidebar

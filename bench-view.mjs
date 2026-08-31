@@ -557,9 +557,8 @@ export function createDebugView(React, t, post, openProject) {
       return out.slice(0, 60)
     })()
     function jumpToError(err) {
-      if (!cwd) return
-      post('/dsh-vision-bench/workspace', { cwd, jumpProject: { file: err.file, line: err.line } }).catch(() => {})
-      if (typeof openProject === 'function') openProject()
+      if (!cwd || !err) return
+      if (typeof openProject === 'function') openProject({ file: err.file, line: err.line })
     }
     function openFullLog() {
       if (!lastResult || !cwd) return

@@ -8,9 +8,18 @@ import {
   hasHarnessInput,
   subscribeState,
 } from '../../../../bench-shared.mjs'
-import { sessionCwd } from '../../common/session-scope.mjs'
+import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
 import { createSourceEditor } from '../../components/source-editor.mjs'
-import { buildProjectTree, fileKind, fileTreeId, languageForPath } from './project-tree-model.mjs'
+import { getNav, subscribeNav } from '../../workspace/vision-navigation-store.mjs'
+import { DEBUG_SECTIONS, VIEW_DEBUG } from '../../workspace/vision-route.mjs'
+import {
+  buildProjectTree,
+  fileKind,
+  fileTreeId,
+  findProjectFile,
+  jumpErrorForHit,
+  languageForPath,
+} from './project-tree-model.mjs'
 
 export const TAB_MAP = 'dsh-vision-bench:project'
 
@@ -32,6 +41,10 @@ export function createMapView(React, t, post) {
     const [copied, setCopied] = React.useState('')
     const [jumpLine, setJumpLine] = React.useState(0)
     const [selectedId, setSelectedId] = React.useState('')
+    const pendingJumpRef = React.useRef(null)
+    const mappedRef = React.useRef(null)
+    const applyJumpRef = React.useRef(() => {})
+    mappedRef.current = mapped
 
     React.useEffect(() => {
       if (!cwd) {
@@ -47,21 +60,11 @@ export function createMapView(React, t, post) {
           const next = data.workspace?.keil ? data.workspace.keil : {}
           const project = next.project || ''
           const target = next.target || ''
-          // Task5/0.19.3: 编译错误定位 — 调试页点击错误后写入 jump 目标
-          const jump = data.workspace?.jumpProject
-          if (jump?.file) {
-            setJumpLine(Number(jump.line) || 0)
-            setSelectedId(String(jump.file || ''))
-            setOpenFiles((prev) => ({ ...prev, [jump.file]: true }))
-            try {
-              setTargetJump(jump)
-            } catch {}
-          }
           setKeil((prev) => (prev.project === project && prev.target === target ? prev : { project, target }))
         },
-        { sessionId: props?.sessionId || '' },
+        { sessionId: pageSessionId(props) },
       )
-    }, [cwd, post, props?.sessionId])
+    }, [cwd, post, props?.sessionId, props?.scope?.sessionId])
 
     React.useEffect(() => {
       let stop = false
@@ -143,6 +146,46 @@ export function createMapView(React, t, post) {
           }),
         )
     }
+
+    const applyPendingJump = () => {
+      const jump = pendingJumpRef.current
+      const groups = mappedRef.current?.groups
+      if (!jump || !groups) return
+      const hit = findProjectFile(groups, jump.file)
+      const fail = jumpErrorForHit(hit, jump.file)
+      if (fail) {
+        pendingJumpRef.current = null
+        setError(fail)
+        return
+      }
+      pendingJumpRef.current = null
+      setError('')
+      setOpenGroups((prev) => ({ ...prev, [hit.group.name]: true }))
+      const fid = fileTreeId(hit.file)
+      setOpenFiles((prev) => ({ ...prev, [fid]: true }))
+      setSelectedId(fid)
+      setJumpLine(jump.line)
+      openPreview(hit.file)
+    }
+    applyJumpRef.current = applyPendingJump
+
+    React.useEffect(() => {
+      mappedRef.current = mapped
+      applyJumpRef.current()
+    }, [mapped])
+
+    React.useEffect(() => {
+      const sessionId = pageSessionId(props)
+      const take = (nav) => {
+        const file = nav?.target?.file
+        if (nav?.viewId === VIEW_DEBUG && nav.section === DEBUG_SECTIONS.PROJECT && file) {
+          pendingJumpRef.current = { file: String(file), line: Number(nav.target.line) || 0 }
+          applyJumpRef.current()
+        }
+      }
+      take(getNav(sessionId, cwd))
+      return subscribeNav(sessionId, cwd, take)
+    }, [cwd, props?.sessionId, props?.scope?.sessionId])
 
     const copyRel = (file) => {
       const line = file.rel || file.path || file.name
@@ -496,10 +539,3 @@ export function createMapView(React, t, post) {
     )
   }
 }
-
-// 工程结构定位（编译错误跳转）：调试页写入，map 页消费
-let targetJump = null
-export const setTargetJump = (jump) => {
-  targetJump = jump
-}
-export const getTargetJump = () => targetJump

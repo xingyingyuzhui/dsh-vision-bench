@@ -30,6 +30,42 @@ export function fileTreeId(file) {
   return String((file && (file.rel || file.path || file.name)) || '')
 }
 
+function normPath(p) {
+  return String(p || '')
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+}
+
+export function findProjectFile(groups, file) {
+  const want = normPath(file)
+  if (!want) return null
+  const wantBase = want.split('/').filter(Boolean).pop()
+  const hits = []
+  for (const group of Array.isArray(groups) ? groups : []) {
+    for (const item of group.files || []) {
+      const rel = normPath(item.rel || item.path || item.name)
+      const name = String(item.name || rel.split('/').pop() || '')
+      let score = 0
+      if (rel === want) score = 4
+      else if (rel.endsWith(`/${want}`) || want.endsWith(`/${rel}`)) score = 3
+      else if (name === want || name === wantBase) score = 2
+      else if (rel.endsWith(`/${wantBase}`)) score = 1
+      if (score) hits.push({ file: item, group, score, kind: fileKind(item) })
+    }
+  }
+  if (!hits.length) return null
+  hits.sort((a, b) => b.score - a.score || (a.kind === 'ok' ? -1 : 1) || 0)
+  return hits[0]
+}
+
+export function jumpErrorForHit(hit, file) {
+  if (!hit) return `未找到文件：${file || ''}`
+  if (hit.kind === 'outside') return '工作区外文件不能打开'
+  if (hit.kind === 'missing') return '文件缺失，无法打开'
+  if (hit.kind === 'unread') return '文件不可读，无法打开'
+  return ''
+}
+
 export function buildProjectTree(groups, opts = {}) {
   const filter = opts.filter || 'all'
   const needle = String(opts.search || '')

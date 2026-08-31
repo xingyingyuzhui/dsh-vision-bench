@@ -117,10 +117,16 @@ export function createSourceEditor(React) {
         {
           className: 'dvb-log dvb-map-preview',
           style: { maxHeight: '320px', overflow: 'auto', whiteSpace: 'pre' },
+          'data-jump-line': jumpLine > 0 ? String(jumpLine) : undefined,
         },
         text,
       )
     }
-    return el('div', { className: 'dvb-source-editor', ref: hostRef, 'data-rel': rel })
+    return el('div', {
+      className: 'dvb-source-editor',
+      ref: hostRef,
+      'data-rel': rel,
+      'data-jump-line': jumpLine > 0 ? String(jumpLine) : undefined,
+    })
   }
 }

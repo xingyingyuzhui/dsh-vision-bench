@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict'
 // Task5/0.19.3: 工程结构 — 树渲染（组/文件/函数）、搜索、筛选、源码预览、
-// 编译错误定位（jumpProject）。
+// 编译错误定位（Session 导航 target，不写 jumpProject）。
 import { afterEach, beforeEach, test } from 'node:test'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { Window } from 'happy-dom'
 import React from 'react'
 import { createElement } from 'react'
 import { createMapView } from '../bench-map.mjs'
+import { findProjectFile, jumpErrorForHit } from '../src/ui/debug/project/project-tree-model.mjs'
+import { createDebugWorkspace } from '../src/ui/workspace/debug-workspace.mjs'
+import { clearNavStore, navigate } from '../src/ui/workspace/vision-navigation-store.mjs'
+import { DEBUG_SECTIONS, VIEW_DEBUG } from '../src/ui/workspace/vision-route.mjs'
 
 let win
 beforeEach(async () => {
@@ -40,6 +44,7 @@ beforeEach(async () => {
 })
 afterEach(() => {
   cleanup()
+  clearNavStore()
 })
 
 const MAP_DETAILS = {
@@ -220,17 +225,156 @@ test('编译配置可折叠（Include/宏/依赖）', async () => {
   tree.unmount()
 })
 
-test('编译错误定位：jumpProject 使目标文件展开并高亮行（源码契约 + 映射）', async () => {
-  const { post } = makePost({ ...MAP_DETAILS, groups: MAP_DETAILS.groups })
+test('findProjectFile matches rel/suffix and reports outside/missing', () => {
+  const hit = findProjectFile(MAP_DETAILS.groups, 'src/main.c')
+  assert.equal(hit.file.name, 'main.c')
+  assert.equal(hit.kind, 'ok')
+  assert.equal(jumpErrorForHit(hit, 'src/main.c'), '')
+  assert.equal(findProjectFile(MAP_DETAILS.groups, 'nope.c'), null)
+  assert.equal(jumpErrorForHit(null, 'nope.c'), '未找到文件：nope.c')
+  const outside = findProjectFile(MAP_DETAILS.groups, 'drv/uart.c')
+  assert.equal(jumpErrorForHit(outside, 'drv/uart.c'), '工作区外文件不能打开')
+  const missing = findProjectFile(MAP_DETAILS.groups, 'src/missing.c')
+  assert.equal(jumpErrorForHit(missing, 'src/missing.c'), '文件缺失，无法打开')
+})
+
+test('点击编译错误后切到工程结构、展开文件、调用源码接口并传入 jumpLine', async () => {
+  const { post, calls } = makePost()
   const t = (k) => k
+  navigate(
+    's1',
+    '/ws',
+    { viewId: VIEW_DEBUG, section: DEBUG_SECTIONS.PROJECT, target: { file: 'src/main.c', line: 12 } },
+    { source: 'manual' },
+  )
   const Map = createMapView(React, t, post)
-  const tree = render(createElement(Map, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
-  await waitFor(() => assert.ok(tree.container.textContent.includes('Source')), { timeout: 6000 })
-  // jump 机制在 /state 订阅中处理；直接验证视图有定位按钮的数据面（调试页写 jumpProject）
-  const viewSrc = (await import('node:fs/promises')).readFile(new URL('../bench-view.mjs', import.meta.url), 'utf8')
-  const src = await viewSrc
-  assert.ok(src.includes('jumpToError'), '调试页错误跳转函数')
-  assert.ok(src.includes("'/dsh-vision-bench/workspace'") && src.includes('jumpProject'), '跳转写入 jumpProject')
-  assert.ok(src.includes('查看完整日志'), '完整日志入口')
+  const tree = render(createElement(Map, { sessionId: 's1', scope: { cwd: '/ws' } }))
+  await waitFor(() => {
+    const fileCall = calls.find((row) => /\/project\/file$/.test(row[0]))
+    assert.ok(fileCall, '源码接口被调用')
+    assert.equal(fileCall[1].path, 'src/main.c')
+  })
+  await waitFor(() => {
+    const host = tree.container.querySelector('[data-jump-line]')
+    assert.ok(host, '编辑器收到 jumpLine')
+    assert.equal(host.getAttribute('data-jump-line'), '12')
+  })
+  const row = tree.container.querySelector('[data-treeid="src/main.c"]')
+  assert.ok(row, '目标文件行存在')
+  assert.ok(row.className.includes('is-on') || row.querySelector('.dvb-map-jump'), '目标文件展开并高亮')
+  assert.ok(tree.container.textContent.includes('line 12'))
+  assert.equal(
+    calls.some((row) => row[0] === '/dsh-vision-bench/workspace'),
+    false,
+    '不再写入 /workspace jumpProject',
+  )
+  tree.unmount()
+})
+
+test('工程树晚于导航目标返回时仍完成定位', async () => {
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  const calls = []
+  const post = async (path, body) => {
+    calls.push([path, body || {}])
+    if (/\/dsh-vision-bench\/state$/.test(path)) {
+      return { ok: true, workspace: { keil: { project: '/proj/x.uvprojx', target: 'Debug' } } }
+    }
+    if (/\/dsh-vision-bench\/keil\/map$/.test(path)) {
+      await gate
+      return { ok: true, result: { details: MAP_DETAILS } }
+    }
+    if (/\/dsh-vision-bench\/project\/file$/.test(path)) {
+      return { ok: true, rel: body.path, text: 'int main(void) { return 0; }\n', lines: 1, truncated: false }
+    }
+    return { ok: true }
+  }
+  navigate(
+    's1',
+    '/ws',
+    { viewId: VIEW_DEBUG, section: DEBUG_SECTIONS.PROJECT, target: { file: 'src/main.c', line: 12 } },
+    { source: 'manual' },
+  )
+  const Map = createMapView(React, (k) => k, post)
+  const tree = render(createElement(Map, { sessionId: 's1', scope: { cwd: '/ws' } }))
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 40))
+  })
+  assert.equal(
+    calls.some((row) => /\/project\/file$/.test(row[0])),
+    false,
+    'Map 到达前不得打开源码',
+  )
+  await act(async () => {
+    release()
+  })
+  await waitFor(() => {
+    const fileCall = calls.find((row) => /\/project\/file$/.test(row[0]))
+    assert.ok(fileCall)
+    assert.equal(fileCall[1].path, 'src/main.c')
+  })
+  tree.unmount()
+})
+
+test('目标不存在时显示错误且不打开源码', async () => {
+  const { post, calls } = makePost()
+  navigate(
+    's1',
+    '/ws',
+    { viewId: VIEW_DEBUG, section: DEBUG_SECTIONS.PROJECT, target: { file: 'ghost.c', line: 9 } },
+    { source: 'manual' },
+  )
+  const Map = createMapView(React, (k) => k, post)
+  const tree = render(createElement(Map, { sessionId: 's1', scope: { cwd: '/ws' } }))
+  await waitFor(() => assert.ok(tree.container.textContent.includes('未找到文件：ghost.c')))
+  assert.equal(
+    calls.some((row) => /\/project\/file$/.test(row[0])),
+    false,
+    '找不到文件时不得请求源码',
+  )
+  tree.unmount()
+})
+
+test('工作区外文件不得尝试打开', async () => {
+  const { post, calls } = makePost()
+  navigate(
+    's1',
+    '/ws',
+    { viewId: VIEW_DEBUG, section: DEBUG_SECTIONS.PROJECT, target: { file: 'drv/uart.c', line: 4 } },
+    { source: 'manual' },
+  )
+  const Map = createMapView(React, (k) => k, post)
+  const tree = render(createElement(Map, { sessionId: 's1', scope: { cwd: '/ws' } }))
+  await waitFor(() => assert.ok(tree.container.textContent.includes('工作区外文件不能打开')))
+  assert.equal(
+    calls.some((row) => /\/project\/file$/.test(row[0])),
+    false,
+  )
+  tree.unmount()
+})
+
+test('openProject 带着文件目标后调试工作台切到工程结构', async () => {
+  const { post } = makePost()
+  const Page = createDebugWorkspace(React, (k) => k, post)
+  const tree = render(createElement(Page, { sessionId: 's1', scope: { cwd: '/ws' } }))
+  await waitFor(() => {
+    const root = tree.container.querySelector('[data-workspace="debug"]')
+    assert.ok(root)
+    assert.equal(root.getAttribute('data-section'), DEBUG_SECTIONS.WORKBENCH)
+  })
+  await act(async () => {
+    navigate(
+      's1',
+      '/ws',
+      { viewId: VIEW_DEBUG, section: DEBUG_SECTIONS.PROJECT, target: { file: 'src/main.c', line: 12 } },
+      { source: 'manual' },
+    )
+  })
+  await waitFor(() => {
+    const root = tree.container.querySelector('[data-workspace="debug"]')
+    assert.equal(root.getAttribute('data-section'), DEBUG_SECTIONS.PROJECT)
+  })
   tree.unmount()
 })
