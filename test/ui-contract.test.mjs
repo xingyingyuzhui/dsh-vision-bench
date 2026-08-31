@@ -34,6 +34,7 @@ async function stylesBundle() {
     'src/ui/styles/sidebar.mjs',
     'src/ui/styles/visualization.mjs',
     'src/ui/styles/frames.mjs',
+    'src/ui/styles/table.mjs',
     'src/ui/styles/workspace.mjs',
   ]
   const parts = await Promise.all(files.map((f) => src(f)))
@@ -45,8 +46,8 @@ test('页面契约：无绑定 UI、无大块聚焦面板、无完整时间线�
     hmiBundle(),
     src('bench-view.mjs'),
     src('bench-shared.mjs'),
-    src('bench-live.mjs'),
-    src('bench-frames-view.mjs'),
+    src('src/ui/monitor/alarms/alarm-page.mjs'),
+    src('src/ui/monitor/frames/frames-page.mjs'),
     stylesBundle(),
   ])
   // Task7: bind UI gone
@@ -64,9 +65,12 @@ test('页面契约：无绑定 UI、无大块聚焦面板、无完整时间线�
   // Task9: full journal timeline removed from debug/hmi pages
   assert.ok(!/journalPanel\(el, t, journal\)/.test(hmi), 'hmi has no full timeline panel')
   assert.ok(!/journalPanel\(el, t, journal\)/.test(view), 'debug has no full timeline panel')
-  assert.ok(/createLogPage/.test(live), 'operation log page exists')
+  const journal = await src('src/ui/monitor/journal/journal-page.mjs')
+  assert.ok(/createLogPage/.test(journal), 'operation log page exists')
   const runtime = await src('bench-runtime.mjs')
   assert.ok(!/betterSidebar/.test(runtime), 'runtime no longer injects betterSidebar')
+  assert.ok(/source: 'agent'/.test(runtime), 'Agent focus navigates as agent source')
+  assert.ok(/applied === false/.test(runtime), 'Agent focus respects manual nav lease')
   const monitor = await src('src/ui/workspace/monitor-workspace.mjs')
   assert.ok(/MONITOR_SECTIONS/.test(monitor), 'monitor workspace owns sections')
   const debugWs = await src('src/ui/workspace/debug-workspace.mjs')

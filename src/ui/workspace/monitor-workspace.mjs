@@ -1,7 +1,8 @@
-import { createFramesPage } from '../../../bench-frames-view.mjs'
-import { createAlarmPage, createLogPage } from '../../../bench-live.mjs'
-import { createVisualizationPage } from '../../../bench-visualization-view.mjs'
 import { sessionCwd } from '../common/session-scope.mjs'
+import { createAlarmPage } from '../monitor/alarms/alarm-page.mjs'
+import { createFramesPage } from '../monitor/frames/frames-page.mjs'
+import { createLogPage } from '../monitor/journal/journal-page.mjs'
+import { createVisualizationPage } from '../monitor/visualization/visualization-page.mjs'
 import { getNav, navigate, subscribeNav } from './vision-navigation-store.mjs'
 import { MONITOR_SECTIONS, VIEW_MONITOR, isMonitorSection } from './vision-route.mjs'
 import { renderWorkspaceTabs } from './workspace-tabs.mjs'
@@ -60,7 +61,7 @@ export function createMonitorWorkspace(React, t, post, hooks) {
         labels,
         onSelect(id) {
           setSection(id)
-          navigate(sessionId, cwd, { viewId: VIEW_MONITOR, section: id })
+          navigate(sessionId, cwd, { viewId: VIEW_MONITOR, section: id }, { source: 'manual' })
         },
       }),
       el('div', { className: 'dvb-ws-body' }, el(Page, props)),

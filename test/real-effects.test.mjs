@@ -21,6 +21,7 @@ const loadVendor = async () => {
   const uPlot = (await import('uplot')).default
   const vcore = await import('@tanstack/virtual-core')
   const rv = await import('@tanstack/react-virtual')
+  const table = await import('@tanstack/table-core')
   globalThis.__rvUseVirtualizer = rv.useVirtualizer
   globalThis.DvbVendor = {
     uPlot,
@@ -29,6 +30,9 @@ const loadVendor = async () => {
     observeElementRect: vcore.observeElementRect,
     observeElementOffset: vcore.observeElementOffset,
     useVirtualizer: rv.useVirtualizer,
+    createTable: table.createTable,
+    getCoreRowModel: table.getCoreRowModel,
+    getSortedRowModel: table.getSortedRowModel,
   }
 }
 
@@ -98,8 +102,9 @@ beforeEach(async () => {
   const ZERO_RECT = () => ({ width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} })
   const rectFor = (el) => {
     const cls = (el && el.className && String(el.className)) || ''
-    if (cls.includes('dvb-frames-virtual') || cls.includes('dvb-live-list')) return VIEW_RECT()
-    if (cls.includes('dvb-live-row')) return ROW_RECT()
+    if (cls.includes('dvb-frames-virtual') || cls.includes('dvb-live-list') || cls.includes('dvb-data-table-scroll'))
+      return VIEW_RECT()
+    if (cls.includes('dvb-live-row') || cls.includes('dvb-data-table-row')) return ROW_RECT()
     return ZERO_RECT()
   }
   win.HTMLElement.prototype.getBoundingClientRect = function () {

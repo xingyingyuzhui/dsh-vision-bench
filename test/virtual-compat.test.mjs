@@ -7,6 +7,33 @@ import { installDomStub } from './dom-stub.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
+test('Stage 5: package.json pins exact @tanstack/react-table and table-core 8.21.3', async () => {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+  assert.equal(pkg.dependencies['@tanstack/react-table'], '8.21.3')
+  assert.equal(pkg.dependencies['@tanstack/table-core'], '8.21.3')
+  assert.doesNotMatch(pkg.dependencies['@tanstack/react-table'], /[\^~]/)
+  assert.doesNotMatch(pkg.dependencies['@tanstack/table-core'], /[\^~]/)
+})
+
+test('Stage 5: package-lock pins table-core 8.21.3', async () => {
+  const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'))
+  const entry = lock.packages && lock.packages['node_modules/@tanstack/table-core']
+  assert.ok(entry, 'lock should contain table-core')
+  assert.equal(entry.version, '8.21.3')
+  assert.equal(entry.resolved, 'https://registry.npmjs.org/@tanstack/table-core/-/table-core-8.21.3.tgz')
+})
+
+test('Stage 5: vendor-entry ships table-core createTable, not useReactTable', async () => {
+  const src = readFileSync(join(root, 'scripts/vendor-entry.mjs'), 'utf8')
+  assert.match(src, /@tanstack\/table-core/)
+  assert.match(src, /createTable/)
+  assert.match(src, /getCoreRowModel/)
+  assert.match(src, /getSortedRowModel/)
+  assert.doesNotMatch(src, /import\s*\{[^}]*useReactTable/)
+  assert.doesNotMatch(src, /import\s*\{[^}]*flexRender/)
+  assert.doesNotMatch(src, /from\s+['"]@tanstack\/react-table['"]/)
+})
+
 test('Task8: package.json has exact @tanstack/virtual-core', async () => {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
   assert.ok(pkg.dependencies, 'should have dependencies')

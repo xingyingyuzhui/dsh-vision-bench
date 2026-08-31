@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { createMonitorWorkspace } from '../../src/ui/workspace/monitor-workspace.mjs'
 import { clearNavStore } from '../../src/ui/workspace/vision-navigation-store.mjs'
 import { MONITOR_SECTIONS } from '../../src/ui/workspace/vision-route.mjs'
@@ -40,4 +43,12 @@ test('monitor workspace renders section tabs and defaults to visualization', () 
     MONITOR_SECTIONS.FRAMES,
     MONITOR_SECTIONS.JOURNAL,
   ])
+})
+
+test('monitor workspace tab click uses manual nav source', () => {
+  const src = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../../src/ui/workspace/monitor-workspace.mjs'),
+    'utf8',
+  )
+  assert.match(src, /source: 'manual'/)
 })

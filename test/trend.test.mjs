@@ -191,7 +191,10 @@ test('Task3: trend buffers are isolated per cwd (same pointId, different values)
 
 test('Task5/6 guards: no hard-coded configVersion collapse and no window.uPlot reliance', async () => {
   // TaskP2/0.20.0: 曲线已迁移为「可视化」组件页（bench-visualization-view.mjs）
-  const live = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'bench-visualization-view.mjs'), 'utf8')
+  const live = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'src/ui/monitor/visualization/visualization-page.mjs'),
+    'utf8',
+  )
   assert.doesNotMatch(live, /window\.uPlot|globalThis\.uPlot/, 'must not rely on host uPlot globals')
   assert.match(live, /vendorUPlot\(\)/, 'should consume bundled uPlot constructor lazily')
   assert.match(live, /destroy/, 'should destroy uPlot on teardown')

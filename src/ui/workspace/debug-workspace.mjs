@@ -1,6 +1,6 @@
-import { createMapView } from '../../../bench-map.mjs'
 import { createDebugView } from '../../../bench-view.mjs'
 import { sessionCwd } from '../common/session-scope.mjs'
+import { createMapView } from '../debug/project/project-page.mjs'
 import { getNav, navigate, subscribeNav } from './vision-navigation-store.mjs'
 import { DEBUG_SECTIONS, VIEW_DEBUG, isDebugSection } from './vision-route.mjs'
 import { renderWorkspaceTabs } from './workspace-tabs.mjs'
@@ -28,7 +28,7 @@ export function createDebugWorkspace(React, t, post) {
     const [section, setSection] = React.useState(() => initialSection(sessionId, cwd))
     openProjectRef.current = () => {
       setSection(DEBUG_SECTIONS.PROJECT)
-      navigate(sessionId, cwd, { viewId: VIEW_DEBUG, section: DEBUG_SECTIONS.PROJECT })
+      navigate(sessionId, cwd, { viewId: VIEW_DEBUG, section: DEBUG_SECTIONS.PROJECT }, { source: 'manual' })
     }
     React.useEffect(() => {
       setSection(initialSection(sessionId, cwd))
@@ -45,7 +45,7 @@ export function createDebugWorkspace(React, t, post) {
         labels,
         onSelect(id) {
           setSection(id)
-          navigate(sessionId, cwd, { viewId: VIEW_DEBUG, section: id })
+          navigate(sessionId, cwd, { viewId: VIEW_DEBUG, section: id }, { source: 'manual' })
         },
       }),
       el(

@@ -277,13 +277,15 @@ test('Task4: postEvidence surfaces CONFIG_DRIFT / TARGET_MISMATCH instead of sil
 })
 
 test('Task4: UI evidence requests use explicit typed fields and no silent evidence swallow', async () => {
-  const live = readFileSync(new URL('../bench-live.mjs', import.meta.url), 'utf8')
+  const live =
+    readFileSync(new URL('../src/ui/monitor/alarms/alarm-page.mjs', import.meta.url), 'utf8') +
+    readFileSync(new URL('../src/ui/monitor/journal/journal-page.mjs', import.meta.url), 'utf8')
   const hmiRoot = join(dirname(fileURLToPath(import.meta.url)), '../src/ui/hmi')
   const hmi = readdirSync(hmiRoot)
     .filter((f) => f.endsWith('.mjs'))
     .map((f) => readFileSync(join(hmiRoot, f), 'utf8'))
     .join('\n')
-  const frames = readFileSync(new URL('../bench-frames-view.mjs', import.meta.url), 'utf8')
+  const frames = readFileSync(new URL('../src/ui/monitor/frames/frames-page.mjs', import.meta.url), 'utf8')
   // all three surfaces must go through the shared typed postEvidence helper
   assert.match(live, /postEvidence\(/)
   assert.match(hmi, /postEvidence\(/)

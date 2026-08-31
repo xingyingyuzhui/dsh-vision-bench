@@ -1,6 +1,6 @@
 // Vendor bridge — reads the `DvbVendor` factory-scope var injected by
-// scripts/build-client.mjs (which contains esbuild-bundled uPlot + virtual-core,
-// incl. the official @tanstack/react-virtual adapter).
+// scripts/build-client.mjs (which contains esbuild-bundled uPlot + virtual-core
+// + table-core, incl. the official @tanstack/react-virtual adapter).
 //
 // IMPORTANT: lookups are LAZY (functions, not module-load-time consts) because
 // `DvbVendor` only exists after the ModuleLoader factory runs (in the bundled
@@ -30,6 +30,21 @@ export const vendorElementScroll = () => {
 export const vendorUseVirtualizer = () => {
   const v = getVendor()
   return (v && v.useVirtualizer) || null
+}
+
+export const vendorCreateTable = () => {
+  const v = getVendor()
+  return (v && v.createTable) || null
+}
+
+export const vendorGetCoreRowModel = () => {
+  const v = getVendor()
+  return (v && v.getCoreRowModel) || null
+}
+
+export const vendorGetSortedRowModel = () => {
+  const v = getVendor()
+  return (v && v.getSortedRowModel) || null
 }
 
 export const vendorAvailable = () => !!(vendorUPlot() && vendorVirtualizer())

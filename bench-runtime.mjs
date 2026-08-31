@@ -63,13 +63,13 @@ export function apply(ctx) {
 
   function openHmi(target) {
     const cwd = getActiveScope().cwd
-    navigate('', cwd, { viewId: VIEW_HMI, section: '', target: target || {} })
+    navigate('', cwd, { viewId: VIEW_HMI, section: '', target: target || {} }, { source: 'manual' })
     selectView(VIEW_HMI)
   }
 
   function openFrames() {
     const cwd = getActiveScope().cwd
-    navigate('', cwd, { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES })
+    navigate('', cwd, { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES }, { source: 'manual' })
     selectView(VIEW_MONITOR)
   }
 
@@ -94,9 +94,10 @@ export function apply(ctx) {
       previousRouteKey: lastRouteKey,
     })
     if (!decision.route) return
-    lastRouteKey = decision.routeKey
     const sessionId = (fs && (fs.sessionId || (fs.request && fs.request.sessionId))) || ''
-    navigate(sessionId, active.cwd, decision)
+    const result = navigate(sessionId, active.cwd, decision, { source: 'agent' })
+    if (!result || result.applied === false) return
+    lastRouteKey = decision.routeKey
     selectView(decision.viewId)
   }
   const focusUnsub = subscribeFocus('', (fs, cwd) => applyFocus(fs, cwd))

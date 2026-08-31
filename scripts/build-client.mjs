@@ -26,6 +26,7 @@ const ESBUILD_COMMON = {
   metafile: true,
   external: ['react'],
   alias: { 'react-dom': REACT_DOM_SHIM },
+  define: { 'process.env.NODE_ENV': '"production"' },
 }
 
 const BLOCKED_SPEC =

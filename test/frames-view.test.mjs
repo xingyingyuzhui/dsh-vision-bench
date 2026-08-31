@@ -113,7 +113,7 @@ test('frames auto-follow only at bottom', async () => {
 })
 
 test('frames view wires identity + virtualizer via build pipeline', async () => {
-  const src = readFileSync(join(root, 'bench-frames-view.mjs'), 'utf8')
+  const src = readFileSync(join(root, 'src/ui/monitor/frames/frames-page.mjs'), 'utf8')
   assert.match(
     src,
     /buildFramePortOptions|parseFramePortSelection|selectProtocolFrames/,
@@ -138,8 +138,10 @@ test('bench-frames-view.mjs exists and registers dsh-vision-bench:frames', async
   const p = join(root, 'bench-frames-view.mjs')
   assert.ok(existsSync(p))
   const src = readFileSync(p, 'utf8')
-  assert.match(src, /dsh-vision-bench:frames/)
   assert.match(src, /createFramesPage/)
+  const page = readFileSync(join(root, 'src/ui/monitor/frames/frames-page.mjs'), 'utf8')
+  assert.match(page, /dsh-vision-bench:frames/)
+  assert.match(page, /createFramesPage/)
 })
 
 test('resolveFrameSelection maps conn:<id> to its COM port; raw: is not a source', async () => {
@@ -159,7 +161,7 @@ test('mode switch keeps conn selection; unconfigured COM is never a source', asy
 })
 
 test('frames page source has no open/close serial UI', async () => {
-  const src = readFileSync(join(root, 'bench-frames-view.mjs'), 'utf8')
+  const src = readFileSync(join(root, 'src/ui/monitor/frames/frames-page.mjs'), 'utf8')
   assert.doesNotMatch(src, /打开串口/)
   assert.doesNotMatch(src, /关闭串口/)
   assert.doesNotMatch(src, /serial\/open/)
