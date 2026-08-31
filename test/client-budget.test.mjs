@@ -10,6 +10,7 @@ import {
   normalizeNewlines,
   sha256Text,
 } from '../scripts/check-client-budget.mjs'
+import { NEW_UI_LIBS, VENDOR_GZIP_LIMIT, reportClientVendors } from '../scripts/report-client-vendors.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -100,6 +101,20 @@ test('assertClientBudget rejects React / serial packages in the esbuild metafile
       ),
     /serial\/modbus/,
   )
+})
+
+test('vendor size report keeps the 300KB gzip gate and react external', () => {
+  assert.equal(VENDOR_GZIP_LIMIT, 300 * 1024)
+  assert.ok(NEW_UI_LIBS.includes('echarts'))
+  assert.ok(NEW_UI_LIBS.includes('gridstack'))
+  const report = reportClientVendors({
+    clientSource: OK_SOURCE,
+    vendorMetafile: { inputs: {} },
+  })
+  assert.equal(report.requiresReact, true)
+  assert.equal(report.hasReactDom, false)
+  assert.equal(report.hasNodeSerial, false)
+  assert.equal(report.gzipLimit, 300 * 1024)
 })
 
 test('generated client.js is under the stage-1 budget', () => {
