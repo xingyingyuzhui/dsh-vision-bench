@@ -44,7 +44,7 @@
 - **从机（未启用）**：本版本不提供 Modbus 从机模式，UI 与 Agent 层均显式拒绝（`ROLE_NOT_SUPPORTED`）；真正的 Slave Server 单独立项
 - **会话协作**：Vision 自动服务当前 Session，不再提供手动绑定/解绑；后台 Session 的操作只记录，不抢当前页面焦点。Agent 定位目标时目标短时高亮并在右下角轻提示「Agent 已定位到 …」，可一次性返回原位置
 - **三个原生工作区**：Harness `conversation.view` 上的 **调试** / **上位机** / **监控**。调试内是工作台（编译烧录与构建日志）和工程结构；监控内是可视化、告警、串口报文、操作记录。不再注册 Vision 侧栏页面，也不再要求安装 `dsh-better-sidebar`。点表值 / 可视化 / 告警共享同一实时值来源，一次采集同时驱动，不重复占串口
-- **Agent 联动**：`vision_bench` 支持 `visualization` 动作（list/get/add/update/remove）——组件读取实时回显，修改直接保存（所有配置修改必须携带最近一次 status/list/get 返回的 `configVersion`；`CONFIG_DRIFT` 后必须重新读取再基于新版本重试；`propose*` 返回 `OP_REMOVED`；ID 冲突返回 `VIZ_TARGET_MISMATCH`）。Agent 可以直接修改连接、设备、点位和可视化配置；Host 校验后原子保存并记入操作记录。真实设备写入和烧录仍需用户批准：烧录走服务端 `requestId` 批准卡，OpenOCD 只烧录哈希校验后的固件快照。`focus` 支持仅凭 `visualizationId` 聚焦组件；`points` 返回 `monitorEnabled/alarmEnabled/trendEnabled/runtimeStatus` 与阈值；组件右侧 Agent 图标把结构化引用追加到当前 Session 输入框
+- **Agent 联动**：`vision_bench` 支持 `visualization` 动作（list/get/add/update/remove/layout）——组件读取实时回显，修改直接保存（所有配置修改必须携带最近一次 status/list/get 返回的 `configVersion`；`CONFIG_DRIFT` 后必须重新 list/get 再基于新版本重试；`layout` 必须携带 `items[{id,x,y,w,h}]`；`propose*` 返回 `OP_REMOVED`；ID 冲突返回 `VIZ_TARGET_MISMATCH`）。Agent 可以直接修改连接、设备、点位和可视化配置，调整布局后当前 Session 可视化页面实时同步。Host 校验后原子保存并记入操作记录。真实设备写入和烧录仍需用户批准：烧录走服务端 `requestId` 批准卡，OpenOCD 只烧录哈希校验后的固件快照。`focus` 支持仅凭 `visualizationId` 聚焦组件；`points` 返回 `monitorEnabled/alarmEnabled/trendEnabled/runtimeStatus` 与阈值；组件右侧 Agent 图标把结构化引用追加到当前 Session 输入框
 - **工程结构**：组/文件/函数三级展开折叠，文件与函数搜索，缺失/不可读/工作区外筛选，只读源码预览（工作区内 + 防符号链接逃逸 + 扩展名白名单 + 256KB 上限），Include/宏/依赖折叠于“编译配置”；编译错误显示文件:行号，一键“定位”打开工程结构并高亮；完整日志支持搜索与错误/警告筛选
 
 还没做：CAN 监视、验证流程（verify）。

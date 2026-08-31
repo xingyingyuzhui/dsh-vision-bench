@@ -890,8 +890,12 @@ test('Task3/0.20.1: 工具 Schema 完整开放 visualization / component / op �
   for (const op of ['proposeAdd', 'proposeUpdate', 'proposeRemove', 'discard']) {
     assert.equal(props.op.enum.includes(op), false, 'op.enum 不含已移除 ' + op)
   }
-  for (const op of ['list', 'get', 'add', 'update', 'remove', 'clear'])
+  for (const op of ['list', 'get', 'add', 'update', 'remove', 'clear', 'layout'])
     assert.ok(props.op.enum.includes(op), 'op.enum 含 ' + op)
+  assert.ok(props.items, 'layout items 参数')
+  assert.deepEqual(props.items.items.required, ['id', 'x', 'y', 'w', 'h'])
+  assert.ok(comp.properties.layout, 'component.layout')
+  assert.deepEqual(Object.keys(comp.properties.layout.properties).sort(), ['h', 'w', 'x', 'y'])
   const pointProps = props.point.properties
   for (const k of ['monitorEnabled', 'alarmEnabled', 'trendEnabled']) assert.ok(k in pointProps, 'point.' + k)
   const itemsProps = props.points.items.properties

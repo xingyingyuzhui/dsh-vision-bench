@@ -31,7 +31,7 @@ export async function handleVisualizationCommand(home, args, room, origin, opts)
       ok: false,
       action,
       errorCode: 'OP_REMOVED',
-      error: '配置草稿已移除；请用 visualization op=add|update|remove 直接修改',
+      error: '配置草稿已移除；请用 visualization op=add|update|remove|layout 直接修改',
     }
   }
   if (op === 'list') {

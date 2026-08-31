@@ -10,6 +10,7 @@ import {
   monitoredPointOptions,
   normalizeVisualization,
   normalizeVisualizationComponent,
+  parseVisualizationLayoutItems,
   validateVisualizationComponent,
   visualizationComponentStatus,
 } from '../bench-visualization-model.mjs'
@@ -184,6 +185,32 @@ test('schema v1 migrates to v2 with default layout; modbus version is not visual
     pts([{ id: 'p1' }]),
   )
   assert.deepEqual(kept.components[0].layout, { x: 3, y: 2, w: 4, h: 5 })
+})
+
+test('parseVisualizationLayoutItems rejects empty, duplicate, missing and out-of-bounds items', () => {
+  const comps = [{ id: 'viz_a' }]
+  assert.equal(parseVisualizationLayoutItems([], comps).errorCode, 'LAYOUT_REQUIRED')
+  assert.equal(
+    parseVisualizationLayoutItems(
+      [
+        { id: 'viz_a', x: 0, y: 0, w: 3, h: 3 },
+        { id: 'viz_a', x: 1, y: 0, w: 3, h: 3 },
+      ],
+      comps,
+    ).errorCode,
+    'LAYOUT_DUPLICATE_ID',
+  )
+  assert.equal(
+    parseVisualizationLayoutItems([{ id: 'gone', x: 0, y: 0, w: 3, h: 3 }], comps).errorCode,
+    'VIZ_NOT_FOUND',
+  )
+  assert.equal(
+    parseVisualizationLayoutItems([{ id: 'viz_a', x: 11, y: 0, w: 4, h: 3 }], comps).errorCode,
+    'LAYOUT_OUT_OF_BOUNDS',
+  )
+  const ok = parseVisualizationLayoutItems([{ id: 'viz_a', x: 2, y: 1, w: 4, h: 3 }], comps)
+  assert.equal(ok.ok, true)
+  assert.deepEqual(ok.items[0].layout, { x: 2, y: 1, w: 4, h: 3 })
 })
 test('Task11/0.20.1: 组件类型-功能码约束（line/bar 仅数值型，value 任意，switch 仅 FC01）', async () => {
   const allPts = pts([

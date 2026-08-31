@@ -69,8 +69,8 @@ export function visionBenchTool(home) {
       'read/write：读点与受控写点（Agent 写点需界面批准）；' +
       'connect：仅打开或断开已保存连接（close=true 断开）。修改端点用 configureConnection，打开用 openConnection；' +
       'points：op=list|add|update|remove|clear。add/update/remove/clear 直接保存；update/remove 必须带 pointId；clear 必须带 connectionId+deviceId。' +
-      'visualization：op=list|get|add|update|remove，直接修改组件。proposeAdd/proposeUpdate/proposeRemove 已移除（OP_REMOVED）。' +
-      '所有配置修改必须携带最近一次 status/list/get 返回的 configVersion。CONFIG_DRIFT 后必须重新读取配置，再基于新版本重试；不得盲目重复旧修改。适用 config、configureConnection、points add/update/remove/clear、visualization add/update/remove。status、points list、visualization list/get 不要求版本。' +
+      'visualization：op=list|get|add|update|remove|layout，直接修改组件。layout 必须携带 expectedConfigVersion 与 items[{id,x,y,w,h}]；CONFIG_DRIFT 后重新 list/get 再提交。当前 Session 可视化页面会实时同步布局。proposeAdd/proposeUpdate/proposeRemove 已移除（OP_REMOVED）。' +
+      '所有配置修改必须携带最近一次 status/list/get 返回的 configVersion。CONFIG_DRIFT 后必须重新读取配置，再基于新版本重试；不得盲目重复旧修改。适用 config、configureConnection、points add/update/remove/clear、visualization add/update/remove/layout。status、points list、visualization list/get 不要求版本。' +
       'frames/focus/trend/alarm/evidence：现场只读与定位；' +
       'manual：请求用户完成现场操作；' +
       'system.ping：无副作用探活 Host（不读写串口、不启动采集）。' +
@@ -106,7 +106,23 @@ export function visionBenchTool(home) {
         parity: { type: 'string', enum: ['N', 'E', 'O'] },
         stopbits: { type: 'number', enum: [1, 2] },
         sim: { type: 'boolean' },
-        op: { type: 'string', enum: ['list', 'get', 'add', 'update', 'remove', 'clear'] },
+        op: { type: 'string', enum: ['list', 'get', 'add', 'update', 'remove', 'clear', 'layout'] },
+        items: {
+          type: 'array',
+          description: 'visualization op=layout 的目标矩形列表',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['id', 'x', 'y', 'w', 'h'],
+            properties: {
+              id: { type: 'string' },
+              x: { type: 'number' },
+              y: { type: 'number' },
+              w: { type: 'number' },
+              h: { type: 'number' },
+            },
+          },
+        },
         point: {
           type: 'object',
           additionalProperties: true,
@@ -164,6 +180,16 @@ export function visionBenchTool(home) {
               properties: {
                 windowMs: { type: 'number' },
                 confirmWrite: { type: 'boolean' },
+              },
+            },
+            layout: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                x: { type: 'number' },
+                y: { type: 'number' },
+                w: { type: 'number' },
+                h: { type: 'number' },
               },
             },
           },

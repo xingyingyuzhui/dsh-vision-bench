@@ -7,8 +7,10 @@ import { requireWorkspaceCwd } from '../../../bench-paths.mjs'
 import { listConnectionStates } from '../../../bench-serial-monitor.mjs'
 import { normalizeWorkspace, workspaceKey } from '../../../bench-store.mjs'
 import {
+  normalizeComponentLayout,
   normalizeVisualization,
   normalizeVisualizationComponent,
+  parseVisualizationLayoutItems,
   validateVisualizationComponent,
 } from '../../../bench-visualization-model.mjs'
 import { explicitId, parseOperation } from '../../domain/config/config-operation.mjs'
@@ -132,6 +134,7 @@ export function createConfigMutationService(deps = {}) {
       affectedAlarms: applied.affectedAlarms || [],
       workspace: saved.workspace,
       visualization: saved.workspace.modbus.visualization,
+      layout: applied.layout,
       points: saved.workspace.modbus.points,
       connections: saved.workspace.modbus.connections,
       devices: saved.workspace.modbus.devices,
@@ -445,20 +448,16 @@ function applyVisualization(workspace, op, target, value) {
     }
   }
   if (op === 'layout') {
-    const items = Array.isArray(value.items) ? value.items : []
-    const byId = new Map()
-    for (const item of items) {
-      const itemId = explicitId(item && (item.id || item.visualizationId))
-      if (!itemId) continue
-      byId.set(itemId, item)
-    }
+    const parsed = parseVisualizationLayoutItems(value.items, viz.components)
+    if (!parsed.ok) return parsed
+    const byId = new Map(parsed.items.map((row) => [row.id, row.layout]))
     /** @type {string[]} */
     const changed = []
     viz.components = viz.components.map((c, i) => {
-      const hit = byId.get(c.id)
-      if (!hit) return c
+      const nextLayout = byId.get(c.id)
+      if (!nextLayout) return c
       changed.push(c.id)
-      return normalizeVisualizationComponent({ ...c, layout: hit.layout || hit }, i)
+      return normalizeVisualizationComponent({ ...c, layout: normalizeComponentLayout(nextLayout, i, c.type) }, i)
     })
     pack.visualization = viz
     return {
@@ -468,6 +467,7 @@ function applyVisualization(workspace, op, target, value) {
       changedIds: changed,
       changedVisualizationIds: changed,
       visualization: viz,
+      layout: viz.components.map((c) => ({ id: c.id, ...(c.layout || {}) })),
     }
   }
   return { ok: false, errorCode: 'UNKNOWN_OP', error: 'visualization op 必须是 add|update|remove|layout' }

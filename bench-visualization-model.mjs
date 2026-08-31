@@ -62,6 +62,55 @@ export function normalizeComponentLayout(raw, index, type) {
   }
 }
 
+export function validateLayoutBox(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { ok: false, errorCode: 'LAYOUT_INVALID', error: '非法布局坐标' }
+  }
+  for (const key of ['x', 'y', 'w', 'h']) {
+    if (!Number.isFinite(Number(raw[key]))) {
+      return { ok: false, errorCode: 'LAYOUT_INVALID', error: `非法布局坐标: ${key}` }
+    }
+  }
+  const x = Math.trunc(Number(raw.x))
+  const y = Math.trunc(Number(raw.y))
+  const w = Math.trunc(Number(raw.w))
+  const h = Math.trunc(Number(raw.h))
+  if (x < 0 || y < 0 || w < 1 || h < 1) {
+    return { ok: false, errorCode: 'LAYOUT_INVALID', error: '非法布局坐标' }
+  }
+  if (w > VIZ_GRID_COLUMNS || x + w > VIZ_GRID_COLUMNS || h > 32 || y > 256) {
+    return { ok: false, errorCode: 'LAYOUT_OUT_OF_BOUNDS', error: '布局超出网格范围' }
+  }
+  return { ok: true, layout: normalizeComponentLayout({ x, y, w, h }, 0, 'value') }
+}
+
+export function parseVisualizationLayoutItems(items, components) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return { ok: false, errorCode: 'LAYOUT_REQUIRED', error: 'layout 必须携带 items' }
+  }
+  const known = new Set((Array.isArray(components) ? components : []).map((c) => c && c.id).filter(Boolean))
+  const seen = new Set()
+  const parsed = []
+  for (const item of items) {
+    const id = String((item && (item.id || item.visualizationId)) || '').trim()
+    if (!id) return { ok: false, errorCode: 'LAYOUT_INVALID', error: 'layout item 缺少 id' }
+    if (seen.has(id)) return { ok: false, errorCode: 'LAYOUT_DUPLICATE_ID', error: `重复布局 id: ${id}` }
+    seen.add(id)
+    const box = item && item.layout && typeof item.layout === 'object' ? item.layout : item
+    const checked = validateLayoutBox(box)
+    if (!checked.ok) return checked
+    parsed.push({ id, layout: checked.layout })
+  }
+  const missing = parsed.filter((row) => !known.has(row.id))
+  if (missing.length === parsed.length) {
+    return { ok: false, errorCode: 'VIZ_NOT_FOUND', error: '布局目标组件不存在' }
+  }
+  if (missing.length) {
+    return { ok: false, errorCode: 'VIZ_NOT_FOUND', error: `组件不存在: ${missing[0].id}` }
+  }
+  return { ok: true, items: parsed }
+}
+
 const vizClampInt = (v, fallback, min, max) => {
   const n = Number(v)
   if (!Number.isFinite(n)) return fallback
