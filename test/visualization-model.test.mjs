@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   COMPONENT_LIMITS,
   componentUsesPoint,
+  defaultComponentLayout,
   emptyVisualization,
   findComponent,
   monitoredPointOptions,
@@ -154,10 +155,35 @@ test('monitoredPointOptions 只列监视点位并带限定路径', async () => {
 
 test('emptyVisualization / componentUsesPoint', async () => {
   const v = emptyVisualization()
-  assert.equal(v.schemaVersion, 1)
+  assert.equal(v.schemaVersion, 2)
+  assert.equal(v.columns, 12)
   assert.deepEqual(v.components, [])
   assert.equal(componentUsesPoint({ pointIds: ['p1', 'p2'] }, 'p2'), true)
   assert.equal(componentUsesPoint({ pointIds: ['p1'] }, 'pX'), false)
+})
+
+test('schema v1 migrates to v2 with default layout; modbus version is not visualization schema', () => {
+  const v1 = {
+    schemaVersion: 1,
+    components: [
+      { id: 'viz_a', name: '趋势', type: 'line', pointIds: ['p1'] },
+      { id: 'viz_b', name: '数值', type: 'value', pointIds: ['p2'] },
+    ],
+  }
+  const v2 = normalizeVisualization(v1, pts([{ id: 'p1' }, { id: 'p2' }]))
+  assert.equal(v2.schemaVersion, 2)
+  assert.equal(v2.columns, 12)
+  assert.equal(v2.components[0].id, 'viz_a')
+  assert.deepEqual(v2.components[0].layout, defaultComponentLayout(0, 'line'))
+  assert.deepEqual(v2.components[1].layout, defaultComponentLayout(1, 'value'))
+  const kept = normalizeVisualization(
+    {
+      schemaVersion: 2,
+      components: [{ id: 'viz_a', type: 'line', pointIds: ['p1'], layout: { x: 3, y: 2, w: 4, h: 5 } }],
+    },
+    pts([{ id: 'p1' }]),
+  )
+  assert.deepEqual(kept.components[0].layout, { x: 3, y: 2, w: 4, h: 5 })
 })
 test('Task11/0.20.1: 组件类型-功能码约束（line/bar 仅数值型，value 任意，switch 仅 FC01）', async () => {
   const allPts = pts([

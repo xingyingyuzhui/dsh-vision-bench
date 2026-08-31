@@ -68,5 +68,20 @@ test('visualization update/remove keep id and do not auto-delete degraded compon
 
   const listed = await runVisionBench(home, { action: 'visualization', op: 'list' }, cwd, { source: 'agent' })
   assert.equal(listed.ok, true)
+  assert.equal(loadWorkspace(home, cwd).modbus.visualization.schemaVersion, 2)
+  assert.equal(loadWorkspace(home, cwd).modbus.version, 3)
+  const laid = await runVisionBench(
+    home,
+    {
+      action: 'visualization',
+      op: 'layout',
+      expectedConfigVersion: loadWorkspace(home, cwd).modbus.configVersion,
+      items: [{ id: 'viz_a', x: 2, y: 1, w: 4, h: 3 }],
+    },
+    cwd,
+    { source: 'user' },
+  )
+  assert.equal(laid.ok, true)
+  assert.deepEqual(loadWorkspace(home, cwd).modbus.visualization.components[0].layout, { x: 2, y: 1, w: 4, h: 3 })
   await rm(home, { recursive: true, force: true })
 })

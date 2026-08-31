@@ -1,6 +1,6 @@
 // @ts-check
 export const POINT_OPS = new Set(['add', 'update', 'remove', 'clear'])
-export const VIZ_OPS = new Set(['add', 'update', 'remove'])
+export const VIZ_OPS = new Set(['add', 'update', 'remove', 'layout'])
 export const CONNECTION_OPS = new Set(['create', 'update', 'remove'])
 export const DEVICE_OPS = new Set(['create', 'update', 'remove'])
 

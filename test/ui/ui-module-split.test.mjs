@@ -3,7 +3,13 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { fileKind, fileMatchesSearch, filePassesFilter } from '../../src/ui/debug/project/project-tree-model.mjs'
+import {
+  buildProjectTree,
+  fileKind,
+  fileMatchesSearch,
+  filePassesFilter,
+  languageForPath,
+} from '../../src/ui/debug/project/project-tree-model.mjs'
 import { alarmListForView } from '../../src/ui/monitor/alarms/alarm-filter-model.mjs'
 import { filterFrameList } from '../../src/ui/monitor/frames/frames-filter-model.mjs'
 
@@ -19,6 +25,25 @@ test('UI facades re-export split pages', () => {
   assert.match(map, /src\/ui\/debug\/project\/project-page\.mjs/)
   assert.match(live, /src\/ui\/monitor\/alarms\/alarm-page\.mjs/)
   assert.match(live, /src\/ui\/monitor\/journal\/journal-page\.mjs/)
+})
+
+test('viz grid and echarts runtimes do not talk to Host or wrap React DOM', () => {
+  const grid = readFileSync(join(root, 'src/ui/components/viz-grid.mjs'), 'utf8')
+  const gridRt = readFileSync(join(root, 'src/ui/vendor/grid-runtime.mjs'), 'utf8')
+  const chartRt = readFileSync(join(root, 'src/ui/vendor/echarts-runtime.mjs'), 'utf8')
+  const vendor = readFileSync(join(root, 'scripts/vendor-entry.mjs'), 'utf8')
+  for (const src of [grid, gridRt, chartRt]) {
+    assert.doesNotMatch(src, /\/dsh-vision-bench\//)
+    assert.doesNotMatch(src, /from\s+['"]react['"]/)
+    assert.doesNotMatch(src, /\.addWidget\(/)
+  }
+  assert.match(grid, /makeWidget/)
+  assert.match(grid, /removeWidget\(node\.el, false\)/)
+  assert.match(grid, /destroy\(false\)/)
+  assert.match(vendor, /from 'gridstack'/)
+  assert.match(vendor, /echarts\/core/)
+  assert.doesNotMatch(vendor, /from\s+['"]echarts-for-react['"]/)
+  assert.doesNotMatch(vendor, /from\s+['"]@gridstack\/react['"]/)
 })
 
 test('DataTable and table-runtime do not talk to Host or third-party React', () => {
@@ -108,4 +133,30 @@ test('pure models filter alarms, frames, and project files without React', () =>
   assert.equal(fileKind(file), 'ok')
   assert.equal(filePassesFilter(file, 'missing'), false)
   assert.equal(fileMatchesSearch(file, 'init'), true)
+  assert.equal(languageForPath('src/main.c'), 'cpp')
+  assert.equal(languageForPath('cfg.json'), 'json')
+  assert.equal(languageForPath('note.txt'), 'plain')
+  const tree = buildProjectTree(
+    [
+      {
+        name: 'Source',
+        files: [
+          { name: 'main.c', rel: 'src/main.c', inside: true, exists: true, readable: true, functions: [] },
+          { name: 'gone.c', rel: 'src/gone.c', inside: true, exists: false, readable: false, functions: [] },
+        ],
+      },
+    ],
+    { filter: 'missing', search: '' },
+  )
+  assert.equal(tree.length, 1)
+  assert.equal(tree[0].files.length, 1)
+  assert.equal(tree[0].files[0].name, 'gone.c')
+})
+
+test('source-editor does not talk to Host', () => {
+  const src = readFileSync(join(root, 'src/ui/components/source-editor.mjs'), 'utf8')
+  assert.doesNotMatch(src, /\/dsh-vision-bench\//)
+  assert.doesNotMatch(src, /from\s+['"]react['"]/)
+  assert.match(src, /EditorView/)
+  assert.match(src, /readOnly/)
 })

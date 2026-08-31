@@ -118,13 +118,20 @@ function asNamedIife(name, raw) {
   return 'var ' + name + ' = ' + rhs + ';'
 }
 
-function readUplotCss() {
-  const p = join(root, 'node_modules/uplot/dist/uPlot.min.css')
-  try {
-    return readFileSync(p, 'utf8')
-  } catch (error) {
-    throw new Error('无法读取 uPlot 官方 CSS: ' + p + ' (' + error.message + ')')
-  }
+function readVendorCss() {
+  const files = [
+    join(root, 'node_modules/uplot/dist/uPlot.min.css'),
+    join(root, 'node_modules/gridstack/dist/gridstack.min.css'),
+  ]
+  return files
+    .map((p) => {
+      try {
+        return readFileSync(p, 'utf8')
+      } catch (error) {
+        throw new Error('无法读取 vendor CSS: ' + p + ' (' + error.message + ')')
+      }
+    })
+    .join('\n')
 }
 
 async function buildNamedBundle(name, entry) {
@@ -175,7 +182,7 @@ export function pluginBodyOf(src) {
 export async function buildClientSource() {
   const vendor = await buildNamedBundle('DvbVendor', 'scripts/vendor-entry.mjs')
   const client = await buildNamedBundle('DvbClient', 'src/ui/client/client-entry.mjs')
-  const source = wrapModuleLoader(vendor.js, readUplotCss(), client.js)
+  const source = wrapModuleLoader(vendor.js, readVendorCss(), client.js)
   const bytes = Buffer.byteLength(source, 'utf8')
   assertClientBudget({
     bytes,

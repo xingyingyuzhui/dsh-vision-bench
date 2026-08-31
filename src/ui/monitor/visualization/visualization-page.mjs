@@ -23,6 +23,7 @@ import {
 import { vendorUPlot } from '../../../../bench-vendor.mjs'
 import {
   COMPONENT_TYPES,
+  VIZ_GRID_COLUMNS,
   formatSwitchWriteNote,
   monitoredPointOptions,
   normalizeVisualizationComponent,
@@ -30,15 +31,26 @@ import {
   visualizationComponentStatus,
 } from '../../../../bench-visualization-model.mjs'
 import { sessionCwd } from '../../common/session-scope.mjs'
+import { createVizGrid } from '../../components/viz-grid.mjs'
+import { getEcharts } from '../../vendor/echarts-runtime.mjs'
 import { renderBarRenderer } from './renderers/bar-renderer.mjs'
 import { renderLineRenderer } from './renderers/line-renderer.mjs'
 import { renderSwitchRenderer } from './renderers/switch-renderer.mjs'
 import { renderValueRenderer } from './renderers/value-renderer.mjs'
-import { VIZ_COLORS, hasTrendSamples, pointCompatible, vizFieldOf, vizTypeLabel } from './viz-helpers.mjs'
+import {
+  VIZ_COLORS,
+  echartsBarFromLatest,
+  echartsSeriesFromTrend,
+  hasTrendSamples,
+  pointCompatible,
+  vizFieldOf,
+  vizTypeLabel,
+} from './viz-helpers.mjs'
 export function createVisualizationPage(React, t, post, hooks) {
   const openHmi = hooks?.openHmi
   void openHmi
   const el = React.createElement
+  const VizGrid = createVizGrid(React)
   return function VisualizationPage(props) {
     const cwd = props?.scope?.cwd || sessionCwd(props) || ''
     const inputDraft = readInputDraft(props?.useInput)
@@ -73,6 +85,8 @@ export function createVisualizationPage(React, t, post, hooks) {
     }, [cwd])
     const [, setTick] = React.useState(0)
     const uplotRefs = React.useRef({})
+    const echartRefs = React.useRef({})
+    const layoutDraft = React.useRef(null)
     const switchDraft = React.useRef(null)
     const copyToken = React.useRef(0)
 
@@ -114,7 +128,9 @@ export function createVisualizationPage(React, t, post, hooks) {
       }
     })()
     const points = pack ? pack.points || [] : []
-    const viz = pack ? pack.visualization || { schemaVersion: 1, components: [] } : { schemaVersion: 1, components: [] }
+    const viz = pack
+      ? pack.visualization || { schemaVersion: 2, columns: VIZ_GRID_COLUMNS, components: [] }
+      : { schemaVersion: 2, columns: VIZ_GRID_COLUMNS, components: [] }
     const components = viz && Array.isArray(viz.components) ? viz.components : []
     const values = pack ? pack.values || [] : []
     const trendStore = pack ? pack.trend || {} : {}
@@ -127,15 +143,26 @@ export function createVisualizationPage(React, t, post, hooks) {
         } catch {}
       }
       delete uplotRefs.current[id]
+      const chart = echartRefs.current[id]
+      if (chart) {
+        try {
+          chart.dispose()
+        } catch {}
+      }
+      delete echartRefs.current[id]
     }
 
     React.useEffect(() => {
       const live = new Set()
       for (const comp of components) {
-        if (comp.type !== 'line') continue
-        if (visualizationComponentStatus(comp, points) === 'ok') live.add(comp.id)
+        if ((comp.type === 'line' || comp.type === 'bar') && visualizationComponentStatus(comp, points) === 'ok') {
+          live.add(comp.id)
+        }
       }
       for (const id of Object.keys(uplotRefs.current)) {
+        if (!live.has(id)) destroyChart(id)
+      }
+      for (const id of Object.keys(echartRefs.current)) {
         if (!live.has(id)) destroyChart(id)
       }
     }, [components, points])
@@ -176,6 +203,42 @@ export function createVisualizationPage(React, t, post, hooks) {
           setNote(String(err?.message || '保存失败'))
           return false
         })
+    }
+
+    function persistLayout(items) {
+      if (!cwd || !pack || !Array.isArray(items) || !items.length) return
+      const draft = { ...(layoutDraft.current || {}) }
+      for (const item of items) {
+        if (!item || !item.id) continue
+        draft[item.id] = { x: item.x, y: item.y, w: item.w, h: item.h }
+      }
+      layoutDraft.current = draft
+      post('/dsh-vision-bench/command', {
+        cwd,
+        sessionId: props?.sessionId || '',
+        source: 'user',
+        action: 'visualization',
+        payload: {
+          action: 'visualization',
+          op: 'layout',
+          items: Object.keys(draft).map((id) => ({ id, ...draft[id] })),
+          expectedConfigVersion: pack.configVersion || 1,
+        },
+      })
+        .then((data) => {
+          if (data && data.ok === false) {
+            setNote(
+              data.errorCode === 'CONFIG_DRIFT' ? '配置已被其他操作更新，请刷新后重试' : data.error || '布局保存失败',
+            )
+            return
+          }
+          if (data?.workspace?.modbus) setMb(data.workspace.modbus)
+        })
+        .catch((err) => setNote(String(err?.message || '布局保存失败')))
+    }
+
+    function layoutOf(comp) {
+      return layoutDraft.current?.[comp.id] || comp.layout || { x: 0, y: 0, w: 6, h: 4 }
     }
 
     function saveComponent() {
@@ -351,6 +414,108 @@ export function createVisualizationPage(React, t, post, hooks) {
       }
     }
 
+    const ensureChart = (node, comp) => {
+      if (!node) return
+      const echarts = getEcharts()
+      if (!echarts) {
+        ensureUplot(node, comp)
+        return
+      }
+      const payload = seriesOfComponent(comp)
+      if (!hasTrendSamples(payload)) {
+        destroyChart(comp.id)
+        return
+      }
+      try {
+        if (uplotRefs.current[comp.id]) destroyChart(comp.id)
+        let chart = echartRefs.current[comp.id]
+        if (!chart || chart._node !== node) {
+          if (chart) {
+            try {
+              chart.dispose()
+            } catch {}
+          }
+          chart = echarts.init(node, null, { renderer: 'canvas' })
+          chart._node = node
+          echartRefs.current[comp.id] = chart
+        }
+        const hostWin = typeof globalThis !== 'undefined' ? globalThis.window : undefined
+        const isDark = !!hostWin?.matchMedia?.('(prefers-color-scheme: dark)').matches
+        chart.setOption(
+          {
+            animation: false,
+            backgroundColor: 'transparent',
+            color: VIZ_COLORS,
+            textStyle: { color: isDark ? 'rgba(255,255,255,.72)' : 'rgba(0,0,0,.72)' },
+            tooltip: { trigger: 'axis' },
+            legend: { type: 'scroll', top: 0 },
+            grid: { left: 44, right: 16, top: 28, bottom: 24 },
+            xAxis: {
+              type: 'time',
+              axisLine: { lineStyle: { color: isDark ? 'rgba(255,255,255,.2)' : 'rgba(0,0,0,.2)' } },
+            },
+            yAxis: {
+              type: 'value',
+              splitLine: { lineStyle: { color: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)' } },
+            },
+            series: echartsSeriesFromTrend(payload),
+          },
+          true,
+        )
+        chart.resize()
+        setChartErrors((prev) => {
+          const next = { ...prev }
+          delete next[comp.id]
+          return next
+        })
+      } catch (err) {
+        setChartErrors((prev) => ({ ...prev, [comp.id]: `曲线渲染失败: ${String(err?.message || err)}` }))
+      }
+    }
+
+    const ensureBarChart = (node, comp, latest) => {
+      if (!node) return
+      const echarts = getEcharts()
+      if (!echarts) return
+      try {
+        let chart = echartRefs.current[comp.id]
+        if (!chart || chart._node !== node) {
+          if (chart) {
+            try {
+              chart.dispose()
+            } catch {}
+          }
+          chart = echarts.init(node, null, { renderer: 'canvas' })
+          chart._node = node
+          echartRefs.current[comp.id] = chart
+        }
+        const packBar = echartsBarFromLatest(latest, VIZ_COLORS)
+        chart.setOption(
+          {
+            animation: false,
+            backgroundColor: 'transparent',
+            tooltip: { trigger: 'axis' },
+            grid: { left: 44, right: 16, top: 16, bottom: 32 },
+            xAxis: { type: 'category', data: packBar.names },
+            yAxis: { type: 'value' },
+            series: [
+              {
+                type: 'bar',
+                data: packBar.values.map((v, i) => ({
+                  value: v,
+                  itemStyle: { color: packBar.itemColors[i] },
+                })),
+              },
+            ],
+          },
+          true,
+        )
+        chart.resize()
+      } catch (err) {
+        setChartErrors((prev) => ({ ...prev, [comp.id]: `柱状图渲染失败: ${String(err?.message || err)}` }))
+      }
+    }
+
     React.useEffect(() => {
       const onResize = () => {
         for (const id of Object.keys(uplotRefs.current)) {
@@ -358,6 +523,13 @@ export function createVisualizationPage(React, t, post, hooks) {
           if (u?._node && u.setSize)
             try {
               u.setSize({ width: u._node.clientWidth || 420, height: 150 })
+            } catch {}
+        }
+        for (const id of Object.keys(echartRefs.current)) {
+          const chart = echartRefs.current[id]
+          if (chart && typeof chart.resize === 'function')
+            try {
+              chart.resize()
             } catch {}
         }
       }
@@ -371,6 +543,12 @@ export function createVisualizationPage(React, t, post, hooks) {
           } catch {}
         }
         uplotRefs.current = {}
+        for (const id of Object.keys(echartRefs.current)) {
+          try {
+            echartRefs.current[id]?.dispose()
+          } catch {}
+        }
+        echartRefs.current = {}
       }
     }, [])
 
@@ -449,14 +627,19 @@ export function createVisualizationPage(React, t, post, hooks) {
           comp,
           payload: seriesOfComponent(comp),
           chartErr: chartErrors[comp.id],
-          ensureUplot,
+          ensureChart,
           openEditor,
           setChartErrors,
           setTick,
           t,
         })
       }
-      if (comp.type === 'bar') return renderBarRenderer(el, barDataOf(comp))
+      if (comp.type === 'bar')
+        return renderBarRenderer(el, {
+          ...barDataOf(comp),
+          comp,
+          ensureChart: getEcharts() ? ensureBarChart : undefined,
+        })
       if (comp.type === 'value') return renderValueRenderer(el, { latest })
       if (comp.type === 'switch') {
         const item = latest[0] || {}
@@ -506,6 +689,7 @@ export function createVisualizationPage(React, t, post, hooks) {
             el(
               'div',
               { className: 'dvb-viz-title-row' },
+              el('span', { className: 'dvb-viz-drag', title: '拖动排列' }, '⋮⋮'),
               el('span', { className: 'dvb-viz-title' }, comp.name),
               el('span', { className: 'dvb-viz-type' }, vizTypeLabel(comp.type)),
             ),
@@ -653,7 +837,33 @@ export function createVisualizationPage(React, t, post, hooks) {
       ),
       copied ? el('div', { className: 'dvb-hint' }, copied) : null,
       note ? el('div', { className: 'dvb-hint' }, note) : null,
-      el('div', { className: 'dvb-viz-list' }, components.map(componentCard)),
+      el(
+        VizGrid,
+        {
+          columns: viz.columns || VIZ_GRID_COLUMNS,
+          itemIds: components.map((c) => c.id),
+          onLayout: persistLayout,
+        },
+        components.map((comp) => {
+          const lay = layoutOf(comp)
+          return el(
+            'div',
+            {
+              key: comp.id,
+              className: 'grid-stack-item',
+              'gs-id': comp.id,
+              'gs-x': String(lay.x),
+              'gs-y': String(lay.y),
+              'gs-w': String(lay.w),
+              'gs-h': String(lay.h),
+              style: {
+                '--dvb-w': String(lay.w),
+              },
+            },
+            el('div', { className: 'grid-stack-item-content' }, componentCard(comp)),
+          )
+        }),
+      ),
       !components.length && !editor
         ? el(
             'div',

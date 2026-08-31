@@ -1,6 +1,6 @@
 {
   "name": "dsh-vision-bench",
-  "version": "0.23.3",
+  "version": "0.25.0",
   "description": "Vision 模式：会话区调试/上位机点表（倍率/单位/告警上下限、CSV 导入导出、可视化组件），Keil 编译与日志、产物哈希、OpenOCD 烧录确认、串口报文订阅，Modbus 读点和受控写点（Agent 写点需界面批准），人工操作请求卡、共享任务与时间线，并安装「Vision模式」Agent 预设。",
   "keywords": [
     "dsh",
@@ -212,7 +212,12 @@
     "src/ui/monitor/frames/frames-page.mjs",
     "src/ui/monitor/frames/frames-filter-model.mjs",
     "src/ui/vendor/table-runtime.mjs",
+    "src/ui/vendor/grid-runtime.mjs",
+    "src/ui/vendor/echarts-runtime.mjs",
     "src/ui/components/data-table.mjs",
+    "src/ui/components/viz-grid.mjs",
+    "src/ui/components/source-editor.mjs",
+    "src/ui/vendor/codemirror-runtime.mjs",
     "src/ui/styles/table.mjs",
     "src/ui/debug/project/project-page.mjs",
     "src/ui/debug/project/project-tree-model.mjs"
@@ -246,10 +251,19 @@
     }
   },
   "dependencies": {
+    "@codemirror/commands": "6.11.0",
+    "@codemirror/lang-cpp": "6.0.3",
+    "@codemirror/lang-json": "6.0.2",
+    "@codemirror/language": "6.12.4",
+    "@codemirror/search": "6.7.1",
+    "@codemirror/state": "6.7.1",
+    "@codemirror/view": "6.43.9",
     "@tanstack/react-table": "8.21.3",
     "@tanstack/react-virtual": "3.13.12",
     "@tanstack/table-core": "8.21.3",
     "@tanstack/virtual-core": "3.13.12",
+    "echarts": "5.6.0",
+    "gridstack": "11.5.1",
     "modbus-serial": "8.0.25",
     "serialport": "13.0.0",
     "uplot": "1.6.32",

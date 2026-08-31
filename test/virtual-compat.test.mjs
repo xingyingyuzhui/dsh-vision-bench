@@ -7,6 +7,25 @@ import { installDomStub } from './dom-stub.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
+test('Stage 0.25: CodeMirror is pinned and react-arborist is not a dependency', async () => {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+  assert.equal(pkg.dependencies['@codemirror/view'], '6.43.9')
+  assert.equal(pkg.dependencies['@codemirror/state'], '6.7.1')
+  assert.equal(pkg.dependencies['@codemirror/lang-cpp'], '6.0.3')
+  assert.equal(pkg.dependencies.reactArborist, undefined)
+  assert.equal(pkg.dependencies['react-arborist'], undefined)
+  const vendor = readFileSync(join(root, 'scripts/vendor-entry.mjs'), 'utf8')
+  assert.match(vendor, /codeMirror/)
+  assert.match(vendor, /@codemirror\/view/)
+  assert.doesNotMatch(vendor, /from\s+['"]react-arborist['"]/)
+})
+
+test('Stage 0.24: package.json pins exact gridstack 11.5.1 and echarts 5.6.0', async () => {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+  assert.equal(pkg.dependencies.gridstack, '11.5.1')
+  assert.equal(pkg.dependencies.echarts, '5.6.0')
+})
+
 test('Stage 5: package.json pins exact @tanstack/react-table and table-core 8.21.3', async () => {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
   assert.equal(pkg.dependencies['@tanstack/react-table'], '8.21.3')

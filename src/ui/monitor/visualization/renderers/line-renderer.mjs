@@ -4,7 +4,7 @@ export function renderLineRenderer(el, spec) {
   const comp = spec.comp
   const payload = spec.payload
   const chartErr = spec.chartErr
-  const ensureUplot = spec.ensureUplot
+  const ensureChart = spec.ensureChart || spec.ensureUplot
   const openEditor = spec.openEditor
   const setChartErrors = spec.setChartErrors
   const setTick = spec.setTick
@@ -49,10 +49,10 @@ export function renderLineRenderer(el, spec) {
       : hasTrendSamples(payload)
         ? el('div', {
             ref: (node) => {
-              if (node) ensureUplot(node, comp)
+              if (node && ensureChart) ensureChart(node, comp)
             },
-            className: 'dvb-viz-uplot',
-            style: { width: '100%', height: '150px' },
+            className: 'dvb-viz-uplot dvb-viz-chart',
+            style: { width: '100%', height: '100%', minHeight: '150px' },
           })
         : el('div', { className: 'dvb-hint' }, t('vizWaitingSamples') || '暂无历史样本，等待采集…'),
   )

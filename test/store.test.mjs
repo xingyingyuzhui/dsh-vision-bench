@@ -109,7 +109,8 @@ test('P0/0.20.0: visualization round-trip, configVersion bump, old workspace mig
   const w1 = loadWorkspace(home, cwd)
   assert.equal(w1.modbus.points[0].monitorEnabled, true, '旧 trendEnabled → monitorEnabled')
   assert.equal(w1.modbus.points[0].alarmEnabled, true, '旧阈值 → alarmEnabled')
-  assert.deepEqual(w1.modbus.visualization, { schemaVersion: 1, components: [] }, '无 visualization 默认空')
+  assert.equal(w1.modbus.visualization.schemaVersion, 2, '无 visualization 默认 v2')
+  assert.deepEqual(w1.modbus.visualization.components, [])
 
   // 保存组件 → configVersion 递增
   const cv1 = w1.modbus.configVersion

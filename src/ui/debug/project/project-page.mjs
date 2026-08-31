@@ -9,11 +9,13 @@ import {
   subscribeState,
 } from '../../../../bench-shared.mjs'
 import { sessionCwd } from '../../common/session-scope.mjs'
-import { fileKind, filePassesFilter } from './project-tree-model.mjs'
+import { createSourceEditor } from '../../components/source-editor.mjs'
+import { buildProjectTree, fileKind, fileTreeId, languageForPath } from './project-tree-model.mjs'
 
 export const TAB_MAP = 'dsh-vision-bench:project'
 
 export function createMapView(React, t, post) {
+  const SourceEditor = createSourceEditor(React)
   return function MapView(props) {
     const el = React.createElement
     const cwd = sessionCwd(props)
@@ -29,6 +31,7 @@ export function createMapView(React, t, post) {
     const [preview, setPreview] = React.useState(null) // {rel, text, lines, truncated, error}
     const [copied, setCopied] = React.useState('')
     const [jumpLine, setJumpLine] = React.useState(0)
+    const [selectedId, setSelectedId] = React.useState('')
 
     React.useEffect(() => {
       if (!cwd) {
@@ -48,6 +51,7 @@ export function createMapView(React, t, post) {
           const jump = data.workspace?.jumpProject
           if (jump?.file) {
             setJumpLine(Number(jump.line) || 0)
+            setSelectedId(String(jump.file || ''))
             setOpenFiles((prev) => ({ ...prev, [jump.file]: true }))
             try {
               setTargetJump(jump)
@@ -102,8 +106,7 @@ export function createMapView(React, t, post) {
     const counts = mapped?.counts ? mapped.counts : {}
     const groups = mapped && Array.isArray(mapped.groups) ? mapped.groups : []
     const truncated = mapped?.truncated && typeof mapped.truncated === 'object' ? mapped.truncated : {}
-
-    const passesFilter = (file) => filePassesFilter(file, filter)
+    const tree = buildProjectTree(groups, { filter, search })
 
     const openPreview = (file) => {
       setPreview({
@@ -160,13 +163,19 @@ export function createMapView(React, t, post) {
       copyAgentRef(ref, () => setCopied('已复制文件引用'))
     }
 
-    const fileRow = (file, groupName) => {
+    const fileRow = (file) => {
       const kind = fileKind(file)
-      const isOpen = !!openFiles[file.rel || file.path || file.name]
-      const jumpHere = jumpLine > 0
+      const fid = fileTreeId(file)
+      const isOpen = !!openFiles[fid]
+      const jumpHere = jumpLine > 0 && selectedId === fid
       return el(
         'div',
-        { key: `f${file.rel || file.path || file.name}`, className: 'dvb-map-file-row', 'data-kind': kind },
+        {
+          key: `f${fid}`,
+          className: `dvb-map-file-row${selectedId === fid ? ' is-on' : ''}`,
+          'data-kind': kind,
+          'data-treeid': fid,
+        },
         el(
           'div',
           { className: 'dvb-map-file', 'data-kind': kind, title: file.rel || file.name },
@@ -177,8 +186,8 @@ export function createMapView(React, t, post) {
                   type: 'button',
                   className: 'dvb-btn dvb-btn-sm dvb-map-toggle',
                   onClick() {
-                    const key = file.rel || file.path || file.name
-                    setOpenFiles((prev) => ({ ...prev, [key]: !prev[key] }))
+                    setOpenFiles((prev) => ({ ...prev, [fid]: !prev[fid] }))
+                    setSelectedId(fid)
                   },
                 },
                 isOpen ? '▾' : '▸',
@@ -191,6 +200,7 @@ export function createMapView(React, t, post) {
               className: `dvb-btn dvb-btn-sm dvb-map-file-name${jumpHere ? ' dvb-map-jump' : ''}`,
               title: '预览源码',
               onClick() {
+                setSelectedId(fid)
                 openPreview(file)
               },
             },
@@ -228,7 +238,7 @@ export function createMapView(React, t, post) {
             },
             '复制路径',
           ),
-          hasHarnessInput
+          hasHarnessInput(props)
             ? el(
                 'button',
                 {
@@ -395,49 +405,60 @@ export function createMapView(React, t, post) {
           )
         : null,
       // ── 组 → 文件 → 函数 树 ──
-      groups.map((group, gi) => {
-        const gKey = group.name
-        const gOpen = openGroups[gKey] !== false
-        const groupFiles = (group.files || []).filter((file) => passesFilter(file))
-        const needle = search.trim().toLowerCase()
-        const shown = needle
-          ? groupFiles.filter((f) =>
-              `${f.name} ${f.rel || ''} ${(f.functions || []).map((fn) => fn.name).join(' ')}`
-                .toLowerCase()
-                .includes(needle),
-            )
-          : groupFiles
-        return el(
-          'div',
-          { key: `g${gi}`, className: 'dvb-map-group' },
-          el(
+      el(
+        'div',
+        {
+          className: 'dvb-map-tree',
+          tabIndex: 0,
+          onKeyDown(ev) {
+            if (ev.key !== 'Enter' && ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return
+            const ids = []
+            for (const group of tree) {
+              ids.push(group.id)
+              if (openGroups[group.name] === false) continue
+              for (const file of group.files) ids.push(fileTreeId(file))
+            }
+            if (!ids.length) return
+            const cur = Math.max(0, ids.indexOf(selectedId))
+            if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+              ev.preventDefault()
+              const next = ev.key === 'ArrowDown' ? Math.min(ids.length - 1, cur + 1) : Math.max(0, cur - 1)
+              setSelectedId(ids[next])
+            }
+          },
+        },
+        tree.map((group) => {
+          const gKey = group.name
+          const gOpen = openGroups[gKey] !== false
+          return el(
             'div',
-            { className: 'dvb-map-group-name' },
+            { key: group.id, className: 'dvb-map-group', 'data-treeid': group.id },
             el(
-              'button',
-              {
-                type: 'button',
-                className: 'dvb-btn dvb-btn-sm dvb-map-toggle',
-                onClick() {
-                  setOpenGroups((prev) => ({ ...prev, [gKey]: !(prev[gKey] !== false) }))
+              'div',
+              { className: 'dvb-map-group-name' },
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dvb-btn dvb-btn-sm dvb-map-toggle',
+                  onClick() {
+                    setOpenGroups((prev) => ({ ...prev, [gKey]: !(prev[gKey] !== false) }))
+                    setSelectedId(group.id)
+                  },
                 },
-              },
-              gOpen ? '▾' : '▸',
+                gOpen ? '▾' : '▸',
+              ),
+              el(
+                'span',
+                null,
+                `${group.name || ''} · ${String(group.total)} 文件${search.trim() ? ` · 匹配 ${group.matched}` : ''}`,
+              ),
+              el('span', { className: 'dvb-hint' }, `${group.outside} 工作区外 · ${group.missing} 缺失`),
             ),
-            el(
-              'span',
-              null,
-              `${group.name || ''} · ${String(groupFiles.length)} 文件${needle ? ` · 匹配 ${shown.length}` : ''}`,
-            ),
-            el(
-              'span',
-              { className: 'dvb-hint' },
-              `${(group.files || []).filter((f) => !f.inside).length} 工作区外 · ${(group.files || []).filter((f) => !f.exists).length} 缺失`,
-            ),
-          ),
-          gOpen ? shown.map((file) => fileRow({ ...file, _group: group.name }, group.name)) : null,
-        )
-      }),
+            gOpen ? group.files.map((file) => fileRow({ ...file, _group: group.name })) : null,
+          )
+        }),
+      ),
       // ── 源码预览 ──
       preview
         ? el(
@@ -464,14 +485,12 @@ export function createMapView(React, t, post) {
               ? el('div', { className: 'dvb-hint' }, t('opening'))
               : preview.error
                 ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, preview.error)
-                : el(
-                    'pre',
-                    {
-                      className: 'dvb-log dvb-map-preview',
-                      style: { maxHeight: '320px', overflow: 'auto', whiteSpace: 'pre' },
-                    },
-                    preview.text,
-                  ),
+                : el(SourceEditor, {
+                    text: preview.text || '',
+                    rel: preview.rel || '',
+                    jumpLine,
+                    language: languageForPath(preview.rel),
+                  }),
           )
         : null,
     )

@@ -23,3 +23,37 @@ export function vizTypeLabel(type) {
 export function vizFieldOf(el, label, control) {
   return el('div', { className: 'dvb-row' }, el('div', { className: 'dvb-label' }, el('span', null, label)), control)
 }
+
+export function echartsSeriesFromTrend(payload) {
+  const data = payload && Array.isArray(payload.data) ? payload.data : []
+  const times = data[0] || []
+  const meta = Array.isArray(payload.meta) ? payload.meta : []
+  const series = []
+  for (let i = 1; i < data.length; i++) {
+    const label = (meta[i - 1] && meta[i - 1].label) || `s${i}`
+    series.push({
+      type: 'line',
+      name: label,
+      showSymbol: false,
+      data: times.map((t, j) => {
+        const v = data[i][j]
+        return [Number(t) * 1000, v == null || Number.isNaN(Number(v)) ? null : Number(v)]
+      }),
+    })
+  }
+  return series
+}
+
+export function echartsBarFromLatest(latest, colors) {
+  const palette = Array.isArray(colors) && colors.length ? colors : VIZ_COLORS
+  const names = []
+  const values = []
+  const itemColors = []
+  ;(Array.isArray(latest) ? latest : []).forEach((item, i) => {
+    names.push(item.name || item.pointId || String(i))
+    const v = item.ok && item.value != null && Number.isFinite(Number(item.value)) ? Number(item.value) : null
+    values.push(v)
+    itemColors.push(palette[i % palette.length])
+  })
+  return { names, values, itemColors }
+}

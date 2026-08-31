@@ -1,10 +1,12 @@
 // TaskP0/0.20.0: 可视化组件纯模型 — 不依赖 React / 插槽 / HTTP。
 //
 // 组件持久化在 modbus.visualization 下：
-//   { schemaVersion: 1, components: [{ id, name, type, pointIds, order, settings }] }
+//   { schemaVersion: 2, columns: 12, components: [{ id, name, type, pointIds, order, settings, layout }] }
+// schema v1 读入时补默认 layout，写出为 v2。modbus.version 仍为 3。
 // 类型：line（1–8 个监视点位）/ bar（1–16）/ value（1）/ switch（1 个可写 FC01 点位）。
 // 组件引用使用稳定 pointId；点位关闭监视或被删除时组件保留并进入 degraded 状态。
-export const VISUALIZATION_SCHEMA_VERSION = 1
+export const VISUALIZATION_SCHEMA_VERSION = 2
+export const VIZ_GRID_COLUMNS = 12
 export const MAX_COMPONENTS = 32
 export const MAX_COMPONENT_NAME = 40
 export const COMPONENT_TYPES = new Set(['line', 'bar', 'value', 'switch'])
@@ -32,7 +34,33 @@ const vizIds = (value) => {
   return out
 }
 
-export const emptyVisualization = () => ({ schemaVersion: VISUALIZATION_SCHEMA_VERSION, components: [] })
+export const emptyVisualization = () => ({
+  schemaVersion: VISUALIZATION_SCHEMA_VERSION,
+  columns: VIZ_GRID_COLUMNS,
+  components: [],
+})
+
+export function defaultComponentLayout(index, type) {
+  const i = Number.isInteger(index) && index >= 0 ? index : 0
+  const w = type === 'line' || type === 'bar' ? 6 : 3
+  const h = type === 'line' || type === 'bar' ? 4 : 3
+  const x = (i * w) % VIZ_GRID_COLUMNS
+  const y = Math.floor((i * w) / VIZ_GRID_COLUMNS) * h
+  return { x, y, w, h }
+}
+
+export function normalizeComponentLayout(raw, index, type) {
+  const src = raw && typeof raw === 'object' ? raw : {}
+  const fallback = defaultComponentLayout(index, type)
+  const w = vizClampInt(src.w, fallback.w, 1, VIZ_GRID_COLUMNS)
+  const x = vizClampInt(src.x, fallback.x, 0, VIZ_GRID_COLUMNS - 1)
+  return {
+    x: Math.min(x, VIZ_GRID_COLUMNS - w),
+    y: vizClampInt(src.y, fallback.y, 0, 256),
+    w,
+    h: vizClampInt(src.h, fallback.h, 1, 32),
+  }
+}
 
 const vizClampInt = (v, fallback, min, max) => {
   const n = Number(v)
@@ -43,7 +71,7 @@ const vizClampInt = (v, fallback, min, max) => {
   return i
 }
 
-export const normalizeVisualizationComponent = (input) => {
+export const normalizeVisualizationComponent = (input, index = 0) => {
   const raw = input && typeof input === 'object' ? input : {}
   const type = COMPONENT_TYPES.has(raw.type) ? raw.type : 'line'
   const id = String(raw.id || '').trim() || vizGenId('viz_')
@@ -63,6 +91,7 @@ export const normalizeVisualizationComponent = (input) => {
       windowMs,
       confirmWrite: settings.confirmWrite !== false,
     },
+    layout: normalizeComponentLayout(raw.layout, index, type),
   }
 }
 
@@ -72,14 +101,14 @@ export const normalizeVisualization = (input, points) => {
   const seen = new Set()
   const out = []
   for (const raw of components) {
-    const c = normalizeVisualizationComponent(raw)
+    const c = normalizeVisualizationComponent(raw, out.length)
     if (seen.has(c.id)) continue
     seen.add(c.id)
     out.push(c)
     if (out.length >= MAX_COMPONENTS) break
   }
   void points
-  return { schemaVersion: VISUALIZATION_SCHEMA_VERSION, components: out }
+  return { schemaVersion: VISUALIZATION_SCHEMA_VERSION, columns: VIZ_GRID_COLUMNS, components: out }
 }
 
 // 校验：类型数量限制、switch 只接受可写 FC01 监视点位、只关联已监视点位。

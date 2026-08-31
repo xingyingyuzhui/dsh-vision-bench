@@ -444,7 +444,33 @@ function applyVisualization(workspace, op, target, value) {
       visualization: viz,
     }
   }
-  return { ok: false, errorCode: 'UNKNOWN_OP', error: 'visualization op 必须是 add|update|remove' }
+  if (op === 'layout') {
+    const items = Array.isArray(value.items) ? value.items : []
+    const byId = new Map()
+    for (const item of items) {
+      const itemId = explicitId(item && (item.id || item.visualizationId))
+      if (!itemId) continue
+      byId.set(itemId, item)
+    }
+    /** @type {string[]} */
+    const changed = []
+    viz.components = viz.components.map((c, i) => {
+      const hit = byId.get(c.id)
+      if (!hit) return c
+      changed.push(c.id)
+      return normalizeVisualizationComponent({ ...c, layout: hit.layout || hit }, i)
+    })
+    pack.visualization = viz
+    return {
+      ok: true,
+      workspace,
+      summary: `更新可视化布局 ${changed.length} 项`,
+      changedIds: changed,
+      changedVisualizationIds: changed,
+      visualization: viz,
+    }
+  }
+  return { ok: false, errorCode: 'UNKNOWN_OP', error: 'visualization op 必须是 add|update|remove|layout' }
 }
 
 /**

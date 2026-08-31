@@ -47,4 +47,19 @@ export const vendorGetSortedRowModel = () => {
   return (v && v.getSortedRowModel) || null
 }
 
+export const vendorGridStack = () => {
+  const v = getVendor()
+  return (v && v.GridStack) || null
+}
+
+export const vendorEcharts = () => {
+  const v = getVendor()
+  return (v && v.echarts) || null
+}
+
+export const vendorCodeMirror = () => {
+  const v = getVendor()
+  return (v && v.codeMirror) || null
+}
+
 export const vendorAvailable = () => !!(vendorUPlot() && vendorVirtualizer())

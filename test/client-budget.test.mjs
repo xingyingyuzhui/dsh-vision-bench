@@ -30,11 +30,10 @@ function spec(overrides = {}) {
   }
 }
 
-test('client budget constants stay at the stage-1 cap', () => {
+test('client budget constants stay at the 0.25 vendor cap', () => {
   assert.equal(CLIENT_BYTE_BASELINE, 567475)
-  assert.equal(CLIENT_BYTE_LIMIT, 595849)
+  assert.equal(CLIENT_BYTE_LIMIT, 1572864)
   assert.ok(CLIENT_BYTE_LIMIT > CLIENT_BYTE_BASELINE)
-  assert.equal(CLIENT_BYTE_LIMIT, Math.round(CLIENT_BYTE_BASELINE * 1.05))
 })
 
 test('normalizeNewlines and sha256Text ignore CRLF', () => {
@@ -48,7 +47,7 @@ test('assertClientBudget accepts a factory that closes over require("react")', (
 })
 
 test('assertClientBudget rejects oversize, missing size, and extra loaders', () => {
-  assert.throws(() => assertClientBudget(spec({ bytes: CLIENT_BYTE_LIMIT + 1 })), /stage-1 limit/)
+  assert.throws(() => assertClientBudget(spec({ bytes: CLIENT_BYTE_LIMIT + 1 })), /0\.25 limit/)
   assert.throws(() => assertClientBudget(spec({ bytes: 0 })), /missing byte size/)
   assert.throws(() => assertClientBudget(spec({ bytes: Number.NaN })), /missing byte size/)
   assert.throws(() => assertClientBudget(spec({ source: OK_SOURCE + OK_SOURCE })), /exactly one __ModuleLoader__/)

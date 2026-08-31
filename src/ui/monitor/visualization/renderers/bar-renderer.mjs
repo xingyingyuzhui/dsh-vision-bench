@@ -1,4 +1,13 @@
-export function renderBarRenderer(el, { latest }) {
+export function renderBarRenderer(el, { latest, comp, ensureChart }) {
+  if (typeof ensureChart === 'function' && comp) {
+    return el('div', {
+      ref: (node) => {
+        if (node) ensureChart(node, comp, latest)
+      },
+      className: 'dvb-viz-chart dvb-viz-bar-chart',
+      style: { width: '100%', height: '100%', minHeight: '140px' },
+    })
+  }
   const nums = latest.map((l) => (l.ok && l.value != null && Number.isFinite(Number(l.value)) ? Number(l.value) : null))
   const absVals = nums.filter((v) => v !== null).map((v) => Math.abs(v))
   const maxAbs = absVals.length ? Math.max(...absVals) : 0

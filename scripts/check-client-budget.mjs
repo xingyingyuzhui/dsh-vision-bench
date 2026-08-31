@@ -2,7 +2,8 @@
 import { createHash } from 'node:crypto'
 
 export const CLIENT_BYTE_BASELINE = 567475
-export const CLIENT_BYTE_LIMIT = 595849
+/** Stage-1 cap 595849; 0.24 ECharts 1048576; 0.25 adds CodeMirror. */
+export const CLIENT_BYTE_LIMIT = 1572864
 
 const REACT_SOURCE = /node_modules[/\\]react[/\\]/
 const REACT_DOM_REQUIRE = /require\(['"]react-dom['"]\)/
@@ -46,7 +47,7 @@ export function assertClientBudget(spec) {
   if (!Number.isFinite(bytes) || bytes <= 0) throw new Error('client budget: missing byte size')
   if (bytes > CLIENT_BYTE_LIMIT) {
     throw new Error(
-      `client.js is ${bytes} bytes; stage-1 limit is ${CLIENT_BYTE_LIMIT} (baseline ${CLIENT_BYTE_BASELINE})`,
+      `client.js is ${bytes} bytes; 0.25 limit is ${CLIENT_BYTE_LIMIT} (stage-0 baseline ${CLIENT_BYTE_BASELINE})`,
     )
   }
   const source = String(spec.source || '')

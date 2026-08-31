@@ -34,6 +34,15 @@ export const HMI_CSS = [
   'body[' + ATTR + '] .dvb-map-file-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
   'body[' + ATTR + '] .dvb-map-file-mark{font-size:11px;opacity:.65;flex:none}',
   'body[' + ATTR + '] .dvb-map-funcs{font-size:11px;opacity:.62;padding:0 0 4px 8px;line-height:1.4}',
+  'body[' + ATTR + '] .dvb-map-tree{outline:none}',
+  'body[' +
+    ATTR +
+    '] .dvb-map-file-row.is-on .dvb-map-file,.dvb-map-file-row.is-on{background:var(--dsw-alias-bg-layer-2,rgba(128,128,128,.1))}',
+  'body[' +
+    ATTR +
+    '] .dvb-source-editor{border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.28));border-radius:4px;min-height:160px;overflow:hidden}',
+  'body[' + ATTR + '] .dvb-source-editor .cm-editor{height:100%}',
+  'body[' + ATTR + '] .dvb-cm-jump{background:rgba(79,142,247,.22)}',
   'body[' +
     ATTR +
     '] .dvb-map-file[data-kind="missing"] .dvb-map-file-name,body[' +

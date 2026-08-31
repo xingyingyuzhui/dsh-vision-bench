@@ -77,4 +77,15 @@ export const VISUALIZATION_CSS = [
   'body[' +
     ATTR +
     '] .dvb-viz-picker-opt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 2px;font-size:12px}',
+  'body[' + ATTR + '] .dvb-viz-grid{min-height:120px}',
+  'body[' + ATTR + '] .dvb-viz-grid-fallback{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:8px}',
+  'body[' + ATTR + '] .dvb-viz-grid-fallback > .grid-stack-item{grid-column:span var(--dvb-w,6);min-width:0}',
+  'body[' +
+    ATTR +
+    '] .dvb-viz-grid .grid-stack-item-content,.dvb-viz-grid-fallback .grid-stack-item-content{inset:0;overflow:auto}',
+  'body[' + ATTR + '] .dvb-viz-grid .dvb-viz-card{height:100%;box-sizing:border-box}',
+  'body[' +
+    ATTR +
+    '] .dvb-viz-drag{cursor:grab;font-size:12px;letter-spacing:-2px;opacity:.45;user-select:none;padding-right:4px}',
+  'body[' + ATTR + '] .dvb-viz-body-wrap{flex:1;min-height:0}',
 ]

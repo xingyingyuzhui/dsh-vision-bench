@@ -82,6 +82,13 @@ export type AlarmState = Record<
   }
 >
 
+export type VisualizationLayout = {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
 export type VisualizationComponent = {
   id: string
   name: string
@@ -89,6 +96,7 @@ export type VisualizationComponent = {
   pointIds: string[]
   order?: number
   settings?: Record<string, unknown>
+  layout?: VisualizationLayout
 }
 
 export type WorkspaceConfig = {

@@ -16,7 +16,7 @@ export async function handleVisualizationCommand(home, args, room, origin, opts)
   const action = args.action
   const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
   const cv = pack.configVersion || 1
-  const viz = pack.visualization || { schemaVersion: 1, components: [] }
+  const viz = pack.visualization || { schemaVersion: 2, components: [] }
   const op = String(args.op || 'list')
   const id = String(args.visualizationId || args.id || '').trim()
   const byId = new Map(pack.points.map((/** @type {any} */ x) => [x.id, x]))
@@ -56,7 +56,7 @@ export async function handleVisualizationCommand(home, args, room, origin, opts)
       configVersion: cv,
     }
   }
-  if (op === 'add' || op === 'update' || op === 'remove') {
+  if (op === 'add' || op === 'update' || op === 'remove' || op === 'layout') {
     const ran = await mutateConfig({
       home,
       cwd: room.cwd,
@@ -70,5 +70,5 @@ export async function handleVisualizationCommand(home, args, room, origin, opts)
     })
     return { action, ...ran }
   }
-  return { ok: false, error: 'op 必须是 list | get | add | update | remove', errorCode: 'UNKNOWN_OP' }
+  return { ok: false, error: 'op 必须是 list | get | add | update | remove | layout', errorCode: 'UNKNOWN_OP' }
 }

@@ -32,20 +32,25 @@ function installDom() {
   globalThis.ResizeObserver = class {
     constructor(cb) {
       this.cb = cb
+      this.live = true
     }
     observe(el) {
-      queueMicrotask(() =>
+      queueMicrotask(() => {
+        if (!this.live || typeof this.cb !== 'function') return
         this.cb([
           {
             target: el,
             borderBoxSize: [{ inlineSize: 400, blockSize: 320 }],
             contentRect: { width: 400, height: 320 },
           },
-        ]),
-      )
+        ])
+      })
     }
     unobserve() {}
-    disconnect() {}
+    disconnect() {
+      this.live = false
+      this.cb = () => {}
+    }
   }
   globalThis.Element = win.HTMLElement
   const VIEW_RECT = () => ({
@@ -88,6 +93,11 @@ function installDom() {
   globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} })
   globalThis.devicePixelRatio = 1
   globalThis.CustomEvent = win.CustomEvent
+  const computed = { getPropertyValue: () => '', setProperty() {}, removeProperty() {} }
+  globalThis.getComputedStyle = () => computed
+  try {
+    win.getComputedStyle = globalThis.getComputedStyle
+  } catch {}
 }
 
 before(async () => {
