@@ -12,6 +12,7 @@ import {
   validateVisualizationComponent,
 } from '../../../bench-visualization-model.mjs'
 import { explicitId, parseOperation } from '../../domain/config/config-operation.mjs'
+import { ERROR_CODES, fail } from '../../domain/modbus/errors.mjs'
 import { applyPointPatch } from '../../domain/modbus/point-patch.mjs'
 import { resolveHierarchy } from '../../domain/modbus/target-resolver.mjs'
 import { pickConnPatch } from '../../domain/modbus/validation.mjs'
@@ -54,6 +55,9 @@ export function createConfigMutationService(deps = {}) {
     const { scope, op, raw } = parseOperation(spec.operation)
     if (!scope || !op) {
       return { ok: false, errorCode: 'UNKNOWN_OP', error: `未知配置操作: ${spec.operation || ''}` }
+    }
+    if (!Number.isInteger(spec.expectedConfigVersion) || spec.expectedConfigVersion <= 0) {
+      return fail(ERROR_CODES.CONFIG_VERSION_REQUIRED, '配置修改必须携带当前 configVersion')
     }
     const repo = repositoryFactory(home)
     /** @type {{ releaseConnectionIds?: string[], summary?: string, extras?: any }} */
@@ -491,7 +495,19 @@ async function applyConnection(home, cwd, workspace, op, target, value, listStat
     pack.devices = pack.devices.filter((/** @type {any} */ d) => d.connectionId !== id)
     pack.points = pack.points.filter((/** @type {any} */ p) => p.connectionId !== id)
     scrubPointRuntime(pack, idsOfPoints(removedPoints))
-    if (pack.activeConnectionId === id) pack.activeConnectionId = ''
+    if (pack.activeConnectionId === id) {
+      pack.activeConnectionId = pack.connections[0]?.id || ''
+      pack.activeDeviceId =
+        pack.devices.find((/** @type {any} */ d) => d.connectionId === pack.activeConnectionId)?.id || ''
+    } else if (pack.activeDeviceId) {
+      const still = pack.devices.find(
+        (/** @type {any} */ d) => d.id === pack.activeDeviceId && d.connectionId === pack.activeConnectionId,
+      )
+      if (!still) {
+        pack.activeDeviceId =
+          pack.devices.find((/** @type {any} */ d) => d.connectionId === pack.activeConnectionId)?.id || ''
+      }
+    }
     if (pack.pollingByConnection) {
       const nextPoll = { ...pack.pollingByConnection }
       delete nextPoll[id]
@@ -584,11 +600,15 @@ function applyDevice(workspace, op, target, value) {
     if (!id) return { ok: false, errorCode: 'TARGET_REQUIRED', error: 'remove 必须携带 deviceId' }
     const scoped = resolveHierarchy(pack, { connectionId: cid || undefined, deviceId: id })
     if (!scoped.ok) return scoped
+    const removed = pack.devices.find((/** @type {any} */ d) => d.id === id)
     const removedPoints = pack.points.filter((/** @type {any} */ p) => p.deviceId === id)
     pack.devices = pack.devices.filter((/** @type {any} */ d) => d.id !== id)
     pack.points = pack.points.filter((/** @type {any} */ p) => p.deviceId !== id)
     scrubPointRuntime(pack, idsOfPoints(removedPoints))
-    if (pack.activeDeviceId === id) pack.activeDeviceId = ''
+    if (pack.activeDeviceId === id) {
+      const connectionId = removed?.connectionId || pack.activeConnectionId
+      pack.activeDeviceId = pack.devices.find((/** @type {any} */ d) => d.connectionId === connectionId)?.id || ''
+    }
     return { ok: true, workspace, summary: `删除设备 ${id}`, changedIds: [id] }
   }
   if (op === 'update') {
@@ -622,6 +642,18 @@ function applyFlags(workspace, op, target, value) {
   if (op !== 'update') return { ok: false, errorCode: 'UNKNOWN_OP', error: 'flags 仅支持 update' }
   const pid = explicitId(target.pointId || value.pointId || value.id)
   if (!pid) return { ok: false, errorCode: 'TARGET_REQUIRED', error: 'flags.update 必须携带 pointId' }
+  const src = value && typeof value === 'object' ? value : {}
+  const hasMonitor = src.monitorEnabled !== undefined
+  const hasAlarm = src.alarmEnabled !== undefined
+  if (!hasMonitor && !hasAlarm) {
+    return { ok: false, error: '缺少 monitorEnabled 或 alarmEnabled' }
+  }
+  if (hasMonitor && typeof src.monitorEnabled !== 'boolean') {
+    return { ok: false, error: 'monitorEnabled 必须是布尔值' }
+  }
+  if (hasAlarm && typeof src.alarmEnabled !== 'boolean') {
+    return { ok: false, error: 'alarmEnabled 必须是布尔值' }
+  }
   const pack = workspace.modbus
   const scoped = resolveHierarchy(pack, {
     connectionId: explicitId(target.connectionId),
@@ -630,7 +662,11 @@ function applyFlags(workspace, op, target, value) {
   })
   if (!scoped.ok) return scoped
   const idx = pack.points.findIndex((/** @type {any} */ p) => p.id === pid)
-  const patched = applyPointPatch(pack.points[idx], value)
+  /** @type {{ monitorEnabled?: boolean, alarmEnabled?: boolean }} */
+  const patch = {}
+  if (hasMonitor) patch.monitorEnabled = src.monitorEnabled
+  if (hasAlarm) patch.alarmEnabled = src.alarmEnabled
+  const patched = applyPointPatch(pack.points[idx], patch)
   if (!patched.ok) return patched
   pack.points = pack.points.map((/** @type {any} */ p, /** @type {any} */ i) => (i === idx ? patched.point : p))
   return finishPoints(workspace, [pid], `更新点位开关 ${pid}`)

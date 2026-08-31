@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { isBroadCwd, pathInside, requireKeilProject, requireWorkspaceCwd } from '../bench-paths.mjs'
 import { _internal, runExecFile } from '../bench-run.mjs'
+import { buildOpenOcdArgs, encodeOpenOcdTclPath } from '../src/infrastructure/process/openocd-runner.mjs'
 
 test('pathInside rejects parents and relatives', async () => {
   const root = join('/tmp', 'ws')
@@ -29,6 +30,24 @@ test('isBroadCwd treats user home as too wide', async () => {
 test('pythonArgv inserts -3 for the Windows launcher', async () => {
   assert.deepEqual(_internal.pythonArgv('/usr/bin/python3', ['a.py']), ['a.py'])
   assert.deepEqual(_internal.pythonArgv('C:\\Windows\\py.exe', ['a.py', '--json']), ['-3', 'a.py', '--json'])
+})
+
+test('OpenOCD Tcl encoding keeps spaces, braces and parentheses in argv', () => {
+  const spaced = encodeOpenOcdTclPath('C:\\Firmware Builds\\app.hex')
+  assert.equal(spaced.ok, true)
+  assert.equal(spaced.encoded, '"C:/Firmware Builds/app.hex"')
+  const paren = encodeOpenOcdTclPath('C:\\ws\\(board)\\app.hex')
+  assert.equal(paren.encoded, '"C:/ws/(board)/app.hex"')
+  const braces = encodeOpenOcdTclPath('C:\\ws\\{board}\\app.hex')
+  assert.equal(braces.encoded, '"C:/ws/{board}/app.hex"')
+  const ran = buildOpenOcdArgs({
+    interfaceName: 'stlink',
+    target: 'stm32f4x',
+    firmware: 'C:\\Firmware Builds\\app.hex',
+  })
+  assert.equal(ran.ok, true)
+  assert.ok(Array.isArray(ran.args))
+  assert.equal(ran.args.at(-1), 'program "C:/Firmware Builds/app.hex" verify reset exit')
 })
 
 test('runExecFile honours an already-aborted signal', async () => {

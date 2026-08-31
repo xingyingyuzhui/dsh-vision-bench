@@ -135,9 +135,11 @@ export function createHmiConnectionActions(ctx, core) {
       devices,
       points: (pack.points || []).filter((point) => !removedPointIds.has(point.id)),
       values: (pack.values || []).filter((value) => !removedPointIds.has(value.pointId || value.key)),
-      activeDeviceId: devices.some((candidate) => candidate.id === pack.activeDeviceId)
+      activeDeviceId: devices.some(
+        (candidate) => candidate.id === pack.activeDeviceId && candidate.connectionId === connectionId,
+      )
         ? pack.activeDeviceId
-        : devices[0]?.id || '',
+        : devices.find((candidate) => candidate.connectionId === connectionId)?.id || '',
       version: 3,
     })
     setDevDeleteId('')
@@ -150,8 +152,7 @@ export function createHmiConnectionActions(ctx, core) {
       !deviceId ||
       !(pack.devices || []).some((device) => device.id === deviceId && device.connectionId === connectionId)
     ) {
-      deviceId =
-        (pack.devices || []).find((device) => device.connectionId === connectionId)?.id || pack.devices[0]?.id || ''
+      deviceId = (pack.devices || []).find((device) => device.connectionId === connectionId)?.id || ''
     }
     persist({ activeConnectionId: connectionId, activeDeviceId: deviceId, version: 3 })
     setPendingDeleteId('')
@@ -179,7 +180,7 @@ export function createHmiConnectionActions(ctx, core) {
     let activeDeviceId = pack.activeDeviceId
     if (activeConnectionId === connectionId) {
       activeConnectionId = connections[0]?.id || ''
-      activeDeviceId = devices.find((device) => device.connectionId === activeConnectionId)?.id || devices[0]?.id || ''
+      activeDeviceId = devices.find((device) => device.connectionId === activeConnectionId)?.id || ''
       setFrameFilter(activeConnectionId || 'all')
       setHmiTab(activeConnectionId || 'all')
     }

@@ -99,6 +99,57 @@ test('runSelfCheck probes a runnable interpreter', async () => {
   }
 })
 
+test('openocdFlash.ready 不依赖 Python，且探测失败则为 false', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-check-ocd-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveBindings(home, { python: '', uv4: '', openocd: join(home, 'missing-openocd') })
+    await withOrigin('http://127.0.0.1:1', async () => {
+      const missing = await runSelfCheck(home, cwd)
+      assert.equal(missing.capabilities.openocdFlash.ready, false)
+      assert.match(missing.capabilities.openocdFlash.reason, /不存在/)
+      assert.equal(missing.capabilities.keilProject.ready, false)
+
+      saveBindings(home, { python: '', uv4: '', openocd: process.execPath })
+      const nodeish = await runSelfCheck(home, cwd)
+      assert.equal(nodeish.capabilities.openocdFlash.ready, false)
+      assert.match(nodeish.capabilities.openocdFlash.reason, /不是 OpenOCD|探测失败|失败/)
+      assert.equal(nodeish.capabilities.keilProject.ready, false)
+
+      const ready = await runSelfCheck(home, cwd, {
+        runExecFile: async () => ({
+          exitCode: 0,
+          stdout: '',
+          stderr: 'Open On-Chip Debugger 0.12.0\n',
+          timedOut: false,
+          cancelled: false,
+        }),
+      })
+      assert.equal(ready.capabilities.openocdFlash.ready, true)
+      assert.equal(ready.capabilities.keilProject.ready, false)
+      const failed = await runSelfCheck(home, cwd, {
+        runExecFile: async () => {
+          throw new Error('not executable')
+        },
+      })
+      assert.equal(failed.capabilities.openocdFlash.ready, false)
+      assert.match(failed.capabilities.openocdFlash.reason, /not executable|探测失败|失败/)
+      const timed = await runSelfCheck(home, cwd, {
+        runExecFile: async () => ({ exitCode: 1, timedOut: true, stdout: '', stderr: 'hang' }),
+      })
+      assert.equal(timed.capabilities.openocdFlash.ready, false)
+      const echoish = await runSelfCheck(home, cwd, {
+        runExecFile: async () => ({ exitCode: 0, stdout: 'hello', stderr: '', timedOut: false, cancelled: false }),
+      })
+      assert.equal(echoish.capabilities.openocdFlash.ready, false)
+    })
+    await stopVisionIoBroker('test')
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
 test('in-process Host ping succeeds', async () => {
   const stop = registerVisionHost({
     async dispatch(cmd) {

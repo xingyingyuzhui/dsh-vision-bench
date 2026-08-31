@@ -139,7 +139,7 @@ export const readBuildLog = (home, logFile, tailBytes = LOG_TAIL_BYTES) => {
     return { ok: false, error: '日志文件不存在' }
   }
   if (!pathInside(logsDir, real) || extOf(real) !== '.log') {
-    return { ok: false, error: '只能读取台架编译日志' }
+    return { ok: false, error: '只能读取 Vision 编译日志' }
   }
   let stat
   try {

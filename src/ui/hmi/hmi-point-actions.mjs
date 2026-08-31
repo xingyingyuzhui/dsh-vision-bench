@@ -231,14 +231,39 @@ export function createHmiPointActions(ctx, core) {
 
     const isLatest = () => seqKeys.every((sk) => seqAtStart[sk] === flagRequestSeq.current[sk])
 
+    const rollbackPatch = {}
+    if (keys.includes('monitorEnabled')) {
+      rollbackPatch.monitorEnabled = prevSnapshot.monitorEnabled
+      rollbackPatch.trendEnabled = prevSnapshot.trendEnabled
+    }
+    if (keys.includes('alarmEnabled')) {
+      rollbackPatch.alarmEnabled = prevSnapshot.alarmEnabled
+    }
+
     const rollback = (msg) => {
       if (!isLatest()) return
-      applyPointFlagLocal(pointId, {
-        monitorEnabled: prevSnapshot.monitorEnabled,
-        alarmEnabled: prevSnapshot.alarmEnabled,
-        trendEnabled: prevSnapshot.trendEnabled,
-      })
+      applyPointFlagLocal(pointId, rollbackPatch)
       if (msg) setError(msg)
+    }
+
+    const recoverFromFailure = (msg) => {
+      if (!isLatest()) return Promise.resolve()
+      return commandClient
+        .refresh()
+        .then((fresh) => {
+          if (!isLatest()) return
+          if (fresh?.workspace?.modbus) {
+            setWorkspace((prev) => {
+              const next = { ...prev, modbus: fresh.workspace.modbus }
+              workspaceRef.current = next
+              return next
+            })
+            if (msg) setError(msg)
+            return
+          }
+          rollback(msg)
+        })
+        .catch(() => rollback(msg))
     }
 
     const applySuccess = (data) => {
@@ -287,22 +312,22 @@ export function createHmiPointActions(ctx, core) {
               .then((data2) => {
                 if (!isLatest()) return data2
                 if (!data2 || data2.ok === false) {
-                  rollback('点位配置已被其他操作更新，请重试')
-                  return data2
+                  return recoverFromFailure('点位配置已被其他操作更新，请重试').then(() => data2)
                 }
                 return applySuccess(data2)
               })
-              .catch(() => rollback('点位配置已被其他操作更新，请重试'))
+              .catch(() => recoverFromFailure('点位配置已被其他操作更新，请重试'))
           }
           const tip = keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态'
-          rollback(tip)
-          return data
+          return recoverFromFailure(tip).then(() => data)
         }
         return applySuccess(data)
       })
-      .catch(() => {
-        rollback(keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态')
-      })
+      .catch(() =>
+        recoverFromFailure(
+          keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态',
+        ),
+      )
       .finally(() => {
         flagInflight.current = Math.max(0, flagInflight.current - 1)
         setFlagSavingByPoint((prev) => {

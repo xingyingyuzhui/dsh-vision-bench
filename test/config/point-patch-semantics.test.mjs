@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
 import { mutateConfig } from '../../src/application/config/config-mutation-service.mjs'
+import { applyPointPatch } from '../../src/domain/modbus/point-patch.mjs'
 
 async function withWs(fn) {
   const home = await mkdtemp(join(tmpdir(), 'dvb-pp-'))
@@ -67,6 +68,56 @@ async function withWs(fn) {
 function snapshotPoint(ws) {
   return { ...ws.modbus.points[0] }
 }
+
+test('flags.update without a positive integer version does not write', async () => {
+  await withWs(async (home, cwd) => {
+    const before = snapshotPoint(loadWorkspace(home, cwd))
+    const cv = loadWorkspace(home, cwd).modbus.configVersion
+    const ran = await mutateConfig({
+      home,
+      cwd,
+      operation: 'flags.update',
+      target: { pointId: 'p1' },
+      value: { monitorEnabled: false },
+    })
+    assert.equal(ran.ok, false)
+    assert.equal(ran.errorCode, 'CONFIG_VERSION_REQUIRED')
+    const after = loadWorkspace(home, cwd)
+    assert.equal(after.modbus.configVersion, cv)
+    assert.equal(after.modbus.points[0].monitorEnabled, before.monitorEnabled)
+  })
+})
+
+test('applyPointPatch: monitor syncs trend; alarm-only leaves monitor/trend; ids frozen', () => {
+  const base = {
+    id: 'p1',
+    connectionId: 'c1',
+    deviceId: 'd1',
+    name: 'T',
+    monitorEnabled: false,
+    trendEnabled: false,
+    alarmEnabled: true,
+    alarmMin: 1,
+    alarmMax: 9,
+  }
+  const mon = applyPointPatch(base, { monitorEnabled: true })
+  assert.equal(mon.ok, true)
+  assert.equal(mon.point.monitorEnabled, true)
+  assert.equal(mon.point.trendEnabled, true)
+  assert.equal(mon.point.alarmEnabled, true)
+  assert.equal(mon.point.alarmMin, 1)
+  const off = applyPointPatch(mon.point, { monitorEnabled: false })
+  assert.equal(off.point.monitorEnabled, false)
+  assert.equal(off.point.trendEnabled, false)
+  assert.equal(off.point.alarmEnabled, true)
+  const alarm = applyPointPatch(mon.point, { alarmEnabled: false })
+  assert.equal(alarm.point.alarmEnabled, false)
+  assert.equal(alarm.point.monitorEnabled, true)
+  assert.equal(alarm.point.trendEnabled, true)
+  const frozen = applyPointPatch(base, { id: 'stolen' })
+  assert.equal(frozen.ok, false)
+  assert.equal(frozen.errorCode, 'TARGET_MISMATCH')
+})
 
 test('name-only update does not reset address/function/scale/flags', async () => {
   await withWs(async (home, cwd) => {

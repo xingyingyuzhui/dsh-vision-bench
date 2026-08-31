@@ -82,7 +82,7 @@ export const maybeNotifyResult = (home, cwd, label, ran) => {
   const fromAgent = ran.source === 'agent'
   if (!failed && !fromAgent) return
   const state = ran.ok === true ? '完成' : ran.cancelled ? '已取消' : '失败'
-  const summary = '台架' + label + state + '：' + String(ran.summary || '').slice(0, 120)
+  const summary = 'Vision' + label + state + '：' + String(ran.summary || '').slice(0, 120)
   void notifyBenchEvent(home, cwd, summary, '', {
     sessionId: ran.sessionId || '',
   }).catch(() => {

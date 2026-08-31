@@ -41,6 +41,8 @@ export type PostCommitWarning = {
   connectionIds?: string[]
 }
 
+export type ConfigMutationErrorCode = 'CONFIG_DRIFT' | 'CONFIG_VERSION_REQUIRED' | 'CONFIG_INVALID'
+
 export type WorkspaceRepositoryMutator = (
   current: unknown,
 ) =>

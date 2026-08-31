@@ -907,53 +907,6 @@ export const pruneBuildLogs = (home, keep = 30) => {
 
 // ── config draft (RFC6902, N4.2) ─────────────────────────────────────────
 
-export const patchPointFlags = async (home, cwd, pointId, patch, options = {}) => {
-  const room = requireWorkspaceCwd(cwd)
-  if (room.error) return { ok: false, error: room.error }
-  const workspace = loadWorkspace(home, room.cwd)
-  const pack = normalizeModbus(workspace.modbus)
-  const expected = Number(options && options.expectedConfigVersion)
-  if (Number.isFinite(expected) && expected > 0 && expected !== (pack.configVersion || 1)) {
-    return { ok: false, errorCode: 'CONFIG_DRIFT', error: '点位配置已更新，请刷新后重试' }
-  }
-  const id = typeof pointId === 'string' ? pointId.trim() : String(pointId == null ? '' : pointId).trim()
-  const points = Array.isArray(pack.points) ? pack.points : []
-  const hit = points.find((p) => p && p.id === id)
-  if (!hit) return { ok: false, errorCode: 'NOT_FOUND', error: '点位不存在: ' + id }
-  const hasMonitor = patch && patch.monitorEnabled !== undefined
-  const hasAlarm = patch && patch.alarmEnabled !== undefined
-  if (!hasMonitor && !hasAlarm) {
-    return { ok: false, error: '缺少 monitorEnabled 或 alarmEnabled' }
-  }
-  if (hasMonitor && typeof patch.monitorEnabled !== 'boolean') {
-    return { ok: false, error: 'monitorEnabled 必须是布尔值' }
-  }
-  if (hasAlarm && typeof patch.alarmEnabled !== 'boolean') {
-    return { ok: false, error: 'alarmEnabled 必须是布尔值' }
-  }
-  const nextPoints = points.map((p) => {
-    if (!p || p.id !== id) return p
-    const next = { ...p }
-    if (hasMonitor) {
-      next.monitorEnabled = patch.monitorEnabled === true
-      next.trendEnabled = next.monitorEnabled
-    }
-    if (hasAlarm) {
-      next.alarmEnabled = patch.alarmEnabled === true
-    }
-    return next
-  })
-  const saved = await saveWorkspaceAsync(home, room.cwd, { modbus: { points: nextPoints, version: 3 } })
-  if (!saved.ok) return saved
-  const savedPoint = (saved.workspace.modbus.points || []).find((p) => p && p.id === id)
-  return {
-    ok: true,
-    point: savedPoint,
-    configVersion: saved.workspace.modbus.configVersion,
-    workspace: saved.workspace,
-  }
-}
-
 // Task1/0.18.2: explicit frame-deletion semantics. Merge cannot express delete;
 // this performs a whole-replacement of framesByConnection.
 // options: { connectionId: 'c1' } | { all: true }

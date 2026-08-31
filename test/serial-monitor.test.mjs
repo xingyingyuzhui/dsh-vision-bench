@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
 import {
   closeSerialMonitor,
   feedConnectionFrames,
@@ -12,7 +10,6 @@ import {
   openSerialMonitor,
 } from '../bench-serial-monitor.mjs'
 import { saveWorkspace } from '../bench-store.mjs'
-import { findPython } from './python.mjs'
 
 test('frames layer refuses to open a serial port', async () => {
   const ran = await openSerialMonitor('/tmp/ws', { port: 'COM3' })
@@ -80,39 +77,4 @@ test('capture feed is read-only and does not require leftover assembly', async (
   assert.equal(feed.lines.length, 2)
   assert.equal(feed.lines[0].hex, '616263')
   assert.equal(feed.lines[1].hex, '6465660A')
-})
-
-test('openocd_flash.py validates inputs before spawning', async () => {
-  const pythonBin = findPython()
-  if (!pythonBin) return
-  const script = fileURLToPath(new URL('../runtime/openocd_flash.py', import.meta.url))
-  assert.ok(!script.startsWith('/D:'), script)
-  assert.ok(!script.includes('D:\\D:'), script)
-  const run = (args) => {
-    try {
-      const out = execFileSync(pythonBin, [script, ...args], { encoding: 'utf8', timeout: 15000, windowsHide: true })
-      return JSON.parse(out.trim().split('\n').pop())
-    } catch (error) {
-      const stdout = String(error.stdout || '')
-        .trim()
-        .split('\n')
-        .pop()
-      if (!stdout) throw error
-      return JSON.parse(stdout)
-    }
-  }
-  const base = [
-    '--openocd',
-    '/nonexistent/openocd',
-    '--interface',
-    'cmsis-dap',
-    '--target',
-    'stm32f1x',
-    '--file',
-    '/nonexistent.hex',
-    '--json',
-  ]
-  const missing = run(base)
-  assert.equal(missing.status, 'error')
-  assert.equal(missing.error.code, 'openocd_not_found')
 })

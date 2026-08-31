@@ -24,6 +24,7 @@ import { changedConnectionIds, notifyConnectionRelease } from './bench-modbus-tr
 import { migrateLegacyDisabled } from './bench-modbus.mjs'
 import { maybeNotifyResult, notifyBenchEvent, setAgentsRegistry } from './bench-notify.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
+import { mutateConfig } from './src/application/config/config-mutation-service.mjs'
 import { ensurePolling, pollingStatus, startPolling, stopAllPolling, stopPolling } from './bench-polling-service.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
 import { VISION_GUIDANCE } from './bench-preset.mjs'
@@ -43,7 +44,6 @@ import {
   journalView,
   loadBindings,
   loadWorkspace,
-  patchPointFlags,
   probeBindings,
   resolveManualRequest,
   saveBindings,
@@ -331,12 +331,43 @@ export function apply(ctx, config = {}) {
       const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
       if (room.error) return { ok: false, error: room.error }
+      const expected = body && body.expectedConfigVersion
+      if (!Number.isInteger(expected) || expected <= 0) {
+        return {
+          ok: false,
+          errorCode: 'CONFIG_VERSION_REQUIRED',
+          error: '配置修改必须携带当前 configVersion',
+        }
+      }
       const patch = {}
-      if (typeof (body && body.monitorEnabled) === 'boolean') patch.monitorEnabled = body.monitorEnabled
-      if (typeof (body && body.alarmEnabled) === 'boolean') patch.alarmEnabled = body.alarmEnabled
-      return patchPointFlags(dshHome, room.cwd, body && body.pointId, patch, {
+      if (body && Object.prototype.hasOwnProperty.call(body, 'monitorEnabled')) {
+        patch.monitorEnabled = body.monitorEnabled
+      }
+      if (body && Object.prototype.hasOwnProperty.call(body, 'alarmEnabled')) {
+        patch.alarmEnabled = body.alarmEnabled
+      }
+      const ran = await mutateConfig({
+        home: dshHome,
+        cwd: room.cwd,
+        source: body && body.source === 'agent' ? 'agent' : 'user',
+        sessionId: (body && body.sessionId) || '',
         expectedConfigVersion: body && body.expectedConfigVersion,
+        operation: 'flags.update',
+        target: { pointId: body && body.pointId },
+        value: patch,
       })
+      if (!ran || ran.ok === false) {
+        const errorCode = ran && ran.errorCode === 'POINT_NOT_FOUND' ? 'NOT_FOUND' : ran && ran.errorCode
+        const error =
+          ran && ran.errorCode === 'CONFIG_DRIFT' ? '点位配置已更新，请刷新后重试' : (ran && ran.error) || '保存失败'
+        return { ok: false, error, errorCode }
+      }
+      const pointId = String((body && body.pointId) || '')
+      const points = (ran.workspace && ran.workspace.modbus && ran.workspace.modbus.points) || []
+      const point = points.find((item) => item && item.id === pointId)
+      const configVersion =
+        ran.nextConfigVersion || (ran.workspace && ran.workspace.modbus && ran.workspace.modbus.configVersion)
+      return { ok: true, point, configVersion, workspace: ran.workspace }
     }),
     route('/dsh-vision-bench/frames/list', async (req) => {
       const body = normalizeConnAlias(await readBodyAndTouchSession(req))

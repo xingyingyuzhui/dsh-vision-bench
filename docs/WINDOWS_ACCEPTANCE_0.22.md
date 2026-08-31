@@ -48,3 +48,11 @@
 - [ ] Agent 与 UI 共用同一个 I/O Worker，COM 不重复占用
 - [ ] Workspace 写入失败 / 旧格式迁移失败
 - [ ] 不崩溃 Harness、不串连接、不误报成功、有结构化错误码
+
+## 8.5 OpenOCD（未安装 Python）
+
+- [ ] 未安装 Python时，OpenOCD 烧录确认可正常打开
+- [ ] 未安装 Python时，OpenOCD 实机烧录成功
+- [ ] OpenOCD 超时可终止整个进程树
+- [ ] OpenOCD 路径和固件路径包含空格
+- [ ] 取消烧录后无残留 openocd.exe

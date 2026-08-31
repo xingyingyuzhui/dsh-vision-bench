@@ -56,14 +56,14 @@ const NS = 'dsh-vision-bench'
 
 const COPY = {
   zh: {
-    nav: '台架',
+    nav: 'Vision',
     tabDebug: '调试',
     tabHmi: '上位机',
     settingsTitle: '本机程序',
     settingsHint: 'Keil 仍绑定本机 UV4/Python；Modbus 与串口监视使用插件内置 Node 运行时，无需 pymodbus。',
     python: 'Python（Keil 工程脚本，可选）',
     uv4: 'Keil UV4',
-    openocd: 'OpenOCD（烧录兼容项，0.20.0 将移除）',
+    openocd: 'OpenOCD（外部可执行文件，由插件通过 Node 进程封装调用）',
     ioRuntime: '内置 Modbus/串口运行时（无需绑定 Node 或 Python）',
     ioRuntimeShort: '内置 Modbus',
     ioPending: '待启动',
@@ -235,8 +235,8 @@ const COPY = {
     bindState_other: '其他会话',
     bindOn: '绑定本会话',
     bindOff: '解绑',
-    bindHint: '绑定后，编译失败、写点结果等台架事件会以通知进入当前会话',
-    serialTitle: '串口日志',
+    bindHint: '绑定后，编译失败、写点结果等 Vision 事件会以通知进入当前会话',
+    serialTitle: '串口报文',
     framesTitle: '报文流',
     connBar: '连接',
     databits: '数据位',
@@ -361,7 +361,7 @@ const COPY = {
     sourceSystem: '系统',
     selfcheck: '运行自检',
     selfchecking: '自检中…',
-    selfcheckTitle: '台架自检',
+    selfcheckTitle: 'Vision 自检',
     selfcheckPass: '通过',
     selfcheckFail: '未过',
     flashTitle: '烧录下载',
@@ -374,13 +374,13 @@ const COPY = {
     flashApprove: '批准下载',
     flashCancel: '取消',
     flashNeedArtifact: '没有可用固件产物，请先编译',
-    needOpenocd: '请先在设置 → 台架 绑定 OpenOCD',
+    needOpenocd: '请先在设置 → Vision 绑定 OpenOCD',
     flashDone: '烧录完成',
     flashFail: '烧录失败',
     configDrift: '配置已漂移（CONFIG_DRIFT）',
   },
   en: {
-    nav: 'Bench',
+    nav: 'Vision',
     tabDebug: 'Debug',
     tabHmi: 'HMI',
     settingsTitle: 'Local programs',
@@ -388,7 +388,7 @@ const COPY = {
       'Keil still binds local UV4/Python. Modbus and serial monitoring use the bundled Node runtime; pymodbus is not required.',
     python: 'Python (optional Keil scripts)',
     uv4: 'Keil UV4',
-    openocd: 'OpenOCD (legacy flash binding, removed in 0.20.0)',
+    openocd: 'OpenOCD (external executable, wrapped by the plugin Node process)',
     ioRuntime: 'Bundled Modbus/serial runtime (no Node or Python binding required)',
     ioRuntimeShort: 'Bundled Modbus',
     ioPending: 'Idle',
@@ -560,8 +560,8 @@ const COPY = {
     bindState_other: 'other session',
     bindOn: 'Bind this session',
     bindOff: 'Unbind',
-    bindHint: 'When bound, bench events such as build failures and write results reach this session as notices',
-    serialTitle: 'Serial log',
+    bindHint: 'When bound, Vision events such as build failures and write results reach this session as notices',
+    serialTitle: 'Serial frames',
     framesTitle: 'Frame stream',
     connBar: 'Connection',
     databits: 'Data bits',
@@ -686,7 +686,7 @@ const COPY = {
     sourceSystem: 'System',
     selfcheck: 'Run self-check',
     selfchecking: 'Checking…',
-    selfcheckTitle: 'Bench self-check',
+    selfcheckTitle: 'Vision self-check',
     selfcheckPass: 'pass',
     selfcheckFail: 'fail',
     flashTitle: 'Flash download',
@@ -699,7 +699,7 @@ const COPY = {
     flashApprove: 'Approve download',
     flashCancel: 'Cancel',
     flashNeedArtifact: 'No firmware artifact yet, build first',
-    needOpenocd: 'Bind OpenOCD in Settings → Bench first',
+    needOpenocd: 'Bind OpenOCD in Settings → Vision first',
     flashDone: 'Flash done',
     flashFail: 'Flash failed',
     configDrift: 'Config drift (CONFIG_DRIFT)',
@@ -3335,11 +3335,12 @@ function normalizeModbus(input) {
         : emptyVisualization()
     // active ids
     let activeConnectionId = devText(src.activeConnectionId, '')
-    if (!connections.some((c) => c.id === activeConnectionId)) activeConnectionId = connections[0]?.id || 'c1'
+    if (!connections.some((c) => c.id === activeConnectionId)) activeConnectionId = connections[0]?.id || ''
     let activeDeviceId = devText(src.activeDeviceId, '')
-    if (!devices.some((d) => d.id === activeDeviceId)) {
-      const devForConn = devices.find((d) => d.connectionId === activeConnectionId)
-      activeDeviceId = devForConn ? devForConn.id : devices[0]?.id || 'd1'
+    const belongs =
+      activeDeviceId && devices.some((d) => d.id === activeDeviceId && d.connectionId === activeConnectionId)
+    if (!belongs) {
+      activeDeviceId = devices.find((d) => d.connectionId === activeConnectionId)?.id || ''
     }
     const configVersion = normalizeConfigVersion(src.configVersion ?? src.rev ?? src.cfgVersion ?? 1)
     // also need to filter points/values that reference invalid connection/device? already fixed refs but keep check
@@ -3393,7 +3394,7 @@ function normalizeModbus(input) {
       },
       slave: {
         get() {
-          const ad = ret.devices.find((d) => d.id === ret.activeDeviceId) || ret.devices[0]
+          const ad = ret.devices.find((d) => d.id === ret.activeDeviceId && d.connectionId === ret.activeConnectionId)
           return ad ? ad.unitId : 1
         },
         enumerable: false,
@@ -3542,7 +3543,7 @@ function normalizeModbus(input) {
     },
     slave: {
       get() {
-        const ad = ret.devices.find((d) => d.id === ret.activeDeviceId) || ret.devices[0]
+        const ad = ret.devices.find((d) => d.id === ret.activeDeviceId && d.connectionId === ret.activeConnectionId)
         return ad ? ad.unitId : 1
       },
       enumerable: false,
@@ -6133,7 +6134,7 @@ function agentNote(cwd, workspace, result) {
   const download = result && result.download ? result.download : {}
   const metrics = result && result.metrics ? result.metrics : {}
   return [
-    '[调试台架]',
+    '[Vision]',
     '工作区: ' + (cwd || ''),
     '工程: ' + (keil.project || ''),
     'Target: ' + (keil.target || ''),
@@ -9621,6 +9622,26 @@ async function persistHmiPatch(client, current, patch) {
   return last || { ok: true, unchanged: true }
 }
 
+function snapshotModbusPack(pack) {
+  return JSON.parse(
+    JSON.stringify({
+      version: pack.version,
+      configVersion: pack.configVersion,
+      connections: pack.connections || [],
+      devices: pack.devices || [],
+      points: pack.points || [],
+      values: pack.values || [],
+      activeConnectionId: pack.activeConnectionId || '',
+      activeDeviceId: pack.activeDeviceId || '',
+      pollingByConnection: pack.pollingByConnection || {},
+      framesByConnection: pack.framesByConnection || {},
+      alarmState: pack.alarmState || {},
+      trend: pack.trend || {},
+      visualization: pack.visualization || {},
+    }),
+  )
+}
+
 /** Shared state, persistence, Agent-focus and derived-view helpers for the HMI page. */
 function createHmiCoreActions(ctx) {
   const {
@@ -9667,9 +9688,38 @@ function createHmiCoreActions(ctx) {
       .finally(() => setScanning(false))
   }
 
-  function persist(modbusPatch) {
-    if (!cwd) return Promise.resolve()
+  async function restoreWorkspaceAfterFailure(seq, fallbackPack, message) {
+    setError(message)
+    if (seq !== inflight.current) return
+    try {
+      const fresh = await commandClient.refresh()
+      if (seq !== inflight.current) return
+      const hostPack = fresh?.workspace?.modbus
+      if (hostPack) {
+        setWorkspace((prev) => {
+          const next = { ...prev, modbus: hostPack }
+          workspaceRef.current = next
+          return next
+        })
+        setJournal(pickJournal(fresh))
+        return
+      }
+    } catch {
+      // Host refresh failed; fall through to the pre-mutation snapshot.
+    }
+    if (seq !== inflight.current) return
+    setWorkspace((prev) => {
+      const next = { ...prev, modbus: fallbackPack }
+      workspaceRef.current = next
+      return next
+    })
+    setError('配置保存失败，当前状态可能已过期')
+  }
+
+  async function persist(modbusPatch) {
+    if (!cwd) return
     const currentPack = normalizePack()
+    const fallbackPack = snapshotModbusPack(currentPack)
     const seq = ++inflight.current
     setWorkspace((prev) => {
       const next = { ...prev, modbus: { ...prev.modbus } }
@@ -9683,28 +9733,31 @@ function createHmiCoreActions(ctx) {
       workspaceRef.current = next
       return next
     })
-    return persistHmiPatch(commandClient, currentPack, modbusPatch)
-      .then((data) => {
-        if (seq === inflight.current && data?.workspace?.modbus) {
-          setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus }))
-          workspaceRef.current = { ...workspaceRef.current, modbus: data.workspace.modbus }
-        }
-        if (data) setJournal(pickJournal(data))
-        if (data?.ok === false) {
-          setError(data.error || t('fail'))
-          return commandClient.refresh().then((fresh) => {
-            if (seq === inflight.current && fresh?.workspace?.modbus) {
-              setWorkspace((prev) => ({ ...prev, modbus: fresh.workspace.modbus }))
-              workspaceRef.current = { ...workspaceRef.current, modbus: fresh.workspace.modbus }
-            }
+    try {
+      const data = await persistHmiPatch(commandClient, currentPack, modbusPatch)
+      if (seq !== inflight.current) return data
+      if (!data || data.ok === false) {
+        await restoreWorkspaceAfterFailure(seq, fallbackPack, data?.error || t('fail'))
+        return data
+      }
+      if (data.workspace?.modbus) {
+        const currentVersion = Number(workspaceRef.current?.modbus?.configVersion || 0)
+        const hostVersion = Number(data.workspace.modbus.configVersion || 0)
+        if (hostVersion >= currentVersion) {
+          setWorkspace((prev) => {
+            const next = { ...prev, modbus: data.workspace.modbus }
+            workspaceRef.current = next
+            return next
           })
         }
-        return data
-      })
-      .catch((error) => setError(String(error?.message || t('fail'))))
-      .finally(() => {
-        if (seq === inflight.current) inflight.current = 0
-      })
+      }
+      setJournal(pickJournal(data))
+      return data
+    } catch (error) {
+      await restoreWorkspaceAfterFailure(seq, fallbackPack, String(error?.message || t('fail')))
+    } finally {
+      if (seq === inflight.current) inflight.current = 0
+    }
   }
 
   function cfgVersion() {
@@ -9778,8 +9831,10 @@ function createHmiCoreActions(ctx) {
     const connections = Array.isArray(pack.connections) ? pack.connections : []
     const devices = Array.isArray(pack.devices) ? pack.devices : []
     const activeConnId = pack.activeConnectionId || connections[0]?.id || ''
-    const activeDeviceId =
-      pack.activeDeviceId || devices.find((device) => device.connectionId === activeConnId)?.id || devices[0]?.id || ''
+    const belonging = devices.find(
+      (device) => device.id === pack.activeDeviceId && device.connectionId === activeConnId,
+    )
+    const activeDeviceId = belonging?.id || devices.find((device) => device.connectionId === activeConnId)?.id || ''
     const activeConnObj = connections.find((connection) => connection.id === activeConnId) ||
       connections[0] || { conn: {} }
     const conn = activeConnObj.conn || {}
@@ -9968,9 +10023,11 @@ function createHmiConnectionActions(ctx, core) {
       devices,
       points: (pack.points || []).filter((point) => !removedPointIds.has(point.id)),
       values: (pack.values || []).filter((value) => !removedPointIds.has(value.pointId || value.key)),
-      activeDeviceId: devices.some((candidate) => candidate.id === pack.activeDeviceId)
+      activeDeviceId: devices.some(
+        (candidate) => candidate.id === pack.activeDeviceId && candidate.connectionId === connectionId,
+      )
         ? pack.activeDeviceId
-        : devices[0]?.id || '',
+        : devices.find((candidate) => candidate.connectionId === connectionId)?.id || '',
       version: 3,
     })
     setDevDeleteId('')
@@ -9983,8 +10040,7 @@ function createHmiConnectionActions(ctx, core) {
       !deviceId ||
       !(pack.devices || []).some((device) => device.id === deviceId && device.connectionId === connectionId)
     ) {
-      deviceId =
-        (pack.devices || []).find((device) => device.connectionId === connectionId)?.id || pack.devices[0]?.id || ''
+      deviceId = (pack.devices || []).find((device) => device.connectionId === connectionId)?.id || ''
     }
     persist({ activeConnectionId: connectionId, activeDeviceId: deviceId, version: 3 })
     setPendingDeleteId('')
@@ -10012,7 +10068,7 @@ function createHmiConnectionActions(ctx, core) {
     let activeDeviceId = pack.activeDeviceId
     if (activeConnectionId === connectionId) {
       activeConnectionId = connections[0]?.id || ''
-      activeDeviceId = devices.find((device) => device.connectionId === activeConnectionId)?.id || devices[0]?.id || ''
+      activeDeviceId = devices.find((device) => device.connectionId === activeConnectionId)?.id || ''
       setFrameFilter(activeConnectionId || 'all')
       setHmiTab(activeConnectionId || 'all')
     }
@@ -10341,14 +10397,39 @@ function createHmiPointActions(ctx, core) {
 
     const isLatest = () => seqKeys.every((sk) => seqAtStart[sk] === flagRequestSeq.current[sk])
 
+    const rollbackPatch = {}
+    if (keys.includes('monitorEnabled')) {
+      rollbackPatch.monitorEnabled = prevSnapshot.monitorEnabled
+      rollbackPatch.trendEnabled = prevSnapshot.trendEnabled
+    }
+    if (keys.includes('alarmEnabled')) {
+      rollbackPatch.alarmEnabled = prevSnapshot.alarmEnabled
+    }
+
     const rollback = (msg) => {
       if (!isLatest()) return
-      applyPointFlagLocal(pointId, {
-        monitorEnabled: prevSnapshot.monitorEnabled,
-        alarmEnabled: prevSnapshot.alarmEnabled,
-        trendEnabled: prevSnapshot.trendEnabled,
-      })
+      applyPointFlagLocal(pointId, rollbackPatch)
       if (msg) setError(msg)
+    }
+
+    const recoverFromFailure = (msg) => {
+      if (!isLatest()) return Promise.resolve()
+      return commandClient
+        .refresh()
+        .then((fresh) => {
+          if (!isLatest()) return
+          if (fresh?.workspace?.modbus) {
+            setWorkspace((prev) => {
+              const next = { ...prev, modbus: fresh.workspace.modbus }
+              workspaceRef.current = next
+              return next
+            })
+            if (msg) setError(msg)
+            return
+          }
+          rollback(msg)
+        })
+        .catch(() => rollback(msg))
     }
 
     const applySuccess = (data) => {
@@ -10397,22 +10478,22 @@ function createHmiPointActions(ctx, core) {
               .then((data2) => {
                 if (!isLatest()) return data2
                 if (!data2 || data2.ok === false) {
-                  rollback('点位配置已被其他操作更新，请重试')
-                  return data2
+                  return recoverFromFailure('点位配置已被其他操作更新，请重试').then(() => data2)
                 }
                 return applySuccess(data2)
               })
-              .catch(() => rollback('点位配置已被其他操作更新，请重试'))
+              .catch(() => recoverFromFailure('点位配置已被其他操作更新，请重试'))
           }
           const tip = keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态'
-          rollback(tip)
-          return data
+          return recoverFromFailure(tip).then(() => data)
         }
         return applySuccess(data)
       })
-      .catch(() => {
-        rollback(keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态')
-      })
+      .catch(() =>
+        recoverFromFailure(
+          keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态',
+        ),
+      )
       .finally(() => {
         flagInflight.current = Math.max(0, flagInflight.current - 1)
         setFlagSavingByPoint((prev) => {
@@ -10700,6 +10781,22 @@ function createHmiLiveActions(ctx, core) {
   } = ctx
   const { normalizePack, persist, derived } = core
 
+  async function refreshConnectionState() {
+    if (!cwd) return
+    const data = await post('/dsh-vision-bench/state', { cwd })
+    if (Array.isArray(data?.connectionStates)) setConnectionStates(data.connectionStates)
+    if (data?.workspace?.modbus) {
+      setWorkspace((prev) => {
+        const nextModbus = { ...prev.modbus, ...data.workspace.modbus }
+        const next = { ...prev, modbus: nextModbus }
+        workspaceRef.current = { ...workspaceRef.current, modbus: nextModbus }
+        return next
+      })
+    }
+    if (data) setJournal(pickJournal(data))
+    return data
+  }
+
   function readAll(deviceId) {
     readOne(null, deviceId || undefined)
   }
@@ -10842,29 +10939,50 @@ function createHmiLiveActions(ctx, core) {
   }
 
   function linkConnection(id) {
-    if (!cwd || !id) return
+    if (!cwd || !id) return Promise.resolve()
     setLinkBusy(id)
-    post('/dsh-vision-bench/connection/open', { cwd, connectionId: id }, 15000)
-      .then((data) => {
+    setError('')
+    return post('/dsh-vision-bench/connection/open', { cwd, connectionId: id }, 15000)
+      .then(async (data) => {
         if (data && data.ok === false) setError(data.error || t('fail'))
-        return post('/dsh-vision-bench/state', { cwd })
+        try {
+          await refreshConnectionState()
+        } catch (error) {
+          setError(String(error?.message || t('fail')))
+        }
       })
-      .then((data) => {
-        if (data && Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
+      .catch(async (err) => {
+        setError(String(err?.message || t('fail')))
+        try {
+          await refreshConnectionState()
+        } catch (refreshError) {
+          void refreshError
+        }
       })
-      .catch((err) => setError(String(err?.message || t('fail'))))
       .finally(() => setLinkBusy(''))
   }
 
   function unlinkConnection(id) {
-    if (!cwd || !id) return
+    if (!cwd || !id) return Promise.resolve()
     setLinkBusy(id)
-    post('/dsh-vision-bench/connection/close', { cwd, connectionId: id }, 15000)
-      .then(() => post('/dsh-vision-bench/state', { cwd }))
-      .then((data) => {
-        if (data && Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
+    setError('')
+    return post('/dsh-vision-bench/connection/close', { cwd, connectionId: id }, 15000)
+      .then(async (data) => {
+        if (data && data.ok === false) setError(data.error || t('fail'))
+        try {
+          await refreshConnectionState()
+        } catch (error) {
+          setError(String(error?.message || t('fail')))
+        }
       })
-      .catch(() => {})
+      .catch(async (err) => {
+        setError(String(err?.message || t('fail')))
+        try {
+          await refreshConnectionState()
+        } catch (refreshError) {
+          void refreshError
+        }
+      })
       .finally(() => setLinkBusy(''))
   }
 
@@ -10884,34 +11002,61 @@ function createHmiLiveActions(ctx, core) {
 
   function toggleCollection() {
     const d = derived()
-    if (!cwd || !d.activeConnId) return
+    if (!cwd || !d.activeConnId) return Promise.resolve()
     setLinkBusy('poll')
+    setError('')
     const url = d.watchEnabled ? '/dsh-vision-bench/polling/stop' : '/dsh-vision-bench/polling/start'
-    post(url, { cwd, connectionId: d.activeConnId }, 15000)
-      .then(() => post('/dsh-vision-bench/state', { cwd }))
-      .then((data) => {
-        if (data?.workspace?.modbus) {
-          setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus }))
+    return post(url, { cwd, connectionId: d.activeConnId }, 15000)
+      .then(async (data) => {
+        if (data?.ok === false) setError(data.error || t('fail'))
+        try {
+          await refreshConnectionState()
+        } catch (error) {
+          setError(String(error?.message || t('fail')))
         }
       })
-      .catch((err) => setError(String(err?.message || t('fail'))))
+      .catch(async (err) => {
+        setError(String(err?.message || t('fail')))
+        try {
+          await refreshConnectionState()
+        } catch (refreshError) {
+          void refreshError
+        }
+      })
       .finally(() => setLinkBusy(''))
   }
 
   function setPollingInterval(ms) {
     const d = derived()
-    persist({
-      pollingByConnection: {
-        ...(d.pollingByConnection || {}),
-        [d.activeConnId]: { ...d.polling, enabled: true, intervalMs: Number(ms) || 1000 },
+    if (!cwd || !d.activeConnId) return Promise.resolve()
+    setLinkBusy('poll')
+    setError('')
+    return post(
+      '/dsh-vision-bench/polling/start',
+      {
+        cwd,
+        connectionId: d.activeConnId,
+        intervalMs: Number(ms) || 1000,
       },
-      version: 3,
-    })
-    post('/dsh-vision-bench/polling/start', {
-      cwd,
-      connectionId: d.activeConnId,
-      intervalMs: Number(ms) || 1000,
-    }).catch(() => {})
+      15000,
+    )
+      .then(async (data) => {
+        if (data?.ok === false) setError(data.error || t('fail'))
+        try {
+          await refreshConnectionState()
+        } catch (error) {
+          setError(String(error?.message || t('fail')))
+        }
+      })
+      .catch(async (err) => {
+        setError(String(err?.message || t('fail')))
+        try {
+          await refreshConnectionState()
+        } catch (refreshError) {
+          void refreshError
+        }
+      })
+      .finally(() => setLinkBusy(''))
   }
 
   function findRtuOccupier(port, excludeId) {

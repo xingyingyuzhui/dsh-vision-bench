@@ -66,7 +66,7 @@ function agentNote(cwd, workspace, result) {
   const download = result && result.download ? result.download : {}
   const metrics = result && result.metrics ? result.metrics : {}
   return [
-    '[调试台架]',
+    '[Vision]',
     '工作区: ' + (cwd || ''),
     '工程: ' + (keil.project || ''),
     'Target: ' + (keil.target || ''),

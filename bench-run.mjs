@@ -7,7 +7,6 @@ const RUNTIME_DIR = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
 const SCRIPTS = {
   'keil_project.py': join(RUNTIME_DIR, 'keil_project.py'),
   'keil_build.py': join(RUNTIME_DIR, 'keil_build.py'),
-  'openocd_flash.py': join(RUNTIME_DIR, 'openocd_flash.py'),
 }
 
 const pythonArgv = (pythonBin, extra) => {

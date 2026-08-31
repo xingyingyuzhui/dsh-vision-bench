@@ -22,6 +22,22 @@ export function createHmiLiveActions(ctx, core) {
   } = ctx
   const { normalizePack, persist, derived } = core
 
+  async function refreshConnectionState() {
+    if (!cwd) return
+    const data = await post('/dsh-vision-bench/state', { cwd })
+    if (Array.isArray(data?.connectionStates)) setConnectionStates(data.connectionStates)
+    if (data?.workspace?.modbus) {
+      setWorkspace((prev) => {
+        const nextModbus = { ...prev.modbus, ...data.workspace.modbus }
+        const next = { ...prev, modbus: nextModbus }
+        workspaceRef.current = { ...workspaceRef.current, modbus: nextModbus }
+        return next
+      })
+    }
+    if (data) setJournal(pickJournal(data))
+    return data
+  }
+
   function readAll(deviceId) {
     readOne(null, deviceId || undefined)
   }
@@ -164,29 +180,50 @@ export function createHmiLiveActions(ctx, core) {
   }
 
   function linkConnection(id) {
-    if (!cwd || !id) return
+    if (!cwd || !id) return Promise.resolve()
     setLinkBusy(id)
-    post('/dsh-vision-bench/connection/open', { cwd, connectionId: id }, 15000)
-      .then((data) => {
+    setError('')
+    return post('/dsh-vision-bench/connection/open', { cwd, connectionId: id }, 15000)
+      .then(async (data) => {
         if (data && data.ok === false) setError(data.error || t('fail'))
-        return post('/dsh-vision-bench/state', { cwd })
+        try {
+          await refreshConnectionState()
+        } catch (error) {
+          setError(String(error?.message || t('fail')))
+        }
       })
-      .then((data) => {
-        if (data && Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
+      .catch(async (err) => {
+        setError(String(err?.message || t('fail')))
+        try {
+          await refreshConnectionState()
+        } catch (refreshError) {
+          void refreshError
+        }
       })
-      .catch((err) => setError(String(err?.message || t('fail'))))
       .finally(() => setLinkBusy(''))
   }
 
   function unlinkConnection(id) {
-    if (!cwd || !id) return
+    if (!cwd || !id) return Promise.resolve()
     setLinkBusy(id)
-    post('/dsh-vision-bench/connection/close', { cwd, connectionId: id }, 15000)
-      .then(() => post('/dsh-vision-bench/state', { cwd }))
-      .then((data) => {
-        if (data && Array.isArray(data.connectionStates)) setConnectionStates(data.connectionStates)
+    setError('')
+    return post('/dsh-vision-bench/connection/close', { cwd, connectionId: id }, 15000)
+      .then(async (data) => {
+        if (data && data.ok === false) setError(data.error || t('fail'))
+        try {
+          await refreshConnectionState()
+        } catch (error) {
+          setError(String(error?.message || t('fail')))
+        }
       })
-      .catch(() => {})
+      .catch(async (err) => {
+        setError(String(err?.message || t('fail')))
+        try {
+          await refreshConnectionState()
+        } catch (refreshError) {
+          void refreshError
+        }
+      })
       .finally(() => setLinkBusy(''))
   }
 
@@ -206,34 +243,61 @@ export function createHmiLiveActions(ctx, core) {
 
   function toggleCollection() {
     const d = derived()
-    if (!cwd || !d.activeConnId) return
+    if (!cwd || !d.activeConnId) return Promise.resolve()
     setLinkBusy('poll')
+    setError('')
     const url = d.watchEnabled ? '/dsh-vision-bench/polling/stop' : '/dsh-vision-bench/polling/start'
-    post(url, { cwd, connectionId: d.activeConnId }, 15000)
-      .then(() => post('/dsh-vision-bench/state', { cwd }))
-      .then((data) => {
-        if (data?.workspace?.modbus) {
-          setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus || prev.modbus }))
+    return post(url, { cwd, connectionId: d.activeConnId }, 15000)
+      .then(async (data) => {
+        if (data?.ok === false) setError(data.error || t('fail'))
+        try {
+          await refreshConnectionState()
+        } catch (error) {
+          setError(String(error?.message || t('fail')))
         }
       })
-      .catch((err) => setError(String(err?.message || t('fail'))))
+      .catch(async (err) => {
+        setError(String(err?.message || t('fail')))
+        try {
+          await refreshConnectionState()
+        } catch (refreshError) {
+          void refreshError
+        }
+      })
       .finally(() => setLinkBusy(''))
   }
 
   function setPollingInterval(ms) {
     const d = derived()
-    persist({
-      pollingByConnection: {
-        ...(d.pollingByConnection || {}),
-        [d.activeConnId]: { ...d.polling, enabled: true, intervalMs: Number(ms) || 1000 },
+    if (!cwd || !d.activeConnId) return Promise.resolve()
+    setLinkBusy('poll')
+    setError('')
+    return post(
+      '/dsh-vision-bench/polling/start',
+      {
+        cwd,
+        connectionId: d.activeConnId,
+        intervalMs: Number(ms) || 1000,
       },
-      version: 3,
-    })
-    post('/dsh-vision-bench/polling/start', {
-      cwd,
-      connectionId: d.activeConnId,
-      intervalMs: Number(ms) || 1000,
-    }).catch(() => {})
+      15000,
+    )
+      .then(async (data) => {
+        if (data?.ok === false) setError(data.error || t('fail'))
+        try {
+          await refreshConnectionState()
+        } catch (error) {
+          setError(String(error?.message || t('fail')))
+        }
+      })
+      .catch(async (err) => {
+        setError(String(err?.message || t('fail')))
+        try {
+          await refreshConnectionState()
+        } catch (refreshError) {
+          void refreshError
+        }
+      })
+      .finally(() => setLinkBusy(''))
   }
 
   function findRtuOccupier(port, excludeId) {

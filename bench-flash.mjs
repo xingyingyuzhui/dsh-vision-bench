@@ -4,27 +4,16 @@ import { aborted, hasRunning, originOf, signalOf } from './bench-journal.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import { finishTask, loadBindings, loadWorkspace, openTask, saveWorkspaceAsync } from './bench-store.mjs'
 
-import { runPythonScript } from './bench-run.mjs'
+import {
+  DEFAULT_OPENOCD_INTERFACE,
+  DEFAULT_OPENOCD_TARGET,
+  FLASH_INTERFACES,
+  FLASH_TARGETS,
+  resolveOpenOcdProfile,
+} from './src/domain/flash/openocd-profile.mjs'
+import { runOpenOcdFlash } from './src/infrastructure/process/openocd-runner.mjs'
 
-export const FLASH_INTERFACES = ['cmsis-dap', 'stlink', 'jlink', 'ftdi', 'dap']
-export const FLASH_TARGETS = [
-  'stm32f1x',
-  'stm32f2x',
-  'stm32f4x',
-  'stm32f7x',
-  'stm32g0x',
-  'stm32g4x',
-  'stm32h7x',
-  'stm32l0x',
-  'stm32l4x',
-  'nrf51',
-  'nrf52',
-  'rp2040',
-  'lpc55',
-  'kinetis',
-  'efm32',
-  'at91samd',
-]
+export { DEFAULT_OPENOCD_INTERFACE, DEFAULT_OPENOCD_TARGET, FLASH_INTERFACES, FLASH_TARGETS }
 
 export const openocdDownload = async (home, cwd, body, opts) => {
   const room = requireWorkspaceCwd(cwd)
@@ -32,20 +21,20 @@ export const openocdDownload = async (home, cwd, body, opts) => {
   const signal = signalOf(body, opts)
   if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
   const bindings = loadBindings(home)
-  if (!bindings.openocd) return { ok: false, error: '请先在设置 → 台架 绑定 OpenOCD' }
-  if (!bindings.python) return { ok: false, error: '请先在设置 → 台架 绑定 Python' }
+  if (!bindings.openocd) return { ok: false, error: '请先在设置 → Vision 绑定 OpenOCD' }
   const workspace = loadWorkspace(home, room.cwd)
   const keil = workspace.keil
   const file = (body && body.path) || keil.download
   if (!file) return { ok: false, error: '没有可下载的固件产物，请先编译' }
   const info = artifactInfo(room.cwd, file)
   if (!info.ok) return { ok: false, error: info.error }
-  const iface =
-    FLASH_INTERFACES.indexOf(body && body.interface) >= 0
-      ? body.interface
-      : (keil.flash && keil.flash.interface) || 'cmsis-dap'
-  const target =
-    FLASH_TARGETS.indexOf(body && body.target) >= 0 ? body.target : (keil.flash && keil.flash.target) || 'stm32f1x'
+  const profile = resolveOpenOcdProfile(
+    { interface: body && body.interface, target: body && body.target },
+    keil.flash || {},
+  )
+  if (!profile.ok) return { ok: false, error: profile.error, errorCode: profile.errorCode }
+  const iface = profile.interfaceName
+  const target = profile.target
   if (hasRunning(workspace, 'download')) {
     return { ok: false, error: '已有下载任务进行中' }
   }
@@ -84,19 +73,25 @@ export const openocdDownload = async (home, cwd, body, opts) => {
     sessionId: origin.sessionId,
     summary: '烧录 ' + target + ' ← ' + (info.name || basename(info.path)),
   })
-  const ran = await runPythonScript(
-    bindings.python,
-    'openocd_flash.py',
-    ['--openocd', bindings.openocd, '--interface', iface, '--target', target, '--file', info.path, '--json'],
-    { cwd: room.cwd, timeoutMs: 150000, signal },
+  const ran = await (opts && opts.runOpenOcdFlash ? opts.runOpenOcdFlash : runOpenOcdFlash)(
+    {
+      openocd: bindings.openocd,
+      interfaceName: iface,
+      target,
+      firmware: info.path,
+      cwd: room.cwd,
+      timeoutMs: 150000,
+      signal,
+    },
+    { runExecFile: opts && opts.runExecFile },
   )
   if (ran.cancelled) {
     await finishTask(home, room.cwd, task.id, { cancelled: true, summary: '烧录已取消' })
     return { ok: false, cancelled: true, taskId: task.id, source: origin.source, error: '已取消' }
   }
-  const details = ran.result && ran.result.details ? ran.result.details : {}
-  const ok = ran.ok && ran.result && ran.result.status !== 'error'
-  const summary = (ran.result && ran.result.summary) || '烧录失败 ' + (ran.error || '')
+  const details = ran.details && typeof ran.details === 'object' ? ran.details : {}
+  const ok = ran.ok === true
+  const summary = ran.summary || '烧录失败 ' + (ran.error || '')
   await finishTask(home, room.cwd, task.id, {
     ok,
     summary,

@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path'
 import test from 'node:test'
 import {
   PRESET_BACKUP_FAILED,
+  PRESET_METADATA,
   PRESET_PERSONA,
   PRESET_RESTORE_FAILED,
   PRESET_WRITE_FAILED,
@@ -16,7 +17,7 @@ import {
   seedVisionBenchPreset,
 } from '../bench-preset.mjs'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
-import { runVisionBench } from '../bench-tool.mjs'
+import { runVisionBench, visionBenchTool } from '../bench-tool.mjs'
 import { apply } from '../host.js'
 
 // bench-preset.mjs routes every fs call through createRequire('node:fs'), so
@@ -101,15 +102,28 @@ test('ensurePresetOverlay appends the agent-plane row and persona', async () => 
     assert.equal(text.includes('Vision 台架'), false)
     // ownership file should be JSON with Vision模式 metadata
     const presetText = await (await import('node:fs/promises')).readFile(join(dir, 'preset.yml'), 'utf8')
-    assert.match(presetText, /Vision模式/)
+    assert.match(presetText, /^name: Vision模式$/m)
     const marker = await (await import('node:fs/promises')).readFile(join(dir, '.dsh-vision-bench'), 'utf8')
     const ownership = JSON.parse(marker)
     assert.equal(ownership.owner, 'dsh-vision-bench')
     assert.equal(ownership.presetSchemaVersion, 2)
     assert.equal(ownership.pluginRowId, 'vision-bench-tools')
+    assert.match(presetText, /Vision 调试与上位机接口/)
+    assert.equal(presetText.includes('Vision 台架接口'), false)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+})
+
+test('new Vision copy does not show 台架; legacy personas still contain 台架 for migration', () => {
+  assert.match(PRESET_METADATA, /^name: Vision模式$/m)
+  assert.match(PRESET_METADATA, /Vision 调试与上位机接口/)
+  assert.equal(PRESET_METADATA.includes('Vision 台架'), false)
+  const tool = visionBenchTool('/tmp')
+  assert.match(tool.description, /Vision 调试与上位机快速接口/)
+  assert.equal(tool.description.includes('Vision 台架'), false)
+  assert.equal(LEGACY_PERSONA_A.includes('Vision 台架'), true)
+  assert.equal(LEGACY_PERSONA_B.includes('Vision 台架'), true)
 })
 
 test('runVisionBench status and select stay inside the workspace', async () => {

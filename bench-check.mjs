@@ -3,6 +3,7 @@ import { IO_RUNTIME_PACKAGES } from './bench-io-contract.mjs'
 import { createModbusTransport } from './bench-modbus-transport.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import { runExecFile } from './bench-run.mjs'
+import { probeOpenOcdExecutable } from './src/infrastructure/process/openocd-runner.mjs'
 import { listSerialPorts } from './bench-serial.mjs'
 import { loadBindings, loadWorkspace, probeBindings } from './bench-store.mjs'
 import { describeHostBridge, pingVisionHost } from './src/infrastructure/host/vision-host-client.mjs'
@@ -12,7 +13,7 @@ const firstLine = (text) =>
     .split('\n')
     .filter(Boolean)[0] || ''
 
-export const runSelfCheck = async (home, cwd) => {
+export const runSelfCheck = async (home, cwd, opts = {}) => {
   const checks = []
   const push = (name, ok, detail = '') => {
     checks.push({ name, ok: !!ok, detail: String(detail || '').slice(0, 120) })
@@ -25,7 +26,7 @@ export const runSelfCheck = async (home, cwd) => {
   push(
     'bind-openocd',
     health.openocd.bound && health.openocd.exists,
-    bindings.openocd || '烧录兼容项，将在 0.20.0 移除',
+    bindings.openocd || '外部 OpenOCD 可执行文件，由插件通过 Node 进程封装调用',
   )
 
   if (health.python.bound && health.python.exists) {
@@ -33,10 +34,20 @@ export const runSelfCheck = async (home, cwd) => {
     push('python-runs', ver.exitCode === 0, firstLine(ver.stdout || ver.stderr))
   }
   if (health.uv4.bound && health.uv4.exists) push('uv4-file', true, bindings.uv4)
+  let openocdReady = false
+  let openocdReason = !health.openocd.bound
+    ? '未绑定 OpenOCD'
+    : !health.openocd.exists
+      ? 'OpenOCD 路径不存在'
+      : 'OpenOCD 探测失败'
+  const execFile = (opts && opts.runExecFile) || runExecFile
   if (health.openocd.bound && health.openocd.exists) {
-    const oc = await runExecFile(bindings.openocd, ['--version'], { timeoutMs: 10000 })
-    const out = oc.stderr || oc.stdout
-    push('openocd-runs', oc.exitCode === 0 || /open (on-chip )?debugger/i.test(out), firstLine(out))
+    const probe = await probeOpenOcdExecutable(bindings.openocd, { runExecFile: execFile })
+    openocdReady = probe.ok === true
+    openocdReason = openocdReady
+      ? '外部 OpenOCD 可执行文件，由插件通过 Node 进程封装调用'
+      : probe.error || 'OpenOCD 探测失败'
+    push('openocd-runs', openocdReady, probe.versionLine || openocdReason)
   }
 
   let ioHealth = { tcp: false, rtu: false, modbusSerial: '', serialport: '', rtuError: '', tcpError: '' }
@@ -102,11 +113,8 @@ export const runSelfCheck = async (home, cwd) => {
     },
     keilBuild: { ready: !!(health.uv4.bound && health.uv4.exists), reason: health.uv4.bound ? '' : '未绑定 UV4' },
     openocdFlash: {
-      ready: !!(health.openocd.bound && health.openocd.exists),
-      reason:
-        health.openocd.bound && health.openocd.exists
-          ? '0.20.0 将迁移为内置运行时'
-          : '未绑定 OpenOCD（0.20.0 将改为内置运行时）',
+      ready: openocdReady,
+      reason: openocdReason,
     },
   }
   const bridge = describeHostBridge()

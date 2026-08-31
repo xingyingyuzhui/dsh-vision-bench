@@ -12,6 +12,26 @@ import {
 } from '../../../bench-shared.mjs'
 import { persistHmiPatch } from './hmi-config-persistence.mjs'
 
+function snapshotModbusPack(pack) {
+  return JSON.parse(
+    JSON.stringify({
+      version: pack.version,
+      configVersion: pack.configVersion,
+      connections: pack.connections || [],
+      devices: pack.devices || [],
+      points: pack.points || [],
+      values: pack.values || [],
+      activeConnectionId: pack.activeConnectionId || '',
+      activeDeviceId: pack.activeDeviceId || '',
+      pollingByConnection: pack.pollingByConnection || {},
+      framesByConnection: pack.framesByConnection || {},
+      alarmState: pack.alarmState || {},
+      trend: pack.trend || {},
+      visualization: pack.visualization || {},
+    }),
+  )
+}
+
 /** Shared state, persistence, Agent-focus and derived-view helpers for the HMI page. */
 export function createHmiCoreActions(ctx) {
   const {
@@ -58,9 +78,38 @@ export function createHmiCoreActions(ctx) {
       .finally(() => setScanning(false))
   }
 
-  function persist(modbusPatch) {
-    if (!cwd) return Promise.resolve()
+  async function restoreWorkspaceAfterFailure(seq, fallbackPack, message) {
+    setError(message)
+    if (seq !== inflight.current) return
+    try {
+      const fresh = await commandClient.refresh()
+      if (seq !== inflight.current) return
+      const hostPack = fresh?.workspace?.modbus
+      if (hostPack) {
+        setWorkspace((prev) => {
+          const next = { ...prev, modbus: hostPack }
+          workspaceRef.current = next
+          return next
+        })
+        setJournal(pickJournal(fresh))
+        return
+      }
+    } catch {
+      // Host refresh failed; fall through to the pre-mutation snapshot.
+    }
+    if (seq !== inflight.current) return
+    setWorkspace((prev) => {
+      const next = { ...prev, modbus: fallbackPack }
+      workspaceRef.current = next
+      return next
+    })
+    setError('配置保存失败，当前状态可能已过期')
+  }
+
+  async function persist(modbusPatch) {
+    if (!cwd) return
     const currentPack = normalizePack()
+    const fallbackPack = snapshotModbusPack(currentPack)
     const seq = ++inflight.current
     setWorkspace((prev) => {
       const next = { ...prev, modbus: { ...prev.modbus } }
@@ -74,28 +123,31 @@ export function createHmiCoreActions(ctx) {
       workspaceRef.current = next
       return next
     })
-    return persistHmiPatch(commandClient, currentPack, modbusPatch)
-      .then((data) => {
-        if (seq === inflight.current && data?.workspace?.modbus) {
-          setWorkspace((prev) => ({ ...prev, modbus: data.workspace.modbus }))
-          workspaceRef.current = { ...workspaceRef.current, modbus: data.workspace.modbus }
-        }
-        if (data) setJournal(pickJournal(data))
-        if (data?.ok === false) {
-          setError(data.error || t('fail'))
-          return commandClient.refresh().then((fresh) => {
-            if (seq === inflight.current && fresh?.workspace?.modbus) {
-              setWorkspace((prev) => ({ ...prev, modbus: fresh.workspace.modbus }))
-              workspaceRef.current = { ...workspaceRef.current, modbus: fresh.workspace.modbus }
-            }
+    try {
+      const data = await persistHmiPatch(commandClient, currentPack, modbusPatch)
+      if (seq !== inflight.current) return data
+      if (!data || data.ok === false) {
+        await restoreWorkspaceAfterFailure(seq, fallbackPack, data?.error || t('fail'))
+        return data
+      }
+      if (data.workspace?.modbus) {
+        const currentVersion = Number(workspaceRef.current?.modbus?.configVersion || 0)
+        const hostVersion = Number(data.workspace.modbus.configVersion || 0)
+        if (hostVersion >= currentVersion) {
+          setWorkspace((prev) => {
+            const next = { ...prev, modbus: data.workspace.modbus }
+            workspaceRef.current = next
+            return next
           })
         }
-        return data
-      })
-      .catch((error) => setError(String(error?.message || t('fail'))))
-      .finally(() => {
-        if (seq === inflight.current) inflight.current = 0
-      })
+      }
+      setJournal(pickJournal(data))
+      return data
+    } catch (error) {
+      await restoreWorkspaceAfterFailure(seq, fallbackPack, String(error?.message || t('fail')))
+    } finally {
+      if (seq === inflight.current) inflight.current = 0
+    }
   }
 
   function cfgVersion() {
@@ -169,8 +221,10 @@ export function createHmiCoreActions(ctx) {
     const connections = Array.isArray(pack.connections) ? pack.connections : []
     const devices = Array.isArray(pack.devices) ? pack.devices : []
     const activeConnId = pack.activeConnectionId || connections[0]?.id || ''
-    const activeDeviceId =
-      pack.activeDeviceId || devices.find((device) => device.connectionId === activeConnId)?.id || devices[0]?.id || ''
+    const belonging = devices.find(
+      (device) => device.id === pack.activeDeviceId && device.connectionId === activeConnId,
+    )
+    const activeDeviceId = belonging?.id || devices.find((device) => device.connectionId === activeConnId)?.id || ''
     const activeConnObj = connections.find((connection) => connection.id === activeConnId) ||
       connections[0] || { conn: {} }
     const conn = activeConnObj.conn || {}

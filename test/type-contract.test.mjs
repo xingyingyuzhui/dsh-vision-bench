@@ -14,6 +14,7 @@ test('tool schema and ERROR_CODES share critical write/target codes', async () =
     'TARGET_MISMATCH',
     'ENDPOINT_DRIFT',
     'CONFIG_DRIFT',
+    'CONFIG_VERSION_REQUIRED',
     'WRITE_OUTCOME_UNKNOWN',
     'WRITE_READBACK_MISMATCH',
     'UNIT_ID_INVALID',

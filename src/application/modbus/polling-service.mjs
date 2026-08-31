@@ -307,7 +307,7 @@ export const modbusPoll = async (home, cwd, opts) => {
         void notifyBenchEvent(
           home,
           room.cwd,
-          `台架告警：${procFired
+          `Vision 告警：${procFired
             .slice(0, 3)
             .map((item) => {
               const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin

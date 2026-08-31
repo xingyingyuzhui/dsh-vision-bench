@@ -653,11 +653,12 @@ export function normalizeModbus(input) {
         : emptyVisualization()
     // active ids
     let activeConnectionId = devText(src.activeConnectionId, '')
-    if (!connections.some((c) => c.id === activeConnectionId)) activeConnectionId = connections[0]?.id || 'c1'
+    if (!connections.some((c) => c.id === activeConnectionId)) activeConnectionId = connections[0]?.id || ''
     let activeDeviceId = devText(src.activeDeviceId, '')
-    if (!devices.some((d) => d.id === activeDeviceId)) {
-      const devForConn = devices.find((d) => d.connectionId === activeConnectionId)
-      activeDeviceId = devForConn ? devForConn.id : devices[0]?.id || 'd1'
+    const belongs =
+      activeDeviceId && devices.some((d) => d.id === activeDeviceId && d.connectionId === activeConnectionId)
+    if (!belongs) {
+      activeDeviceId = devices.find((d) => d.connectionId === activeConnectionId)?.id || ''
     }
     const configVersion = normalizeConfigVersion(src.configVersion ?? src.rev ?? src.cfgVersion ?? 1)
     // also need to filter points/values that reference invalid connection/device? already fixed refs but keep check
@@ -711,7 +712,7 @@ export function normalizeModbus(input) {
       },
       slave: {
         get() {
-          const ad = ret.devices.find((d) => d.id === ret.activeDeviceId) || ret.devices[0]
+          const ad = ret.devices.find((d) => d.id === ret.activeDeviceId && d.connectionId === ret.activeConnectionId)
           return ad ? ad.unitId : 1
         },
         enumerable: false,
@@ -860,7 +861,7 @@ export function normalizeModbus(input) {
     },
     slave: {
       get() {
-        const ad = ret.devices.find((d) => d.id === ret.activeDeviceId) || ret.devices[0]
+        const ad = ret.devices.find((d) => d.id === ret.activeDeviceId && d.connectionId === ret.activeConnectionId)
         return ad ? ad.unitId : 1
       },
       enumerable: false,

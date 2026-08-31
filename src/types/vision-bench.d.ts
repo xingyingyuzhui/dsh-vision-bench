@@ -14,6 +14,7 @@ export type VisionBenchErrorCode =
   | 'POINT_NOT_FOUND'
   | 'TARGET_MISMATCH'
   | 'CONFIG_DRIFT'
+  | 'CONFIG_VERSION_REQUIRED'
   | 'CONFIG_INVALID'
   | 'ENDPOINT_DRIFT'
   | 'PORT_IN_USE'

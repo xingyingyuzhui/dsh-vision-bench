@@ -41,8 +41,16 @@ export function applyPointPatch(existingPoint, patch) {
       next[key] = src[key]
     }
   }
+  if (src.monitorEnabled !== undefined) {
+    next.monitorEnabled = src.monitorEnabled === true
+    next.trendEnabled = next.monitorEnabled
+  }
+  if (src.alarmEnabled !== undefined) {
+    next.alarmEnabled = src.alarmEnabled === true
+  }
   if (src.trendEnabled !== undefined && src.monitorEnabled === undefined) {
     next.monitorEnabled = src.trendEnabled === true
+    next.trendEnabled = src.trendEnabled === true
   }
   return { ok: true, point: next }
 }

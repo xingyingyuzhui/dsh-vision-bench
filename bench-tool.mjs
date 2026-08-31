@@ -63,7 +63,7 @@ export function visionBenchTool(home) {
   return {
     name: 'vision_bench',
     description:
-      'Vision 台架快速接口。查询或操作当前会话工作区的调试/上位机现场。' +
+      'Vision 调试与上位机快速接口。查询或操作当前会话工作区的调试/上位机现场。' +
       'status：已选工程、Target、多连接与任务时间线；' +
       'ls/select/build/map：工程与编译；' +
       'read/write：读点与受控写点（Agent 写点需界面批准）；' +

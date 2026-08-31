@@ -60,7 +60,7 @@ const LEGACY_VISION_PERSONAS = [
 
 export const PRESET_METADATA = [
   'name: ' + PRESET_TITLE,
-  'description: 标准编码能力，外加 Vision 台架接口：查询现场工程、编译、Modbus 读点和受控写点。',
+  'description: 标准编码能力，外加 Vision 调试与上位机接口：查询现场工程、编译、Modbus 读点和受控写点。',
   '',
 ].join('\n')
 

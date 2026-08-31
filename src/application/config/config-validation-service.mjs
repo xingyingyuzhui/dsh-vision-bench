@@ -20,5 +20,20 @@ export function validateWorkspaceConfig(workspace) {
     seen.add(key)
     if (!point.id) errors.push('点位缺少 pointId')
   }
+  const activeConnectionId = pack.activeConnectionId || ''
+  const activeDeviceId = pack.activeDeviceId || ''
+  if (
+    activeConnectionId &&
+    !(pack.connections || []).some((/** @type {any} */ connection) => connection.id === activeConnectionId)
+  ) {
+    errors.push('活动连接不存在')
+  }
+  if (activeDeviceId) {
+    const device = (pack.devices || []).find((/** @type {any} */ item) => item.id === activeDeviceId)
+    if (!device) errors.push('活动设备不存在')
+    else if (activeConnectionId && device.connectionId !== activeConnectionId) {
+      errors.push('活动设备不属于活动连接')
+    }
+  }
   return errors
 }

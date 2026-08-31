@@ -8,12 +8,12 @@ import { runPythonScript } from './bench-run.mjs'
 import { storeDir } from './bench-store.mjs'
 
 const needPython = (bindings) => {
-  if (!bindings.python) return '请先在设置 → 台架 绑定 Python'
+  if (!bindings.python) return '请先在设置 → Vision 绑定 Python'
   return null
 }
 
 const needUv4 = (bindings) => {
-  if (!bindings.uv4) return '请先在设置 → 台架 绑定 Keil UV4'
+  if (!bindings.uv4) return '请先在设置 → Vision 绑定 Keil UV4'
   return null
 }
 

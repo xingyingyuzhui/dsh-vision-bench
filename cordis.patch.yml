@@ -1,4 +1,4 @@
-# dsh bundle layer: Vision 台架 (host UI + seed 台架模式 preset).
+# dsh bundle layer: Vision (host UI + seed Vision模式 preset).
 - insert:
     - id: dsh-vision-bench
       name: dsh-vision-bench

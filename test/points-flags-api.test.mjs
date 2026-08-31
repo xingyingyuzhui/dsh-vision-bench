@@ -3,8 +3,11 @@ import { mkdirSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Readable } from 'node:stream'
 import test from 'node:test'
-import { loadWorkspace, patchPointFlags, saveWorkspace } from '../bench-store.mjs'
+import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
+import { _internal, apply } from '../host.js'
+import { mutateConfig } from '../src/application/config/config-mutation-service.mjs'
 
 const seedV3 = (home, cwd) => {
   mkdirSync(cwd, { recursive: true })
@@ -38,27 +41,35 @@ const seedV3 = (home, cwd) => {
   return saved.workspace
 }
 
-test('patchPointFlags flips monitorEnabled, syncs trendEnabled, bumps configVersion', async () => {
+const flagsUpdate = (home, cwd, pointId, patch, expectedConfigVersion) =>
+  mutateConfig({
+    home,
+    cwd,
+    expectedConfigVersion,
+    operation: 'flags.update',
+    target: { pointId },
+    value: patch,
+    source: 'user',
+  }).then((ran) => {
+    if (!ran.ok) return ran
+    const point = (ran.workspace.modbus.points || []).find((item) => item.id === pointId)
+    return { ...ran, point, configVersion: ran.nextConfigVersion }
+  })
+
+test('flags.update flips monitorEnabled, syncs trendEnabled, bumps configVersion', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-flags-'))
   const cwd = join(home, 'board')
   try {
     const ws0 = seedV3(home, cwd)
     const cv0 = ws0.modbus.configVersion
-    assert.equal(ws0.modbus.points[0].monitorEnabled, false)
-    assert.equal(ws0.modbus.points[0].alarmEnabled, true)
-
-    const ran = await patchPointFlags(home, cwd, 'p1', { monitorEnabled: true }, { expectedConfigVersion: cv0 })
+    const ran = await flagsUpdate(home, cwd, 'p1', { monitorEnabled: true }, cv0)
     assert.equal(ran.ok, true)
     assert.equal(ran.point.monitorEnabled, true)
     assert.equal(ran.point.trendEnabled, true)
     assert.equal(ran.point.alarmEnabled, true, 'alarmEnabled 不变')
     assert.equal(ran.point.alarmMin, 18)
     assert.equal(ran.point.alarmMax, 30)
-    assert.equal(ran.point.connectionId, 'c1')
-    assert.equal(ran.point.address, 0)
-    assert.ok(ran.configVersion > cv0, 'configVersion 应递增')
-    assert.equal(ran.workspace.modbus.configVersion, ran.configVersion)
-
+    assert.ok(ran.configVersion > cv0)
     const loaded = loadWorkspace(home, cwd)
     assert.equal(loaded.modbus.points[0].monitorEnabled, true)
     assert.equal(loaded.modbus.points[0].trendEnabled, true)
@@ -68,51 +79,158 @@ test('patchPointFlags flips monitorEnabled, syncs trendEnabled, bumps configVers
   }
 })
 
-test('patchPointFlags rejects CONFIG_DRIFT / missing point / empty patch', async () => {
+test('flags.update rejects CONFIG_DRIFT / missing point / empty patch', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-flags-err-'))
   const cwd = join(home, 'board')
   try {
     const ws0 = seedV3(home, cwd)
     const cv0 = ws0.modbus.configVersion
-
-    const drift = await patchPointFlags(home, cwd, 'p1', { monitorEnabled: true }, { expectedConfigVersion: cv0 + 99 })
+    const drift = await flagsUpdate(home, cwd, 'p1', { monitorEnabled: true }, cv0 + 99)
     assert.equal(drift.ok, false)
     assert.equal(drift.errorCode, 'CONFIG_DRIFT')
-    assert.match(drift.error, /刷新/)
 
-    const missing = await patchPointFlags(home, cwd, 'no-such', { alarmEnabled: false }, { expectedConfigVersion: cv0 })
+    const missing = await flagsUpdate(home, cwd, 'no-such', { alarmEnabled: false }, cv0)
     assert.equal(missing.ok, false)
-    assert.equal(missing.errorCode, 'NOT_FOUND')
+    assert.equal(missing.errorCode, 'POINT_NOT_FOUND')
     assert.match(missing.error, /点位不存在/)
 
-    const empty = await patchPointFlags(home, cwd, 'p1', {}, { expectedConfigVersion: cv0 })
+    const empty = await flagsUpdate(home, cwd, 'p1', {}, cv0)
     assert.equal(empty.ok, false)
     assert.match(empty.error, /monitorEnabled|alarmEnabled/)
 
-    const neither = await patchPointFlags(
-      home,
-      cwd,
-      'p1',
-      { monitorEnabled: undefined, alarmEnabled: undefined },
-      { expectedConfigVersion: cv0 },
-    )
-    assert.equal(neither.ok, false)
-
-    const badType = await patchPointFlags(home, cwd, 'p1', { monitorEnabled: 'yes' }, { expectedConfigVersion: cv0 })
+    const badType = await flagsUpdate(home, cwd, 'p1', { monitorEnabled: 'yes' }, cv0)
     assert.equal(badType.ok, false)
     assert.match(badType.error, /布尔/)
+
+    for (const expectedConfigVersion of [undefined, 0, -1, '2', Number.NaN]) {
+      const ran = await flagsUpdate(home, cwd, 'p1', { monitorEnabled: true }, expectedConfigVersion)
+      assert.equal(ran.ok, false, String(expectedConfigVersion))
+      assert.equal(ran.errorCode, 'CONFIG_VERSION_REQUIRED')
+    }
+    const loaded = loadWorkspace(home, cwd)
+    assert.equal(loaded.modbus.configVersion, cv0)
+    assert.equal(loaded.modbus.points[0].monitorEnabled, false)
   } finally {
     await rm(home, { recursive: true, force: true })
   }
 })
 
-test('patchPointFlags can flip alarmEnabled alone without touching monitor', async () => {
+test('flags.update ignores extra fields such as name and alarmMin', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-flags-extra-'))
+  const cwd = join(home, 'board')
+  try {
+    const ws0 = seedV3(home, cwd)
+    const cv0 = ws0.modbus.configVersion
+    const ran = await flagsUpdate(
+      home,
+      cwd,
+      'p1',
+      { alarmEnabled: false, name: 'hijack', alarmMin: 0, id: 'stolen' },
+      cv0,
+    )
+    assert.equal(ran.ok, true, ran.error)
+    assert.equal(ran.point.alarmEnabled, false)
+    assert.equal(ran.point.name, '温度')
+    assert.equal(ran.point.alarmMin, 18)
+    assert.equal(ran.point.id, 'p1')
+    assert.equal(ran.point.monitorEnabled, false)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('/points/flags returns saved point and maps CONFIG_DRIFT', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-flags-http-'))
+  const cwd = join(home, 'board')
+  const routes = []
+  let stop
+  apply({
+    webServer: {
+      register(entry) {
+        routes.push(entry)
+        return () => {}
+      },
+    },
+    tools: {
+      register() {
+        return () => {}
+      },
+    },
+    effect(factory) {
+      stop = factory()
+    },
+  })
+  _internal.setDshHome(home)
+  const csrf = { 'x-dsh-vision-bench': '1', origin: 'http://127.0.0.1:3080' }
+  const invoke = (body) => {
+    const handler = routes.find((r) => r.path === '/dsh-vision-bench/points/flags').handler
+    const stream = Readable.from([Buffer.from(JSON.stringify(body))])
+    stream.method = 'POST'
+    stream.headers = csrf
+    return new Promise((resolve) => {
+      const box = {
+        status: 0,
+        body: '',
+        writeHead(code) {
+          box.status = code
+        },
+        end(text) {
+          box.body = text
+          resolve(JSON.parse(text))
+        },
+      }
+      handler(stream, box)
+    })
+  }
+  try {
+    const ws0 = seedV3(home, cwd)
+    const cv0 = ws0.modbus.configVersion
+    const ran = await invoke({
+      cwd,
+      pointId: 'p1',
+      monitorEnabled: true,
+      expectedConfigVersion: cv0,
+    })
+    assert.equal(ran.ok, true)
+    assert.equal(ran.point.monitorEnabled, true)
+    assert.equal(ran.point.trendEnabled, true)
+    assert.equal(ran.point.alarmEnabled, true)
+    assert.ok(ran.workspace && ran.workspace.modbus)
+    assert.ok(ran.configVersion > cv0)
+    const drift = await invoke({
+      cwd,
+      pointId: 'p1',
+      alarmEnabled: false,
+      expectedConfigVersion: cv0,
+    })
+    assert.equal(drift.ok, false)
+    assert.equal(drift.errorCode, 'CONFIG_DRIFT')
+    assert.match(drift.error, /刷新后重试/)
+    const missing = await invoke({
+      cwd,
+      pointId: 'no-such',
+      alarmEnabled: true,
+      expectedConfigVersion: ran.configVersion,
+    })
+    assert.equal(missing.ok, false)
+    assert.equal(missing.errorCode, 'NOT_FOUND')
+    const noVersion = await invoke({ cwd, pointId: 'p1', monitorEnabled: true })
+    assert.equal(noVersion.ok, false)
+    assert.equal(noVersion.errorCode, 'CONFIG_VERSION_REQUIRED')
+    assert.equal(loadWorkspace(home, cwd).modbus.configVersion, ran.configVersion)
+  } finally {
+    if (stop) stop()
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('flags.update can flip alarmEnabled alone without touching monitor', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-flags-alarm-'))
   const cwd = join(home, 'board')
   try {
     const ws0 = seedV3(home, cwd)
     const cv0 = ws0.modbus.configVersion
-    const ran = await patchPointFlags(home, cwd, 'p1', { alarmEnabled: false }, { expectedConfigVersion: cv0 })
+    const ran = await flagsUpdate(home, cwd, 'p1', { alarmEnabled: false }, cv0)
     assert.equal(ran.ok, true)
     assert.equal(ran.point.alarmEnabled, false)
     assert.equal(ran.point.monitorEnabled, false)

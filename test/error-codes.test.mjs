@@ -11,6 +11,7 @@ test('ERROR_CODES covers the Stage 4 unified set and is shared via facade', asyn
     'POINT_NOT_FOUND',
     'TARGET_MISMATCH',
     'CONFIG_DRIFT',
+    'CONFIG_VERSION_REQUIRED',
     'ENDPOINT_DRIFT',
     'PORT_IN_USE',
     'WRITE_OUTCOME_UNKNOWN',
