@@ -156,6 +156,81 @@ test('keilBuild rejects a second running build and keeps the first task', async 
   }
 })
 
+test('keilBuild executor throw 结束任务且不留下 running', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-build-throw-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveBindings(home, { python: process.execPath, uv4: process.execPath, openocd: '' })
+    const project = join(cwd, 'app.uvprojx')
+    await writeFile(project, '<Project/>')
+    saveWorkspace(home, cwd, { keil: { project, target: 'Debug' } })
+    const ran = await keilBuild(
+      home,
+      cwd,
+      { source: 'agent', sessionId: 'sess-k' },
+      {
+        runPythonScript: async () => {
+          throw new Error('uv4 crashed')
+        },
+      },
+    )
+    assert.equal(ran.ok, false)
+    assert.equal(ran.source, 'agent')
+    const ws = loadWorkspace(home, cwd)
+    assert.equal(ws.tasks[0].status, 'error')
+    assert.equal(ws.tasks[0].sessionId, 'sess-k')
+    const again = await keilBuild(
+      home,
+      cwd,
+      { source: 'user' },
+      { runPythonScript: async () => ({ ok: false, error: 'fail', result: { summary: 'fail', details: {} } }) },
+    )
+    assert.notEqual(again.errorCode, 'TASK_CONFLICT')
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('keilBuild 无结果或取消也会结束任务，成功路径可再次构建', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-build-empty-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveBindings(home, { python: process.execPath, uv4: process.execPath, openocd: '' })
+    const project = join(cwd, 'app.uvprojx')
+    await writeFile(project, '<Project/>')
+    saveWorkspace(home, cwd, { keil: { project, target: 'Debug' } })
+    const empty = await keilBuild(home, cwd, { source: 'user' }, { runPythonScript: async () => undefined })
+    assert.equal(empty.ok, false)
+    assert.equal(loadWorkspace(home, cwd).tasks[0].status, 'error')
+    const cancelled = await keilBuild(
+      home,
+      cwd,
+      { source: 'user' },
+      { runPythonScript: async () => ({ cancelled: true }) },
+    )
+    assert.equal(cancelled.cancelled, true)
+    assert.ok(loadWorkspace(home, cwd).tasks.some((item) => item.status === 'cancelled'))
+    const ok = await keilBuild(
+      home,
+      cwd,
+      { source: 'user' },
+      {
+        runPythonScript: async () => ({
+          ok: true,
+          result: { summary: '编译成功', details: { log_file: '', phase: 'ok', errors: [] } },
+        }),
+      },
+    )
+    assert.equal(ok.ok, true)
+    assert.equal(ok.source, 'user')
+    assert.notEqual(ok.errorCode, 'TASK_CONFLICT')
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
 test('keilBuild records agent source when the compile itself fails', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-build-agent-'))
   const cwd = join(home, 'board')

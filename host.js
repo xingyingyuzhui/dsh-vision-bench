@@ -24,6 +24,7 @@ import { changedConnectionIds, notifyConnectionRelease } from './bench-modbus-tr
 import { migrateLegacyDisabled } from './bench-modbus.mjs'
 import { maybeNotifyResult, notifyBenchEvent, setAgentsRegistry } from './bench-notify.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
+import { clearFlashApprovals } from './src/application/flash/flash-approval-service.mjs'
 import { probeOpenOcdHealth } from './src/application/flash/openocd-health-service.mjs'
 import { mutateConfig } from './src/application/config/config-mutation-service.mjs'
 import { ensurePolling, pollingStatus, startPolling, stopAllPolling, stopPolling } from './bench-polling-service.mjs'
@@ -486,6 +487,7 @@ export function apply(ctx, config = {}) {
     stopHost()
     clearSerialMonitorState()
     stopAllPolling()
+    clearFlashApprovals()
     void stopVisionIoBroker('plugin-dispose')
   })
 }

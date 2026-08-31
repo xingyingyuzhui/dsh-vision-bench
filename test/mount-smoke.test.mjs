@@ -39,6 +39,10 @@ test('debug view mounts without hidden-scope ReferenceErrors', async () => {
     fs.readFileSync(new URL('../bench-view.mjs', import.meta.url), 'utf8'),
   )
   assert.match(src, /openocdFlash.status !== 'ready'/)
+  assert.match(src, /function probeOpenOcd/)
+  assert.match(src, /probeOpenOcd\(\{\s*force:\s*true\s*\}\)/)
+  assert.match(src, /t\('openocdChecking'\)/)
+  assert.match(src, /function cancelFlash/)
 })
 
 test('hmi view mounts — the former blind spot of the bundle', async () => {

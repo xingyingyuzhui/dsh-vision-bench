@@ -97,63 +97,85 @@ export const keilBuild = async (home, cwd, body, opts) => {
   )
   if (!opened.ok) return opened
   const task = opened.task
-  const ran = await runPythonScript(
-    bindings.python,
-    'keil_build.py',
-    [
-      '--uv4',
-      bindings.uv4,
-      '--project',
-      keil.project,
-      '--target',
-      target || '',
-      '--log-dir',
-      join(storeDir(home), 'logs'),
-      '--task-id',
-      task.id,
-      '--json',
-    ],
-    { cwd: room.cwd, timeoutMs: 620000, signal },
-  )
-  if (ran.cancelled) {
-    await finishTask(home, room.cwd, task.id, { cancelled: true, summary: '编译已取消' })
-    return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source }
+  let finished = false
+  const finish = opts && typeof opts.finishTask === 'function' ? opts.finishTask : finishTask
+  const completeTaskOnce = async (patch) => {
+    if (finished) return
+    finished = true
+    await finish(home, room.cwd, task.id, patch)
   }
-  const details = ran.result && ran.result.details ? ran.result.details : {}
-  const download = pickArtifact(details, artifact)
-  const ok = ran.ok && (!ran.result || ran.result.status !== 'error')
-  const summary =
-    ((ran.result && ran.result.summary) || (ok ? '编译成功' : '编译失败 ' + (ran.error || ''))) +
-    (download.path ? ' → ' + download.path : '')
-  await finishTask(home, room.cwd, task.id, {
-    ok,
-    summary,
-    logFile: details.log_file || '',
-    phase: details.phase || '',
-    errors: Array.isArray(details.errors) ? details.errors : [],
-    keil: { download: download.path || '' },
-  })
   try {
-    pruneBuildLogs(home)
-  } catch {
-    /* retention is best-effort */
-  }
-  if (!ok) {
+    const runner = opts && typeof opts.runPythonScript === 'function' ? opts.runPythonScript : runPythonScript
+    const ran = await runner(
+      bindings.python,
+      'keil_build.py',
+      [
+        '--uv4',
+        bindings.uv4,
+        '--project',
+        keil.project,
+        '--target',
+        target || '',
+        '--log-dir',
+        join(storeDir(home), 'logs'),
+        '--task-id',
+        task.id,
+        '--json',
+      ],
+      { cwd: room.cwd, timeoutMs: 620000, signal },
+    )
+    if (!ran || typeof ran !== 'object') {
+      await completeTaskOnce({ ok: false, summary: '编译失败', errors: ['编译失败'] })
+      return { ok: false, error: '编译失败', taskId: task.id, source: origin.source }
+    }
+    if (ran.cancelled) {
+      await completeTaskOnce({ cancelled: true, summary: '编译已取消' })
+      return { ok: false, cancelled: true, error: '已取消', taskId: task.id, source: origin.source }
+    }
+    const details = ran.result && ran.result.details ? ran.result.details : {}
+    const download = pickArtifact(details, artifact)
+    const ok = ran.ok && (!ran.result || ran.result.status !== 'error')
+    const summary =
+      ((ran.result && ran.result.summary) || (ok ? '编译成功' : '编译失败 ' + (ran.error || ''))) +
+      (download.path ? ' → ' + download.path : '')
+    await completeTaskOnce({
+      ok,
+      summary,
+      logFile: details.log_file || '',
+      phase: details.phase || '',
+      errors: Array.isArray(details.errors) ? details.errors : [],
+      keil: { download: download.path || '' },
+    })
+    if (!ok) {
+      return {
+        ...ran,
+        ok: false,
+        taskId: task.id,
+        source: origin.source,
+        result: ran.result ? { ...ran.result, download } : { summary, details, download },
+      }
+    }
     return {
       ...ran,
-      ok: false,
       taskId: task.id,
       source: origin.source,
-      result: ran.result ? { ...ran.result, download } : { summary, details, download },
+      result: {
+        ...ran.result,
+        download,
+      },
     }
-  }
-  return {
-    ...ran,
-    taskId: task.id,
-    source: origin.source,
-    result: {
-      ...ran.result,
-      download,
-    },
+  } catch (error) {
+    const summary = (error instanceof Error ? error.message : String(error || '编译失败')).slice(0, 240)
+    await completeTaskOnce({ ok: false, summary, errors: [summary] })
+    return { ok: false, error: summary, taskId: task.id, source: origin.source }
+  } finally {
+    if (!finished) {
+      await completeTaskOnce({ ok: false, summary: '编译失败', errors: ['编译失败'] })
+    }
+    try {
+      pruneBuildLogs(home)
+    } catch {
+      /* retention is best-effort */
+    }
   }
 }

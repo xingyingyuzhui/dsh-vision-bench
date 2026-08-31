@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { COPY } from '../bench-i18n.mjs'
 import { formatResult } from '../bench-view.mjs'
 
 const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'bench-view.mjs'), 'utf8')
@@ -34,6 +35,23 @@ test('debug flash uses OpenOCD probe and server requestId, not a local whitelist
   assert.match(src, /FLASH_INTERFACES/)
   assert.doesNotMatch(src, /const FLASH_IFACES/)
   assert.doesNotMatch(src, /confirm: true/)
+})
+
+test('OpenOCD same-path re-probe uses force and sequence, cancel failures are caught', () => {
+  assert.match(src, /function probeOpenOcd/)
+  assert.match(src, /probeOpenOcd\(\{\s*force:\s*true\s*\}\)/)
+  assert.match(src, /probeSeqRef/)
+  assert.match(src, /seq !== probeSeqRef\.current/)
+  assert.match(src, /t\('openocdChecking'\)/)
+  assert.match(src, /t\('openocdReprobe'\)/)
+  assert.doesNotMatch(src, /openocdFlash.status === 'checking' \? t\('flashing'\)/)
+  assert.match(src, /function cancelFlash/)
+  assert.match(src, /approved: false[\s\S]{0,1200}\.catch/)
+  assert.match(src, /flashCancelFail/)
+  assert.match(src, /cancelBusy/)
+  assert.match(src, /!force && boundPath === probedPathRef\.current/)
+  assert.equal(COPY.zh.openocdChecking, '正在检查 OpenOCD…')
+  assert.equal(COPY.zh.openocdReprobe, '重新探测')
 })
 
 test('debug run keeps structured ok:false instead of turning it into null', async () => {

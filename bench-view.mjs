@@ -126,6 +126,7 @@ export function createDebugView(React, t, post, openProject) {
       interface: DEFAULT_OPENOCD_INTERFACE,
       target: DEFAULT_OPENOCD_TARGET,
       busy: false,
+      cancelBusy: false,
       confirm: null,
       result: null,
     })
@@ -136,79 +137,120 @@ export function createDebugView(React, t, post, openProject) {
       path: '',
     })
     const probedPathRef = React.useRef('')
+    const boundPathRef = React.useRef('')
+    const probeSeqRef = React.useRef(0)
+    const unmountedRef = React.useRef(false)
+    const flashRef = React.useRef(flash)
+    flashRef.current = flash
+    const cancelSentRef = React.useRef(false)
     const [pendingWrites, setPendingWrites] = React.useState([])
     const workspaceRef = React.useRef(workspace)
     workspaceRef.current = workspace
     const projectRef = React.useRef('')
 
-    React.useEffect(
-      () =>
-        subscribeState(
-          post,
-          cwd,
-          (data) => {
-            if (!data) return
-            if (data.health) setHealth(data.health)
-            const boundPath = data.bindings && data.bindings.openocd ? String(data.bindings.openocd) : ''
-            const bound = !!(data.health && data.health.openocd && data.health.openocd.bound)
-            const exists = !!(data.health && data.health.openocd && data.health.openocd.exists)
-            if (!bound) {
-              probedPathRef.current = ''
-              setOpenocdFlash({ status: 'missing', reason: '未绑定 OpenOCD', versionLine: '', path: '' })
-            } else if (!exists) {
-              probedPathRef.current = boundPath
-              setOpenocdFlash({ status: 'missing', reason: 'OpenOCD 路径不存在', versionLine: '', path: boundPath })
-            } else if (boundPath && boundPath !== probedPathRef.current) {
-              probedPathRef.current = boundPath
-              setOpenocdFlash({ status: 'checking', reason: '', versionLine: '', path: boundPath })
-              post('/dsh-vision-bench/openocd/probe', { cwd }, 12000)
-                .then((probe) => {
-                  if (probedPathRef.current !== boundPath) return
-                  if (probe && probe.ready === true) {
-                    setOpenocdFlash({
-                      status: 'ready',
-                      reason: probe.reason || '',
-                      versionLine: probe.versionLine || '',
-                      path: boundPath,
-                    })
-                    return
-                  }
-                  const invalid = probe && probe.errorCode === 'OPENOCD_IDENTITY_INVALID'
-                  setOpenocdFlash({
-                    status: invalid ? 'invalid' : 'failed',
-                    reason: (probe && (probe.reason || probe.error)) || 'OpenOCD 探测失败',
-                    versionLine: (probe && probe.versionLine) || '',
-                    path: boundPath,
-                  })
-                })
-                .catch((err) => {
-                  if (probedPathRef.current !== boundPath) return
-                  setOpenocdFlash({
-                    status: 'failed',
-                    reason: String((err && err.message) || 'OpenOCD 探测失败'),
-                    versionLine: '',
-                    path: boundPath,
-                  })
-                })
-            }
-            if (Array.isArray(data.pendingWrites)) setPendingWrites(data.pendingWrites)
-            if (data.workspace) {
-              setWorkspace((prev) => ({
-                ...prev,
-                keil: { ...prev.keil, ...(data.workspace.keil || {}) },
-                session: data.workspace.session || prev.session,
-                manualRequests: Array.isArray(data.workspace.manualRequests)
-                  ? data.workspace.manualRequests
-                  : prev.manualRequests,
-                modbus: data.workspace.modbus || prev.modbus,
-              }))
-            }
-            setJournal(pickJournal(data))
-          },
-          { sessionId },
-        ),
-      [cwd, post, sessionId],
-    )
+    function probeOpenOcd(opts) {
+      const force = !!(opts && opts.force)
+      const boundPath = String((opts && opts.path != null ? opts.path : boundPathRef.current) || '')
+      const bound = opts && Object.prototype.hasOwnProperty.call(opts, 'bound') ? !!opts.bound : !!boundPath
+      const exists = opts && Object.prototype.hasOwnProperty.call(opts, 'exists') ? !!opts.exists : true
+      if (unmountedRef.current) return
+      if (!bound) {
+        probeSeqRef.current += 1
+        probedPathRef.current = ''
+        boundPathRef.current = ''
+        setOpenocdFlash({ status: 'missing', reason: '未绑定 OpenOCD', versionLine: '', path: '' })
+        return
+      }
+      boundPathRef.current = boundPath
+      if (!force && !exists) {
+        if (probedPathRef.current === boundPath) return
+        probeSeqRef.current += 1
+        probedPathRef.current = boundPath
+        setOpenocdFlash({ status: 'missing', reason: 'OpenOCD 路径不存在', versionLine: '', path: boundPath })
+        return
+      }
+      if (!boundPath) return
+      if (!force && boundPath === probedPathRef.current) return
+      const seq = ++probeSeqRef.current
+      probedPathRef.current = boundPath
+      setOpenocdFlash({ status: 'checking', reason: '', versionLine: '', path: boundPath })
+      post('/dsh-vision-bench/openocd/probe', { cwd }, 12000)
+        .then((probe) => {
+          if (unmountedRef.current || seq !== probeSeqRef.current) return
+          if (probe && probe.ready === true) {
+            setOpenocdFlash({
+              status: 'ready',
+              reason: probe.reason || '',
+              versionLine: probe.versionLine || '',
+              path: boundPath,
+            })
+            return
+          }
+          const invalid = probe && probe.errorCode === 'OPENOCD_IDENTITY_INVALID'
+          setOpenocdFlash({
+            status: invalid ? 'invalid' : 'failed',
+            reason: (probe && (probe.reason || probe.error)) || 'OpenOCD 探测失败',
+            versionLine: (probe && probe.versionLine) || '',
+            path: boundPath,
+          })
+        })
+        .catch((err) => {
+          if (unmountedRef.current || seq !== probeSeqRef.current) return
+          setOpenocdFlash({
+            status: 'failed',
+            reason: String((err && err.message) || 'OpenOCD 探测失败'),
+            versionLine: '',
+            path: boundPath,
+          })
+        })
+    }
+    const probeOpenOcdRef = React.useRef(probeOpenOcd)
+    probeOpenOcdRef.current = probeOpenOcd
+
+    React.useEffect(() => {
+      unmountedRef.current = false
+      cancelSentRef.current = false
+      const stop = subscribeState(
+        post,
+        cwd,
+        (data) => {
+          if (!data) return
+          if (data.health) setHealth(data.health)
+          const boundPath = data.bindings && data.bindings.openocd ? String(data.bindings.openocd) : ''
+          const bound = !!(data.health && data.health.openocd && data.health.openocd.bound)
+          const exists = !!(data.health && data.health.openocd && data.health.openocd.exists)
+          probeOpenOcdRef.current({ path: boundPath, bound, exists, force: false })
+          if (Array.isArray(data.pendingWrites)) setPendingWrites(data.pendingWrites)
+          if (data.workspace) {
+            setWorkspace((prev) => ({
+              ...prev,
+              keil: { ...prev.keil, ...(data.workspace.keil || {}) },
+              session: data.workspace.session || prev.session,
+              manualRequests: Array.isArray(data.workspace.manualRequests)
+                ? data.workspace.manualRequests
+                : prev.manualRequests,
+              modbus: data.workspace.modbus || prev.modbus,
+            }))
+          }
+          setJournal(pickJournal(data))
+        },
+        { sessionId },
+      )
+      return () => {
+        unmountedRef.current = true
+        const cur = flashRef.current
+        const id = cur && cur.confirm && cur.confirm.requestId
+        if (id && !cur.busy && !cancelSentRef.current) {
+          cancelSentRef.current = true
+          post(
+            '/dsh-vision-bench/keil/download',
+            { cwd, requestId: id, approved: false, source: 'user', sessionId },
+            15000,
+          ).catch(() => {})
+        }
+        if (typeof stop === 'function') stop()
+      }
+    }, [cwd, post, sessionId])
 
     function setKeil(patch) {
       setWorkspace((prev) => ({ ...prev, keil: { ...prev.keil, ...patch } }))
@@ -295,7 +337,8 @@ export function createDebugView(React, t, post, openProject) {
 
     function startFlash() {
       if (!cwd || openocdFlash.status !== 'ready') return
-      setFlash((prev) => ({ ...prev, busy: true, result: null }))
+      cancelSentRef.current = false
+      setFlash((prev) => ({ ...prev, busy: true, result: null, cancelBusy: false }))
       post(
         '/dsh-vision-bench/keil/download',
         {
@@ -328,7 +371,8 @@ export function createDebugView(React, t, post, openProject) {
     function approveFlash() {
       const req = flash.confirm
       if (!req || !cwd) return
-      setFlash((prev) => ({ ...prev, busy: true }))
+      cancelSentRef.current = true
+      setFlash((prev) => ({ ...prev, busy: true, cancelBusy: false }))
       post(
         '/dsh-vision-bench/keil/download',
         {
@@ -351,6 +395,38 @@ export function createDebugView(React, t, post, openProject) {
             busy: false,
             confirm: null,
             result: { ok: false, error: String((err && err.message) || t('fail')) },
+          }))
+        })
+    }
+
+    function cancelFlash() {
+      const req = flash.confirm
+      if (!req || !cwd || flash.busy || flash.cancelBusy) return
+      setFlash((prev) => ({ ...prev, cancelBusy: true, result: null }))
+      post(
+        '/dsh-vision-bench/keil/download',
+        { cwd, requestId: req.requestId, approved: false, source: 'user', sessionId },
+        15000,
+      )
+        .then((data) => {
+          if (unmountedRef.current) return
+          if (data && data.cancelled) {
+            cancelSentRef.current = true
+            setFlash((prev) => ({ ...prev, confirm: null, cancelBusy: false, busy: false, result: null }))
+            return
+          }
+          setFlash((prev) => ({
+            ...prev,
+            cancelBusy: false,
+            result: { ok: false, error: (data && data.error) || t('flashCancelFail') },
+          }))
+        })
+        .catch((err) => {
+          if (unmountedRef.current) return
+          setFlash((prev) => ({
+            ...prev,
+            cancelBusy: false,
+            result: { ok: false, error: String((err && err.message) || t('flashCancelFail')) },
           }))
         })
     }
@@ -617,6 +693,10 @@ export function createDebugView(React, t, post, openProject) {
     const openocdReady = openocdFlash.status === 'ready'
     const artifactPath = workspace.keil.download || ''
     const flashReq = flash.confirm
+    const showReprobe =
+      !!openocdFlash.path &&
+      (openocdFlash.status === 'failed' || openocdFlash.status === 'invalid' || openocdFlash.status === 'missing')
+    const reprobeDisabled = openocdFlash.status === 'checking' || flash.busy
     const flashPanel = el(
       'div',
       { className: 'dvb-panel' },
@@ -628,7 +708,21 @@ export function createDebugView(React, t, post, openProject) {
           ? el(
               'span',
               { className: 'dvb-need' },
-              openocdFlash.status === 'checking' ? t('flashing') : openocdFlash.reason || t('needOpenocd'),
+              openocdFlash.status === 'checking' ? t('openocdChecking') : openocdFlash.reason || t('needOpenocd'),
+            )
+          : null,
+        showReprobe
+          ? el(
+              'button',
+              {
+                type: 'button',
+                className: 'dvb-btn',
+                disabled: reprobeDisabled,
+                onClick() {
+                  probeOpenOcd({ force: true })
+                },
+              },
+              t('openocdReprobe'),
             )
           : null,
       ),
@@ -707,12 +801,8 @@ export function createDebugView(React, t, post, openProject) {
                 {
                   type: 'button',
                   className: 'dvb-btn',
-                  disabled: flash.busy,
-                  onClick() {
-                    const id = flash.confirm && flash.confirm.requestId
-                    setFlash((prev) => ({ ...prev, confirm: null }))
-                    if (id) post('/dsh-vision-bench/keil/download', { cwd, requestId: id, approved: false }, 15000)
-                  },
+                  disabled: flash.busy || flash.cancelBusy,
+                  onClick: cancelFlash,
                 },
                 t('flashCancel'),
               ),

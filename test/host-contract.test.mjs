@@ -6,6 +6,7 @@ import { Readable } from 'node:stream'
 import test from 'node:test'
 import { loadWorkspace, openTask, saveWorkspace } from '../bench-store.mjs'
 import { _internal, apply, inject, name } from '../host.js'
+import { clearFlashApprovals, defaultFlashApprovals } from '../src/application/flash/flash-approval-service.mjs'
 
 function req(method, headers, body) {
   const stream = Readable.from([body ? Buffer.from(body) : Buffer.alloc(0)])
@@ -103,6 +104,7 @@ test('apply registers state and bindings routes and disposes them', async () => 
   assert.ok(paths.includes('/dsh-vision-bench/openocd/probe'))
   const hostSrc = await (await import('node:fs/promises')).readFile(new URL('../host.js', import.meta.url), 'utf8')
   assert.match(hostSrc, /Vision预设未更新/)
+  assert.match(hostSrc, /clearFlashApprovals\(\)/)
   assert.doesNotMatch(hostSrc, /roster copy is best-effort/)
   assert.ok(paths.includes('/dsh-vision-bench/fs/list'))
   assert.ok(paths.includes('/dsh-vision-bench/keil/build'))
@@ -120,6 +122,39 @@ test('apply registers state and bindings routes and disposes them', async () => 
   assert.ok(!paths.includes('/dsh-vision-bench/serial/close'))
   ctx._stop()
   assert.deepEqual(disposed, paths)
+})
+
+test('plugin dispose 清空刷写审批仓库', async () => {
+  const ctx = {
+    webServer: {
+      register() {
+        return () => {}
+      },
+    },
+    tools: {
+      register() {
+        return () => {}
+      },
+    },
+    effect(factory) {
+      ctx._stop = factory()
+    },
+  }
+  clearFlashApprovals()
+  apply(ctx)
+  defaultFlashApprovals.create({
+    cwd: '/tmp/ws',
+    sessionId: 'sess-dispose',
+    source: 'user',
+    path: '/tmp/ws/app.hex',
+    size: 1,
+    sha256: 'aa',
+    interfaceName: 'stlink',
+    target: 'stm32f1x',
+  })
+  assert.ok(defaultFlashApprovals.size() > 0)
+  ctx._stop()
+  assert.equal(defaultFlashApprovals.size(), 0)
 })
 
 test('routes reject GET, missing header, and foreign origin', async () => {

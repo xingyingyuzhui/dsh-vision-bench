@@ -10,7 +10,7 @@ import {
   saveWorkspaceAsync,
   storeDir,
 } from './bench-store.mjs'
-import { defaultFlashApprovals } from './src/application/flash/flash-approval-service.mjs'
+import { clearFlashApprovals, defaultFlashApprovals } from './src/application/flash/flash-approval-service.mjs'
 import { FLASH_ERROR_CODES } from './src/domain/flash/errors.mjs'
 import {
   DEFAULT_OPENOCD_INTERFACE,
@@ -23,6 +23,7 @@ import { createFirmwareSnapshot, removeFirmwareSnapshot } from './src/infrastruc
 import { runOpenOcdFlash } from './src/infrastructure/process/openocd-runner.mjs'
 
 export { DEFAULT_OPENOCD_INTERFACE, DEFAULT_OPENOCD_TARGET, FLASH_INTERFACES, FLASH_TARGETS }
+export { clearFlashApprovals }
 
 const flashFail = (errorCode, error, extra = {}) => ({ ok: false, errorCode, error, ...extra })
 
@@ -38,6 +39,30 @@ const toPublicRequest = (record) => ({
   expiresAt: record.expiresAt,
 })
 
+function safeFlashError(error) {
+  const raw = error instanceof Error ? error.message : String(error || '烧录失败')
+  return raw.replace(/(?:[A-Za-z]:)?(?:\\|\/)[^\s:'"]+/g, '…').slice(0, 240) || '烧录失败'
+}
+
+function approvalScope(cwd, body) {
+  const origin = originOf(body)
+  return { cwd, sessionId: origin.sessionId }
+}
+
+function isOpenOcdRunnerResult(ran) {
+  return !!(
+    ran &&
+    typeof ran === 'object' &&
+    !Array.isArray(ran) &&
+    (typeof ran.ok === 'boolean' ||
+      ran.cancelled === true ||
+      ran.timedOut === true ||
+      ran.error ||
+      ran.errorCode ||
+      ran.summary)
+  )
+}
+
 export const openocdDownload = async (home, cwd, body, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -48,19 +73,17 @@ export const openocdDownload = async (home, cwd, body, opts) => {
   if (!bindings.openocd) return { ok: false, error: '请先在设置 → Vision 绑定 OpenOCD' }
 
   if (body && body.confirm === true) {
-    return flashFail(FLASH_ERROR_CODES.FLASH_APPROVAL_REQUIRED, '烧录必须通过批准请求', {
-      error: '烧录必须通过批准请求',
-    })
+    return flashFail(FLASH_ERROR_CODES.FLASH_APPROVAL_REQUIRED, '烧录必须通过批准请求')
   }
 
   if (body && body.approved === false) {
-    const consumed = approvals.consume(body.requestId, { cwd: room.cwd })
+    const consumed = approvals.consume(body.requestId, approvalScope(room.cwd, body))
     if (!consumed.ok) return consumed
     return { ok: false, cancelled: true, error: '已取消', requestId: consumed.record.requestId }
   }
 
   if (body && body.approved === true) {
-    const consumed = approvals.consume(body.requestId, { cwd: room.cwd })
+    const consumed = approvals.consume(body.requestId, approvalScope(room.cwd, body))
     if (!consumed.ok) return consumed
     return executeApprovedFlash(home, room.cwd, consumed.record, body, opts, signal, bindings)
   }
@@ -97,15 +120,15 @@ export const openocdDownload = async (home, cwd, body, opts) => {
 }
 
 async function executeApprovedFlash(home, cwd, record, body, opts, signal, bindings) {
+  const approver = originOf(body)
   await saveWorkspaceAsync(home, cwd, { keil: { flash: { interface: record.interfaceName, target: record.target } } })
-  const origin = originOf(body)
   const opened = await openExclusiveTask(
     home,
     cwd,
     {
       type: 'download',
-      source: origin.source || record.source,
-      sessionId: origin.sessionId || record.sessionId,
+      source: record.source,
+      sessionId: record.sessionId,
       summary: '烧录 ' + record.target + ' ← ' + (record.name || basename(record.path)),
     },
     { conflicts: ['build', 'download'] },
@@ -113,71 +136,152 @@ async function executeApprovedFlash(home, cwd, record, body, opts, signal, bindi
   if (!opened.ok) return opened
   const task = opened.task
   const stagingRoot = join(storeDir(home), 'flash-staging')
-  const snapshot = (opts && opts.createFirmwareSnapshot ? opts.createFirmwareSnapshot : createFirmwareSnapshot)({
-    sourcePath: record.path,
-    stagingRoot,
+  let snapshot = { ok: false, dir: '', path: '' }
+  let finished = false
+  const finish = opts && typeof opts.finishTask === 'function' ? opts.finishTask : finishTask
+  const completeTaskOnce = async (patch) => {
+    if (finished) return
+    finished = true
+    await finish(home, cwd, task.id, patch)
+  }
+  const withAudit = (payload) => ({
+    ...payload,
     taskId: task.id,
-    expectedSha256: record.sha256,
-    expectedSize: record.size,
+    source: record.source,
+    sessionId: record.sessionId,
+    approvedBySessionId: approver.sessionId,
   })
-  if (!snapshot.ok) {
-    await finishTask(home, cwd, task.id, {
+  const failFlash = async (error, extra = {}) => {
+    const summary = safeFlashError(error)
+    await completeTaskOnce({ ok: false, summary, errors: [summary] })
+    return withAudit({
       ok: false,
-      summary: snapshot.error || '固件快照失败',
-      errors: [snapshot.error || '固件快照失败'],
+      errorCode: FLASH_ERROR_CODES.FLASH_FAILED,
+      error: summary,
+      ...extra,
     })
-    return { ...snapshot, ok: false, taskId: task.id, source: origin.source }
   }
   let result
   try {
-    const ran = await (opts && opts.runOpenOcdFlash ? opts.runOpenOcdFlash : runOpenOcdFlash)(
-      {
-        openocd: bindings.openocd,
-        interfaceName: record.interfaceName,
-        target: record.target,
-        firmware: snapshot.path,
-        cwd,
-        timeoutMs: 150000,
-        signal,
-      },
-      { runExecFile: opts && opts.runExecFile },
-    )
+    try {
+      const createSnap = opts && opts.createFirmwareSnapshot ? opts.createFirmwareSnapshot : createFirmwareSnapshot
+      snapshot = createSnap({
+        sourcePath: record.path,
+        stagingRoot,
+        taskId: task.id,
+        expectedSha256: record.sha256,
+        expectedSize: record.size,
+      })
+    } catch (error) {
+      result = await failFlash(error)
+      return result
+    }
+    if (!snapshot || typeof snapshot !== 'object') {
+      result = await failFlash('固件快照失败')
+      return result
+    }
+    if (snapshot.ok === false) {
+      const summary = snapshot.error || '固件快照失败'
+      await completeTaskOnce({ ok: false, summary, errors: [summary] })
+      result = withAudit({
+        ...snapshot,
+        ok: false,
+        errorCode: snapshot.errorCode || FLASH_ERROR_CODES.FIRMWARE_SNAPSHOT_FAILED,
+        error: summary,
+      })
+      return result
+    }
+    let ran
+    try {
+      ran = await (opts && opts.runOpenOcdFlash ? opts.runOpenOcdFlash : runOpenOcdFlash)(
+        {
+          openocd: bindings.openocd,
+          interfaceName: record.interfaceName,
+          target: record.target,
+          firmware: snapshot.path,
+          cwd,
+          timeoutMs: 150000,
+          signal,
+        },
+        { runExecFile: opts && opts.runExecFile },
+      )
+    } catch (error) {
+      result = await failFlash(error)
+      return result
+    }
+    if (!isOpenOcdRunnerResult(ran)) {
+      result = await failFlash('OpenOCD 无结果')
+      return result
+    }
     if (ran.cancelled) {
-      await finishTask(home, cwd, task.id, { cancelled: true, summary: '烧录已取消' })
-      result = {
+      await completeTaskOnce({ cancelled: true, summary: '烧录已取消' })
+      result = withAudit({
         ok: false,
         cancelled: true,
-        taskId: task.id,
-        source: origin.source,
         errorCode: ran.errorCode || FLASH_ERROR_CODES.FLASH_CANCELLED,
         error: '已取消',
-      }
-    } else {
+      })
+      return result
+    }
+    try {
       const details = ran.details && typeof ran.details === 'object' ? ran.details : {}
       const ok = ran.ok === true
       const summary = ran.summary || '烧录失败 ' + (ran.error || '')
-      await finishTask(home, cwd, task.id, {
+      const tail = String((details.output || ran.error || '').split('\n').pop() || '').slice(0, 240)
+      await completeTaskOnce({
         ok,
         summary,
         phase: 'flash',
-        errors: ok ? [] : [String((details.output || ran.error || '').split('\n').pop() || '').slice(0, 240)],
+        errors: ok ? [] : [tail],
         keil: { download: record.path },
       })
-      result = { ...ran, ok, taskId: task.id, source: origin.source, summary }
+      result = withAudit({
+        ...ran,
+        ok,
+        summary,
+      })
+      return result
+    } catch (error) {
+      result = await failFlash(error)
+      return result
     }
+  } catch (error) {
+    result = await failFlash(error)
+    return result
   } finally {
-    const cleaned = (opts && opts.removeFirmwareSnapshot ? opts.removeFirmwareSnapshot : removeFirmwareSnapshot)(
-      snapshot.dir,
-      stagingRoot,
-    )
-    if (result && cleaned && cleaned.ok === false) {
-      result = {
-        ...result,
-        warnings: [...(result.warnings || []), { code: cleaned.errorCode, message: cleaned.error || '快照清理失败' }],
+    try {
+      if (snapshot && snapshot.dir) {
+        const cleaned = (opts && opts.removeFirmwareSnapshot ? opts.removeFirmwareSnapshot : removeFirmwareSnapshot)(
+          snapshot.dir,
+          stagingRoot,
+        )
+        if (result && cleaned && cleaned.ok === false) {
+          result.warnings = [
+            ...(result.warnings || []),
+            { code: cleaned.errorCode, message: cleaned.error || '快照清理失败' },
+          ]
+        }
+      }
+    } catch (cleanupError) {
+      if (result) {
+        result.warnings = [
+          ...(result.warnings || []),
+          {
+            code: FLASH_ERROR_CODES.FIRMWARE_SNAPSHOT_CLEANUP_FAILED,
+            message: safeFlashError(cleanupError),
+          },
+        ]
+      }
+    }
+    if (!finished) {
+      await completeTaskOnce({ ok: false, summary: '烧录失败', errors: ['烧录失败'] })
+      if (!result) {
+        result = withAudit({
+          ok: false,
+          errorCode: FLASH_ERROR_CODES.FLASH_FAILED,
+          error: '烧录失败',
+        })
       }
     }
   }
-  return result
 }
-
-export const _internal = { approvals: defaultFlashApprovals }

@@ -1,17 +1,18 @@
-import { loadBindings, probeBindings } from '../../../bench-store.mjs'
 // @ts-check
+import { loadBindings, probeBindings } from '../../../bench-store.mjs'
 import { FLASH_ERROR_CODES } from '../../domain/flash/errors.mjs'
 import { probeOpenOcdExecutable } from '../../infrastructure/process/openocd-runner.mjs'
 
 /**
  * Shared OpenOCD identity probe used by self-check and the debug page.
  * @param {string} home
- * @param {{ runExecFile?: Function }} [opts]
+ * @param {{ runExecFile?: (bin: any, args: any, opts?: {}) => Promise<any> }} [opts]
  */
 export async function probeOpenOcdHealth(home, opts = {}) {
   const bindings = loadBindings(home)
-  const health = probeBindings(bindings)
-  if (!health.openocd.bound) {
+  const probed = /** @type {{ openocd?: { bound?: boolean, exists?: boolean } }} */ (probeBindings(bindings))
+  const openocd = probed.openocd || { bound: false, exists: false }
+  if (!openocd.bound) {
     return {
       ok: true,
       ready: false,
@@ -22,7 +23,7 @@ export async function probeOpenOcdHealth(home, opts = {}) {
       versionLine: '',
     }
   }
-  if (!health.openocd.exists) {
+  if (!openocd.exists) {
     return {
       ok: true,
       ready: false,

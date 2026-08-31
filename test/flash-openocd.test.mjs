@@ -1,17 +1,26 @@
 import assert from 'node:assert/strict'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { _internal as flashInternal, openocdDownload } from '../bench-flash.mjs'
+import { clearFlashApprovals, openocdDownload } from '../bench-flash.mjs'
 import { keilBuild } from '../bench-keil.mjs'
-import { journalView, loadWorkspace, openTask, saveBindings, saveWorkspace } from '../bench-store.mjs'
+import {
+  journalView,
+  loadWorkspace,
+  openTask,
+  saveBindings,
+  saveWorkspace,
+  storeDir,
+  finishTask as storeFinishTask,
+} from '../bench-store.mjs'
 import { createFlashApprovalStore } from '../src/application/flash/flash-approval-service.mjs'
 import { FLASH_ERROR_CODES } from '../src/domain/flash/errors.mjs'
 
 const seedFirmware = async (home) => {
+  clearFlashApprovals()
   const cwd = join(home, 'board')
   await mkdir(cwd)
   saveBindings(home, { python: '', uv4: '', openocd: '/opt/openocd' })
@@ -20,6 +29,14 @@ const seedFirmware = async (home) => {
   saveWorkspace(home, cwd, { keil: { download: fw } })
   return { cwd, fw }
 }
+
+const stagingNames = (home) => {
+  const root = join(storeDir(home), 'flash-staging')
+  return existsSync(root) ? readdirSync(root) : []
+}
+
+const downloadTasks = (home, cwd) =>
+  journalView(loadWorkspace(home, cwd)).tasks.filter((item) => item.type === 'download')
 
 const start = (home, cwd, extra = {}) =>
   openocdDownload(home, cwd, { interface: 'stlink', target: 'stm32f4x', source: 'user', ...extra })
@@ -104,7 +121,7 @@ test('批准后原固件被覆盖则拒绝烧录且不启动 OpenOCD', async () 
       home,
       cwd,
       first,
-      {},
+      { sessionId: 's1' },
       {
         runOpenOcdFlash: async () => {
           called += 1
@@ -400,7 +417,260 @@ test('echo/空输出退出码 0 不能误报烧录成功', async () => {
     assert.equal(echo.ok, false)
     assert.notEqual(echo.summary, '烧录完成')
   } finally {
-    flashInternal.approvals.clear()
+    clearFlashApprovals()
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('Session B 不能批准或拒绝 Session A 的刷写，且不会提前消费', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-flash-scope-'))
+  try {
+    const { cwd } = await seedFirmware(home)
+    const first = await start(home, cwd, { source: 'agent', sessionId: 'sess-a' })
+    let called = 0
+    const runner = {
+      runOpenOcdFlash: async () => {
+        called += 1
+        return { ok: true, summary: '烧录完成', details: { output: 'verify ok' } }
+      },
+    }
+    const otherApprove = await approve(home, cwd, first, { source: 'user', sessionId: 'sess-b' }, runner)
+    assert.equal(otherApprove.errorCode, FLASH_ERROR_CODES.FLASH_APPROVAL_SCOPE_MISMATCH)
+    const otherReject = await openocdDownload(
+      home,
+      cwd,
+      { requestId: first.request.requestId, approved: false, sessionId: 'sess-b' },
+      runner,
+    )
+    assert.equal(otherReject.errorCode, FLASH_ERROR_CODES.FLASH_APPROVAL_SCOPE_MISMATCH)
+    assert.equal(called, 0)
+    const ran = await approve(home, cwd, first, { source: 'user', sessionId: 'sess-a' }, runner)
+    assert.equal(ran.ok, true)
+    assert.equal(ran.source, 'agent')
+    assert.equal(ran.sessionId, 'sess-a')
+    assert.equal(ran.approvedBySessionId, 'sess-a')
+    const task = downloadTasks(home, cwd)[0]
+    assert.equal(task.source, 'agent')
+    assert.equal(task.sessionId, 'sess-a')
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('Runner 抛异常 / 返回 undefined 都会 FLASH_FAILED 并结束任务', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-flash-throw-'))
+  try {
+    const { cwd } = await seedFirmware(home)
+    let finishes = 0
+    const first = await start(home, cwd)
+    const boom = await approve(
+      home,
+      cwd,
+      first,
+      {},
+      {
+        finishTask: async (...args) => {
+          finishes += 1
+          return storeFinishTask(...args)
+        },
+        runOpenOcdFlash: async () => {
+          throw new Error('openocd crashed at /opt/openocd')
+        },
+      },
+    )
+    assert.equal(boom.ok, false)
+    assert.equal(boom.errorCode, FLASH_ERROR_CODES.FLASH_FAILED)
+    assert.doesNotMatch(String(boom.error), /\/opt\/openocd/)
+    assert.equal(finishes, 1)
+    assert.ok(downloadTasks(home, cwd).every((item) => item.status !== 'running'))
+    assert.deepEqual(stagingNames(home), [])
+    const second = await start(home, cwd)
+    const empty = await approve(home, cwd, second, {}, { runOpenOcdFlash: async () => undefined })
+    assert.equal(empty.errorCode, FLASH_ERROR_CODES.FLASH_FAILED)
+    assert.ok(downloadTasks(home, cwd).every((item) => item.status !== 'running'))
+    const third = await start(home, cwd)
+    assert.equal(third.needsConfirm, true)
+    const weird = await approve(home, cwd, third, {}, { runOpenOcdFlash: async () => ({ foo: 1 }) })
+    assert.equal(weird.errorCode, FLASH_ERROR_CODES.FLASH_FAILED)
+    assert.deepEqual(stagingNames(home), [])
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('快照创建或输出解析抛异常后任务进入 error，并可立即再刷写', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-flash-parse-'))
+  try {
+    const { cwd } = await seedFirmware(home)
+    const first = await start(home, cwd)
+    const snap = await approve(
+      home,
+      cwd,
+      first,
+      {},
+      {
+        createFirmwareSnapshot: () => {
+          throw new Error('snapshot boom')
+        },
+        runOpenOcdFlash: async () => ({ ok: true, summary: '烧录完成' }),
+      },
+    )
+    assert.equal(snap.errorCode, FLASH_ERROR_CODES.FLASH_FAILED)
+    assert.ok(downloadTasks(home, cwd).every((item) => item.status === 'error'))
+    assert.deepEqual(stagingNames(home), [])
+    const second = await start(home, cwd)
+    const parsed = await approve(
+      home,
+      cwd,
+      second,
+      {},
+      {
+        runOpenOcdFlash: async () => ({
+          ok: true,
+          summary: '烧录完成',
+          details: {
+            get output() {
+              throw new Error('parse boom')
+            },
+          },
+        }),
+      },
+    )
+    assert.equal(parsed.errorCode, FLASH_ERROR_CODES.FLASH_FAILED)
+    assert.ok(downloadTasks(home, cwd).every((item) => item.status !== 'running'))
+    assert.deepEqual(stagingNames(home), [])
+    const again = await start(home, cwd)
+    assert.equal(again.needsConfirm, true)
+    assert.notEqual(again.errorCode, 'TASK_CONFLICT')
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('快照清理失败不覆盖刷写结果，也不会二次 finishTask', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-flash-cleanup-'))
+  try {
+    const { cwd } = await seedFirmware(home)
+    let finishes = 0
+    const first = await start(home, cwd)
+    const ran = await approve(
+      home,
+      cwd,
+      first,
+      {},
+      {
+        finishTask: async (...args) => {
+          finishes += 1
+          return storeFinishTask(...args)
+        },
+        runOpenOcdFlash: async () => ({ ok: true, summary: '烧录完成', details: { output: 'verify ok' } }),
+        removeFirmwareSnapshot: () => {
+          throw new Error('cleanup boom')
+        },
+      },
+    )
+    assert.equal(ran.ok, true)
+    assert.equal(finishes, 1)
+    assert.ok(Array.isArray(ran.warnings) && ran.warnings.length > 0)
+    assert.equal(downloadTasks(home, cwd)[0].status, 'ok')
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('finishTask 抛错时仍返回 FLASH_FAILED 且不会留下 running', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-flash-finish-throw-'))
+  try {
+    const { cwd } = await seedFirmware(home)
+    const first = await start(home, cwd)
+    const ran = await approve(
+      home,
+      cwd,
+      first,
+      {},
+      {
+        finishTask: async () => {
+          throw new Error('finish boom')
+        },
+        runOpenOcdFlash: async () => {
+          throw new Error('runner boom')
+        },
+      },
+    )
+    assert.equal(ran.ok, false)
+    assert.equal(ran.errorCode, FLASH_ERROR_CODES.FLASH_FAILED)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('快照返回空对象或清理失败都会结构化收尾', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-flash-empty-snap-'))
+  try {
+    const { cwd } = await seedFirmware(home)
+    const first = await start(home, cwd)
+    const emptySnap = await approve(home, cwd, first, {}, { createFirmwareSnapshot: () => null })
+    assert.equal(emptySnap.errorCode, FLASH_ERROR_CODES.FLASH_FAILED)
+    assert.ok(downloadTasks(home, cwd).every((item) => item.status !== 'running'))
+    const second = await start(home, cwd)
+    const cleaned = await approve(
+      home,
+      cwd,
+      second,
+      {},
+      {
+        runOpenOcdFlash: async () => ({ ok: true, summary: '烧录完成', details: { output: 'verify ok' } }),
+        removeFirmwareSnapshot: () => ({
+          ok: false,
+          errorCode: FLASH_ERROR_CODES.FIRMWARE_SNAPSHOT_CLEANUP_FAILED,
+          error: '快照清理失败',
+        }),
+      },
+    )
+    assert.equal(cleaned.ok, true)
+    assert.ok(cleaned.warnings && cleaned.warnings.length > 0)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('Keil 执行器抛异常后不会留下运行中任务，也不会挡住刷写', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-keil-throw-'))
+  const cwd = join(home, 'board')
+  await mkdir(cwd)
+  try {
+    saveBindings(home, { python: process.execPath, uv4: process.execPath, openocd: '/opt/openocd' })
+    const project = join(cwd, 'app.uvprojx')
+    const fw = join(cwd, 'app.hex')
+    await writeFile(project, '<Project/>')
+    await writeFile(fw, ':020000040800F2\n')
+    saveWorkspace(home, cwd, { keil: { project, target: 'Debug', download: fw } })
+    const boom = await keilBuild(
+      home,
+      cwd,
+      { source: 'user' },
+      {
+        runPythonScript: async () => {
+          throw new Error('uv4 crashed')
+        },
+      },
+    )
+    assert.equal(boom.ok, false)
+    assert.match(boom.error, /uv4 crashed/)
+    const ws = loadWorkspace(home, cwd)
+    assert.equal(ws.tasks[0].status, 'error')
+    const first = await start(home, cwd)
+    assert.equal(first.needsConfirm, true)
+    assert.notEqual(first.errorCode, 'TASK_CONFLICT')
+    const second = await keilBuild(
+      home,
+      cwd,
+      { source: 'user' },
+      { runPythonScript: async () => ({ ok: false, error: 'compile fail', result: { summary: 'fail', details: {} } }) },
+    )
+    assert.notEqual(second.errorCode, 'TASK_CONFLICT')
+    assert.equal(second.ok, false)
+  } finally {
     await rm(home, { recursive: true, force: true })
   }
 })
