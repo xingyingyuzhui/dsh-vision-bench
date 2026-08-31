@@ -11,6 +11,8 @@ const log = (row) => {
   try { appendFileSync(logPath, JSON.stringify(row) + '\n') } catch { /* ignore */ }
 }
 
+if (logPath) log({ op: 'boot' })
+
 const sleep = (ms, signal) => new Promise((resolve) => {
   if (!ms) {
     resolve()

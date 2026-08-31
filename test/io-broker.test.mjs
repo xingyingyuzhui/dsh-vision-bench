@@ -8,6 +8,23 @@ import { createVisionIoBroker } from '../bench-io-broker.mjs'
 
 const fakeWorker = fileURLToPath(new URL('./fixtures/fake-io-worker.mjs', import.meta.url))
 
+async function waitForLogMatch(path, re, timeoutMs = 2000) {
+  const start = Date.now()
+  let last = ''
+  while (Date.now() - start < timeoutMs) {
+    try {
+      last = readFileSync(path, 'utf8')
+      if (re.test(last)) return last
+    } catch {
+      /* worker has not created the oplog yet */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error(
+    'log did not match ' + String(re) + ' within ' + timeoutMs + 'ms: ' + (last || '(missing ' + path + ')'),
+  )
+}
+
 test('broker correlates concurrent requests by id', async () => {
   const broker = createVisionIoBroker({ workerPath: fakeWorker })
   try {
@@ -101,8 +118,7 @@ test('broker timeout sends cancel and ignores late response', async () => {
       ),
     )
     assert.equal(broker.pendingSize(), 0)
-    await new Promise((resolve) => setTimeout(resolve, 120))
-    const text = readFileSync(log, 'utf8')
+    const text = await waitForLogMatch(log, /"op":"cancel"/)
     assert.match(text, /"op":"cancel"/)
   } finally {
     await broker.stop()
