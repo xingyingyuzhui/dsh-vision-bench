@@ -147,6 +147,7 @@
     "src/domain/modbus/point-patch.mjs",
     "src/domain/modbus/target-resolver.mjs",
     "src/application/commands/command-contract.mjs",
+    "src/application/commands/lossless-json.mjs",
     "src/application/commands/command-idempotency-cache.mjs",
     "src/application/commands/vision-command-service.mjs",
     "src/application/commands/vision-command-router.mjs",

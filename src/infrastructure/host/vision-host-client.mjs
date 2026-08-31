@@ -7,6 +7,7 @@ import {
   HOST_UNAUTHORIZED,
   HOST_UNAVAILABLE,
 } from '../../application/commands/command-contract.mjs'
+import { losslessCommandResult, toLosslessJson } from '../../application/commands/lossless-json.mjs'
 
 /**
  * @typedef {import('../../types/agent-tool.js').AgentCommandEnvelope} AgentCommandEnvelope
@@ -177,13 +178,17 @@ async function tryHostHttp(cmd) {
 export async function dispatchVisionCommand(cmd) {
   const input = cmd && typeof cmd === 'object' ? cmd : { action: '' }
   if (hostHandle && typeof hostHandle.dispatch === 'function') {
-    return hostHandle.dispatch(/** @type {AgentCommandEnvelope} */ (input))
+    return /** @type {AgentCommandResult} */ (
+      losslessCommandResult(await hostHandle.dispatch(/** @type {AgentCommandEnvelope} */ (input)))
+    )
   }
   if (input.requireHost !== true) {
     const { executeVisionCommand } = await import('../../application/commands/vision-command-service.mjs')
-    return executeVisionCommand(input)
+    return /** @type {AgentCommandResult} */ (losslessCommandResult(await executeVisionCommand(input)))
   }
-  return tryHostHttp(/** @type {AgentCommandEnvelope} */ (input))
+  return /** @type {AgentCommandResult} */ (
+    losslessCommandResult(await tryHostHttp(/** @type {AgentCommandEnvelope} */ (input)))
+  )
 }
 
 /** @returns {HostBridgeDescriptor} */
@@ -218,6 +223,8 @@ export async function pingVisionHost(options = {}) {
     signal: options.signal,
   })
   const roundtripMs = Date.now() - started
+  /** @type {Record<string, unknown>} */
+  let out
   if (result && result.ok === true) {
     const raw = result.data && typeof result.data === 'object' ? result.data : result
     const service = typeof raw.service === 'string' ? raw.service : ''
@@ -233,7 +240,7 @@ export async function pingVisionHost(options = {}) {
       timestamp.length > 0 &&
       Number.isFinite(Date.parse(timestamp))
     if (!valid) {
-      return {
+      out = {
         ok: false,
         available: false,
         errorCode: HOST_INVALID_RESPONSE,
@@ -242,28 +249,31 @@ export async function pingVisionHost(options = {}) {
         httpStatus: result.httpStatus,
         roundtripMs,
       }
+    } else {
+      out = {
+        ok: true,
+        available: true,
+        data: {
+          service,
+          version,
+          transport: inProcess ? 'in-process' : 'http',
+          pid,
+          timestamp,
+        },
+        origin: result.origin || hostOriginOf(),
+        roundtripMs,
+      }
     }
-    return {
-      ok: true,
-      available: true,
-      data: {
-        service,
-        version,
-        transport: inProcess ? 'in-process' : 'http',
-        pid,
-        timestamp,
-      },
-      origin: result.origin || hostOriginOf(),
+  } else {
+    out = {
+      ok: false,
+      available: false,
+      errorCode: result?.errorCode,
+      error: result?.error,
+      origin: result?.origin || hostOriginOf(),
+      httpStatus: result?.httpStatus,
       roundtripMs,
     }
   }
-  return {
-    ok: false,
-    available: false,
-    errorCode: result?.errorCode,
-    error: result?.error,
-    origin: result?.origin || hostOriginOf(),
-    httpStatus: result?.httpStatus,
-    roundtripMs,
-  }
+  return /** @type {any} */ (toLosslessJson(out) || losslessCommandResult(out))
 }

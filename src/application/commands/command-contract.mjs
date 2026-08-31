@@ -1,4 +1,6 @@
 // @ts-check
+import { losslessCommandResult } from './lossless-json.mjs'
+
 /**
  * @typedef {import('../../types/agent-tool.js').AgentCommandEnvelope} AgentCommandEnvelope
  * @typedef {import('../../types/agent-tool.js').AgentCommandResult} AgentCommandResult
@@ -60,21 +62,23 @@ export function normalizeCommand(input) {
  */
 export function envelope(cmd, result) {
   const ran = result && typeof result === 'object' ? result : { ok: false, error: String(result) }
-  return {
-    ok: ran.ok === true,
-    errorCode: ran.errorCode || ran.code || (ran.ok === true ? undefined : undefined),
-    error: ran.error,
-    previousConfigVersion: ran.previousConfigVersion,
-    nextConfigVersion: ran.nextConfigVersion ?? ran.configVersion,
-    changedIds: ran.changedIds || ran.changedPointIds || ran.changedVisualizationIds,
-    changedPointIds: ran.changedPointIds,
-    affectedVisualizations: ran.affectedVisualizations,
-    affectedAlarms: ran.affectedAlarms,
-    taskId: ran.taskId || ran.task?.id,
-    transactionId: ran.transactionId,
-    workspace: ran.workspace,
-    ...ran,
-    commandId: cmd.commandId,
-    action: ran.action || cmd.action,
-  }
+  return /** @type {AgentCommandResult} */ (
+    losslessCommandResult({
+      ok: ran.ok === true,
+      errorCode: ran.errorCode || ran.code,
+      error: ran.error,
+      previousConfigVersion: ran.previousConfigVersion,
+      nextConfigVersion: ran.nextConfigVersion ?? ran.configVersion,
+      changedIds: ran.changedIds || ran.changedPointIds || ran.changedVisualizationIds,
+      changedPointIds: ran.changedPointIds,
+      affectedVisualizations: ran.affectedVisualizations,
+      affectedAlarms: ran.affectedAlarms,
+      taskId: ran.taskId || ran.task?.id,
+      transactionId: ran.transactionId,
+      workspace: ran.workspace,
+      ...ran,
+      commandId: cmd.commandId,
+      action: ran.action || cmd.action,
+    })
+  )
 }

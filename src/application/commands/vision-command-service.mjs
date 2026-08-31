@@ -1,6 +1,7 @@
 // @ts-check
 import { envelope, normalizeCommand } from './command-contract.mjs'
 import { globalCommandIdempotency } from './command-idempotency-cache.mjs'
+import { losslessCommandResult } from './lossless-json.mjs'
 import { runVisionBench } from './vision-command-router.mjs'
 
 /**
@@ -10,12 +11,12 @@ import { runVisionBench } from './vision-command-router.mjs'
  */
 export async function executeVisionCommand(input) {
   const cmd = normalizeCommand(input)
-  return globalCommandIdempotency.run(cmd, async () => {
+  const ran = await globalCommandIdempotency.run(cmd, async () => {
     const args = /** @type {any} */ ({ ...(cmd.payload || {}), action: cmd.action })
     if (cmd.expectedConfigVersion != null && args.expectedConfigVersion == null) {
       args.expectedConfigVersion = cmd.expectedConfigVersion
     }
-    const ran = await runVisionBench(
+    const result = await runVisionBench(
       cmd.home,
       args,
       cmd.cwd,
@@ -25,8 +26,9 @@ export async function executeVisionCommand(input) {
       },
       { signal: cmd.signal, commandId: cmd.commandId },
     )
-    return envelope(cmd, ran)
+    return envelope(cmd, result)
   })
+  return losslessCommandResult(ran)
 }
 
 export { ACTIONS, runVisionBench, _internal } from './vision-command-router.mjs'

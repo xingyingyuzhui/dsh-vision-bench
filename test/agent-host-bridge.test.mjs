@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { visionBenchTool } from '../bench-tool.mjs'
 import { HOST_UNAVAILABLE } from '../src/application/commands/command-contract.mjs'
+import { isLosslessJsonValue } from '../src/application/commands/lossless-json.mjs'
 import {
   dispatchVisionCommand,
   registerVisionHost,
@@ -20,6 +21,7 @@ test('agent execute requires host and returns HOST_UNAVAILABLE when missing', as
     )
     assert.equal(ran.ok, false)
     assert.equal(ran.errorCode, HOST_UNAVAILABLE)
+    assert.equal(isLosslessJsonValue(ran), true)
   } finally {
     if (prev == null) delete process.env.VISION_BENCH_HOST_ORIGIN
     else process.env.VISION_BENCH_HOST_ORIGIN = prev
@@ -44,6 +46,7 @@ test('registered host receives agent commands', async () => {
     assert.equal(ran.ok, true)
     assert.equal(ran.via, 'host')
     assert.equal(calls.length, 1)
+    assert.equal(isLosslessJsonValue(ran), true)
   } finally {
     stop()
   }

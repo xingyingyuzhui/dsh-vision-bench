@@ -1,3 +1,4 @@
+import { losslessCommandResult } from './src/application/commands/lossless-json.mjs'
 import { dispatchVisionCommand } from './src/infrastructure/host/vision-host-client.mjs'
 
 export const ACTIONS = new Set([
@@ -45,18 +46,20 @@ const originFrom = (input) => ({
 /** In-process helper used by tests; Agent execute() sets requireHost. */
 export async function runVisionBench(home, args, cwd, originInput, opts) {
   const origin = originFrom(originInput)
-  return dispatchVisionCommand({
-    home,
-    cwd,
-    action: args && args.action,
-    payload: args || {},
-    source: origin.source,
-    sessionId: origin.sessionId,
-    signal: opts && opts.signal,
-    commandId: opts && opts.commandId,
-    expectedConfigVersion: args && (args.expectedConfigVersion ?? args.configVersion),
-    requireHost: opts && opts.requireHost === true,
-  })
+  return losslessCommandResult(
+    await dispatchVisionCommand({
+      home,
+      cwd,
+      action: args && args.action,
+      payload: args || {},
+      source: origin.source,
+      sessionId: origin.sessionId,
+      signal: opts && opts.signal,
+      commandId: opts && opts.commandId,
+      expectedConfigVersion: args && (args.expectedConfigVersion ?? args.configVersion),
+      requireHost: opts && opts.requireHost === true,
+    }),
+  )
 }
 
 export function visionBenchTool(home) {
@@ -244,19 +247,21 @@ export function visionBenchTool(home) {
     async execute(args, exec) {
       const agent = exec && exec.agent
       const signal = exec && exec.signal
-      if (signal && signal.aborted) return { ok: false, cancelled: true, error: '已取消' }
-      return dispatchVisionCommand({
-        home,
-        cwd: cwdOf(agent),
-        action: args && args.action,
-        payload: args || {},
-        source: 'agent',
-        sessionId: sessionIdOf(agent),
-        signal,
-        commandId: args && args.commandId,
-        expectedConfigVersion: args && (args.expectedConfigVersion ?? args.configVersion),
-        requireHost: true,
-      })
+      if (signal && signal.aborted) return losslessCommandResult({ ok: false, cancelled: true, error: '已取消' })
+      return losslessCommandResult(
+        await dispatchVisionCommand({
+          home,
+          cwd: cwdOf(agent),
+          action: args && args.action,
+          payload: args || {},
+          source: 'agent',
+          sessionId: sessionIdOf(agent),
+          signal,
+          commandId: args && args.commandId,
+          expectedConfigVersion: args && (args.expectedConfigVersion ?? args.configVersion),
+          requireHost: true,
+        }),
+      )
     },
   }
 }

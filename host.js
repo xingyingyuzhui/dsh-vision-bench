@@ -55,6 +55,7 @@ import {
 } from './bench-store.mjs'
 import { clearFramesByConnection } from './bench-store.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
+import { toLosslessJson } from './src/application/commands/lossless-json.mjs'
 import { registerVisionHost } from './src/infrastructure/host/vision-host-client.mjs'
 import { createVisionCommandDispatcher, handleCommand } from './src/interfaces/http/vision-command-routes.mjs'
 
@@ -69,8 +70,10 @@ const WORKSPACE_CONFIG_KEYS = new Set(['conn', 'connections', 'devices', 'points
 let dshHome = defaultDshHome()
 
 const writeJson = (res, status, body) => {
+  const payload = toLosslessJson(body)
+  const safe = payload === undefined ? { ok: false, error: '响应无法序列化为 JSON' } : payload
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
-  res.end(JSON.stringify(body))
+  res.end(JSON.stringify(safe))
 }
 
 const readJsonBody = (req, cap = BODY_CAP) =>

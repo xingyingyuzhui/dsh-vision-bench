@@ -1,5 +1,6 @@
 // @ts-check
 import { normalizeCommand } from '../../application/commands/command-contract.mjs'
+import { losslessCommandResult } from '../../application/commands/lossless-json.mjs'
 import { executeVisionCommand } from '../../application/commands/vision-command-service.mjs'
 
 /**
@@ -10,7 +11,7 @@ export function createVisionCommandDispatcher(home) {
   return {
     /** @param {any} input */
     async dispatch(input) {
-      return executeVisionCommand({ ...normalizeCommand(input), home: input.home || home })
+      return losslessCommandResult(await executeVisionCommand({ ...normalizeCommand(input), home: input.home || home }))
     },
   }
 }
@@ -37,10 +38,12 @@ export function visionCommandRoute(home, { readBodyAndTouchSession }) {
  */
 export async function handleCommand(home, req, readBodyAndTouchSession) {
   const body = await readBodyAndTouchSession(req)
-  return executeVisionCommand({
-    ...body,
-    home,
-    payload: body.payload || body,
-    action: body.action || body.payload?.action,
-  })
+  return losslessCommandResult(
+    await executeVisionCommand({
+      ...body,
+      home,
+      payload: body.payload || body,
+      action: body.action || body.payload?.action,
+    }),
+  )
 }

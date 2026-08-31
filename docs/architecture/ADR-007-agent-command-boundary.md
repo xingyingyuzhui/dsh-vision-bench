@@ -19,9 +19,11 @@ Agent tools and the Host UI share one workspace. If the Agent process constructs
 7. **Saved config + failed side effect returns `ok: true`** with `postCommitWarnings` (`CONNECTION_RELEASE_FAILED`, `EVENT_NOTIFY_FAILED`). The caller is not told the write rolled back.
 8. **Idempotency keys** are `home|cwd|sessionId|source|commandId` with a payload fingerprint. Reuse of the same id with a different body is `COMMAND_ID_REUSE`.
 9. **UI and Agent go through the same application services and repository.** Direct config mutations (`points`, `visualization`, `configureConnection`) are not approval-gated; coil/register writes and flash still are.
+10. **Values leaving Host/Agent must be lossless JSON.** In-process dispatch returns the same JSON-round-tripped object HTTP would produce. `undefined` own properties, `NaN`/`Infinity`, `AbortSignal`, class instances JSON cannot represent, and circular structures must not reach the Agent tool output projector. Unserializable results fail closed as `HOST_INVALID_RESPONSE`. The sanitizer runs at `envelope()`, `executeVisionCommand()`, `dispatchVisionCommand()`, `vision_bench` `execute()`, `pingVisionHost()`, and Host `writeJson`.
 
 ## Consequences
 
 - Self-check `host-bridge` is only green after a real `system.ping`.
 - HTTP Bridge tests must spawn a real Node child (`process.execPath`, `shell: false`).
 - Windows `.tgz` COM acceptance is still required before tagging `v0.22.0`.
+- Agent `vision_bench` output must pass DSH lossless JSON (`isLosslessJsonValue`); HTTP success is not sufficient proof that the Agent tool path works.
