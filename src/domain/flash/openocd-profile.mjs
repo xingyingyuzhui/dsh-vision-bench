@@ -1,4 +1,5 @@
 // @ts-check
+import { FLASH_ERROR_CODES } from './errors.mjs'
 
 export const FLASH_INTERFACES = ['cmsis-dap', 'stlink', 'jlink', 'ftdi', 'dap']
 export const FLASH_TARGETS = [
@@ -46,7 +47,7 @@ function isSafeCfgToken(name) {
 export function validateOpenOcdInterface(name) {
   const raw = tokenOf(name)
   if (!isSafeCfgToken(raw) || !FLASH_INTERFACES.includes(raw)) {
-    return { ok: false, errorCode: 'FLASH_INTERFACE_INVALID', error: 'OpenOCD interface 不在白名单内' }
+    return { ok: false, errorCode: FLASH_ERROR_CODES.FLASH_INTERFACE_INVALID, error: 'OpenOCD interface 不在白名单内' }
   }
   return { ok: true, value: raw }
 }
@@ -58,7 +59,7 @@ export function validateOpenOcdInterface(name) {
 export function validateOpenOcdTarget(name) {
   const raw = tokenOf(name)
   if (!isSafeCfgToken(raw) || !FLASH_TARGETS.includes(raw)) {
-    return { ok: false, errorCode: 'FLASH_TARGET_INVALID', error: 'OpenOCD target 不在白名单内' }
+    return { ok: false, errorCode: FLASH_ERROR_CODES.FLASH_TARGET_INVALID, error: 'OpenOCD target 不在白名单内' }
   }
   return { ok: true, value: raw }
 }
@@ -82,15 +83,25 @@ export function resolveOpenOcdProfile(request = {}, stored = {}) {
     const checked = validateOpenOcdTarget(reqTarget)
     if (!checked.ok) return checked
   }
-  const storedIface = validateOpenOcdInterface(stored.interface)
-  const storedTarget = validateOpenOcdTarget(stored.target)
+  if (!present(reqIface) && present(stored.interface)) {
+    const checked = validateOpenOcdInterface(stored.interface)
+    if (!checked.ok) return checked
+  }
+  if (!present(reqTarget) && present(stored.target)) {
+    const checked = validateOpenOcdTarget(stored.target)
+    if (!checked.ok) return checked
+  }
   return {
     ok: true,
     interfaceName: present(reqIface)
       ? tokenOf(reqIface)
-      : storedIface.ok
-        ? storedIface.value
+      : present(stored.interface)
+        ? tokenOf(stored.interface)
         : DEFAULT_OPENOCD_INTERFACE,
-    target: present(reqTarget) ? tokenOf(reqTarget) : storedTarget.ok ? storedTarget.value : DEFAULT_OPENOCD_TARGET,
+    target: present(reqTarget)
+      ? tokenOf(reqTarget)
+      : present(stored.target)
+        ? tokenOf(stored.target)
+        : DEFAULT_OPENOCD_TARGET,
   }
 }

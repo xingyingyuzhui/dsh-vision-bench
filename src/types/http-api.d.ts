@@ -50,8 +50,19 @@ export type WorkspaceRepositoryMutator = (
   | { ok: false; errorCode?: string; error?: string }
   | Promise<{ ok: true; workspace: unknown } | { ok: false; errorCode?: string; error?: string }>
 
+export type OpenOcdProbeResponse = {
+  ok: true
+  ready: boolean
+  bound: boolean
+  exists: boolean
+  errorCode?: string
+  reason?: string
+  versionLine?: string
+}
+
 export type HttpApiPaths =
   | '/dsh-vision-bench/state'
+  | '/dsh-vision-bench/openocd/probe'
   | '/dsh-vision-bench/workspace'
   | '/dsh-vision-bench/modbus/write'
   | '/dsh-vision-bench/modbus/write/approve'

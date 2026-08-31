@@ -6085,6 +6085,135 @@ const UPLOT_PROTO = {
   hooks: {},
 }
 
+// @ts-check
+/** Unified OpenOCD / firmware-flash error codes. */
+const FLASH_ERROR_CODES = {
+  FLASH_APPROVAL_REQUIRED: 'FLASH_APPROVAL_REQUIRED',
+  FLASH_APPROVAL_NOT_FOUND: 'FLASH_APPROVAL_NOT_FOUND',
+  FLASH_APPROVAL_EXPIRED: 'FLASH_APPROVAL_EXPIRED',
+  FLASH_APPROVAL_SCOPE_MISMATCH: 'FLASH_APPROVAL_SCOPE_MISMATCH',
+  FIRMWARE_SNAPSHOT_FAILED: 'FIRMWARE_SNAPSHOT_FAILED',
+  FIRMWARE_SNAPSHOT_MISMATCH: 'FIRMWARE_SNAPSHOT_MISMATCH',
+  FIRMWARE_SNAPSHOT_CLEANUP_FAILED: 'FIRMWARE_SNAPSHOT_CLEANUP_FAILED',
+  OPENOCD_NOT_FOUND: 'OPENOCD_NOT_FOUND',
+  OPENOCD_IDENTITY_INVALID: 'OPENOCD_IDENTITY_INVALID',
+  OPENOCD_PROBE_FAILED: 'OPENOCD_PROBE_FAILED',
+  OPENOCD_PROBE_TIMEOUT: 'OPENOCD_PROBE_TIMEOUT',
+  OPENOCD_PROBE_CANCELLED: 'OPENOCD_PROBE_CANCELLED',
+  FLASH_INTERFACE_INVALID: 'FLASH_INTERFACE_INVALID',
+  FLASH_TARGET_INVALID: 'FLASH_TARGET_INVALID',
+  FLASH_RESULT_UNVERIFIED: 'FLASH_RESULT_UNVERIFIED',
+  FLASH_TIMEOUT: 'FLASH_TIMEOUT',
+  FLASH_CANCELLED: 'FLASH_CANCELLED',
+  FLASH_FAILED: 'FLASH_FAILED',
+}
+
+// @ts-check
+const FLASH_INTERFACES = ['cmsis-dap', 'stlink', 'jlink', 'ftdi', 'dap']
+const FLASH_TARGETS = [
+  'stm32f1x',
+  'stm32f2x',
+  'stm32f4x',
+  'stm32f7x',
+  'stm32g0x',
+  'stm32g4x',
+  'stm32h7x',
+  'stm32l0x',
+  'stm32l4x',
+  'nrf51',
+  'nrf52',
+  'rp2040',
+  'lpc55',
+  'kinetis',
+  'efm32',
+  'at91samd',
+]
+
+const DEFAULT_OPENOCD_INTERFACE = 'cmsis-dap'
+const DEFAULT_OPENOCD_TARGET = 'stm32f1x'
+
+/** @param {unknown} value */
+const present = (value) => value != null && String(value).trim() !== ''
+
+/** @param {unknown} value */
+const tokenOf = (value) => String(value || '').trim()
+
+/**
+ * Config script names must stay relative basename tokens.
+ * @param {string} name
+ */
+function isSafeCfgToken(name) {
+  if (!name || name.includes('..') || name.includes('/') || name.includes('\\')) return false
+  if (/[;:"'$[\]{}]/.test(name)) return false
+  return /^[a-z0-9][a-z0-9._-]*$/i.test(name)
+}
+
+/**
+ * @param {unknown} name
+ * @returns {{ ok: true, value: string } | { ok: false, errorCode: string, error: string }}
+ */
+function validateOpenOcdInterface(name) {
+  const raw = tokenOf(name)
+  if (!isSafeCfgToken(raw) || !FLASH_INTERFACES.includes(raw)) {
+    return { ok: false, errorCode: FLASH_ERROR_CODES.FLASH_INTERFACE_INVALID, error: 'OpenOCD interface 不在白名单内' }
+  }
+  return { ok: true, value: raw }
+}
+
+/**
+ * @param {unknown} name
+ * @returns {{ ok: true, value: string } | { ok: false, errorCode: string, error: string }}
+ */
+function validateOpenOcdTarget(name) {
+  const raw = tokenOf(name)
+  if (!isSafeCfgToken(raw) || !FLASH_TARGETS.includes(raw)) {
+    return { ok: false, errorCode: FLASH_ERROR_CODES.FLASH_TARGET_INVALID, error: 'OpenOCD target 不在白名单内' }
+  }
+  return { ok: true, value: raw }
+}
+
+/**
+ * Resolve interface/target from the request, then a previously saved profile, then defaults.
+ * Illegal request values are rejected instead of falling back to an unvalidated workspace value.
+ *
+ * @param {{ interfaceName?: unknown, interface?: unknown, target?: unknown }} [request]
+ * @param {{ interface?: unknown, target?: unknown }} [stored]
+ * @returns {{ ok: true, interfaceName: string, target: string } | { ok: false, errorCode: string, error: string }}
+ */
+function resolveOpenOcdProfile(request = {}, stored = {}) {
+  const reqIface = request.interfaceName ?? request.interface
+  const reqTarget = request.target
+  if (present(reqIface)) {
+    const checked = validateOpenOcdInterface(reqIface)
+    if (!checked.ok) return checked
+  }
+  if (present(reqTarget)) {
+    const checked = validateOpenOcdTarget(reqTarget)
+    if (!checked.ok) return checked
+  }
+  if (!present(reqIface) && present(stored.interface)) {
+    const checked = validateOpenOcdInterface(stored.interface)
+    if (!checked.ok) return checked
+  }
+  if (!present(reqTarget) && present(stored.target)) {
+    const checked = validateOpenOcdTarget(stored.target)
+    if (!checked.ok) return checked
+  }
+  return {
+    ok: true,
+    interfaceName: present(reqIface)
+      ? tokenOf(reqIface)
+      : present(stored.interface)
+        ? tokenOf(stored.interface)
+        : DEFAULT_OPENOCD_INTERFACE,
+    target: present(reqTarget)
+      ? tokenOf(reqTarget)
+      : present(stored.target)
+        ? tokenOf(stored.target)
+        : DEFAULT_OPENOCD_TARGET,
+  }
+}
+
 function formatResult(result) {
   if (!result) return ''
   const details = result.details || {}
@@ -6160,26 +6289,6 @@ function agentNote(cwd, workspace, result) {
     .join('\n')
 }
 
-const FLASH_IFACES = ['cmsis-dap', 'stlink', 'jlink', 'ftdi', 'dap']
-const FLASH_TARGETS = [
-  'stm32f1x',
-  'stm32f2x',
-  'stm32f4x',
-  'stm32f7x',
-  'stm32g0x',
-  'stm32g4x',
-  'stm32h7x',
-  'stm32l0x',
-  'stm32l4x',
-  'nrf51',
-  'nrf52',
-  'rp2040',
-  'lpc55',
-  'kinetis',
-  'efm32',
-  'at91samd',
-]
-
 function createDebugView(React, t, post, openProject) {
   return function DebugView(props) {
     const el = React.createElement
@@ -6205,12 +6314,19 @@ function createDebugView(React, t, post, openProject) {
     const [copied, setCopied] = React.useState(false)
     const [picker, setPicker] = React.useState(null)
     const [flash, setFlash] = React.useState({
-      interface: 'cmsis-dap',
-      target: 'stm32f1x',
+      interface: DEFAULT_OPENOCD_INTERFACE,
+      target: DEFAULT_OPENOCD_TARGET,
       busy: false,
       confirm: null,
       result: null,
     })
+    const [openocdFlash, setOpenocdFlash] = React.useState({
+      status: 'checking',
+      reason: '',
+      versionLine: '',
+      path: '',
+    })
+    const probedPathRef = React.useRef('')
     const [pendingWrites, setPendingWrites] = React.useState([])
     const workspaceRef = React.useRef(workspace)
     workspaceRef.current = workspace
@@ -6224,6 +6340,48 @@ function createDebugView(React, t, post, openProject) {
           (data) => {
             if (!data) return
             if (data.health) setHealth(data.health)
+            const boundPath = data.bindings && data.bindings.openocd ? String(data.bindings.openocd) : ''
+            const bound = !!(data.health && data.health.openocd && data.health.openocd.bound)
+            const exists = !!(data.health && data.health.openocd && data.health.openocd.exists)
+            if (!bound) {
+              probedPathRef.current = ''
+              setOpenocdFlash({ status: 'missing', reason: '未绑定 OpenOCD', versionLine: '', path: '' })
+            } else if (!exists) {
+              probedPathRef.current = boundPath
+              setOpenocdFlash({ status: 'missing', reason: 'OpenOCD 路径不存在', versionLine: '', path: boundPath })
+            } else if (boundPath && boundPath !== probedPathRef.current) {
+              probedPathRef.current = boundPath
+              setOpenocdFlash({ status: 'checking', reason: '', versionLine: '', path: boundPath })
+              post('/dsh-vision-bench/openocd/probe', { cwd }, 12000)
+                .then((probe) => {
+                  if (probedPathRef.current !== boundPath) return
+                  if (probe && probe.ready === true) {
+                    setOpenocdFlash({
+                      status: 'ready',
+                      reason: probe.reason || '',
+                      versionLine: probe.versionLine || '',
+                      path: boundPath,
+                    })
+                    return
+                  }
+                  const invalid = probe && probe.errorCode === 'OPENOCD_IDENTITY_INVALID'
+                  setOpenocdFlash({
+                    status: invalid ? 'invalid' : 'failed',
+                    reason: (probe && (probe.reason || probe.error)) || 'OpenOCD 探测失败',
+                    versionLine: (probe && probe.versionLine) || '',
+                    path: boundPath,
+                  })
+                })
+                .catch((err) => {
+                  if (probedPathRef.current !== boundPath) return
+                  setOpenocdFlash({
+                    status: 'failed',
+                    reason: String((err && err.message) || 'OpenOCD 探测失败'),
+                    versionLine: '',
+                    path: boundPath,
+                  })
+                })
+            }
             if (Array.isArray(data.pendingWrites)) setPendingWrites(data.pendingWrites)
             if (data.workspace) {
               setWorkspace((prev) => ({
@@ -6327,7 +6485,7 @@ function createDebugView(React, t, post, openProject) {
     }
 
     function startFlash() {
-      if (!cwd) return
+      if (!cwd || openocdFlash.status !== 'ready') return
       setFlash((prev) => ({ ...prev, busy: true, result: null }))
       post(
         '/dsh-vision-bench/keil/download',
@@ -6368,12 +6526,8 @@ function createDebugView(React, t, post, openProject) {
           cwd,
           source: 'user',
           sessionId,
-          interface: req.interface,
-          target: req.target,
-          path: req.file,
-          sha256: req.sha256 || '',
-          size: req.size || 0,
-          confirm: true,
+          requestId: req.requestId,
+          approved: true,
         },
         180000,
       )
@@ -6651,7 +6805,7 @@ function createDebugView(React, t, post, openProject) {
         )
       : null
 
-    const openocdReady = statusKind(health.openocd) === 'ready'
+    const openocdReady = openocdFlash.status === 'ready'
     const artifactPath = workspace.keil.download || ''
     const flashReq = flash.confirm
     const flashPanel = el(
@@ -6661,7 +6815,13 @@ function createDebugView(React, t, post, openProject) {
         'div',
         { className: 'dvb-panel-head' },
         el('span', { className: 'dvb-panel-title' }, t('flashTitle')),
-        !openocdReady ? el('span', { className: 'dvb-need' }, t('needOpenocd')) : null,
+        !openocdReady
+          ? el(
+              'span',
+              { className: 'dvb-need' },
+              openocdFlash.status === 'checking' ? t('flashing') : openocdFlash.reason || t('needOpenocd'),
+            )
+          : null,
       ),
       el(
         'div',
@@ -6678,7 +6838,7 @@ function createDebugView(React, t, post, openProject) {
                 setFlash((prev) => ({ ...prev, interface: event.target.value }))
               },
             },
-            FLASH_IFACES.map((name) => el('option', { key: name, value: name }, name)),
+            FLASH_INTERFACES.map((name) => el('option', { key: name, value: name }, name)),
           ),
         ),
         field(
@@ -6740,7 +6900,9 @@ function createDebugView(React, t, post, openProject) {
                   className: 'dvb-btn',
                   disabled: flash.busy,
                   onClick() {
+                    const id = flash.confirm && flash.confirm.requestId
                     setFlash((prev) => ({ ...prev, confirm: null }))
+                    if (id) post('/dsh-vision-bench/keil/download', { cwd, requestId: id, approved: false }, 15000)
                   },
                 },
                 t('flashCancel'),
@@ -6752,7 +6914,7 @@ function createDebugView(React, t, post, openProject) {
             {
               type: 'button',
               className: 'dvb-btn dvb-btn-write',
-              disabled: !cwd || !openocdReady || !artifactPath || flash.busy,
+              disabled: !cwd || openocdFlash.status !== 'ready' || !artifactPath || flash.busy,
               onClick: startFlash,
             },
             flash.busy ? t('flashing') : t('flashBtn'),

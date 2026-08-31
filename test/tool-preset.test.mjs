@@ -13,7 +13,9 @@ import {
   PRESET_RESTORE_FAILED,
   PRESET_WRITE_FAILED,
   REBUILD_INSTRUCTIONS,
+  _internal,
   ensurePresetOverlay,
+  parseCompositionDocument,
   seedVisionBenchPreset,
 } from '../bench-preset.mjs'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
@@ -115,12 +117,55 @@ test('ensurePresetOverlay appends the agent-plane row and persona', async () => 
   }
 })
 
+test('overlay keeps Cordis !!js tags, never evals them, and migrates to Vision模式', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dvb-js-tag-'))
+  try {
+    const jsLine = "disabled: !!js process.platform === 'win32'"
+    await writeFile(
+      join(dir, 'agent.cordis.yml'),
+      [
+        '- id: extra',
+        '  name: extra-row',
+        '  ' + jsLine,
+        '- id: persona',
+        '  name: x',
+        '  config:',
+        '    text: >-',
+        '      ' + LEGACY_PERSONA_A,
+        '',
+      ].join('\n'),
+    )
+    await writeFile(join(dir, 'preset.yml'), 'name: 台架模式\n')
+    await writeFile(
+      join(dir, '.dsh-vision-bench'),
+      JSON.stringify({ owner: 'dsh-vision-bench', presetSchemaVersion: 1 }),
+    )
+    const bare = (await import('yaml')).parseDocument(await readFile(join(dir, 'agent.cordis.yml'), 'utf8'))
+    assert.ok(bare.warnings.some((item) => /Unresolved tag: tag:yaml.org,2002:js/.test(String(item))))
+    const out = ensurePresetOverlay(dir)
+    assert.equal(out.ok, true, out.error)
+    const after = await readFile(join(dir, 'agent.cordis.yml'), 'utf8')
+    assert.match(after, /disabled: !!js process\.platform === 'win32'/)
+    assert.doesNotMatch(after, /disabled: (true|false)\b/)
+    const parsed = parseCompositionDocument(after)
+    assert.equal(parsed.errors.length, 0)
+    assert.equal(parsed.warnings.length, 0)
+    const presetText = await readFile(join(dir, 'preset.yml'), 'utf8')
+    assert.match(presetText, /^name: Vision模式$/m)
+    assert.equal(after.includes('Vision 台架'), false)
+    assert.equal(_internal.CORDIS_JS_TAG.tag, 'tag:yaml.org,2002:js')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('new Vision copy does not show 台架; legacy personas still contain 台架 for migration', () => {
   assert.match(PRESET_METADATA, /^name: Vision模式$/m)
   assert.match(PRESET_METADATA, /Vision 调试与上位机接口/)
   assert.equal(PRESET_METADATA.includes('Vision 台架'), false)
   const tool = visionBenchTool('/tmp')
   assert.match(tool.description, /Vision 调试与上位机快速接口/)
+  assert.match(tool.description, /所有配置修改必须携带最近一次 status\/list\/get 返回的 configVersion/)
   assert.equal(tool.description.includes('Vision 台架'), false)
   assert.equal(LEGACY_PERSONA_A.includes('Vision 台架'), true)
   assert.equal(LEGACY_PERSONA_B.includes('Vision 台架'), true)
@@ -816,7 +861,12 @@ test('P4/0.20.0: 非监视点位不可入库（proposeAdd 被校验拒绝）', a
   })
   const res = await runVisionBench(
     home,
-    { action: 'visualization', op: 'add', component: { name: 'x', type: 'value', pointIds: ['p1'] } },
+    {
+      action: 'visualization',
+      op: 'add',
+      expectedConfigVersion: loadWorkspace(home, cwd).modbus.configVersion,
+      component: { name: 'x', type: 'value', pointIds: ['p1'] },
+    },
     cwd,
     { source: 'agent', sessionId: 's1' },
   )
@@ -959,7 +1009,13 @@ test('Task4/0.22.0: visualization update 保留 ID/order/settings；ID 冲突拒
   assert.ok(pack.configVersion > cv0, 'configVersion 增加')
   res = await runVisionBench(
     home,
-    { action: 'visualization', op: 'update', visualizationId: 'viz_a', component: { id: 'viz_b', name: 'x' } },
+    {
+      action: 'visualization',
+      op: 'update',
+      visualizationId: 'viz_a',
+      expectedConfigVersion: loadWorkspace(home, cwd).modbus.configVersion,
+      component: { id: 'viz_b', name: 'x' },
+    },
     cwd,
     { source: 'agent', sessionId: 's1' },
   )

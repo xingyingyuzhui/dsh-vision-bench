@@ -62,7 +62,7 @@ export async function handleVisualizationCommand(home, args, room, origin, opts)
       cwd: room.cwd,
       source: origin.source,
       sessionId: origin.sessionId,
-      expectedConfigVersion: args.expectedConfigVersion ?? args.configVersion ?? cv,
+      expectedConfigVersion: args.expectedConfigVersion ?? args.configVersion,
       commandId: opts?.commandId,
       operation: `visualization.${op}`,
       target: { visualizationId: id },

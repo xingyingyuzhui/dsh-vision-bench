@@ -25,6 +25,17 @@ test('formatResult keeps compile errors, phase and log path', async () => {
   assert.match(text, /t1\.log/)
 })
 
+test('debug flash uses OpenOCD probe and server requestId, not a local whitelist', () => {
+  assert.match(src, /\/dsh-vision-bench\/openocd\/probe/)
+  assert.match(src, /requestId: req.requestId/)
+  assert.match(src, /approved: true/)
+  assert.match(src, /status: 'checking'/)
+  assert.match(src, /openocdFlash.status !== 'ready'/)
+  assert.match(src, /FLASH_INTERFACES/)
+  assert.doesNotMatch(src, /const FLASH_IFACES/)
+  assert.doesNotMatch(src, /confirm: true/)
+})
+
 test('debug run keeps structured ok:false instead of turning it into null', async () => {
   assert.match(src, /if \(data && data\.ok === false\) setError/)
   assert.match(src, /return data/)

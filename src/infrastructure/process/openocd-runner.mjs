@@ -1,5 +1,6 @@
 // @ts-check
 import { runExecFile } from '../../../bench-run.mjs'
+import { FLASH_ERROR_CODES } from '../../domain/flash/errors.mjs'
 import { resolveOpenOcdProfile } from '../../domain/flash/openocd-profile.mjs'
 
 const FLASH_TIMEOUT_MS = 150000
@@ -107,19 +108,43 @@ export async function probeOpenOcdExecutable(openocd, deps = {}) {
       signal: deps.signal,
       maxBuffer: 1024 * 1024,
     })
-    const output = combinedOutput(ran).slice(-OUTPUT_TAIL)
+    const fullOutput = combinedOutput(ran)
+    const output = fullOutput.slice(-OUTPUT_TAIL)
     if (ran.cancelled) {
-      return { ok: false, errorCode: 'OPENOCD_PROBE_FAILED', error: 'OpenOCD 探测已取消', versionLine: '', output }
-    }
-    if (ran.timedOut) {
-      return { ok: false, errorCode: 'OPENOCD_PROBE_TIMEOUT', error: 'OpenOCD 探测超时', versionLine: '', output }
-    }
-    if (!OPENOCD_IDENTITY.test(output)) {
       return {
         ok: false,
-        errorCode: 'OPENOCD_IDENTITY_INVALID',
+        cancelled: true,
+        errorCode: FLASH_ERROR_CODES.OPENOCD_PROBE_CANCELLED,
+        error: 'OpenOCD 探测已取消',
+        versionLine: '',
+        output,
+      }
+    }
+    if (ran.timedOut) {
+      return {
+        ok: false,
+        errorCode: FLASH_ERROR_CODES.OPENOCD_PROBE_TIMEOUT,
+        error: 'OpenOCD 探测超时',
+        versionLine: firstLine(fullOutput),
+        output,
+      }
+    }
+    if (Number(ran.exitCode) !== 0) {
+      return {
+        ok: false,
+        errorCode: FLASH_ERROR_CODES.OPENOCD_PROBE_FAILED,
+        error: 'OpenOCD --version 失败',
+        exitCode: ran.exitCode,
+        versionLine: firstLine(fullOutput),
+        output,
+      }
+    }
+    if (!OPENOCD_IDENTITY.test(fullOutput)) {
+      return {
+        ok: false,
+        errorCode: FLASH_ERROR_CODES.OPENOCD_IDENTITY_INVALID,
         error: '绑定的程序不是 OpenOCD',
-        versionLine: firstLine(output),
+        versionLine: firstLine(fullOutput),
         output,
       }
     }
@@ -127,7 +152,7 @@ export async function probeOpenOcdExecutable(openocd, deps = {}) {
       ok: true,
       errorCode: undefined,
       error: '',
-      versionLine: firstLine(output),
+      versionLine: firstLine(fullOutput),
       output,
     }
   } catch (error) {
@@ -135,7 +160,7 @@ export async function probeOpenOcdExecutable(openocd, deps = {}) {
     const notFound = /无法启动|ENOENT|not found/i.test(message)
     return {
       ok: false,
-      errorCode: notFound ? 'OPENOCD_NOT_FOUND' : 'OPENOCD_PROBE_FAILED',
+      errorCode: notFound ? FLASH_ERROR_CODES.OPENOCD_NOT_FOUND : FLASH_ERROR_CODES.OPENOCD_PROBE_FAILED,
       error: message,
       versionLine: '',
       output: message.slice(-OUTPUT_TAIL),
@@ -157,23 +182,24 @@ export function parseOpenOcdResult(ran, opts = {}) {
   if (!ran) {
     return {
       ok: false,
-      errorCode: 'FLASH_FAILED',
+      errorCode: FLASH_ERROR_CODES.FLASH_FAILED,
       error: 'OpenOCD 无结果',
       exitCode: 1,
       summary: '烧录失败',
       details: { output: '' },
     }
   }
-  const output = combinedOutput(ran).slice(-OUTPUT_TAIL)
+  const fullOutput = combinedOutput(ran)
+  const outputTail = fullOutput.slice(-OUTPUT_TAIL)
   if (ran.cancelled) {
     return {
       ok: false,
       cancelled: true,
       timedOut: false,
-      errorCode: 'FLASH_CANCELLED',
+      errorCode: FLASH_ERROR_CODES.FLASH_CANCELLED,
       exitCode: ran.exitCode,
       summary: '烧录已取消',
-      details: { output },
+      details: { output: outputTail },
       error: '已取消',
     }
   }
@@ -182,10 +208,10 @@ export function parseOpenOcdResult(ran, opts = {}) {
       ok: false,
       cancelled: false,
       timedOut: true,
-      errorCode: 'FLASH_TIMEOUT',
+      errorCode: FLASH_ERROR_CODES.FLASH_TIMEOUT,
       exitCode: ran.exitCode,
       summary: '烧录超时',
-      details: { output },
+      details: { output: outputTail },
       error: `烧录超时（${timeoutSec}s）`,
     }
   }
@@ -194,25 +220,25 @@ export function parseOpenOcdResult(ran, opts = {}) {
       ok: false,
       cancelled: false,
       timedOut: false,
-      errorCode: 'FLASH_FAILED',
+      errorCode: FLASH_ERROR_CODES.FLASH_FAILED,
       exitCode: ran.exitCode,
       summary: '烧录失败',
-      details: { output },
-      error: lastLine(output) || 'OpenOCD 失败',
+      details: { output: outputTail },
+      error: lastLine(fullOutput) || 'OpenOCD 失败',
     }
   }
-  const identified = OPENOCD_IDENTITY.test(output)
-  const shutdown = OPENOCD_SHUTDOWN.test(output)
-  const programmed = hasProgramEvidence(output)
+  const identified = OPENOCD_IDENTITY.test(fullOutput)
+  const shutdown = OPENOCD_SHUTDOWN.test(fullOutput)
+  const programmed = hasProgramEvidence(fullOutput)
   if (!identified || !shutdown || !programmed) {
     return {
       ok: false,
       cancelled: false,
       timedOut: false,
-      errorCode: 'FLASH_RESULT_UNVERIFIED',
+      errorCode: FLASH_ERROR_CODES.FLASH_RESULT_UNVERIFIED,
       exitCode: 0,
       summary: '烧录结果无法确认',
-      details: { output },
+      details: { output: outputTail },
       error: 'OpenOCD 输出缺少烧录成功证据',
     }
   }
@@ -222,7 +248,7 @@ export function parseOpenOcdResult(ran, opts = {}) {
     timedOut: false,
     exitCode: 0,
     summary: '烧录完成',
-    details: { output },
+    details: { output: outputTail },
   }
 }
 
@@ -256,11 +282,23 @@ export async function runOpenOcdFlash(spec, deps = {}) {
     signal: spec.signal,
   })
   if (!probe.ok) {
+    if (probe.cancelled) {
+      return {
+        ok: false,
+        cancelled: true,
+        timedOut: false,
+        exitCode: probe.exitCode,
+        errorCode: FLASH_ERROR_CODES.FLASH_CANCELLED,
+        error: '已取消',
+        summary: '烧录已取消',
+        details: { output: probe.output || '' },
+      }
+    }
     return {
       ok: false,
       cancelled: false,
-      timedOut: probe.errorCode === 'OPENOCD_PROBE_TIMEOUT',
-      exitCode: 1,
+      timedOut: probe.errorCode === FLASH_ERROR_CODES.OPENOCD_PROBE_TIMEOUT,
+      exitCode: probe.exitCode || 1,
       errorCode: probe.errorCode,
       error: probe.error,
       summary: probe.error,
@@ -283,7 +321,9 @@ export async function runOpenOcdFlash(spec, deps = {}) {
       cancelled: false,
       timedOut: false,
       exitCode: 1,
-      errorCode: /无法启动|ENOENT/i.test(message) ? 'OPENOCD_NOT_FOUND' : 'FLASH_FAILED',
+      errorCode: /无法启动|ENOENT/i.test(message)
+        ? FLASH_ERROR_CODES.OPENOCD_NOT_FOUND
+        : FLASH_ERROR_CODES.FLASH_FAILED,
       summary: '无法启动 OpenOCD',
       details: { output: message.slice(-OUTPUT_TAIL) },
       error: message,

@@ -35,6 +35,10 @@ test('debug view mounts without hidden-scope ReferenceErrors', async () => {
   const DebugView = createDebugView(makeReact(), () => 'k', post, {})
   const tree = DebugView({ sessionId: 's1', useSessions: (fn) => fn({ byId: { s1: { cwd: '/tmp' } } }) })
   assert.ok(tree, 'debug tree rendered')
+  const src = await import('node:fs').then((fs) =>
+    fs.readFileSync(new URL('../bench-view.mjs', import.meta.url), 'utf8'),
+  )
+  assert.match(src, /openocdFlash.status !== 'ready'/)
 })
 
 test('hmi view mounts — the former blind spot of the bundle', async () => {

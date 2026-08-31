@@ -68,8 +68,9 @@ export function visionBenchTool(home) {
       'ls/select/build/map：工程与编译；' +
       'read/write：读点与受控写点（Agent 写点需界面批准）；' +
       'connect：仅打开或断开已保存连接（close=true 断开）。修改端点用 configureConnection，打开用 openConnection；' +
-      'points：op=list|add|update|remove|clear。add/update/remove/clear 直接保存；update/remove 必须带 pointId；clear 必须带 connectionId+deviceId；建议携带 expectedConfigVersion；' +
-      'visualization：op=list|get|add|update|remove，直接修改组件。proposeAdd/proposeUpdate/proposeRemove 已移除（OP_REMOVED）；' +
+      'points：op=list|add|update|remove|clear。add/update/remove/clear 直接保存；update/remove 必须带 pointId；clear 必须带 connectionId+deviceId。' +
+      'visualization：op=list|get|add|update|remove，直接修改组件。proposeAdd/proposeUpdate/proposeRemove 已移除（OP_REMOVED）。' +
+      '所有配置修改必须携带最近一次 status/list/get 返回的 configVersion。CONFIG_DRIFT 后必须重新读取配置，再基于新版本重试；不得盲目重复旧修改。适用 config、configureConnection、points add/update/remove/clear、visualization add/update/remove。status、points list、visualization list/get 不要求版本。' +
       'frames/focus/trend/alarm/evidence：现场只读与定位；' +
       'manual：请求用户完成现场操作；' +
       'system.ping：无副作用探活 Host（不读写串口、不启动采集）。' +
@@ -198,7 +199,8 @@ export function visionBenchTool(home) {
         foreground: { type: 'boolean' },
         expectedConfigVersion: {
           type: 'number',
-          description: '配置乐观并发版本；与当前 configVersion 不一致时返回 CONFIG_DRIFT',
+          description:
+            '配置修改必须携带最近一次 status/list/get 返回的 configVersion；不一致时返回 CONFIG_DRIFT，缺失时返回 CONFIG_VERSION_REQUIRED',
         },
         configVersion: { type: 'number', description: 'expectedConfigVersion 别名' },
         commandId: { type: 'string', description: '幂等键' },

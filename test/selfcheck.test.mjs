@@ -53,7 +53,15 @@ test('runSelfCheck reports structured results without bindings', async () => {
       assert.equal(typeof ran.ok, 'boolean')
       assert.ok(Array.isArray(ran.checks))
       const names = ran.checks.map((item) => item.name)
-      for (const key of ['bind-python', 'bind-uv4', 'bind-openocd', 'workspace', 'serial-scan', 'host-bridge']) {
+      for (const key of [
+        'bind-python',
+        'bind-uv4',
+        'bind-openocd',
+        'vision-preset',
+        'workspace',
+        'serial-scan',
+        'host-bridge',
+      ]) {
         assert.ok(names.includes(key), 'missing check ' + key)
       }
       const workspace = ran.checks.find((item) => item.name === 'workspace')
@@ -116,6 +124,17 @@ test('openocdFlash.ready 不依赖 Python，且探测失败则为 false', async 
       assert.equal(nodeish.capabilities.openocdFlash.ready, false)
       assert.match(nodeish.capabilities.openocdFlash.reason, /不是 OpenOCD|探测失败|失败/)
       assert.equal(nodeish.capabilities.keilProject.ready, false)
+
+      const identNonzero = await runSelfCheck(home, cwd, {
+        runExecFile: async () => ({
+          exitCode: 1,
+          stdout: '',
+          stderr: 'Open On-Chip Debugger 0.12.0\n',
+          timedOut: false,
+          cancelled: false,
+        }),
+      })
+      assert.equal(identNonzero.capabilities.openocdFlash.ready, false)
 
       const ready = await runSelfCheck(home, cwd, {
         runExecFile: async () => ({

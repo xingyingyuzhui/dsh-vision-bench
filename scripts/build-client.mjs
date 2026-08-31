@@ -242,6 +242,8 @@ const parts = [
   'bench-visualization-view.mjs',
   'bench-io-capability.mjs',
   'bench-trend.mjs',
+  'src/domain/flash/errors.mjs',
+  'src/domain/flash/openocd-profile.mjs',
   'bench-view.mjs',
   // HMI modules before facade
   'src/ui/hmi/hmi-ids.mjs',

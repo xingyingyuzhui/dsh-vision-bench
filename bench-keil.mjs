@@ -1,8 +1,8 @@
 import { join } from 'node:path'
 import { pickArtifact } from './bench-fs.mjs'
-import { aborted, hasRunning, originOf, signalOf } from './bench-journal.mjs'
+import { aborted, originOf, signalOf } from './bench-journal.mjs'
 import { requireKeilProject, requireWorkspaceCwd } from './bench-paths.mjs'
-import { finishTask, loadBindings, loadWorkspace, openTask, pruneBuildLogs } from './bench-store.mjs'
+import { finishTask, loadBindings, loadWorkspace, openExclusiveTask, pruneBuildLogs } from './bench-store.mjs'
 
 import { runPythonScript } from './bench-run.mjs'
 import { storeDir } from './bench-store.mjs'
@@ -81,18 +81,22 @@ export const keilBuild = async (home, cwd, body, opts) => {
   const keil = requireKeilProject(room.cwd, project)
   if (keil.error)
     return { ok: false, error: keil.error === '工程必须是绝对路径' ? '请先在工作区里选择 Keil 工程' : keil.error }
-  if (hasRunning(workspace, 'build')) {
-    return { ok: false, error: '已有编译任务进行中' }
-  }
   const signal = signalOf(body, opts)
   if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
   const origin = originOf(body)
-  const task = await openTask(home, room.cwd, {
-    type: 'build',
-    source: origin.source,
-    sessionId: origin.sessionId,
-    summary: '编译 ' + (target || keil.project),
-  })
+  const opened = await openExclusiveTask(
+    home,
+    room.cwd,
+    {
+      type: 'build',
+      source: origin.source,
+      sessionId: origin.sessionId,
+      summary: '编译 ' + (target || keil.project),
+    },
+    { conflicts: ['build', 'download'] },
+  )
+  if (!opened.ok) return opened
+  const task = opened.task
   const ran = await runPythonScript(
     bindings.python,
     'keil_build.py',

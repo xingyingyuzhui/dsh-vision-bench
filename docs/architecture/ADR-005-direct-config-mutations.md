@@ -30,10 +30,11 @@ WorkspaceRepository + 唯一 I/O Worker
 
 - Agent may mutate connections, devices, points, monitor/alarm flags and thresholds, and visualization components **directly**.
 - Host is the only process that applies and persists configuration.
-- Callers send explicit `connectionId` / `deviceId` / `pointId` / `visualizationId` plus `expectedConfigVersion`.
+- Callers send explicit `connectionId` / `deviceId` / `pointId` / `visualizationId` plus a positive integer `expectedConfigVersion`. Missing or non-integer versions return `CONFIG_VERSION_REQUIRED`; visualization add/update/remove must not fall back to the current workspace version.
+- After `CONFIG_DRIFT`, callers re-read config and retry with the new version; they must not blindly repeat the old mutation.
 - Host validates, writes atomically, increments `configVersion`, records the operation, and returns previous/next version plus affected ids.
 - The HMI refreshes from the Host snapshot. There is no draft card and no silent `propose*` alias.
-- Writes to a live device, firmware download, and reset stay on the existing approval cards (endpoint fingerprint, configVersion, 5 minute TTL, read-back, `WRITE_OUTCOME_UNKNOWN`).
+- Writes to a live device, firmware download, and reset stay on Host-issued approval tickets (`requestId`, 5 minute TTL). Firmware download copies a hashed snapshot before OpenOCD runs; a naked `confirm:true` is `FLASH_APPROVAL_REQUIRED`.
 
 Do not keep a “direct mutate” path beside a “draft mutate” path.
 

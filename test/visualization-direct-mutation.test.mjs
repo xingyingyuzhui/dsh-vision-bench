@@ -57,6 +57,7 @@ test('visualization update/remove keep id and do not auto-delete degraded compon
       action: 'visualization',
       op: 'update',
       visualizationId: 'viz_a',
+      expectedConfigVersion: loadWorkspace(home, cwd).modbus.configVersion,
       component: { id: 'viz_b', name: 'x' },
     },
     cwd,

@@ -24,6 +24,7 @@ import {
   capTasks,
   compactTasks,
   compactTimeline,
+  hasRunning,
   newId,
   normalizeTask,
   normalizeTasks,
@@ -39,6 +40,7 @@ import { emptyLog, mergeLog, normalizeEvent } from './bench-prompt.mjs'
 import { resolveTarget } from './bench-targets.mjs'
 import { writeJsonAtomicSync } from './src/infrastructure/persistence/atomic-json.mjs'
 import { runExclusiveSync } from './src/infrastructure/persistence/workspace-lock.mjs'
+import { ERROR_CODES } from './src/domain/modbus/errors.mjs'
 import { createWorkspaceRepository } from './src/infrastructure/persistence/workspace-repository.mjs'
 
 export const BINDING_KEYS = ['python', 'uv4', 'openocd']
@@ -286,6 +288,12 @@ export const normalizeWorkspace = (input) => {
   const artifact = typeof keil.artifact === 'string' ? keil.artifact.trim().toLowerCase() : 'hex'
   out.keil.artifact = ['hex', 'bin', 'axf', 'elf'].indexOf(artifact) >= 0 ? artifact : 'hex'
   out.keil.download = typeof keil.download === 'string' ? keil.download.trim() : ''
+  if (keil.flash && typeof keil.flash === 'object') {
+    out.keil.flash = {
+      interface: typeof keil.flash.interface === 'string' ? keil.flash.interface.trim() : '',
+      target: typeof keil.flash.target === 'string' ? keil.flash.target.trim() : '',
+    }
+  }
   const rawLog = input && Array.isArray(input.log) ? input.log : []
   out.log = rawLog.map(normalizeEvent).slice(0, 8)
   out.tasks = normalizeTasks(input && input.tasks)
@@ -690,6 +698,65 @@ export const openTask = async (home, cwd, spec) => {
     }),
   }))
   return task
+}
+
+/**
+ * Open a running task only if none of `conflicts` are already running.
+ * Check and write happen in one workspace exclusive update.
+ * @param {string} home
+ * @param {string} cwd
+ * @param {any} spec
+ * @param {{ conflicts?: string[] }} [opts]
+ */
+export const openExclusiveTask = async (home, cwd, spec, opts = {}) => {
+  const origin = {
+    source: spec && spec.source === 'agent' ? 'agent' : 'user',
+    sessionId: spec && spec.sessionId ? String(spec.sessionId) : '',
+  }
+  const task = normalizeTask({
+    id: newId('t'),
+    type: spec && spec.type,
+    source: origin.source,
+    sessionId: origin.sessionId,
+    status: 'running',
+    startedAt: Date.now(),
+    summary: spec && spec.summary,
+  })
+  const event = normalizeTimelineEvent({
+    kind: task.type + '-start',
+    source: origin.source,
+    sessionId: origin.sessionId,
+    taskId: task.id,
+    summary: task.summary || '开始 ' + task.type,
+  })
+  const conflicts = Array.isArray(opts.conflicts) && opts.conflicts.length ? opts.conflicts : [task.type]
+  const saved = await workspaceRepository(home).update(cwd, null, async (current) => {
+    for (const type of conflicts) {
+      if (hasRunning(current, type)) {
+        return {
+          ok: false,
+          errorCode: ERROR_CODES.TASK_CONFLICT,
+          error: type === 'download' ? '已有烧录任务进行中' : '已有编译任务进行中',
+        }
+      }
+    }
+    return {
+      ok: true,
+      workspace: normalizeWorkspace({
+        ...current,
+        tasks: capTasks(prepend(current.tasks, task, MAX_TASKS * 3)),
+        timeline: pushEvent(current.timeline, event),
+      }),
+    }
+  })
+  if (!saved || saved.ok === false) {
+    return {
+      ok: false,
+      errorCode: saved && saved.errorCode ? saved.errorCode : ERROR_CODES.TASK_CONFLICT,
+      error: (saved && saved.error) || '任务冲突',
+    }
+  }
+  return { ok: true, task }
 }
 
 export const finishTask = async (home, cwd, taskId, patch) => {

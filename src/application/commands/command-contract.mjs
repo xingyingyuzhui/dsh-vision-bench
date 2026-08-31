@@ -46,7 +46,7 @@ export function normalizeCommand(input) {
     source: raw.source === 'agent' || raw.source === 'system' ? raw.source : 'user',
     action,
     payload,
-    expectedConfigVersion: expected == null || expected === '' ? undefined : Number(expected),
+    expectedConfigVersion: expected == null || expected === '' ? undefined : expected,
     signal: raw.signal,
     requireHost: raw.requireHost === true,
     timeoutMs: Number(raw.timeoutMs) > 0 ? Number(raw.timeoutMs) : undefined,

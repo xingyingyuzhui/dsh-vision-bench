@@ -3,7 +3,8 @@ import { IO_RUNTIME_PACKAGES } from './bench-io-contract.mjs'
 import { createModbusTransport } from './bench-modbus-transport.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import { runExecFile } from './bench-run.mjs'
-import { probeOpenOcdExecutable } from './src/infrastructure/process/openocd-runner.mjs'
+import { getLastPresetSeed } from './bench-preset.mjs'
+import { probeOpenOcdHealth } from './src/application/flash/openocd-health-service.mjs'
 import { listSerialPorts } from './bench-serial.mjs'
 import { loadBindings, loadWorkspace, probeBindings } from './bench-store.mjs'
 import { describeHostBridge, pingVisionHost } from './src/infrastructure/host/vision-host-client.mjs'
@@ -28,26 +29,24 @@ export const runSelfCheck = async (home, cwd, opts = {}) => {
     health.openocd.bound && health.openocd.exists,
     bindings.openocd || '外部 OpenOCD 可执行文件，由插件通过 Node 进程封装调用',
   )
+  const presetSeed = getLastPresetSeed()
+  push(
+    'vision-preset',
+    presetSeed.ok !== false,
+    presetSeed.ok === false ? presetSeed.error || 'Vision预设未更新' : 'Vision模式',
+  )
 
   if (health.python.bound && health.python.exists) {
     const ver = await runExecFile(bindings.python, ['--version'], { timeoutMs: 10000 })
     push('python-runs', ver.exitCode === 0, firstLine(ver.stdout || ver.stderr))
   }
   if (health.uv4.bound && health.uv4.exists) push('uv4-file', true, bindings.uv4)
-  let openocdReady = false
-  let openocdReason = !health.openocd.bound
-    ? '未绑定 OpenOCD'
-    : !health.openocd.exists
-      ? 'OpenOCD 路径不存在'
-      : 'OpenOCD 探测失败'
   const execFile = (opts && opts.runExecFile) || runExecFile
-  if (health.openocd.bound && health.openocd.exists) {
-    const probe = await probeOpenOcdExecutable(bindings.openocd, { runExecFile: execFile })
-    openocdReady = probe.ok === true
-    openocdReason = openocdReady
-      ? '外部 OpenOCD 可执行文件，由插件通过 Node 进程封装调用'
-      : probe.error || 'OpenOCD 探测失败'
-    push('openocd-runs', openocdReady, probe.versionLine || openocdReason)
+  const ocdHealth = await probeOpenOcdHealth(home, { runExecFile: execFile })
+  const openocdReady = ocdHealth.ready === true
+  const openocdReason = ocdHealth.reason || 'OpenOCD 探测失败'
+  if (ocdHealth.bound && ocdHealth.exists) {
+    push('openocd-runs', openocdReady, ocdHealth.versionLine || openocdReason)
   }
 
   let ioHealth = { tcp: false, rtu: false, modbusSerial: '', serialport: '', rtuError: '', tcpError: '' }

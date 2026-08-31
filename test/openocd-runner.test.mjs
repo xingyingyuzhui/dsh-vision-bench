@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  DEFAULT_OPENOCD_INTERFACE,
+  DEFAULT_OPENOCD_TARGET,
+  resolveOpenOcdProfile,
+} from '../src/domain/flash/openocd-profile.mjs'
+import {
   buildOpenOcdArgs,
   encodeOpenOcdTclPath,
   encodeOpenOcdTclWord,
@@ -86,6 +91,25 @@ test('buildOpenOcdArgs uses execFile argv and quoted firmware path', () => {
   assert.equal(execInject.args.at(-1).includes('probe[exec'), false)
 })
 
+test('stored profile is fail-closed; empty uses defaults', () => {
+  const empty = resolveOpenOcdProfile({}, {})
+  assert.equal(empty.ok, true)
+  assert.equal(empty.interfaceName, DEFAULT_OPENOCD_INTERFACE)
+  assert.equal(empty.target, DEFAULT_OPENOCD_TARGET)
+  const good = resolveOpenOcdProfile({}, { interface: 'stlink', target: 'stm32f4x' })
+  assert.equal(good.interfaceName, 'stlink')
+  const storedBad = resolveOpenOcdProfile({}, { interface: '../passwd', target: 'stm32f1x' })
+  assert.equal(storedBad.ok, false)
+  const mixed = resolveOpenOcdProfile({}, { interface: 'stlink', target: 'stm32f4x; shutdown' })
+  assert.equal(mixed.ok, false)
+  const prefer = resolveOpenOcdProfile(
+    { interface: 'jlink', target: 'nrf52' },
+    { interface: 'stlink', target: 'stm32f1x' },
+  )
+  assert.equal(prefer.interfaceName, 'jlink')
+  assert.equal(prefer.target, 'nrf52')
+})
+
 test('interface/target path traversal and extra Tcl is rejected', () => {
   const trav = buildOpenOcdArgs({ interfaceName: '../passwd', target: 'stm32f4x', firmware: 'a.hex' })
   assert.equal(trav.ok, false)
@@ -101,12 +125,25 @@ test('interface/target path traversal and extra Tcl is rejected', () => {
   assert.equal(tgt.ok, false)
 })
 
-test('probeOpenOcdExecutable requires OpenOCD identity, not exit 0', async () => {
+test('probeOpenOcdExecutable requires identity and exit 0', async () => {
   const ok = await probeOpenOcdExecutable('/opt/openocd', {
-    runExecFile: async () => ({ exitCode: 1, stdout: '', stderr: OCD_VERSION, timedOut: false, cancelled: false }),
+    runExecFile: async () => ({ exitCode: 0, stdout: '', stderr: OCD_VERSION, timedOut: false, cancelled: false }),
   })
   assert.equal(ok.ok, true)
   assert.match(ok.versionLine, /Open On-Chip Debugger/)
+
+  const identButFail = await probeOpenOcdExecutable('/opt/openocd', {
+    runExecFile: async () => ({ exitCode: 1, stdout: '', stderr: OCD_VERSION, timedOut: false, cancelled: false }),
+  })
+  assert.equal(identButFail.ok, false)
+  assert.equal(identButFail.errorCode, 'OPENOCD_PROBE_FAILED')
+  assert.match(identButFail.versionLine, /Open On-Chip Debugger/)
+
+  const cancelled = await probeOpenOcdExecutable('/opt/openocd', {
+    runExecFile: async () => ({ exitCode: 1, cancelled: true, timedOut: false, stdout: '', stderr: '' }),
+  })
+  assert.equal(cancelled.cancelled, true)
+  assert.equal(cancelled.errorCode, 'OPENOCD_PROBE_CANCELLED')
 
   const nodeish = await probeOpenOcdExecutable('/usr/bin/node', {
     runExecFile: async () => ({ exitCode: 0, stdout: 'v20.11.0\n', stderr: '', timedOut: false, cancelled: false }),
@@ -154,6 +191,32 @@ test('parseOpenOcdResult requires identity, program evidence and shutdown', () =
   const ok = parseOpenOcdResult({ exitCode: 0, stdout: OCD_FLASH_OK, stderr: '' })
   assert.equal(ok.ok, true)
   assert.equal(ok.summary, '烧录完成')
+  const longOk = parseOpenOcdResult({
+    exitCode: 0,
+    stdout: `${OCD_VERSION}${'noise\n'.repeat(800)}wrote 2048 bytes from file app.hex\nverified\nshutdown command invoked\n`,
+    stderr: '',
+  })
+  assert.equal(longOk.ok, true)
+  assert.ok(String(longOk.details.output).length <= 4000)
+  const longNoVerify = parseOpenOcdResult({
+    exitCode: 0,
+    stdout: `${OCD_VERSION}${'noise\n'.repeat(800)}shutdown command invoked\n`,
+    stderr: '',
+  })
+  assert.equal(longNoVerify.ok, false)
+  const verifyNoShutdown = parseOpenOcdResult({
+    exitCode: 0,
+    stdout: `${OCD_VERSION}wrote 12 bytes\nverified\n`,
+    stderr: '',
+  })
+  assert.equal(verifyNoShutdown.ok, false)
+  const nonzeroWithSuccessWords = parseOpenOcdResult({
+    exitCode: 1,
+    stdout: `${OCD_FLASH_OK}`,
+    stderr: '',
+  })
+  assert.equal(nonzeroWithSuccessWords.ok, false)
+  assert.equal(nonzeroWithSuccessWords.errorCode, 'FLASH_FAILED')
 })
 
 test('runOpenOcdFlash probes identity then flashes with argv only', async () => {
@@ -190,6 +253,20 @@ test('runOpenOcdFlash rejects echo/node success and maps timeout/cancel', async 
   )
   assert.equal(echo.ok, false)
   assert.equal(echo.errorCode, 'OPENOCD_IDENTITY_INVALID')
+
+  const probeCancel = await runOpenOcdFlash(
+    { openocd: '/opt/openocd', interfaceName: 'stlink', target: 'stm32f4x', firmware: 'a.hex' },
+    {
+      runExecFile: async (_bin, args) => {
+        if (args && args.includes('--version')) {
+          return { exitCode: 1, cancelled: true, timedOut: false, stdout: '', stderr: '' }
+        }
+        throw new Error('should not flash')
+      },
+    },
+  )
+  assert.equal(probeCancel.cancelled, true)
+  assert.equal(probeCancel.errorCode, 'FLASH_CANCELLED')
 
   const emptyFlash = await runOpenOcdFlash(
     { openocd: '/opt/openocd', interfaceName: 'stlink', target: 'stm32f4x', firmware: 'a.hex' },

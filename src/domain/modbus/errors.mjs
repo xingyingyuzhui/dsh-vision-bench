@@ -1,4 +1,6 @@
 // @ts-check
+import { FLASH_ERROR_CODES } from '../flash/errors.mjs'
+
 /** Unified Modbus / Vision Bench error codes (HTTP + Agent share these). */
 export const ERROR_CODES = {
   PORT_IN_USE: 'PORT_IN_USE',
@@ -15,8 +17,10 @@ export const ERROR_CODES = {
   CONFIG_DRIFT: 'CONFIG_DRIFT',
   CONFIG_VERSION_REQUIRED: 'CONFIG_VERSION_REQUIRED',
   CONFLICT: 'CONFLICT',
+  TASK_CONFLICT: 'TASK_CONFLICT',
   WRITE_OUTCOME_UNKNOWN: 'WRITE_OUTCOME_UNKNOWN',
   IO_RUNTIME_UNAVAILABLE: 'IO_RUNTIME_UNAVAILABLE',
+  ...FLASH_ERROR_CODES,
 }
 
 /**

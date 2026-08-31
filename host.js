@@ -24,6 +24,7 @@ import { changedConnectionIds, notifyConnectionRelease } from './bench-modbus-tr
 import { migrateLegacyDisabled } from './bench-modbus.mjs'
 import { maybeNotifyResult, notifyBenchEvent, setAgentsRegistry } from './bench-notify.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
+import { probeOpenOcdHealth } from './src/application/flash/openocd-health-service.mjs'
 import { mutateConfig } from './src/application/config/config-mutation-service.mjs'
 import { ensurePolling, pollingStatus, startPolling, stopAllPolling, stopPolling } from './bench-polling-service.mjs'
 import { seedVisionBenchPreset } from './bench-preset.mjs'
@@ -461,6 +462,7 @@ export function apply(ctx, config = {}) {
       const body = await readBodyAndTouchSession(req)
       return runSelfCheck(dshHome, body && body.cwd)
     }),
+    route('/dsh-vision-bench/openocd/probe', async () => probeOpenOcdHealth(dshHome)),
     route('/dsh-vision-bench/serial/feed', async (req) => {
       const body = await readBodyAndTouchSession(req)
       const room = requireWorkspaceCwd(body && body.cwd)
@@ -470,9 +472,15 @@ export function apply(ctx, config = {}) {
     route('/dsh-vision-bench/command', async (req) => handleCommand(dshHome, req, readBodyAndTouchSession)),
   ]
   const disposers = rows.map((entry) => ctx.webServer.register(entry))
-  void seedVisionBenchPreset(ctx.agentPresets, dshHome).catch(() => {
-    /* roster copy is best-effort */
-  })
+  void seedVisionBenchPreset(ctx.agentPresets, dshHome)
+    .then((out) => {
+      if (out && out.ok === false) {
+        console.warn('[dsh-vision-bench] Vision预设未更新:', out.error || 'overlay failed')
+      }
+    })
+    .catch((error) => {
+      console.warn('[dsh-vision-bench] Vision预设未更新:', error && error.message ? error.message : error)
+    })
   ctx.effect(() => () => {
     for (const dispose of disposers) dispose()
     stopHost()

@@ -106,6 +106,98 @@ test('project/config/visualization handlers cover happy and mismatch paths', asy
   }
 })
 
+test('config mutations without a positive integer version do not write', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-ver-table-'))
+  const cwd = join(home, 'board')
+  seed(home, cwd)
+  const before = loadWorkspace(home, cwd)
+  const ops = [
+    {
+      action: 'config',
+      payload: { action: 'config', operation: 'device.update', target: { deviceId: 'd1' }, value: { name: 'Hijack' } },
+    },
+    {
+      action: 'configureConnection',
+      payload: { action: 'configureConnection', connectionId: 'c1', name: 'Hijack' },
+    },
+    {
+      action: 'points',
+      payload: {
+        action: 'points',
+        op: 'update',
+        connectionId: 'c1',
+        deviceId: 'd1',
+        pointId: 'p1',
+        point: { id: 'p1', name: 'Hijack' },
+      },
+    },
+    {
+      action: 'points',
+      payload: {
+        action: 'points',
+        op: 'add',
+        connectionId: 'c1',
+        deviceId: 'd1',
+        point: { name: 'Hijack', function: 3, address: 99 },
+      },
+    },
+    {
+      action: 'points',
+      payload: { action: 'points', op: 'remove', connectionId: 'c1', deviceId: 'd1', pointId: 'p1' },
+    },
+    {
+      action: 'points',
+      payload: { action: 'points', op: 'clear', connectionId: 'c1', deviceId: 'd1' },
+    },
+    {
+      action: 'visualization',
+      payload: { action: 'visualization', op: 'add', component: { name: 'Hijack', type: 'value', pointIds: ['p1'] } },
+    },
+    {
+      action: 'visualization',
+      payload: { action: 'visualization', op: 'update', visualizationId: 'missing', component: { name: 'Hijack' } },
+    },
+    {
+      action: 'visualization',
+      payload: { action: 'visualization', op: 'remove', visualizationId: 'missing' },
+    },
+  ]
+  try {
+    for (const spec of ops) {
+      for (const expectedConfigVersion of [undefined, 0, -1, '2', Number.NaN]) {
+        const ran = await executeVisionCommand({
+          home,
+          cwd,
+          action: spec.action,
+          source: 'agent',
+          payload: { ...spec.payload, expectedConfigVersion },
+        })
+        assert.equal(
+          ran.ok,
+          false,
+          `${spec.action} ${spec.payload.op || spec.payload.operation} ${String(expectedConfigVersion)}`,
+        )
+        assert.equal(ran.errorCode, 'CONFIG_VERSION_REQUIRED')
+      }
+    }
+    const after = loadWorkspace(home, cwd)
+    assert.equal(after.modbus.configVersion, before.modbus.configVersion)
+    assert.equal(after.modbus.devices[0].name, 'D1')
+    assert.equal(after.modbus.points[0].name, 'Temp')
+    assert.equal(
+      (after.modbus.visualization?.components || []).length,
+      (before.modbus.visualization?.components || []).length,
+    )
+    const timeline = Array.isArray(after.timeline) ? after.timeline : []
+    assert.equal(
+      timeline.some((item) => /Hijack/.test(String(item && item.summary))),
+      false,
+    )
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
 test('router is a composition layer and handlers own business branches', () => {
   const router = readFileSync(join(root, 'src/application/commands/vision-command-router.mjs'), 'utf8')
   const lines = router.split('\n').length

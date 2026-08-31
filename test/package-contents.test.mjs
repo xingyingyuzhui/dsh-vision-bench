@@ -28,6 +28,17 @@ test('package.json: version tracks package and no legacy python modbus files', a
     files.some((f) => String(f).indexOf('openocd-profile.mjs') >= 0),
     'openocd-profile.mjs packaged',
   )
+  for (const want of [
+    'src/application/flash/flash-approval-service.mjs',
+    'src/application/flash/openocd-health-service.mjs',
+    'src/infrastructure/files/firmware-snapshot.mjs',
+    'src/domain/flash/errors.mjs',
+  ]) {
+    assert.ok(
+      files.some((f) => String(f) === want || String(f).indexOf(want) >= 0),
+      want + ' packaged',
+    )
+  }
   // 可视化模块必须在发布包内
   for (const want of ['bench-visualization-model.mjs', 'bench-visualization-view.mjs']) {
     assert.ok(

@@ -17,6 +17,54 @@ export const PRESET_BACKUP_FAILED = 'PRESET_BACKUP_FAILED'
 export const PRESET_WRITE_FAILED = 'PRESET_WRITE_FAILED'
 export const PRESET_RESTORE_FAILED = 'PRESET_RESTORE_FAILED'
 
+/**
+ * Cordis stores JS expressions as `!!js …`. Overlay only needs to round-trip
+ * the source text; evaluating it here would run untrusted preset YAML in-process.
+ */
+class CordisJsExpr {
+  /** @param {string} src */
+  constructor(src) {
+    this.src = String(src ?? '')
+  }
+  toString() {
+    return this.src
+  }
+}
+
+const CORDIS_JS_TAG = {
+  identify: (/** @type {unknown} */ value) => value instanceof CordisJsExpr,
+  default: false,
+  tag: 'tag:yaml.org,2002:js',
+  /**
+   * @param {string} value
+   * @returns {CordisJsExpr}
+   */
+  resolve(value) {
+    return new CordisJsExpr(value)
+  },
+  /**
+   * @param {{ value?: unknown }} item
+   */
+  stringify(item) {
+    const value = item && item.value
+    return value instanceof CordisJsExpr ? value.src : String(value ?? '')
+  },
+}
+
+/**
+ * @param {string} raw
+ */
+export function parseCompositionDocument(raw) {
+  return yaml.parseDocument(raw, { customTags: [CORDIS_JS_TAG], prettyErrors: true })
+}
+
+/** @type {{ ok: boolean, error?: string }} */
+let lastPresetSeed = { ok: true }
+
+export function getLastPresetSeed() {
+  return lastPresetSeed
+}
+
 export const PRESET_ID = 'vision-bench'
 export const PRESET_TITLE = 'Vision模式'
 const MARKER = '.dsh-vision-bench'
@@ -175,7 +223,7 @@ export const ensurePresetOverlay = (dir) => {
   const raw = _readFileSync(file, 'utf8')
   let doc
   try {
-    doc = yaml.parseDocument(raw)
+    doc = parseCompositionDocument(raw)
   } catch (e) {
     return { ok: false, error: 'invalid yaml: ' + String((e && e.message) || e), rebuildHelp: REBUILD_INSTRUCTIONS }
   }
@@ -183,14 +231,6 @@ export const ensurePresetOverlay = (dir) => {
     return {
       ok: false,
       error: 'invalid yaml: ' + String(doc.errors[0].message || doc.errors[0]),
-      hasYamlError: true,
-      rebuildHelp: REBUILD_INSTRUCTIONS,
-    }
-  }
-  if (doc.warnings && doc.warnings.length) {
-    return {
-      ok: false,
-      error: 'invalid yaml: ' + String(doc.warnings[0].message || doc.warnings[0]),
       hasYamlError: true,
       rebuildHelp: REBUILD_INSTRUCTIONS,
     }
@@ -394,15 +434,19 @@ export async function seedVisionBenchPreset(agentPresets, home) {
   const dir = userPresetDir(home)
   const composition = join(dir, 'agent.cordis.yml')
   const marker = join(dir, MARKER)
+  const finish = (result) => {
+    lastPresetSeed = result && typeof result === 'object' ? result : { ok: false, error: String(result) }
+    return lastPresetSeed
+  }
   const hasComposition = _existsSync(composition)
   const hasMarker = _existsSync(marker)
   if (hasComposition && !hasMarker) {
-    return { ok: false, error: 'Vision预设 id 已被其他预设占用', dir, rebuildHelp: REBUILD_INSTRUCTIONS }
+    return finish({ ok: false, error: 'Vision预设 id 已被其他预设占用', dir, rebuildHelp: REBUILD_INSTRUCTIONS })
   }
   if (hasComposition && hasMarker) {
     const ownership = checkOwnership(dir)
     if (ownership.error) {
-      return { ok: false, error: ownership.error, dir, rebuildHelp: REBUILD_INSTRUCTIONS }
+      return finish({ ok: false, error: ownership.error, dir, rebuildHelp: REBUILD_INSTRUCTIONS })
     }
   }
   if (!hasComposition && agentPresets && typeof agentPresets.copy === 'function') {
@@ -413,9 +457,13 @@ export async function seedVisionBenchPreset(agentPresets, home) {
     }
   }
   if (!_existsSync(composition)) {
-    return { ok: false, error: '未能创建Vision预设（需要可从 standard 复制）', rebuildHelp: REBUILD_INSTRUCTIONS }
+    return finish({
+      ok: false,
+      error: '未能创建Vision预设（需要可从 standard 复制）',
+      rebuildHelp: REBUILD_INSTRUCTIONS,
+    })
   }
-  return ensurePresetOverlay(dir)
+  return finish(ensurePresetOverlay(dir))
 }
 
 export const _internal = {
@@ -425,6 +473,8 @@ export const _internal = {
   OWNERSHIP_TEMPLATE,
   MARKER,
   REBUILD_INSTRUCTIONS,
+  CORDIS_JS_TAG,
+  parseCompositionDocument,
   checkOwnership,
   templateFieldsMatch,
   writeAtomic,
