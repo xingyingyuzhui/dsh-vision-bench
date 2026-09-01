@@ -1,7 +1,7 @@
 /** Add/edit device form panel. */
 export function renderDeviceForm(el, t, ctx) {
   const { field, devForm, setDevForm, activeConnId, activeConnObj, cwd, saveDeviceForm } = ctx
-  if (!(devForm.open && activeConnId)) return null
+  if (!(devForm.open && activeConnId && devForm.connectionId === activeConnId)) return null
   return el(
     'div',
     { className: 'dvb-panel dvb-write-panel' },

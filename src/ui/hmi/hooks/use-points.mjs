@@ -6,7 +6,7 @@ export function usePoints(React) {
   const [newPointDraft, setNewPointDraft] = React.useState(null)
   const [inlineWrite, setInlineWrite] = React.useState(null)
   const [batch, setBatch] = React.useState({ open: false, deviceId: '', prefix: '', fc: 3, start: 0, count: 5 })
-  const [devForm, setDevForm] = React.useState({ open: false, id: '', name: '', unitId: 1 })
+  const [devForm, setDevForm] = React.useState({ open: false, id: '', name: '', unitId: 1, connectionId: '' })
   const [devDeleteId, setDevDeleteId] = React.useState('')
   const [csvText, setCsvText] = React.useState('')
   const [csvTarget, setCsvTarget] = React.useState({ deviceId: '', open: false, mode: 'merge' })

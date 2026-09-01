@@ -9,7 +9,6 @@ export function createHmiConnectionActions(ctx, core) {
     setFrameFilter,
     setDevForm,
     devForm,
-    setDevDeleteId,
     connForm,
     setConnForm,
     setHmiTab,
@@ -18,7 +17,34 @@ export function createHmiConnectionActions(ctx, core) {
     setPendingDeleteId,
     lastDeviceByConn,
   } = ctx
+  const setBatch = ctx.setBatch || (() => {})
+  const setNewPointDraft = ctx.setNewPointDraft || (() => {})
+  const setCsvTarget = ctx.setCsvTarget || (() => {})
+  const setEditingDeviceId = ctx.setEditingDeviceId || (() => {})
+  const setEditingPointsDeviceId = ctx.setEditingPointsDeviceId || (() => {})
+  const setInlineWrite = ctx.setInlineWrite || (() => {})
+  const setDevDeleteId = ctx.setDevDeleteId || (() => {})
   const { normalizePack, persist, activeConnIdOf } = core
+
+  function deviceBelongsTo(deviceId, connectionId) {
+    if (!deviceId) return false
+    const pack = normalizePack()
+    return (pack.devices || []).some((device) => device.id === deviceId && device.connectionId === connectionId)
+  }
+
+  function dismissEditorsExcept(connectionId) {
+    setConnForm((prev) => (!prev.open || prev.id === connectionId ? prev : { ...prev, open: false }))
+    setDevForm((prev) => (!prev.open || prev.connectionId === connectionId ? prev : { ...prev, open: false }))
+    setBatch((prev) => (prev.open && !deviceBelongsTo(prev.deviceId, connectionId) ? { ...prev, open: false } : prev))
+    setNewPointDraft((prev) => (prev && !deviceBelongsTo(prev.deviceId, connectionId) ? null : prev))
+    setCsvTarget((prev) =>
+      prev.open && !deviceBelongsTo(prev.deviceId, connectionId) ? { ...prev, open: false } : prev,
+    )
+    setEditingDeviceId((id) => (deviceBelongsTo(id, connectionId) ? id : ''))
+    setEditingPointsDeviceId((id) => (deviceBelongsTo(id, connectionId) ? id : ''))
+    setInlineWrite(null)
+    setDevDeleteId('')
+  }
 
   function addConnection() {
     const pack = normalizePack()
@@ -55,7 +81,8 @@ export function createHmiConnectionActions(ctx, core) {
     setHmiTab(id)
     lastDeviceByConn.current[id] = ''
     setFrameFilter(id)
-    setDevForm({ open: true, id: '', name: '', unitId: 1 })
+    dismissEditorsExcept(id)
+    setDevForm({ open: true, id: '', name: '', unitId: 1, connectionId: id })
   }
 
   function openAddDevice() {
@@ -68,17 +95,27 @@ export function createHmiConnectionActions(ctx, core) {
       id: '',
       name: '',
       unitId: devices.length ? Math.max(...devices.map((device) => device.unitId || 1)) + 1 : 1,
+      connectionId,
     })
   }
 
   function openEditDevice(device) {
     setError('')
-    setDevForm({ open: true, id: device.id, name: device.name, unitId: device.unitId })
+    setDevForm({
+      open: true,
+      id: device.id,
+      name: device.name,
+      unitId: device.unitId,
+      connectionId: device.connectionId,
+    })
   }
 
   function saveDeviceForm() {
     const pack = normalizePack()
-    const connectionId = activeConnIdOf()
+    const connectionId = devForm.connectionId || activeConnIdOf()
+    if (!connectionId || (devForm.connectionId && devForm.connectionId !== activeConnIdOf())) {
+      return setError('当前连接已切换，请重新打开添加设备')
+    }
     const name = String(devForm.name || '')
       .trim()
       .slice(0, 40)
@@ -159,6 +196,7 @@ export function createHmiConnectionActions(ctx, core) {
     setHmiTab(connectionId)
     setMoreOpen(false)
     setFrameFilter(connectionId)
+    dismissEditorsExcept(connectionId)
   }
 
   function requestDeleteConnection(connectionId) {

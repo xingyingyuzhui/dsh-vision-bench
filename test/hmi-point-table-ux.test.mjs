@@ -632,6 +632,30 @@ test('编辑点位态与新增草稿态开关可点；点轨道也可触发', as
   tree.unmount()
 })
 
+test('新建连接的添加设备窗口不会串到其他连接 tab', async () => {
+  const { post } = makePost()
+  const Hmi = createHmiView(React, t, post)
+  const tree = render(createElement(Hmi, { sessionId: 's1', useSessions: () => 's1' }))
+  await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
+  const addConn = Array.from(tree.container.querySelectorAll('button')).find((b) => /＋连接/.test(b.textContent || ''))
+  assert.ok(addConn, '有＋连接')
+  await act(async () => {
+    addConn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 40))
+  })
+  await waitFor(() => assert.ok(tree.container.querySelector('.dvb-write-panel')), { timeout: 6000 })
+  assert.ok(tree.container.textContent.includes('如 温度传感器') || tree.container.querySelector('.dvb-write-panel'))
+  const c1Tab = Array.from(tree.container.querySelectorAll('.dvb-tab')).find((b) => b.textContent.includes('C1'))
+  assert.ok(c1Tab, 'C1 tab')
+  await act(async () => {
+    c1Tab.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 40))
+  })
+  await waitFor(() => assert.ok(tree.container.textContent.includes('设备1')), { timeout: 6000 })
+  assert.equal(!!tree.container.querySelector('.dvb-write-panel'), false, 'C1 tab 不显示新连接的添加设备窗')
+  tree.unmount()
+})
+
 test('flags 保存失败会回滚且不影响另一开关', async () => {
   const mb = {
     ...MB,

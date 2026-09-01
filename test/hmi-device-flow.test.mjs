@@ -61,6 +61,14 @@ test('创建连接不会自动创建设备（源码契约）', async () => {
   assert.ok(src.includes('下一步：添加设备'), '引导下一步存在')
 })
 
+test('设备/连接编辑窗口绑定所属连接，切 tab 不串窗', async () => {
+  const src = hmiSources()
+  assert.match(src, /dismissEditorsExcept/, '切连接时收起不属于该连接的编辑窗')
+  assert.match(src, /connectionId: id/, '新建连接把添加设备窗绑到新连接')
+  assert.match(src, /devForm\.connectionId === activeConnId/, '设备窗只在所属连接 tab 显示')
+  assert.match(src, /devForm\.connectionId \|\| activeConnIdOf\(\)/, '保存设备用表单所属连接')
+})
+
 test('添加设备必须填写名称与唯一站号（服务端唯一性可被 UI 校验）', async () => {
   const src = hmiSources()
   assert.ok(src.includes('请填写设备名称'), '设备名必填校验')
