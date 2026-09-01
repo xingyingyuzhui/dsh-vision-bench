@@ -42,3 +42,11 @@ test('ADR-012 records that official Remote packaging is blocked for thin JS', ()
   assert.match(adr, /typert.host.js/)
   assert.match(adr, /Do not fake authentication with a static/)
 })
+
+test('browser client does not send the retired static Vision header', () => {
+  const runtime = readFileSync(join(root, 'bench-runtime.mjs'), 'utf8')
+  assert.doesNotMatch(runtime, /X-DSH-Vision-Bench/)
+  const host = readFileSync(join(root, 'host.js'), 'utf8')
+  assert.match(host, /x-dsh-vision-capability/)
+  assert.doesNotMatch(host, /headers\[CSRF\]/)
+})

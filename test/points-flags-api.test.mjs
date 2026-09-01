@@ -161,12 +161,13 @@ test('/points/flags returns saved point and maps CONFIG_DRIFT', async () => {
     },
   })
   _internal.setDshHome(home)
-  const csrf = { 'x-dsh-vision-bench': '1', origin: 'http://127.0.0.1:3080' }
+  const csrf = { origin: 'http://127.0.0.1:3080', 'content-type': 'application/json' }
   const invoke = (body) => {
     const handler = routes.find((r) => r.path === '/dsh-vision-bench/points/flags').handler
     const stream = Readable.from([Buffer.from(JSON.stringify(body))])
     stream.method = 'POST'
     stream.headers = csrf
+    stream.socket = { remoteAddress: '127.0.0.1' }
     return new Promise((resolve) => {
       const box = {
         status: 0,

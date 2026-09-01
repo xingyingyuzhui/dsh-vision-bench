@@ -1,3 +1,4 @@
+import { randomUUID, timingSafeEqual } from 'node:crypto'
 import {
   connectOp,
   keilBuild,
@@ -64,8 +65,9 @@ export const inject = ['webServer', 'tools', 'agentPresets', 'systemPrompt']
 
 const BODY_CAP = 65536
 const LOOPBACK_ORIGIN = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/
-const CSRF = 'x-dsh-vision-bench'
+const CAPABILITY_HEADER = 'x-dsh-vision-capability'
 const WORKSPACE_CONFIG_KEYS = new Set(['conn', 'connections', 'devices', 'points', 'visualization'])
+let bridgeCapability = ''
 
 let dshHome = defaultDshHome()
 
@@ -110,19 +112,63 @@ const readBodyAndTouchSession = async (req) => {
   return body
 }
 
+function isLoopbackAddress(addr) {
+  const a = String(addr || '').replace(/^::ffff:/, '')
+  return a === '127.0.0.1' || a === '::1' || a === 'localhost'
+}
+
+function socketAddress(req) {
+  return req?.socket?.remoteAddress || req?.connection?.remoteAddress || ''
+}
+
+function capabilityMatches(got) {
+  if (!bridgeCapability || !got) return false
+  const a = Buffer.from(String(got))
+  const b = Buffer.from(bridgeCapability)
+  if (a.length !== b.length) return false
+  return timingSafeEqual(a, b)
+}
+
+function issueBridgeCapability() {
+  bridgeCapability = randomUUID()
+  process.env.VISION_BENCH_CAPABILITY = bridgeCapability
+  return bridgeCapability
+}
+
+function clearBridgeCapability() {
+  if (process.env.VISION_BENCH_CAPABILITY === bridgeCapability) delete process.env.VISION_BENCH_CAPABILITY
+  bridgeCapability = ''
+}
+
 const guard = (req, res) => {
   if (req.method !== 'POST') {
     writeJson(res, 405, { ok: false, error: 'method not allowed' })
     return false
   }
-  const headers = req.headers || {}
-  if (headers[CSRF] !== '1' && headers['X-DSH-Vision-Bench'] !== '1') {
-    writeJson(res, 403, { ok: false, error: 'missing csrf header' })
+  if (!isLoopbackAddress(socketAddress(req))) {
+    writeJson(res, 403, { ok: false, error: 'loopback only' })
     return false
   }
-  const origin = headers.origin || headers.Origin
+  const headers = req.headers || {}
+  const origin = headers.origin || headers.Origin || ''
   if (origin && !LOOPBACK_ORIGIN.test(origin)) {
     writeJson(res, 403, { ok: false, error: 'origin not allowed' })
+    return false
+  }
+  const ctype = String(headers['content-type'] || headers['Content-Type'] || '')
+  if (ctype && !/^application\/json\b/i.test(ctype)) {
+    writeJson(res, 415, { ok: false, error: 'content-type must be application/json' })
+    return false
+  }
+  const cap = headers[CAPABILITY_HEADER] || headers['X-DSH-Vision-Capability'] || ''
+  const browser = origin && LOOPBACK_ORIGIN.test(origin)
+  if (cap) {
+    if (!capabilityMatches(cap)) {
+      writeJson(res, 403, { ok: false, error: 'invalid capability' })
+      return false
+    }
+  } else if (!browser) {
+    writeJson(res, 403, { ok: false, error: 'missing capability' })
     return false
   }
   return true
@@ -223,6 +269,7 @@ export function apply(ctx, config = {}) {
     })
     return
   }
+  issueBridgeCapability()
   void sweepStaleTasks(dshHome).catch(() => {})
   // Lazy resolver: the agents service may register after this plugin applies.
   try {
@@ -488,6 +535,7 @@ export function apply(ctx, config = {}) {
   ctx.effect(() => () => {
     for (const dispose of disposers) dispose()
     stopHost()
+    clearBridgeCapability()
     clearSerialMonitorState()
     stopAllPolling()
     clearFlashApprovals()
@@ -503,6 +551,8 @@ export const _internal = {
     return dshHome
   },
   guard,
+  issueBridgeCapability,
+  clearBridgeCapability,
   snapshot,
   cwdOf,
   journalView,

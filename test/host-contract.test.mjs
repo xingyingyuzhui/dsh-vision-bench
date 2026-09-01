@@ -8,10 +8,11 @@ import { loadWorkspace, openTask, saveWorkspace } from '../bench-store.mjs'
 import { _internal, apply, inject, name } from '../host.js'
 import { clearFlashApprovals, defaultFlashApprovals } from '../src/application/flash/flash-approval-service.mjs'
 
-function req(method, headers, body) {
+function req(method, headers, body, addr = '127.0.0.1') {
   const stream = Readable.from([body ? Buffer.from(body) : Buffer.alloc(0)])
   stream.method = method
   stream.headers = headers || {}
+  stream.socket = { remoteAddress: addr }
   return stream
 }
 
@@ -28,7 +29,7 @@ function resBox() {
   return box
 }
 
-const csrf = { 'x-dsh-vision-bench': '1', origin: 'http://127.0.0.1:3080' }
+const csrf = { origin: 'http://127.0.0.1:3080', 'content-type': 'application/json' }
 
 test('host named exports', async () => {
   assert.equal(name, 'dsh-vision-bench')
@@ -157,7 +158,7 @@ test('plugin dispose 清空刷写审批仓库', async () => {
   assert.equal(defaultFlashApprovals.size(), 0)
 })
 
-test('routes reject GET, missing header, and foreign origin', async () => {
+test('routes reject GET, missing capability, forged static header, and foreign origin', async () => {
   const routes = []
   apply({
     webServer: {
@@ -182,10 +183,20 @@ test('routes reject GET, missing header, and foreign origin', async () => {
   box = resBox()
   handler(req('POST', {}), box.res)
   assert.equal(box.status, 403)
+  assert.match(box.body, /missing capability/)
+
+  box = resBox()
+  handler(req('POST', { 'x-dsh-vision-bench': '1' }), box.res)
+  assert.equal(box.status, 403)
 
   box = resBox()
   handler(req('POST', { 'x-dsh-vision-bench': '1', origin: 'https://evil.example' }), box.res)
   assert.equal(box.status, 403)
+
+  box = resBox()
+  handler(req('POST', csrf, '', '8.8.8.8'), box.res)
+  assert.equal(box.status, 403)
+  assert.match(box.body, /loopback only/)
 })
 
 test('HTTP system.ping does not bind or mutate the workspace session', async () => {

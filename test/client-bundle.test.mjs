@@ -55,7 +55,7 @@ test('generated client keeps the factory contract', async () => {
   assert.match(src, new RegExp(`alarmOn:\\s*${q}告警${q}`))
   assert.match(src, /--dsh-composer-side-clearance/)
   assert.match(src, /寄存器段/)
-  assert.match(src, /X-DSH-Vision-Bench/)
+  assert.doesNotMatch(src, /X-DSH-Vision-Bench/)
   assert.doesNotMatch(src, /^import /m)
   assert.doesNotMatch(src, /if \(data && data\.ok === false\) throw/)
   assert.match(src, /setError/)

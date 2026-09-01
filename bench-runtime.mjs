@@ -41,7 +41,7 @@ export function apply(ctx) {
   function post(path, payload, timeoutMs) {
     return fetch(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-DSH-Vision-Bench': '1' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload || {}),
       cache: 'no-store',
       signal: AbortSignal.timeout(timeoutMs || 15000),

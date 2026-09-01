@@ -107,7 +107,9 @@ async function tryHostHttp(cmd) {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-dsh-vision-bench': '1',
+        ...(process.env.VISION_BENCH_CAPABILITY
+          ? { 'x-dsh-vision-capability': process.env.VISION_BENCH_CAPABILITY }
+          : {}),
       },
       body: JSON.stringify({
         commandId: cmd.commandId,
