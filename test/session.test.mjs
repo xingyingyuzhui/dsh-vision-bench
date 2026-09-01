@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { MAX_TIMELINE, isMajorKind, isTaskType, normalizeTask, taskTypeLabel, trimTimeline } from '../bench-journal.mjs'
 import { _internal, formatVisionNotice, notifyBenchEvent, setAgentsRegistry } from '../bench-notify.mjs'
 import {
@@ -136,6 +138,9 @@ test('notifyBenchEvent only delivers to the bound live agent', async () => {
     assert.equal(ran.ok, true)
     assert.equal(delivered.length, 1)
     const message = delivered[0].message
+    assert.equal(typeof message.id, 'string')
+    assert.ok(message.id)
+    assert.equal(message.role, 'user')
     assert.equal(message.source.plugin, 'dsh-vision-bench')
     assert.equal(message.source.form, 'notice')
     assert.match(message.content[0].text, /台架写点失败/)
@@ -207,14 +212,35 @@ test('config notices are labeled as completed results, not new commands', () => 
   assert.equal(already.startsWith('Vision写点完成'), true)
 })
 
-test('notice builder falls back to a literal plugin-source message', async () => {
-  const message = await _internal.buildMessage('正文', '摘要')
-  assert.equal(message.role, 'user')
-  assert.equal(message.content[0].type, 'text')
-  assert.equal(message.content[0].text, '正文')
-  assert.equal(message.source.kind, 'plugin')
-  assert.equal(message.source.form, 'notice')
-  assert.equal(message.source.summary, '摘要')
+test('notice builder emits alpha.3 plugin messages with unique ids', () => {
+  const a = _internal.buildMessage('正文', '摘要')
+  const b = _internal.buildMessage('正文', '摘要')
+  assert.equal(a.role, 'user')
+  assert.equal(a.content[0].type, 'text')
+  assert.equal(a.content[0].text, '正文')
+  assert.equal(a.source.kind, 'plugin')
+  assert.equal(a.source.plugin, 'dsh-vision-bench')
+  assert.equal(a.source.form, 'notice')
+  assert.equal(a.source.summary, '摘要')
+  assert.equal(typeof a.id, 'string')
+  assert.ok(a.id.length > 8)
+  assert.notEqual(a.id, b.id)
+})
+
+test('notice summary is capped and redacts secrets', () => {
+  const long = 'x'.repeat(200)
+  const capped = _internal.sanitizeNoticeSummary(long)
+  assert.equal(capped.length, 160)
+  assert.equal(capped.endsWith('…'), true)
+  const redacted = _internal.sanitizeNoticeSummary('token=abc password=xyz')
+  assert.match(redacted, /\[redacted\]/)
+  assert.doesNotMatch(redacted, /abc|xyz/)
+})
+
+test('notify production source does not import dsh-llm', () => {
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'bench-notify.mjs'), 'utf8')
+  assert.doesNotMatch(src, /@deepseek-ai\/dsh-llm/)
+  assert.match(src, /randomUUID/)
 })
 
 test('manual requests persist, resolve and notify', async () => {

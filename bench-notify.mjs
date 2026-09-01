@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto'
 import { loadWorkspace } from './bench-store.mjs'
 
 const PLUGIN_NAME = 'dsh-vision-bench'
+const SUMMARY_MAX = 160
+const SENSITIVE = /(password|passwd|secret|token|api[_-]?key|authorization|bearer)\s*[:=]\s*\S+/gi
 
 // Accepts either a registry object or a lazy resolver function so the agents
 // service can appear after plugin apply() without being lost.
@@ -32,24 +35,30 @@ export function formatVisionNotice(summary, detail = '') {
   return extra ? `${body}\n${extra}` : body
 }
 
-const buildMessage = async (text, summary) => {
-  try {
-    const mod = await import('@deepseek-ai/dsh-llm')
-    if (mod && typeof mod.createUserMessage === 'function') {
-      return mod.createUserMessage({
-        content: [{ type: 'text', text }],
-        source: { kind: 'plugin', plugin: PLUGIN_NAME, form: 'notice', summary },
-      })
-    }
-  } catch {
-    /* not bundled with core llm; fall through */
-  }
+export function sanitizeNoticeSummary(summary) {
+  let s = String(summary || '')
+    .replace(SENSITIVE, '$1=[redacted]')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (s.length > SUMMARY_MAX) s = `${s.slice(0, SUMMARY_MAX - 1)}…`
+  return s || 'Vision notice'
+}
+
+export function buildPluginNotice(text, summary) {
   return {
+    id: randomUUID(),
     role: 'user',
-    content: [{ type: 'text', text }],
-    source: { kind: 'plugin', plugin: PLUGIN_NAME, form: 'notice', summary },
+    content: [{ type: 'text', text: String(text || '') }],
+    source: {
+      kind: 'plugin',
+      plugin: PLUGIN_NAME,
+      form: 'notice',
+      summary: sanitizeNoticeSummary(summary),
+    },
   }
 }
+
+const buildMessage = (text, summary) => buildPluginNotice(text, summary)
 
 export const notifyBenchEvent = async (home, cwd, summary, detail = '', opts = {}) => {
   try {
@@ -76,7 +85,7 @@ export const notifyBenchEvent = async (home, cwd, summary, detail = '', opts = {
           : null
     if (!deliver) return { ok: false, skipped: 'no-method' }
     const text = formatVisionNotice(summary, detail)
-    const message = await buildMessage(text, summary)
+    const message = buildMessage(text, summary)
     await deliver(message)
     return { ok: true, boundId: targetId }
   } catch (error) {
@@ -100,4 +109,4 @@ export const maybeNotifyResult = (home, cwd, label, ran) => {
   })
 }
 
-export const _internal = { PLUGIN_NAME, buildMessage, formatVisionNotice }
+export const _internal = { PLUGIN_NAME, buildMessage, formatVisionNotice, sanitizeNoticeSummary }
