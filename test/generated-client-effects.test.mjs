@@ -11,6 +11,7 @@ import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react
 import { Window } from 'happy-dom'
 import React from 'react'
 import { createElement } from 'react'
+import { alpha3PageProps } from './fixtures/harness-alpha3-props.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 let win
@@ -260,7 +261,12 @@ test('Task10: generated client renders the real frames tab with 5000 rows (1–4
   assert.ok(monitorPage, 'generated bundle registered vision-bench-monitor')
   assert.equal(typeof monitorPage, 'function')
 
-  const tree = render(createElement(monitorPage, { sessionId: 's1', scope: { cwd: '/tmp/gen' }, useSessions: noop }))
+  const tree = render(
+    createElement(monitorPage, {
+      ...alpha3PageProps({ sessionId: 's1', path: '/tmp/gen' }),
+      scope: { cwd: '/tmp/gen' },
+    }),
+  )
   const framesBtn = tree.container.querySelector('[data-section="frames"]')
   assert.ok(framesBtn, 'monitor workspace exposes frames section tab')
   fireEvent.click(framesBtn)

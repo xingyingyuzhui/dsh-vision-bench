@@ -86,12 +86,13 @@ export function apply(ctx) {
   setNavViewSelector(selectView)
 
   const SettingsPage = createSettingsPage(React, t, post)
-  const DebugWorkspace = wrapVisionPage(React, createDebugWorkspace(React, t, post), 'debug')
-  const HmiView = wrapVisionPage(React, createHmiView(React, t, post), 'hmi')
+  const DebugWorkspace = wrapVisionPage(React, createDebugWorkspace(React, t, post), 'debug', t)
+  const HmiView = wrapVisionPage(React, createHmiView(React, t, post), 'hmi', t)
   const MonitorWorkspace = wrapVisionPage(
     React,
     createMonitorWorkspace(React, t, post, { openHmi, openFrames }),
     'monitor',
+    t,
   )
   const stopSettings = registerSettings(ctx, React, t, SettingsPage)
   const stopView = registerView(ctx, React, t, DebugWorkspace, HmiView, MonitorWorkspace)

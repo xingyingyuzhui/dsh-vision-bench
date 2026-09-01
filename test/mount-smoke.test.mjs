@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { alpha3PageProps } from './fixtures/harness-alpha3-props.mjs'
 
 // Mount every conversation view with stub React/post/hooks and render twice
 // (initial + one state update). The strip-concat bundle resolves cross-module
@@ -33,7 +34,7 @@ const post = () => Promise.resolve({ ok: true })
 test('debug view mounts without hidden-scope ReferenceErrors', async () => {
   const { createDebugView } = await import('../bench-view.mjs')
   const DebugView = createDebugView(makeReact(), () => 'k', post, {})
-  const tree = DebugView({ sessionId: 's1', useSessions: (fn) => fn({ byId: { s1: { cwd: '/tmp' } } }) })
+  const tree = DebugView({ ...alpha3PageProps({ sessionId: 's1', path: '/tmp' }) })
   assert.ok(tree, 'debug tree rendered')
   const src = await import('node:fs').then((fs) =>
     fs.readFileSync(new URL('../bench-view.mjs', import.meta.url), 'utf8'),
@@ -48,7 +49,7 @@ test('debug view mounts without hidden-scope ReferenceErrors', async () => {
 test('hmi view mounts — the former blind spot of the bundle', async () => {
   const { createHmiView } = await import('../bench-hmi.mjs')
   const HmiView = createHmiView(makeReact(), () => 'k', post, {})
-  const tree = HmiView({ sessionId: 's1' })
+  const tree = HmiView({ ...alpha3PageProps({ sessionId: 's1', path: '/tmp' }) })
   assert.ok(tree, 'hmi tree rendered')
 })
 

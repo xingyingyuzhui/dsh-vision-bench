@@ -6,6 +6,7 @@ import { Window } from 'happy-dom'
 import React from 'react'
 import { createElement } from 'react'
 import { createVisualizationPage } from '../bench-visualization-view.mjs'
+import { alpha3PageProps } from './fixtures/harness-alpha3-props.mjs'
 
 let win
 beforeEach(async () => {
@@ -162,7 +163,9 @@ test('挂载无错误；默认不展开已监视点位列表（空状态只提�
   const onError = (e) => errors.push(e)
   window.addEventListener('error', onError)
   const Viz = createVisualizationPage(React, t, post, {})
-  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  const tree = render(
+    createElement(Viz, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
   await waitFor(() => assert.ok(tree.container.textContent.includes('可视化')), { timeout: 6000 })
   const text = tree.container.textContent
   assert.ok(!text.includes('温度 /'), '未展开监视点位列表')
@@ -181,7 +184,9 @@ test('挂载无错误；默认不展开已监视点位列表（空状态只提�
 test('新建组件：编辑器勾选监视点位（限定路径）→ 保存后立即渲染', async () => {
   const { post, saved, state } = makePost()
   const Viz = createVisualizationPage(React, t, post, {})
-  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  const tree = render(
+    createElement(Viz, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
   await waitFor(() => assert.ok(tree.container.textContent.includes('新建组件')), { timeout: 6000 })
   // 点击 新建组件
   const newBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent.includes('新建组件'))
@@ -242,7 +247,9 @@ test('编辑图标恢复组件草稿；类型与关联点位回显', async () =>
   }
   const { post } = makePost(mb)
   const Viz = createVisualizationPage(React, t, post, {})
-  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  const tree = render(
+    createElement(Viz, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
   await waitFor(() => assert.ok(tree.container.textContent.includes('我的数值卡')), { timeout: 6000 })
   const editBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '编辑')
   assert.ok(editBtn)
@@ -263,7 +270,9 @@ test('degraded 组件显示修复入口；关闭监视/删除点位不删除组�
   mb.visualization = { schemaVersion: 1, components: [{ id: 'viz_y', name: '断源', type: 'line', pointIds: ['p1'] }] }
   const { post } = makePost(mb)
   const Viz = createVisualizationPage(React, t, post, {})
-  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  const tree = render(
+    createElement(Viz, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
   await waitFor(() => assert.ok(tree.container.textContent.includes('断源')), { timeout: 6000 })
   const card = Array.from(tree.container.querySelectorAll('.dvb-viz-card')).find((c) => c.textContent.includes('断源'))
   assert.ok(card.querySelector('.dvb-viz-degraded') || card.className.includes('dvb-viz-degraded'), 'degraded 样式')
@@ -307,7 +316,9 @@ test('Task10/0.20.1: 柱状图柱长按比例 + 正负方向 + null 显示 —',
   }
   const { post } = makePost(mb)
   const Viz = createVisualizationPage(React, t, post, {})
-  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  const tree = render(
+    createElement(Viz, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
   await waitFor(() => assert.ok(tree.container.textContent.includes('柱')), { timeout: 6000 })
   const fills = Array.from(tree.container.querySelectorAll('.dvb-viz-bar-fill'))
   assert.equal(fills.length, 3, '三个有效值柱')
@@ -339,7 +350,9 @@ test('Task10b/0.20.1: 柱状图小数比例不强制 maxAbs=1', async () => {
   }
   const { post } = makePost(mb)
   const Viz = createVisualizationPage(React, t, post, {})
-  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  const tree = render(
+    createElement(Viz, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
   await waitFor(() => assert.ok(tree.container.textContent.includes('小数柱')), { timeout: 6000 })
   const fills = Array.from(tree.container.querySelectorAll('.dvb-viz-bar-fill'))
   assert.equal(fills.length, 2)
@@ -378,7 +391,9 @@ test('Task8/0.20.1: 编辑保留 ID/order/windowMs/confirmWrite 且排列不变�
     return base.post(path, body)
   }
   const Viz = createVisualizationPage(React, t, post, {})
-  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  const tree = render(
+    createElement(Viz, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
   await waitFor(() => assert.ok(tree.container.textContent.includes('第一')), { timeout: 6000 })
   const cards = Array.from(tree.container.querySelectorAll('.dvb-viz-card'))
   assert.equal(cards.length, 2, '两个组件')
@@ -418,7 +433,9 @@ test('Task1/0.20.1: 无图表运行时 → 曲线卡片显示渲染失败 + 重�
   mb.visualization = { schemaVersion: 1, components: [{ id: 'viz_line', name: '线', type: 'line', pointIds: ['p1'] }] }
   const { post } = makePost(mb)
   const Viz = createVisualizationPage(React, t, post, {})
-  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  const tree = render(
+    createElement(Viz, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
   await waitFor(() => assert.ok(tree.container.textContent.includes('图表运行时不可用')), { timeout: 8000 })
   const btns = Array.from(tree.container.querySelectorAll('button')).map((b) => b.textContent)
   assert.ok(btns.includes('重试'), '重试入口')
@@ -460,7 +477,9 @@ test('未来 schema 进入只读模式：可查看、不可改、不发写请求
     return base.post(path, body)
   }
   const Viz = createVisualizationPage(React, t, post, {})
-  const tree = render(createElement(Viz, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  const tree = render(
+    createElement(Viz, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
   await waitFor(() => assert.ok(tree.container.textContent.includes('未来版本组件')), { timeout: 6000 })
   assert.ok(tree.container.querySelector('.dvb-viz-readonly'), '只读横幅')
   assert.ok(tree.container.textContent.includes('可视化配置为只读'))

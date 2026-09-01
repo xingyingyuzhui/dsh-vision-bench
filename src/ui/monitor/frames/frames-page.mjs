@@ -19,6 +19,7 @@ import {
 } from '../../../../bench-shared.mjs'
 import { buildInputBridge, evidenceFromRef, postEvidence, readInputDraft } from '../../../../bench-shared.mjs'
 import { vendorUseVirtualizer, vendorVirtualizer } from '../../../../bench-vendor.mjs'
+import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
 import { createDataTable } from '../../components/data-table.mjs'
 import { filterFrameList } from './frames-filter-model.mjs'
 
@@ -43,21 +44,8 @@ export function createFramesPage(React, t, post, hooks) {
     // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
     const inputDraft = readInputDraft(props?.useInput)
     const agentBridge = buildInputBridge(props, inputDraft)
-    const realCwd = (() => {
-      try {
-        if (props?.scope?.cwd) return props.scope.cwd
-        if (props?.useSessions) {
-          const sid = props.scope?.sessionId || props.sessionId
-          return props.useSessions(
-            (s) =>
-              (s.byId && sid && s.byId[sid] && s.byId[sid].cwd) ||
-              (s.byId && s.current && s.byId[s.current] && s.byId[s.current].cwd) ||
-              '',
-          )
-        }
-      } catch {}
-      return ''
-    })()
+    const realCwd = sessionCwd(props)
+    const sessionId = pageSessionId(props)
     const [health, setHealth] = React.useState({})
     const [modbus, setModbus] = React.useState({
       version: 3,
@@ -87,13 +75,23 @@ export function createFramesPage(React, t, post, hooks) {
     const cursorRef = React.useRef(new Map())
     const lastAtBottomRef = React.useRef(true)
 
+    React.useEffect(() => {
+      setHealth({})
+      setModbus({ version: 3, connections: [], devices: [], points: [], framesByConnection: {} })
+      setPorts([])
+      setSerial({ lines: [], lastId: 0, lastAt: 0, error: '' })
+      setSerialSources([])
+      setPausedSnapshot(null)
+      setPendingNew(0)
+    }, [realCwd, sessionId])
+
     // state polling → persisted framesByConnection + memory merge (Task3 live collection)
     React.useEffect(() => {
       if (!realCwd) return undefined
       let stop = false
       const timer = setInterval(async () => {
         try {
-          const data = await post('/dsh-vision-bench/state', { cwd: realCwd })
+          const data = await post('/dsh-vision-bench/state', { cwd: realCwd, sessionId: sessionId || undefined })
           if (stop) return
           if (data?.health) setHealth(data.health)
           const mb = data?.workspace?.modbus
@@ -106,7 +104,7 @@ export function createFramesPage(React, t, post, hooks) {
         stop = true
         clearInterval(timer)
       }
-    }, [realCwd])
+    }, [realCwd, sessionId])
 
     React.useEffect(() => {
       if (mode !== 'raw' || !realCwd) return undefined
@@ -117,6 +115,7 @@ export function createFramesPage(React, t, post, hooks) {
           '/dsh-vision-bench/serial/feed',
           {
             cwd: realCwd,
+            sessionId: sessionId || undefined,
             connectionId: selNow.kind === 'conn' ? selNow.connectionId : '',
             since: selNow.kind === 'conn' ? serial.lastId : serial.lastAt,
           },
@@ -151,7 +150,7 @@ export function createFramesPage(React, t, post, hooks) {
         stop = true
         clearInterval(timer)
       }
-    }, [realCwd, mode, serial.lastId, selection])
+    }, [realCwd, sessionId, mode, serial.lastId, selection])
 
     const pack = (() => {
       try {

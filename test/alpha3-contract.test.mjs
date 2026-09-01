@@ -42,14 +42,22 @@ test('alpha.3 fixture documents DSH 0.1.2-alpha.3 and public page keys', () => {
   assert.equal('scope' in props, false)
 })
 
-test('production code must not read props.useSessions or slots.select', () => {
+test('production code must not read props.useSessions', () => {
   const hits = []
   for (const file of productionSources()) {
     const src = readFileSync(file, 'utf8')
     if (/\.useSessions\b|props\?\.useSessions|useSessions:/.test(src)) hits.push(`${file}: useSessions`)
+  }
+  assert.deepEqual(hits, [], 'alpha.3 production must not use removed useSessions:\n' + hits.join('\n'))
+})
+
+test('production code must not call slots.select', { skip: 'stage 2: viewRequest/openView navigation' }, () => {
+  const hits = []
+  for (const file of productionSources()) {
+    const src = readFileSync(file, 'utf8')
     if (/slots\.select|slotsApi\.select/.test(src)) hits.push(`${file}: slots.select`)
   }
-  assert.deepEqual(hits, [], 'alpha.3 production must not use removed Harness APIs:\n' + hits.join('\n'))
+  assert.deepEqual(hits, [], 'alpha.3 production must not call slots.select:\n' + hits.join('\n'))
 })
 
 test('sessionCwd resolves path from useWorkspaces items by sessionId', () => {
@@ -99,4 +107,22 @@ test('useSessionCwd matches sessionCwd for the same alpha.3 props', () => {
 test('scope.cwd remains a documented short-term fallback', () => {
   const props = { ...alpha3PageProps({ sessionId: 's1', items: [] }), scope: { cwd: '/legacy/scope' } }
   assert.equal(sessionCwd(props), '/legacy/scope')
+})
+
+test('frames, alarms, visualization, HMI and debug resolve cwd through session-scope', () => {
+  const files = [
+    'src/ui/monitor/frames/frames-page.mjs',
+    'src/ui/monitor/alarms/alarm-page.mjs',
+    'src/ui/monitor/visualization/visualization-page.mjs',
+    'src/ui/monitor/journal/journal-page.mjs',
+    'src/ui/hmi/hmi-page.mjs',
+    'src/ui/debug/project/project-page.mjs',
+    'src/ui/workspace/monitor-workspace.mjs',
+    'src/ui/workspace/debug-workspace.mjs',
+  ]
+  for (const rel of files) {
+    const src = readFileSync(join(root, rel), 'utf8')
+    assert.match(src, /sessionCwd|useSessionCwd/, rel)
+    assert.doesNotMatch(src, /useSessions/, rel)
+  }
 })

@@ -12,6 +12,15 @@ export function useHmiState(React, post, cwd, sessionId) {
   const inflight = React.useRef(0)
   const flagInflight = React.useRef(0)
 
+  React.useEffect(() => {
+    setWorkspace(emptyWorkspace())
+    setJournal(emptyJournal())
+    setPending([])
+    setConnectionStates([])
+    setHealth({})
+    setIoRuntime({})
+  }, [cwd, sessionId])
+
   React.useEffect(
     () =>
       subscribeState(

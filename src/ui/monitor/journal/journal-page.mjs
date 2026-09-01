@@ -1,6 +1,7 @@
 import { clockOf } from '../../../../bench-points.mjs'
 import { subscribeState } from '../../../../bench-shared.mjs'
 import { vendorUseVirtualizer } from '../../../../bench-vendor.mjs'
+import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
 import { createDataTable } from '../../components/data-table.mjs'
 
 const useViz = vendorUseVirtualizer() || (() => null)
@@ -17,11 +18,14 @@ export function createLogPage(React, t, post, helpers = {}) {
     { key: 'err', label: t('logFilterErr') || '错误' },
   ]
   return function LogPage(props) {
-    const cwd = props?.scope?.cwd || props?.cwd || ''
-    const sessionId = props?.sessionId || ''
+    const cwd = sessionCwd(props)
+    const sessionId = pageSessionId(props)
     const [journal, setJournal] = React.useState({ tasks: [], running: [], timeline: [] })
     const [filter, setFilter] = React.useState('all')
     const [note, setNote] = React.useState('')
+    React.useEffect(() => {
+      setJournal({ tasks: [], running: [], timeline: [] })
+    }, [cwd, sessionId])
     React.useEffect(
       () =>
         subscribeState(

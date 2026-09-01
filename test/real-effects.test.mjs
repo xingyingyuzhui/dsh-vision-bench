@@ -10,6 +10,7 @@ import { createElement } from 'react'
 import { createFramesPage } from '../bench-frames-view.mjs'
 import { createVisualizationPage } from '../bench-live.mjs'
 import { pushFramesLog } from '../bench-shared.mjs'
+import { alpha3PageProps } from './fixtures/harness-alpha3-props.mjs'
 
 // Task8/0.18.3: tests must exit naturally — every component effect tears down
 // its timers on unmount, so no process.exit() is allowed here.
@@ -328,7 +329,9 @@ test('Task8: official Virtualizer renders viewport-limited rows (adapter level) 
   const officialViz = globalThis.__rvUseVirtualizer || (await import('@tanstack/react-virtual')).useVirtualizer
   assert.ok(officialViz)
   const Frames = createFramesPage(React, t, post, { useVirtualizer: officialViz })
-  const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/proj' }, useSessions: noop }))
+  const tree = render(
+    createElement(Frames, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }), scope: { cwd: '/tmp/proj' } }),
+  )
   await waitFor(
     () => {
       assert.ok(calls.state >= 2, 'must poll /state repeatedly via real effect, got ' + calls.state)
@@ -392,7 +395,12 @@ test('Task8: pause freezes content (ids/text identical), resume shows live frame
   globalThis.DvbVendor = null
   try {
     const Frames = createFramesPage(React, t, post, { useVirtualizer: () => null })
-    const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/proj' }, useSessions: noop }))
+    const tree = render(
+      createElement(Frames, {
+        ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }),
+        scope: { cwd: '/tmp/proj' },
+      }),
+    )
     await waitFor(
       () => {
         const pauseBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '暂停')
@@ -459,7 +467,9 @@ test('Task8: pause freezes content (ids/text identical), resume shows live frame
 test('frames page has no open/close serial buttons in proto or raw', async () => {
   const { post, calls } = makePost({ frames: { c1: makeFrames('c1', 3) } })
   const Frames = createFramesPage(React, t, post, {})
-  const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/proj' }, useSessions: noop }))
+  const tree = render(
+    createElement(Frames, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }), scope: { cwd: '/tmp/proj' } }),
+  )
   await waitFor(
     () => {
       assert.ok(calls.state >= 1)
@@ -484,7 +494,9 @@ test('frames page has no open/close serial buttons in proto or raw', async () =>
 test('Task8: TrendPage mounts with real effects without leaking listeners', async () => {
   const { post } = makePost({ frames: {} })
   const Tabs = createVisualizationPage(React, t, post, {})
-  const tree = render(createElement(Tabs, { sessionId: 's1', scope: { cwd: '/tmp/proj' }, useSessions: noop }))
+  const tree = render(
+    createElement(Tabs, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }), scope: { cwd: '/tmp/proj' } }),
+  )
   await waitFor(
     () => {
       assert.ok(tree.container.querySelector('.dvb-live'), 'trend page rendered')
@@ -561,9 +573,8 @@ test('Task4: VisualizationPage 让 Agent 分析组件 uses the input bridge, pre
     let setDraftCalls = 0
     let submissions = 0
     const props = {
-      sessionId: 's1',
+      ...alpha3PageProps({ sessionId: 's1', path: cwdA }),
       scope: { cwd: cwdA },
-      useSessions: noop,
       useInput: (sel) => sel({ draft }),
       inputActions: {
         setDraft(v) {
@@ -664,7 +675,9 @@ test('Task4: no input writer → clipboard fallback and no crash', async () => {
   const errors = []
   const onError = (e) => errors.push(e)
   window.addEventListener('error', onError)
-  const tree = render(createElement(Trend, { sessionId: 's1', scope: { cwd: cwdB }, useSessions: noop }))
+  const tree = render(
+    createElement(Trend, { ...alpha3PageProps({ sessionId: 's1', path: cwdB }), scope: { cwd: cwdB } }),
+  )
   await waitFor(
     () => {
       const btn = Array.from(tree.container.querySelectorAll('button')).find((b) =>
@@ -693,7 +706,9 @@ test('Task4: no input writer → clipboard fallback and no crash', async () => {
 test('unmounting frames page never opens or closes a COM', async () => {
   const { post, calls, closeCalls, openCalls } = makePost({ frames: { c1: makeFrames('c1', 3) } })
   const Frames = createFramesPage(React, t, post, {})
-  const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/proj' }, useSessions: noop }))
+  const tree = render(
+    createElement(Frames, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }), scope: { cwd: '/tmp/proj' } }),
+  )
   await waitFor(
     () => {
       assert.ok(calls.state >= 1)
@@ -716,7 +731,9 @@ test('live source list only includes connected RTU, never unconfigured COM', asy
     serialSources: [{ connectionId: 'c1', port: 'COM3', state: 'connected', name: 'C1' }],
   })
   const Frames = createFramesPage(React, t, post, {})
-  const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/proj' }, useSessions: noop }))
+  const tree = render(
+    createElement(Frames, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }), scope: { cwd: '/tmp/proj' } }),
+  )
   await waitFor(
     () => {
       assert.ok(calls.state >= 1)
@@ -736,7 +753,9 @@ test('switching proto/raw does not open or close a COM', async () => {
   const frames = { c1: makeFrames('c1', 3) }
   const { post, calls, openCalls, closeCalls } = makePost({ frames })
   const Frames = createFramesPage(React, t, post, {})
-  const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/proj' }, useSessions: noop }))
+  const tree = render(
+    createElement(Frames, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }), scope: { cwd: '/tmp/proj' } }),
+  )
   await waitFor(
     () => {
       assert.ok(calls.state >= 1)
@@ -809,7 +828,9 @@ test('raw feed identity stays on the selected connection; COM4 does not mix in',
   }
   const tmap = (k) => ({ framesRaw: '原始数据', serialPause: '暂停' })[k] || k
   const Frames = createFramesPage(React, tmap, post, { useVirtualizer: () => null })
-  const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/p3' }, useSessions: noop }))
+  const tree = render(
+    createElement(Frames, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/p3' }), scope: { cwd: '/tmp/p3' } }),
+  )
   await waitFor(
     () => {
       assert.ok(
@@ -893,7 +914,9 @@ test('empty live sources show no HMI CTA; closing the tab does not unlink', asyn
   }
   const tmap = (k) => ({ framesRaw: '原始数据', framesEmpty: '暂无报文' })[k] || k
   const Frames = createFramesPage(React, tmap, post, { useVirtualizer: () => null })
-  const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/p4' }, useSessions: noop }))
+  const tree = render(
+    createElement(Frames, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/p4' }), scope: { cwd: '/tmp/p4' } }),
+  )
   await waitFor(
     () => {
       assert.ok(tree.container.textContent.includes('串口报文') || tree.container.querySelector('.dvb-frames-page'))
@@ -956,7 +979,9 @@ test('清空显示 only resets the page view and does not post frames/clear or c
   const tmap = (k) => ({ serialPause: '暂停', serialResume: '恢复', framesClearView: '清空显示' })[k] || k
   pushFramesLog('/tmp/p6', 'c1', [memOnly])
   const Frames = createFramesPage(React, tmap, post, { useVirtualizer: () => null })
-  const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/p6' }, useSessions: noop }))
+  const tree = render(
+    createElement(Frames, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/p6' }), scope: { cwd: '/tmp/p6' } }),
+  )
   await waitFor(
     () => {
       const rows = tree.container.querySelectorAll('.dvb-live-row')
@@ -1024,7 +1049,9 @@ test('Task7: switching connection while paused exits pause and shows only the ne
   }
   const tmap = (k) => ({ serialPause: '暂停', serialResume: '恢复' })[k] || k
   const Frames = createFramesPage(React, tmap, post, { useVirtualizer: () => null })
-  const tree = render(createElement(Frames, { sessionId: 's1', scope: { cwd: '/tmp/p7' }, useSessions: noop }))
+  const tree = render(
+    createElement(Frames, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/p7' }), scope: { cwd: '/tmp/p7' } }),
+  )
   await waitFor(
     () => {
       assert.ok(tree.container.querySelectorAll('.dvb-live-row').length > 0)

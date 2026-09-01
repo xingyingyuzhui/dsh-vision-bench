@@ -10,6 +10,7 @@ import { Window } from 'happy-dom'
 import React from 'react'
 import { createElement } from 'react'
 import { createHmiView } from '../bench-hmi.mjs'
+import { alpha3PageProps } from './fixtures/harness-alpha3-props.mjs'
 function hmiSources() {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..')
   const dir = join(root, 'src/ui/hmi')
@@ -208,7 +209,7 @@ test('点位表不存在更新时间与独立写入/读取/编辑/删除文字�
 test('编辑设备只改设备栏；编辑点位才进入点位行内编辑', async () => {
   const { post } = makePost()
   const Hmi = createHmiView(React, t, post)
-  const tree = render(createElement(Hmi, { sessionId: 's1', useSessions: () => 's1' }))
+  const tree = render(createElement(Hmi, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }) }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   await selectConn(tree)
   await waitFor(() => assert.ok(tree.container.textContent.includes('设备1')), { timeout: 8000 })
@@ -259,7 +260,7 @@ test('添加点位草稿插入当前设备表格内部并固定到该设备', as
     return base.post(path, body)
   }
   const Hmi = createHmiView(React, t, post)
-  const tree = render(createElement(Hmi, { sessionId: 's1', useSessions: () => 's1' }))
+  const tree = render(createElement(Hmi, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }) }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   await selectConn(tree)
   await waitFor(() => assert.ok(tree.container.textContent.includes('设备2')), { timeout: 8000 })
@@ -319,7 +320,7 @@ test('当前值行内写入：点击值单元格只在该行打开编辑器，�
     return { ok: true }
   }
   const Hmi = createHmiView(React, t, post)
-  const tree = render(createElement(Hmi, { sessionId: 's1', useSessions: () => 's1' }))
+  const tree = render(createElement(Hmi, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }) }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   await selectConn(tree)
   await waitFor(() => assert.ok(tree.container.textContent.includes('23.5')), { timeout: 8000 })
@@ -373,7 +374,7 @@ test('FC01 开关行内写入：确认写入固定到设备2（p2）', async () 
     return { ok: true }
   }
   const Hmi = createHmiView(React, t, post)
-  const tree = render(createElement(Hmi, { sessionId: 's1', useSessions: () => 's1' }))
+  const tree = render(createElement(Hmi, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }) }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   await selectConn(tree)
   await waitFor(() => assert.ok(tree.container.textContent.includes('开关')), { timeout: 8000 })
@@ -436,7 +437,7 @@ test('只读点位当前值不可点击（FC02/FC04/FC211）', async () => {
     return { ok: true }
   }
   const Hmi = createHmiView(React, t, post)
-  const tree = render(createElement(Hmi, { sessionId: 's1', useSessions: () => 's1' }))
+  const tree = render(createElement(Hmi, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }) }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   await selectConn(tree)
   await waitFor(() => assert.ok(tree.container.textContent.includes('输入')), { timeout: 8000 })
@@ -502,7 +503,7 @@ test('非编辑态也可切换监视/告警开关并立即持久化', async () =
     return { ok: true }
   }
   const Hmi = createHmiView(React, t, post)
-  const tree = render(createElement(Hmi, { sessionId: 's1', useSessions: () => 's1' }))
+  const tree = render(createElement(Hmi, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }) }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   await selectConn(tree)
   await waitFor(() => assert.ok(tree.container.textContent.includes('温度')), { timeout: 8000 })
@@ -588,7 +589,7 @@ test('编辑点位态与新增草稿态开关可点；点轨道也可触发', as
     return { ok: true }
   }
   const Hmi = createHmiView(React, t, post)
-  const tree = render(createElement(Hmi, { sessionId: 's1', useSessions: () => 's1' }))
+  const tree = render(createElement(Hmi, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }) }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   await selectConn(tree)
   await waitFor(() => assert.ok(tree.container.textContent.includes('温度')), { timeout: 8000 })
@@ -635,7 +636,7 @@ test('编辑点位态与新增草稿态开关可点；点轨道也可触发', as
 test('新建连接的添加设备窗口不会串到其他连接 tab', async () => {
   const { post } = makePost()
   const Hmi = createHmiView(React, t, post)
-  const tree = render(createElement(Hmi, { sessionId: 's1', useSessions: () => 's1' }))
+  const tree = render(createElement(Hmi, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }) }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   const addConn = Array.from(tree.container.querySelectorAll('button')).find((b) => /＋连接/.test(b.textContent || ''))
   assert.ok(addConn, '有＋连接')
@@ -699,7 +700,7 @@ test('flags 保存失败会回滚且不影响另一开关', async () => {
     return { ok: true }
   }
   const Hmi = createHmiView(React, t, post)
-  const tree = render(createElement(Hmi, { sessionId: 's1', useSessions: () => 's1' }))
+  const tree = render(createElement(Hmi, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }) }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   await selectConn(tree)
   await waitFor(() => assert.ok(tree.container.textContent.includes('温度')), { timeout: 8000 })

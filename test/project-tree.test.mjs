@@ -11,6 +11,7 @@ import { findProjectFile, jumpErrorForHit } from '../src/ui/debug/project/projec
 import { createDebugWorkspace } from '../src/ui/workspace/debug-workspace.mjs'
 import { clearNavStore, navigate } from '../src/ui/workspace/vision-navigation-store.mjs'
 import { DEBUG_SECTIONS, VIEW_DEBUG } from '../src/ui/workspace/vision-route.mjs'
+import { alpha3PageProps } from './fixtures/harness-alpha3-props.mjs'
 
 let win
 beforeEach(async () => {
@@ -134,7 +135,9 @@ test('工程树渲染：组 → 文件 → 函数三级 + 缺失/工作区外标
       csvCancel: '关闭',
     })[k] || k
   const Map = createMapView(React, t, post)
-  const tree = render(createElement(Map, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  const tree = render(
+    createElement(Map, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
   await waitFor(
     () => {
       assert.ok(tree.container.textContent.includes('Source'), '组名渲染: ' + tree.container.textContent.slice(0, 120))
@@ -169,7 +172,9 @@ test('文件可展开函数列表并可预览源码', async () => {
   const { post } = makePost()
   const t = (k) => ({ projectMap: '工程结构', csvCancel: '关闭', opening: '打开中' })[k] || k
   const Map = createMapView(React, t, post)
-  const tree = render(createElement(Map, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  const tree = render(
+    createElement(Map, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
   await waitFor(() => assert.ok(tree.container.textContent.includes('Source')), { timeout: 6000 })
   // 找 main.c 所在行的"预览"按钮
   const previewBtn = Array.from(tree.container.querySelectorAll('.dvb-map-file-actions button')).find(
@@ -188,7 +193,9 @@ test('搜索与筛选控件存在且生效', async () => {
   const { post } = makePost()
   const t = (k) => k
   const Map = createMapView(React, t, post)
-  const tree = render(createElement(Map, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  const tree = render(
+    createElement(Map, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
   await waitFor(() => assert.ok(tree.container.textContent.includes('Source')), { timeout: 6000 })
   const input = tree.container.querySelector('.dvb-map-search')
   assert.ok(input, '搜索框存在')
@@ -209,7 +216,9 @@ test('编译配置可折叠（Include/宏/依赖）', async () => {
   const { post } = makePost()
   const t = (k) => ({ mapIncludes: 'Include 路径', mapDefines: '宏', mapIncludesOf: '依赖关系' })[k] || k
   const Map = createMapView(React, t, post)
-  const tree = render(createElement(Map, { sessionId: 's1', scope: { cwd: '/ws' }, useSessions: () => '' }))
+  const tree = render(
+    createElement(Map, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
   await waitFor(() => assert.ok(tree.container.textContent.includes('Include 路径')), { timeout: 6000 })
   // 折叠态默认收起宏/依赖明细
   assert.ok(tree.container.textContent.includes('USE_HAL') === false || tree.container.textContent.includes('宏'))

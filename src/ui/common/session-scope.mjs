@@ -1,16 +1,15 @@
-// Session cwd + active page scope (split from bench-live / bench-shared).
+// Session cwd from DSH 0.1.2-alpha.3 useWorkspaces (see ADR-011).
 
-/** Resolve workspace cwd from Harness page props (scope.cwd or useSessions). */
-export function sessionCwd(props) {
-  if (props?.scope?.cwd) return props.scope.cwd
-  const sessionId = pageSessionId(props)
-  return props?.useSessions
-    ? props.useSessions((s) => {
-        if (sessionId && s.byId && s.byId[sessionId] && s.byId[sessionId].cwd) return s.byId[sessionId].cwd
-        const id = s?.current
-        return (s?.byId && id && s.byId[id] && s.byId[id].cwd) || ''
-      })
-    : ''
+/**
+ * @param {unknown} state
+ * @param {string} sessionId
+ * @returns {string}
+ */
+export function pathFromWorkspaceList(state, sessionId) {
+  const sid = String(sessionId || '')
+  const items = state && typeof state === 'object' && Array.isArray(state.items) ? state.items : []
+  const hit = items.find((row) => row && Array.isArray(row.sessionIds) && sid && row.sessionIds.includes(sid))
+  return hit?.path ? String(hit.path) : ''
 }
 
 /** Resolve the owning conversation session from Harness page props. Never guess from focus. */
@@ -18,12 +17,28 @@ export function pageSessionId(props) {
   return String(props?.sessionId || props?.scope?.sessionId || '')
 }
 
+function cwdFromWorkspaces(props) {
+  const sessionId = pageSessionId(props)
+  if (typeof props?.useWorkspaces !== 'function') return ''
+  try {
+    return String(props.useWorkspaces((state) => pathFromWorkspaceList(state, sessionId)) || '')
+  } catch {
+    return ''
+  }
+}
+
+/** Resolve workspace cwd from Harness page props (useWorkspaces, then deprecated scope.cwd). */
+export function sessionCwd(props) {
+  const fromWorkspaces = cwdFromWorkspaces(props)
+  if (fromWorkspaces) return fromWorkspaces
+  // Deprecated until 0.26.0: alpha.3 pages must not rely on props.scope.cwd.
+  if (props?.scope?.cwd) return String(props.scope.cwd)
+  return ''
+}
+
 export function useSessionCwd(React, props) {
   void React
-  const sessionId = props?.sessionId
-  return props?.useSessions
-    ? props.useSessions((s) => (s.byId && sessionId && s.byId[sessionId] && s.byId[sessionId].cwd) || '')
-    : ''
+  return sessionCwd(props)
 }
 
 // Token-guarded active page scope — unmounting a stale session page must never

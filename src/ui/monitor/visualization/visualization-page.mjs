@@ -30,7 +30,7 @@ import {
   validateVisualizationComponent,
   visualizationComponentStatus,
 } from '../../../../bench-visualization-model.mjs'
-import { sessionCwd } from '../../common/session-scope.mjs'
+import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
 import { createVizGrid } from '../../components/viz-grid.mjs'
 import { getEcharts } from '../../vendor/echarts-runtime.mjs'
 import { renderBarRenderer } from './renderers/bar-renderer.mjs'
@@ -52,7 +52,8 @@ export function createVisualizationPage(React, t, post, hooks) {
   const el = React.createElement
   const VizGrid = createVizGrid(React)
   return function VisualizationPage(props) {
-    const cwd = props?.scope?.cwd || sessionCwd(props) || ''
+    const cwd = sessionCwd(props)
+    const sessionId = pageSessionId(props)
     const inputDraft = readInputDraft(props?.useInput)
     const agentBridge = buildInputBridge(props, inputDraft)
     const [mb, setMb] = React.useState(null)
@@ -83,6 +84,13 @@ export function createVisualizationPage(React, t, post, hooks) {
       }
     }, [])
     React.useEffect(() => {
+      setMb(null)
+      setEditor(null)
+      setDeleteId('')
+      setFocusVizId('')
+      setChartErrors({})
+    }, [cwd, sessionId])
+    React.useEffect(() => {
       setFocusVizId('')
       return subscribeFocus(cwd, (fs) => {
         try {
@@ -103,7 +111,7 @@ export function createVisualizationPage(React, t, post, hooks) {
     React.useEffect(() => {
       if (!cwd || !post) return undefined
       let stop = false
-      const sid = props?.sessionId || ''
+      const sid = sessionId || ''
       post('/dsh-vision-bench/state', { cwd, sessionId: sid || undefined })
         .then((data) => {
           if (!stop && data) setMb(data.workspace?.modbus || null)
@@ -123,7 +131,7 @@ export function createVisualizationPage(React, t, post, hooks) {
         stop = true
         if (typeof unsub === 'function') unsub()
       }
-    }, [cwd, post, props?.sessionId])
+    }, [cwd, post, sessionId])
 
     React.useEffect(() => {
       const timer = setInterval(() => setTick((n) => n + 1), 1000)

@@ -11,7 +11,7 @@ import {
   subscribeState,
 } from '../../../../bench-shared.mjs'
 import { vendorUseVirtualizer } from '../../../../bench-vendor.mjs'
-import { sessionCwd } from '../../common/session-scope.mjs'
+import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
 import { createDataTable } from '../../components/data-table.mjs'
 import { alarmListForView } from './alarm-filter-model.mjs'
 
@@ -25,6 +25,7 @@ export function createAlarmPage(React, t, post, hooks) {
   return function AlarmPage(props) {
     const el = React.createElement
     const cwd = sessionCwd(props)
+    const sessionId = pageSessionId(props)
     // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
     const inputDraft = readInputDraft(props?.useInput)
     const agentBridge = buildInputBridge(props, inputDraft)
@@ -33,6 +34,11 @@ export function createAlarmPage(React, t, post, hooks) {
     const [pack, setPack] = React.useState(null)
     const [view, setView] = React.useState('activeUnacked')
     const [group, setGroup] = React.useState('all')
+    React.useEffect(() => {
+      setEvents([])
+      setAlarmState({})
+      setPack(null)
+    }, [cwd, sessionId])
     React.useEffect(
       () =>
         subscribeState(
@@ -52,9 +58,9 @@ export function createAlarmPage(React, t, post, hooks) {
               }
             }
           },
-          { sessionId: props?.sessionId || '' },
+          { sessionId },
         ),
-      [cwd, post, props?.sessionId],
+      [cwd, post, sessionId],
     )
     const grouped = groupAlarms(alarmState)
     const filtered = alarmListForView(grouped, view, group)

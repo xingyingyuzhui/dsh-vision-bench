@@ -115,9 +115,23 @@ for (const [id, entry] of Object.entries(pages)) {
   try {
     const props = {
       sessionId: 's1',
-      useSessions: (fn) => fn({ byId: { s1: { cwd: '/tmp/proj' } }, current: 's1' }),
+      useWorkspaces: (fn) =>
+        fn({
+          items: [
+            {
+              workspaceId: 'ws1',
+              path: '/tmp/proj',
+              title: 'proj',
+              sessionIds: ['s1'],
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+        }),
       tab: { id },
-      scope: {},
+      viewRequest: null,
+      openView() {},
+      completeViewRequest() {},
     }
     const tree = comp(props)
     results.push([id, typeof tree === 'object' ? 'rendered' : 'returned ' + typeof tree])

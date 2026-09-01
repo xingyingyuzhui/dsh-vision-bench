@@ -7,6 +7,7 @@ import React from 'react'
 import { createElement } from 'react'
 import { createHmiView } from '../bench-hmi.mjs'
 import { createHmiPointActions } from '../src/ui/hmi/hmi-point-actions.mjs'
+import { alpha3PageProps } from './fixtures/harness-alpha3-props.mjs'
 
 let win
 beforeEach(async () => {
@@ -114,7 +115,7 @@ const baseMb = () => ({
 
 async function mount(post) {
   const Hmi = createHmiView(React, t, post)
-  const tree = render(createElement(Hmi, { sessionId: 's1', useSessions: () => 's1' }))
+  const tree = render(createElement(Hmi, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }) }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   const connTab = Array.from(tree.container.querySelectorAll('.dvb-tab')).find((b) => b.textContent.includes('C1'))
   if (connTab)

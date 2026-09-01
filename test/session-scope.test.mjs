@@ -11,41 +11,24 @@ import {
 import { clearNavStore, getNav } from '../src/ui/workspace/vision-navigation-store.mjs'
 import { viewIdForPage, wrapVisionPage } from '../src/ui/workspace/vision-page-boundary.mjs'
 import { VIEW_MONITOR } from '../src/ui/workspace/vision-route.mjs'
+import { alpha3PageProps, alpha3Workspace } from './fixtures/harness-alpha3-props.mjs'
 
-test('sessionCwd prefers props.scope.cwd', async () => {
-  assert.equal(sessionCwd({ scope: { cwd: '/ws/a' }, sessionId: 's1', useSessions: () => '/ws/other' }), '/ws/a')
+test('sessionCwd prefers useWorkspaces over deprecated scope.cwd', async () => {
+  const props = {
+    ...alpha3PageProps({ sessionId: 's1', path: '/ws/alpha' }),
+    scope: { cwd: '/legacy' },
+  }
+  assert.equal(sessionCwd(props), '/ws/alpha')
 })
 
-test('sessionCwd falls back to useSessions by sessionId then current', async () => {
-  const byId = {
-    s1: { cwd: '/ws/s1' },
-    s2: { cwd: '/ws/s2' },
-  }
-  assert.equal(
-    sessionCwd({
-      sessionId: 's1',
-      useSessions: (sel) => sel({ byId, current: 's2' }),
-    }),
-    '/ws/s1',
-  )
-  assert.equal(
-    sessionCwd({
-      useSessions: (sel) => sel({ byId, current: 's2' }),
-    }),
-    '/ws/s2',
-  )
+test('sessionCwd keeps scope.cwd as short-term fallback', async () => {
+  assert.equal(sessionCwd({ sessionId: 's1', scope: { cwd: '/ws/a' } }), '/ws/a')
   assert.equal(sessionCwd({}), '')
 })
 
-test('useSessionCwd reads by sessionId only', async () => {
-  const byId = { s9: { cwd: '/ws/9' } }
-  assert.equal(
-    useSessionCwd(null, {
-      sessionId: 's9',
-      useSessions: (sel) => sel({ byId, current: 's9' }),
-    }),
-    '/ws/9',
-  )
+test('useSessionCwd reads the same workspace path as sessionCwd', async () => {
+  const props = alpha3PageProps({ sessionId: 's9', path: '/ws/9' })
+  assert.equal(useSessionCwd(null, props), '/ws/9')
 })
 
 test('pageSessionId reads props.sessionId then scope.sessionId', async () => {
@@ -73,7 +56,7 @@ test('active scope token guards clear and keeps sessionId/viewId', async () => {
 test('wrapVisionPage writes real sessionId and viewId into the active scope', () => {
   clearNavStore()
   const React = {
-    createElement: (type, props) => ({ type, props }),
+    createElement: (type, props, ...children) => ({ type, props, children }),
     useRef: (init) => ({ current: init }),
     useEffect: (fn) => fn(),
   }
@@ -81,7 +64,7 @@ test('wrapVisionPage writes real sessionId and viewId into the active scope', ()
     return props
   }
   const Wrapped = wrapVisionPage(React, Page, 'monitor')
-  Wrapped({ sessionId: 'sA', scope: { cwd: '/ws' } })
+  Wrapped({ ...alpha3PageProps({ sessionId: 'sA', path: '/ws' }), scope: { cwd: '/ws' } })
   const active = getActiveScope()
   assert.equal(active.sessionId, 'sA')
   assert.equal(active.cwd, '/ws')
@@ -91,4 +74,29 @@ test('wrapVisionPage writes real sessionId and viewId into the active scope', ()
   assert.equal(getNav('sB', '/ws'), null)
   clearNavStore()
   clearActiveScope(active.token)
+})
+
+test('wrapVisionPage waits when the session has no workspace', () => {
+  const React = {
+    createElement: (type, props, ...children) => ({ type, props, children }),
+    useRef: (init) => ({ current: init }),
+    useEffect: (fn) => fn(),
+  }
+  const Page = function Inner() {
+    return { type: 'page' }
+  }
+  const copy = {
+    workspaceWaiting: 'Waiting for workspace',
+    workspaceWaitingHint: 'This session is not in a workspace yet. State loads after it joins one.',
+  }
+  const Wrapped = wrapVisionPage(React, Page, 'hmi', (key) => copy[key] || key)
+  const tree = Wrapped(
+    alpha3PageProps({
+      sessionId: 's-empty',
+      items: [alpha3Workspace({ sessionId: 'other', path: '/ws/x' })],
+    }),
+  )
+  assert.equal(tree.props['data-workspace-waiting'], 'true')
+  assert.notEqual(tree.type, Page)
+  assert.equal(tree.children[0].children[0], copy.workspaceWaiting)
 })

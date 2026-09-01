@@ -15,7 +15,10 @@ export function viewIdForPage(pageId) {
   return PAGE_TO_VIEW[String(pageId || '')] || ''
 }
 
-export function wrapVisionPage(React, Page, pageId) {
+export function wrapVisionPage(React, Page, pageId, t) {
+  const waitingTitle = typeof t === 'function' ? t('workspaceWaiting') : '正在等待工作区'
+  const waitingHint =
+    typeof t === 'function' ? t('workspaceWaitingHint') : '当前 Session 尚未加入工作区，加入后会自动加载状态。'
   return function VisionPageBoundary(props) {
     const el = React.createElement
     const cwd = sessionCwd(props)
@@ -33,6 +36,14 @@ export function wrapVisionPage(React, Page, pageId) {
         if (tokenRef.current) clearActiveScope(tokenRef.current)
       }
     }, [cwd, sessionId, viewId, pageId])
+    if (!cwd) {
+      return el(
+        'div',
+        { className: 'dvb-page', role: 'status', 'data-workspace-waiting': 'true' },
+        el('div', { className: 'dvb-hint' }, waitingTitle),
+        el('div', { className: 'dvb-hint' }, waitingHint),
+      )
+    }
     return el(Page, props)
   }
 }
