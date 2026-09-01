@@ -12,7 +12,7 @@
 
 ## Vision模式
 
-插件启动时若还没有 `vision-bench` 预设，会把官方 **标准模式** 复制到 `$DSH_HOME/.agent-presets/vision-bench/`，并加上 agent 平面的本插件行。新会话在设置里选 **Vision模式** 即可。
+插件启动时若还没有 `vision-bench` 预设，会把官方 **标准模式** 复制到 `$DSH_HOME/.agent-presets/vision-bench/`，并加上 agent 平面的本插件行。预设内容只在 composition 真正变化时写入。**新建 Session 后生效**；已打开的 Session 保持原来的 generation，不会热更新工具或 system prompt。
 
 `vision_bench` 只出现在这个预设里，避免每个 Agent 都多带一套工具。
 

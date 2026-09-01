@@ -65,6 +65,38 @@ export function getLastPresetSeed() {
   return lastPresetSeed
 }
 
+export function inspectPresetHealth(home) {
+  const seed = getLastPresetSeed()
+  const dir = userPresetDir(home)
+  const composition = join(dir, 'agent.cordis.yml')
+  const ownership = _existsSync(dir) ? checkOwnership(dir) : { exists: false }
+  const generation = ownership.payload && ownership.payload.lastManagedAt ? String(ownership.payload.lastManagedAt) : ''
+  let parseError = ''
+  if (_existsSync(composition)) {
+    try {
+      const parsed = parseCompositionDocument(_readFileSync(composition, 'utf8'))
+      if (parsed.errors && parsed.errors.length) parseError = String(parsed.errors[0].message || parsed.errors[0])
+    } catch (error) {
+      parseError = String((error && error.message) || error)
+    }
+  } else if (!seed.error) {
+    parseError = 'Vision预设尚未安装'
+  }
+  const error = seed.ok === false ? seed.error || 'Vision预设未更新' : parseError || ownership.error || ''
+  return {
+    ok: !error,
+    id: PRESET_ID,
+    title: PRESET_TITLE,
+    generation,
+    error,
+    nextStep: error
+      ? seed.rebuildHelp || REBUILD_INSTRUCTIONS
+      : '新建 Session 后生效。已打开的 Session 保持原 generation，不会热更新。',
+    appliesOnNewSession: true,
+    unchanged: seed.unchanged === true,
+  }
+}
+
 export const PRESET_ID = 'vision-bench'
 export const PRESET_TITLE = 'Vision模式'
 const MARKER = '.dsh-vision-bench'

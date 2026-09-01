@@ -9,6 +9,7 @@ export const COPY = {
     sectionWorkbench: '工作台',
     settingsTitle: '本机程序',
     settingsHint: 'Keil 仍绑定本机 UV4/Python；Modbus 与串口监视使用插件内置 Node 运行时，无需 pymodbus。',
+    presetAppliesNextSession: '预设修改后，新建 Session 才生效。已打开的 Session 不会热更新 Agent 工具。',
     python: 'Python（Keil 工程脚本，可选）',
     uv4: 'Keil UV4',
     openocd: 'OpenOCD（外部可执行文件，由插件通过 Node 进程封装调用）',
@@ -345,6 +346,8 @@ export const COPY = {
     settingsTitle: 'Local programs',
     settingsHint:
       'Keil still binds local UV4/Python. Modbus and serial monitoring use the bundled Node runtime; pymodbus is not required.',
+    presetAppliesNextSession:
+      'Preset changes apply to new sessions. Open sessions keep their current generation and do not hot-reload tools.',
     python: 'Python (optional Keil scripts)',
     uv4: 'Keil UV4',
     openocd: 'OpenOCD (external executable, wrapped by the plugin Node process)',

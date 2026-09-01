@@ -3,7 +3,7 @@ import { IO_RUNTIME_PACKAGES } from './bench-io-contract.mjs'
 import { createModbusTransport } from './bench-modbus-transport.mjs'
 import { requireWorkspaceCwd } from './bench-paths.mjs'
 import { runExecFile } from './bench-run.mjs'
-import { getLastPresetSeed } from './bench-preset.mjs'
+import { inspectPresetHealth } from './bench-preset.mjs'
 import { probeOpenOcdHealth } from './src/application/flash/openocd-health-service.mjs'
 import { listSerialPorts } from './bench-serial.mjs'
 import { loadBindings, loadWorkspace, probeBindings } from './bench-store.mjs'
@@ -29,11 +29,13 @@ export const runSelfCheck = async (home, cwd, opts = {}) => {
     health.openocd.bound && health.openocd.exists,
     bindings.openocd || '外部 OpenOCD 可执行文件，由插件通过 Node 进程封装调用',
   )
-  const presetSeed = getLastPresetSeed()
+  const presetHealth = inspectPresetHealth(home)
   push(
     'vision-preset',
-    presetSeed.ok !== false,
-    presetSeed.ok === false ? presetSeed.error || 'Vision预设未更新' : 'Vision模式',
+    presetHealth.ok,
+    presetHealth.ok
+      ? `Vision模式 · generation ${presetHealth.generation || 'ready'} · 新建 Session 后生效`
+      : presetHealth.error || 'Vision预设未更新',
   )
 
   if (health.python.bound && health.python.exists) {

@@ -29,7 +29,7 @@ import { clearFlashApprovals } from './src/application/flash/flash-approval-serv
 import { probeOpenOcdHealth } from './src/application/flash/openocd-health-service.mjs'
 import { mutateConfig } from './src/application/config/config-mutation-service.mjs'
 import { ensurePolling, pollingStatus, startPolling, stopAllPolling, stopPolling } from './bench-polling-service.mjs'
-import { seedVisionBenchPreset } from './bench-preset.mjs'
+import { inspectPresetHealth, seedVisionBenchPreset } from './bench-preset.mjs'
 import { VISION_GUIDANCE } from './bench-preset.mjs'
 import {
   clearSerialMonitorState,
@@ -181,6 +181,7 @@ const snapshot = async (cwd) => {
     bindings,
     health: probeBindings(bindings),
     ioRuntime: getVisionIoBroker().snapshot(),
+    presetHealth: inspectPresetHealth(dshHome),
   }
   const room = cwd ? requireWorkspaceCwd(cwd) : { error: 'no-cwd' }
   if (!room.error) {

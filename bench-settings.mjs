@@ -21,11 +21,13 @@ export function createSettingsPage(React, t, post) {
     const [checks, setChecks] = React.useState(null)
     const [message, setMessage] = React.useState(null)
     const [ioRuntime, setIoRuntime] = React.useState(null)
+    const [presetHealth, setPresetHealth] = React.useState(null)
 
     const applySnap = (data) => {
       if (data && data.bindings) setBindings(data.bindings)
       if (data && data.health) setHealth(data.health)
       if (data && data.ioRuntime) setIoRuntime(data.ioRuntime)
+      if (data && data.presetHealth) setPresetHealth(data.presetHealth)
     }
 
     React.useEffect(() => {
@@ -73,6 +75,16 @@ export function createSettingsPage(React, t, post) {
       { className: 'dvb-page' },
       el('div', { className: 'dvb-title' }, t('settingsTitle')),
       el('div', { className: 'dvb-hint' }, t('settingsHint')),
+      el(
+        'div',
+        {
+          className: 'dvb-hint',
+          'data-preset-health': presetHealth && presetHealth.ok === false ? 'err' : 'ok',
+        },
+        t('presetAppliesNextSession') +
+          (presetHealth && presetHealth.generation ? ' · generation ' + presetHealth.generation : '') +
+          (presetHealth && presetHealth.error ? ' · ' + presetHealth.error : ''),
+      ),
       el(
         'div',
         { className: 'dvb-hint' },

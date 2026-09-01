@@ -15,6 +15,7 @@ import {
   REBUILD_INSTRUCTIONS,
   _internal,
   ensurePresetOverlay,
+  inspectPresetHealth,
   parseCompositionDocument,
   seedVisionBenchPreset,
 } from '../bench-preset.mjs'
@@ -219,6 +220,66 @@ test('agent single-point read patches the active device address', async () => {
     // point model keeps the read as a transient operation; points table unchanged
     assert.ok(Array.isArray(ws.modbus.points))
     assert.equal(ws.modbus.points.length, 1)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('inspectPresetHealth reports generation and new-session apply rule', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dvb-preset-health-'))
+  try {
+    await writeFile(
+      join(dir, 'agent.cordis.yml'),
+      [
+        '- id: persona',
+        "  name: '@deepseek-ai/dsh-persona'",
+        '  config:',
+        '    text: >-',
+        '      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.',
+        '',
+      ].join('\n'),
+    )
+    const first = ensurePresetOverlay(dir)
+    assert.equal(first.ok, true)
+    const home = join(dir, 'home')
+    await mkdir(join(home, '.agent-presets', 'vision-bench'), { recursive: true })
+    const presetDir = join(home, '.agent-presets', 'vision-bench')
+    for (const name of ['agent.cordis.yml', 'preset.yml', '.dsh-vision-bench']) {
+      await writeFile(join(presetDir, name), await readFile(join(dir, name), 'utf8'))
+    }
+    await seedVisionBenchPreset(null, home)
+    const health = inspectPresetHealth(home)
+    assert.equal(health.ok, true)
+    assert.equal(health.appliesOnNewSession, true)
+    assert.match(health.nextStep, /新建 Session/)
+    assert.ok(health.generation)
+    const again = ensurePresetOverlay(presetDir)
+    assert.equal(again.unchanged, true)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('inspectPresetHealth surfaces a broken agent.cordis.yml', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-preset-broken-'))
+  const dir = join(home, '.agent-presets', 'vision-bench')
+  try {
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'agent.cordis.yml'), ':\n  - [')
+    await writeFile(
+      join(dir, '.dsh-vision-bench'),
+      JSON.stringify({
+        owner: 'dsh-vision-bench',
+        presetSchemaVersion: 2,
+        basePresetId: 'standard',
+        pluginRowId: 'vision-bench-tools',
+        lastManagedAt: '2026-01-01T00:00:00.000Z',
+      }),
+    )
+    const health = inspectPresetHealth(home)
+    assert.equal(health.ok, false)
+    assert.ok(health.error)
+    assert.equal(health.appliesOnNewSession, true)
   } finally {
     await rm(home, { recursive: true, force: true })
   }
