@@ -7,7 +7,11 @@ import {
   HOST_UNAUTHORIZED,
   HOST_UNAVAILABLE,
 } from '../../application/commands/command-contract.mjs'
-import { losslessCommandResult, toLosslessJson } from '../../application/commands/lossless-json.mjs'
+import {
+  finalizeAgentCommandResult,
+  losslessCommandResult,
+  toLosslessJson,
+} from '../../application/commands/lossless-json.mjs'
 
 /**
  * @typedef {import('../../types/agent-tool.js').AgentCommandEnvelope} AgentCommandEnvelope
@@ -177,17 +181,18 @@ async function tryHostHttp(cmd) {
  */
 export async function dispatchVisionCommand(cmd) {
   const input = cmd && typeof cmd === 'object' ? cmd : { action: '' }
+  const source = input.source === 'agent' || input.source === 'system' ? input.source : 'user'
   if (hostHandle && typeof hostHandle.dispatch === 'function') {
     return /** @type {AgentCommandResult} */ (
-      losslessCommandResult(await hostHandle.dispatch(/** @type {AgentCommandEnvelope} */ (input)))
+      finalizeAgentCommandResult(await hostHandle.dispatch(/** @type {AgentCommandEnvelope} */ (input)), source)
     )
   }
   if (input.requireHost !== true) {
     const { executeVisionCommand } = await import('../../application/commands/vision-command-service.mjs')
-    return /** @type {AgentCommandResult} */ (losslessCommandResult(await executeVisionCommand(input)))
+    return /** @type {AgentCommandResult} */ (finalizeAgentCommandResult(await executeVisionCommand(input), source))
   }
   return /** @type {AgentCommandResult} */ (
-    losslessCommandResult(await tryHostHttp(/** @type {AgentCommandEnvelope} */ (input)))
+    finalizeAgentCommandResult(await tryHostHttp(/** @type {AgentCommandEnvelope} */ (input)), source)
   )
 }
 

@@ -27,6 +27,35 @@ async function withWs(fn) {
   }
 }
 
+test('points add accepts a batch array in one configVersion bump', async () => {
+  await withWs(async (home, cwd) => {
+    const before = loadWorkspace(home, cwd)
+    const added = await mutateConfig({
+      home,
+      cwd,
+      source: 'agent',
+      sessionId: 's1',
+      expectedConfigVersion: before.modbus.configVersion,
+      operation: 'points.add',
+      target: { connectionId: 'c1', deviceId: 'd1' },
+      value: {
+        points: [
+          { name: '回风温度1', function: 3, address: 0, monitorEnabled: true, unit: '℃' },
+          { name: '回风温度2', function: 3, address: 1, monitorEnabled: true, unit: '℃' },
+          { name: '进水温度', function: 3, address: 2, monitorEnabled: true, unit: '℃' },
+        ],
+      },
+    })
+    assert.equal(added.ok, true, added.error)
+    assert.equal(added.changedPointIds.length, 3)
+    assert.equal(added.nextConfigVersion, before.modbus.configVersion + 1)
+    const ws = loadWorkspace(home, cwd)
+    assert.equal(ws.modbus.points.length, 3)
+    assert.equal(ws.modbus.points[0].address, 0)
+    assert.equal(ws.modbus.points[2].name, '进水温度')
+  })
+})
+
 test('points add/update/remove apply immediately and bump configVersion', async () => {
   await withWs(async (home, cwd) => {
     const before = loadWorkspace(home, cwd)

@@ -1,4 +1,4 @@
-import { losslessCommandResult } from './src/application/commands/lossless-json.mjs'
+import { finalizeAgentCommandResult } from './src/application/commands/lossless-json.mjs'
 import { dispatchVisionCommand } from './src/infrastructure/host/vision-host-client.mjs'
 
 export const ACTIONS = new Set([
@@ -46,7 +46,7 @@ const originFrom = (input) => ({
 /** In-process helper used by tests; Agent execute() sets requireHost. */
 export async function runVisionBench(home, args, cwd, originInput, opts) {
   const origin = originFrom(originInput)
-  return losslessCommandResult(
+  return finalizeAgentCommandResult(
     await dispatchVisionCommand({
       home,
       cwd,
@@ -59,6 +59,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
       expectedConfigVersion: args && (args.expectedConfigVersion ?? args.configVersion),
       requireHost: opts && opts.requireHost === true,
     }),
+    origin.source,
   )
 }
 
@@ -71,7 +72,7 @@ export function visionBenchTool(home) {
       'ls/select/build/map：工程与编译；' +
       'read/write：读点与受控写点（Agent 写点需界面批准）；' +
       'connect：仅打开或断开已保存连接（close=true 断开）。修改端点用 configureConnection，打开用 openConnection；' +
-      'points：op=list|add|update|remove|clear。add/update/remove/clear 直接保存；update/remove 必须带 pointId；clear 必须带 connectionId+deviceId。' +
+      'points：op=list|add|update|remove|clear。一次调用可以批量：op=add 用 points[{name,function,address,connectionId,deviceId,...}] 数组一次写入多个点；op=update 同样用 points[]；op=remove 用 ids[] 或 pointId。不要逐个 add。address 是协议地址（保持寄存器 0 = 40001），不要填 40001。clear 必须带 connectionId+deviceId。' +
       'visualization：op=list|get|add|update|remove|layout，直接修改组件。layout 必须携带 expectedConfigVersion 与 items[{id,x,y,w,h}]；CONFIG_DRIFT 后重新 list/get 再提交。当前 Session 可视化页面会实时同步布局。proposeAdd/proposeUpdate/proposeRemove 已移除（OP_REMOVED）。' +
       '所有配置修改必须携带最近一次 status/list/get 返回的 configVersion。CONFIG_DRIFT 后必须重新读取配置，再基于新版本重试；不得盲目重复旧修改。适用 config、configureConnection、points add/update/remove/clear、visualization add/update/remove/layout。status、points list、visualization list/get 不要求版本。' +
       'frames/focus/trend/alarm/evidence：现场只读与定位；' +
@@ -143,20 +144,30 @@ export function visionBenchTool(home) {
         },
         points: {
           type: 'array',
+          description: 'op=add/update 一次提交多个点位。优先用这个数组，不要循环单点 add。',
           items: {
             type: 'object',
             additionalProperties: true,
             properties: {
               id: { type: 'string' },
               name: { type: 'string' },
+              function: { type: 'number' },
+              address: { type: 'number', description: '协议地址，保持寄存器 0 = 40001' },
+              scale: { type: 'number' },
+              offset: { type: 'number' },
+              unit: { type: 'string' },
+              alarmMin: { type: 'number' },
+              alarmMax: { type: 'number' },
               monitorEnabled: { type: 'boolean' },
               alarmEnabled: { type: 'boolean' },
               trendEnabled: { type: 'boolean' },
+              connectionId: { type: 'string' },
+              deviceId: { type: 'string' },
             },
           },
         },
         id: { type: 'string' },
-        ids: { type: 'array', items: { type: 'string' } },
+        ids: { type: 'array', items: { type: 'string' }, description: 'op=remove 一次删除多个点位' },
         text: { type: 'string' },
         frameId: { type: 'string' },
         trendKey: { type: 'string' },
@@ -247,8 +258,9 @@ export function visionBenchTool(home) {
     async execute(args, exec) {
       const agent = exec && exec.agent
       const signal = exec && exec.signal
-      if (signal && signal.aborted) return losslessCommandResult({ ok: false, cancelled: true, error: '已取消' })
-      return losslessCommandResult(
+      if (signal && signal.aborted)
+        return finalizeAgentCommandResult({ ok: false, cancelled: true, error: '已取消' }, 'agent')
+      return finalizeAgentCommandResult(
         await dispatchVisionCommand({
           home,
           cwd: cwdOf(agent),
@@ -261,6 +273,7 @@ export function visionBenchTool(home) {
           expectedConfigVersion: args && (args.expectedConfigVersion ?? args.configVersion),
           requireHost: true,
         }),
+        'agent',
       )
     },
   }

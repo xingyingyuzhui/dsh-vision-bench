@@ -8,6 +8,7 @@ import { saveWorkspace } from '../../bench-store.mjs'
 import { visionBenchTool } from '../../bench-tool.mjs'
 import { envelope } from '../../src/application/commands/command-contract.mjs'
 import {
+  compactAgentResult,
   isLosslessJsonValue,
   losslessCommandResult,
   toLosslessJson,
@@ -64,6 +65,19 @@ test('toLosslessJson matches HTTP stringify: drops undefined, nulls holes/NaN, I
   assert.equal('skip' in cleaned, false)
   assert.deepEqual(cleaned.boom, { name: 'Error', message: 'nope' })
   assert.equal(cleaned.big, '10')
+})
+
+test('compactAgentResult drops workspace dumps but keeps config fields', () => {
+  const compact = compactAgentResult({
+    ok: true,
+    nextConfigVersion: 4,
+    changedPointIds: ['p1'],
+    points: [{ id: 'p1' }],
+    workspace: { log: [{ action: 'build' }], keil: { project: 'x' } },
+  })
+  assert.equal('workspace' in compact, false)
+  assert.equal(compact.nextConfigVersion, 4)
+  assert.deepEqual(compact.changedPointIds, ['p1'])
 })
 
 test('circular structures fail closed as HOST_INVALID_RESPONSE', () => {
@@ -145,9 +159,7 @@ test('in-process Agent tool execute sanitizes dirty host results', async () => {
     assert.equal('error' in ran, false)
     assert.equal('errorCode' in ran, false)
     assert.equal('signal' in ran, false)
-    assert.equal('a' in ran.workspace, false)
-    assert.equal(ran.workspace.n, null)
-    assert.equal(ran.workspace.when, '2026-01-02T00:00:00.000Z')
+    assert.equal('workspace' in ran, false)
     assert.deepEqual(ran.nested.list, [1, null, 2])
   } finally {
     stop()
@@ -214,6 +226,55 @@ test('Agent tool with real in-process dispatcher matches HTTP lossless ping', as
     const status = await tool.execute({ action: 'status' }, { agent: { session: { header: { cwd, id: 's1' } } } })
     assert.equal(status.ok, true, status.error)
     assertLossless(status, 'agent in-process status')
+  } finally {
+    stop()
+    unregisterVisionHost()
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('Agent points add batch is one version bump and omits workspace dump', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-json-batch-'))
+  const cwd = join(home, 'board')
+  mkdirSync(cwd, { recursive: true })
+  saveWorkspace(home, cwd, {
+    modbus: {
+      version: 3,
+      connections: [{ id: 'c1', name: 'C1', conn: { mode: 'tcp', sim: true } }],
+      devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
+      points: [],
+    },
+  })
+  unregisterVisionHost()
+  const stop = registerVisionHost(createVisionCommandDispatcher(home))
+  try {
+    const tool = visionBenchTool(home)
+    const before = await tool.execute({ action: 'status' }, { agent: { session: { header: { cwd, id: 's1' } } } })
+    const cv = before.modbus.configVersion
+    const ran = await tool.execute(
+      {
+        action: 'points',
+        op: 'add',
+        expectedConfigVersion: cv,
+        connectionId: 'c1',
+        deviceId: 'd1',
+        points: [
+          { name: '回风温度1', function: 3, address: 0, monitorEnabled: true },
+          { name: '回风温度2', function: 3, address: 1, monitorEnabled: true },
+        ],
+      },
+      { agent: { session: { header: { cwd, id: 's1' } } } },
+    )
+    assert.equal(ran.ok, true, ran.error)
+    assert.equal(ran.changedPointIds.length, 2)
+    assert.equal(ran.nextConfigVersion, cv + 1)
+    assert.equal('workspace' in ran, false, 'agent result must not dump workspace/log')
+    assertLossless(ran, 'batch add')
+    const listed = await tool.execute(
+      { action: 'points', op: 'list' },
+      { agent: { session: { header: { cwd, id: 's1' } } } },
+    )
+    assert.equal(listed.points.length, 2)
   } finally {
     stop()
     unregisterVisionHost()

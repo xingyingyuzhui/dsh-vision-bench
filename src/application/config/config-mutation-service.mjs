@@ -110,17 +110,20 @@ export function createConfigMutationService(deps = {}) {
         })
       }
     }
-    try {
-      await Promise.resolve(
-        notifyEvent(home, String(room.cwd), String(postCommit.summary || raw || ''), '', {
-          sessionId: spec.sessionId || '',
-        }),
-      )
-    } catch (error) {
-      postCommitWarnings.push({
-        code: 'EVENT_NOTIFY_FAILED',
-        message: error instanceof Error ? error.message : String(error || '事件通知失败'),
-      })
+    if (spec.source !== 'agent') {
+      try {
+        await Promise.resolve(
+          notifyEvent(home, String(room.cwd), String(postCommit.summary || raw || ''), '', {
+            sessionId: spec.sessionId || '',
+            source: spec.source || 'user',
+          }),
+        )
+      } catch (error) {
+        postCommitWarnings.push({
+          code: 'EVENT_NOTIFY_FAILED',
+          message: error instanceof Error ? error.message : String(error || '事件通知失败'),
+        })
+      }
     }
     const applied = postCommit.extras || {}
 

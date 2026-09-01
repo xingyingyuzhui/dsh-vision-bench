@@ -91,7 +91,12 @@ export const pointsOp = async (home, cwd, body) => {
     let list = pack.points
     if (cidArg) list = list.filter((p) => (p.connectionId || p.connId) === cidArg)
     if (didArg) list = list.filter((p) => p.deviceId === didArg)
-    return { ok: true, action: 'points', points: list.map((p) => compactPointRow(p, pack.values)) }
+    return {
+      ok: true,
+      action: 'points',
+      configVersion: pack.configVersion || 1,
+      points: list.map((p) => compactPointRow(p, pack.values)),
+    }
   }
   if (op === 'add' || op === 'update') {
     const inputs = Array.isArray(body.points) ? body.points : body.point ? [body.point] : []

@@ -1,7 +1,7 @@
 // @ts-check
 import { envelope, normalizeCommand } from './command-contract.mjs'
 import { globalCommandIdempotency } from './command-idempotency-cache.mjs'
-import { losslessCommandResult } from './lossless-json.mjs'
+import { finalizeAgentCommandResult } from './lossless-json.mjs'
 import { runVisionBench } from './vision-command-router.mjs'
 
 /**
@@ -28,7 +28,7 @@ export async function executeVisionCommand(input) {
     )
     return envelope(cmd, result)
   })
-  return losslessCommandResult(ran)
+  return finalizeAgentCommandResult(ran, cmd.source)
 }
 
 export { ACTIONS, runVisionBench, _internal } from './vision-command-router.mjs'

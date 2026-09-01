@@ -93,3 +93,28 @@ export function losslessCommandResult(result) {
     error: '命令结果不是 lossless JSON',
   }
 }
+
+/**
+ * Agent tool results must not dump the whole workspace (journal/log/tasks).
+ * Config mutations already return points/connections/devices/configVersion.
+ * @param {unknown} result
+ * @returns {unknown}
+ */
+export function compactAgentResult(result) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return result
+  const src = /** @type {Record<string, unknown>} */ (result)
+  if (!('workspace' in src)) return result
+  const { workspace: _workspace, ...rest } = src
+  void _workspace
+  return rest
+}
+
+/**
+ * @param {unknown} result
+ * @param {string} [source]
+ * @returns {Record<string, unknown>}
+ */
+export function finalizeAgentCommandResult(result, source) {
+  const compact = source === 'agent' ? compactAgentResult(result) : result
+  return losslessCommandResult(compact)
+}

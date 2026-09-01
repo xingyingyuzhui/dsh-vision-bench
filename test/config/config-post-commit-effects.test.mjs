@@ -84,6 +84,33 @@ test('persist success releases the connection exactly once', async () => {
   await rm(home, { recursive: true, force: true })
 })
 
+test('agent-sourced config mutations do not echo a followup notice', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-pc-agent-'))
+  const cwd = join(home, 'board')
+  seed(home, cwd)
+  const notified = []
+  const service = createConfigMutationService({
+    releaseConnections() {},
+    notifyEvent(_h, _room, summary) {
+      notified.push(summary)
+    },
+    listConnectionStates: async () => ({ connectionStates: [] }),
+  })
+  const ran = await service.mutateConfig({
+    home,
+    cwd,
+    source: 'agent',
+    sessionId: 'sess-live',
+    expectedConfigVersion: loadWorkspace(home, cwd).modbus.configVersion,
+    operation: 'points.add',
+    target: { connectionId: 'c1', deviceId: 'd1' },
+    value: { point: { name: 'T', function: 3, address: 0 } },
+  })
+  assert.equal(ran.ok, true, ran.error)
+  assert.equal(notified.length, 0, 'agent origin must not splice a user notice')
+  await rm(home, { recursive: true, force: true })
+})
+
 test('CONFIG_INVALID does not release connections', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-pc-inv-'))
   const cwd = join(home, 'board')

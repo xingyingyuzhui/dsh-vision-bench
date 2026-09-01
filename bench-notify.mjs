@@ -22,6 +22,16 @@ const currentAgents = () => {
   }
 }
 
+/** Notices must not look like a new user command, or DSH splices them into the inbox and the Agent re-runs them. */
+export function formatVisionNotice(summary, detail = '') {
+  const head = String(summary || '').trim()
+  const body = /^(?:\[Vision|Vision)/.test(head)
+    ? head
+    : `[Vision 已生效] ${head}。这是配置结果通知，不是新的操作请求，不要再执行一遍。`
+  const extra = String(detail || '').trim()
+  return extra ? `${body}\n${extra}` : body
+}
+
 const buildMessage = async (text, summary) => {
   try {
     const mod = await import('@deepseek-ai/dsh-llm')
@@ -65,7 +75,7 @@ export const notifyBenchEvent = async (home, cwd, summary, detail = '', opts = {
           ? agent.steer.bind(agent)
           : null
     if (!deliver) return { ok: false, skipped: 'no-method' }
-    const text = detail ? summary + '\n' + detail : summary
+    const text = formatVisionNotice(summary, detail)
     const message = await buildMessage(text, summary)
     await deliver(message)
     return { ok: true, boundId: targetId }
@@ -90,4 +100,4 @@ export const maybeNotifyResult = (home, cwd, label, ran) => {
   })
 }
 
-export const _internal = { PLUGIN_NAME, buildMessage }
+export const _internal = { PLUGIN_NAME, buildMessage, formatVisionNotice }
