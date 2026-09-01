@@ -205,6 +205,7 @@
     "docs/architecture/ADR-008-session-navigation.md",
     "docs/architecture/ADR-009-visualization-schema-v2.md",
     "docs/architecture/ADR-010-gridstack-react-ownership.md",
+    "docs/architecture/ADR-011-dsh-alpha3-integration.md",
     "docs/architecture/VENDOR_SIZE_0.25.md",
     "scripts/report-client-vendors.mjs",
     "src/ui/monitor/visualization/visualization-page.mjs",

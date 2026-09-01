@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { installDomStub } from './dom-stub.mjs'
+import { alpha3PageProps } from './fixtures/harness-alpha3-props.mjs'
 
 // Execute the GENERATED bundle exactly like the DSH web loader would
 // (factory(require) -> apply(ctx)) and mount every registered page with a
@@ -120,10 +121,8 @@ test('every registered bench page mounts without runtime errors', async () => {
     let tree = null
     assert.doesNotThrow(() => {
       tree = comp({
-        sessionId: 's1',
-        useSessions: (fn) => fn({ byId: { s1: { cwd: '/tmp/proj' } }, current: 's1' }),
+        ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }),
         tab: { id },
-        scope: {},
       })
     }, id + ' threw during render')
     assert.ok(tree, id + ' rendered no tree')
