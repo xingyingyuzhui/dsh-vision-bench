@@ -12,7 +12,7 @@ import { createMonitorWorkspace } from './src/ui/workspace/monitor-workspace.mjs
 
 export function apply(ctx) {
   const React = require('react')
-  const slots = ctx.get('slots')
+  const slots = ctx.slots
   if (slots == null || React == null) return
 
   const doc = typeof document === 'undefined' ? null : document
@@ -27,12 +27,11 @@ export function apply(ctx) {
   }
 
   let localeDispose = function () {}
-  try {
-    if (ctx.locale && typeof ctx.locale.register === 'function') {
-      localeDispose = ctx.locale.register(NS, COPY) || function () {}
+  if (ctx.locale) {
+    if (typeof ctx.locale.register !== 'function') {
+      throw new Error('dsh-vision-bench: injected locale is missing register()')
     }
-  } catch {
-    /* remount */
+    localeDispose = ctx.locale.register(NS, COPY) || function () {}
   }
 
   function t(key, params) {

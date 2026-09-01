@@ -84,6 +84,7 @@ const slots = {
   },
 }
 const ctx = {
+  slots,
   get(key) {
     if (key === 'slots') return slots
     return null

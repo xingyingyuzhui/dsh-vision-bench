@@ -84,6 +84,7 @@ function makeCtx(pages) {
   }
   return {
     pages,
+    slots,
     get(key) {
       return key === 'slots' ? slots : null
     },
@@ -105,6 +106,7 @@ function makeCtx(pages) {
 
 test('every registered bench page mounts without runtime errors', async () => {
   const mod = loadBundle()
+  assert.deepEqual(mod.inject, ['slots', 'locale'])
   const pages = {}
   mod.apply(makeCtx(pages))
   const mounted = Object.entries(pages).filter(([, comp]) => typeof comp === 'function')

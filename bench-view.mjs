@@ -1103,7 +1103,7 @@ export function createDebugView(React, t, post, openProject) {
 }
 
 export function registerView(ctx, React, t, DebugPage, HmiPage, MonitorPage) {
-  const slots = ctx.get ? ctx.get('slots') : ctx.slots
+  const slots = ctx.slots
   if (slots == null || React == null) return function () {}
   const stopDebug = slots.inject('conversation.view', function () {
     return slots.register(

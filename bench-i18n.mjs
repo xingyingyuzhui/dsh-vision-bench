@@ -683,13 +683,9 @@ export function interpolate(template, params) {
 }
 
 export function activeLocaleId(ctx) {
-  try {
-    const locale = ctx && ctx.locale
-    const snap = locale && (locale.getLocale ? locale.getLocale() : locale.getSnapshot && locale.getSnapshot())
-    if (snap && typeof snap.active === 'string' && snap.active) return snap.active
-  } catch {
-    /* inject miss */
-  }
+  const locale = ctx && ctx.locale
+  const snap = locale && (locale.getLocale ? locale.getLocale() : locale.getSnapshot && locale.getSnapshot())
+  if (snap && typeof snap.active === 'string' && snap.active) return snap.active
   const tag = (typeof document !== 'undefined' && document.documentElement && document.documentElement.lang) || 'zh'
   return tag
 }
@@ -704,14 +700,10 @@ export function translate(lang, key, params) {
 }
 
 export function tWith(ctx, key, params) {
-  try {
-    const locale = ctx && ctx.locale
-    if (locale && typeof locale.bind === 'function') {
-      const translated = locale.bind(NS)(key, params)
-      if (translated && translated !== key) return interpolate(translated, params)
-    }
-  } catch {
-    /* fall through */
+  const locale = ctx && ctx.locale
+  if (locale && typeof locale.bind === 'function') {
+    const translated = locale.bind(NS)(key, params)
+    if (translated && translated !== key) return interpolate(translated, params)
   }
   return translate(isZh(ctx) ? 'zh' : 'en', key, params)
 }

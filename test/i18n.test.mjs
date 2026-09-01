@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import test from 'node:test'
-import { COPY, interpolate, translate } from '../bench-i18n.mjs'
+import { fileURLToPath } from 'node:url'
+import { COPY, interpolate, tWith, translate } from '../bench-i18n.mjs'
 
 test('zh and en tables share keys', async () => {
   assert.deepEqual(Object.keys(COPY.zh).sort(), Object.keys(COPY.en).sort())
@@ -48,4 +51,28 @@ test('translate falls back and interpolates', async () => {
   assert.equal(translate('en', 'tabMonitor'), 'Monitor')
   assert.equal(interpolate('a {n} b', { n: 2 }), 'a 2 b')
   assert.equal(translate('zh', 'missing-key'), 'missing-key')
+})
+
+test('tWith falls back to COPY when locale is not injected', () => {
+  assert.equal(tWith({}, 'tabHmi'), '上位机')
+  assert.equal(tWith({ locale: null }, 'tabDebug'), '调试')
+})
+
+test('tWith uses locale.bind when the locale service is present', () => {
+  const ctx = {
+    locale: {
+      bind: () => (key) => (key === 'tabHmi' ? 'HMI from locale' : key),
+    },
+  }
+  assert.equal(tWith(ctx, 'tabHmi'), 'HMI from locale')
+})
+
+test('client inject lists slots and locale and matches the package manifest', () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+  assert.deepEqual(pkg.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-slots', '@deepseek-ai/dsh-client-locale'])
+  const entry = readFileSync(join(root, 'src/ui/client/client-entry.mjs'), 'utf8')
+  assert.match(entry, /inject = \['slots', 'locale'\]/)
+  const build = readFileSync(join(root, 'scripts/build-client.mjs'), 'utf8')
+  assert.match(build, /inject: \['slots', 'locale'\]/)
 })

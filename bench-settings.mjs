@@ -159,7 +159,7 @@ export function createSettingsPage(React, t, post) {
 }
 
 export function registerSettings(ctx, React, t, Page) {
-  const slots = ctx.get ? ctx.get('slots') : ctx.slots
+  const slots = ctx.slots
   if (slots == null || React == null) return function () {}
   return slots.inject('settings.section', function () {
     return slots.register(

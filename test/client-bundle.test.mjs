@@ -12,7 +12,7 @@ test('generated client keeps the factory contract', async () => {
   const q = `['"]`
   assert.match(src, /Do not edit by hand/)
   assert.match(src, new RegExp(`id:\\s*${q}dsh-vision-bench${q}`))
-  assert.match(src, /inject: \['slots'\]/)
+  assert.match(src, /inject: \['slots', 'locale'\]/)
   assert.match(src, /apply: DvbClient\.apply/)
   assert.match(src, /var DvbClient =/)
   assert.doesNotMatch(src, /stripModule/)

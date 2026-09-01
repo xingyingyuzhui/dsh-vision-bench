@@ -248,6 +248,7 @@ test('Task10: generated client renders the real frames tab with 5000 rows (1–4
     },
   }
   const ctx = {
+    slots,
     get(key) {
       return key === 'slots' ? slots : null
     },
