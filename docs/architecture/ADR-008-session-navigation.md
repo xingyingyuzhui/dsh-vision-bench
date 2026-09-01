@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (0.25.x)
+Accepted (0.25.x). Supplemented by [ADR-011](./ADR-011-dsh-alpha3-integration.md) for DSH 0.1.2-alpha.3: cwd now comes from `useWorkspaces`, and cross-view navigation uses `openView` / `viewRequest` instead of `slots.select`.
 
 ## Context
 

@@ -1,5 +1,7 @@
 # dsh-vision-bench · Vision 模式
 
+Requires DSH 0.1.2-alpha.3. Install from an `npm pack` tarball, not a `link:` checkout.
+
 日常开发用的会话工作台。跟 Claw 无关。
 
 - 会话区标签：**调试**、**上位机**、**监控**。监控内：可视化、告警、串口报文、操作记录；调试内另有工程结构
@@ -36,7 +38,7 @@
 - **看总线报文**：每次 Modbus 读/写记录事务报文（hex）。RTU 为 ADU（含 CRC）；TCP 显示协议归一化报文，不是原始 MBAP。「串口报文」只展示当前或曾经使用过的 **RTU** 通道（TCP 与仿真连接不出现），负责选择串口与筛选查看（设备/方向/功能码/状态/关键字、暂停滚动、清空、复制 Hex、导出 JSONL），**不再负责打开串口**。串口由上位机连接持有，Windows 下 COM 独占，Worker owner 表按物理口互斥；占用返回 `PORT_IN_USE`
 
 - **上位机**：设备 / 连接 / 点位。RTU 串口扫描本机已连接 COM 口。真实读写走插件内置 Node Modbus 运行时（仿真不启动 Worker）。功能码 01/03 可写（FC05/06 单点、FC15/16 批量），02/04 只读。写入后显示 **写前值 → 目标值 → 回读值**。写入超时返回 `WRITE_OUTCOME_UNKNOWN`（结果未知），不要直接重试，先读回再由用户决定。操作流程：创建连接 → 配置 COM/TCP → 连接 → 添加设备（名称 + 连接内唯一 Unit ID）→ 设备卡片内添加点位（唯一键 = 连接+设备+功能码+地址，不同设备可用同地址）→ 开始采集 → 查看点表 / 可视化 / 告警 → 在「串口报文」选当前 RTU 串口查看报文。**连接 / 断开中不可修改端点参数，先断开再改**；采集由 Host 后台服务运行，点表/可视化/告警/报文共享同一实时值来源
-- **Windows 无 Python 安装**：从发布 `.tgz` 安装后，未绑定 Python 即可做 Modbus RTU/TCP 主机读写与轮询。Keil 仍需要本机 UV4；烧录仍需要外部 OpenOCD。macOS 自动测试不能代替 Windows 10/11 实机验收（见 `docs/WINDOWS_ACCEPTANCE_0.25.md`，**尚未真机验收**）
+- **Windows 无 Python 安装**：从发布 `.tgz` 安装后，未绑定 Python 即可做 Modbus RTU/TCP 主机读写与轮询。Keil 仍需要本机 UV4；烧录仍需要外部 OpenOCD。macOS 自动测试不能代替 Windows 10/11 实机验收（见 `docs/WINDOWS_ACCEPTANCE_0.26.md`，**尚未真机验收**）
 - **0.22 写入边界**：Host 是工作区唯一写者。配置走 `mutateConfig`（成功才递增 `configVersion`），实时值/趋势/告警/报文走同一把 `runExclusive` 队列上的 `mutateRuntime`。配置已落盘但连接释放/事件通知失败时返回 `ok: true` 与 `postCommitWarnings`，不回滚。Agent 改配置无需确认卡；真实线圈/寄存器写入、烧录、复位仍需界面批准。Agent 与 Host 分进程时走 HTTP 命令桥；`system.ping` 是无副作用探活。失败会返回 `HOST_UNAVAILABLE` / `HOST_TIMEOUT` / `HOST_UNAUTHORIZED` / `HOST_FORBIDDEN` / `HOST_INVALID_RESPONSE` 等，而不是静默降级。
 - **点表元数据**：每段可带倍率 / 偏移 / 单位 / 告警上下限；CSV 导入导出（剪贴板往返）批量编辑
 - **阈值告警**：采集时评估越限，越限/恢复写入「操作记录」并通知当前会话；监控「告警」回看记录
