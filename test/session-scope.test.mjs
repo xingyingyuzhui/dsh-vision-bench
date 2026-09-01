@@ -59,6 +59,7 @@ test('wrapVisionPage writes real sessionId and viewId into the active scope', ()
     createElement: (type, props, ...children) => ({ type, props, children }),
     useRef: (init) => ({ current: init }),
     useEffect: (fn) => fn(),
+    useState: (init) => [typeof init === 'function' ? init() : init, () => {}],
   }
   const Page = function Inner(props) {
     return props
@@ -81,6 +82,7 @@ test('wrapVisionPage waits when the session has no workspace', () => {
     createElement: (type, props, ...children) => ({ type, props, children }),
     useRef: (init) => ({ current: init }),
     useEffect: (fn) => fn(),
+    useState: (init) => [typeof init === 'function' ? init() : init, () => {}],
   }
   const Page = function Inner() {
     return { type: 'page' }

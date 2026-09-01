@@ -51,13 +51,14 @@ test('production code must not read props.useSessions', () => {
   assert.deepEqual(hits, [], 'alpha.3 production must not use removed useSessions:\n' + hits.join('\n'))
 })
 
-test('production code must not call slots.select', { skip: 'stage 2: viewRequest/openView navigation' }, () => {
+test('production code must not call slots.select or setNavViewSelector', () => {
   const hits = []
   for (const file of productionSources()) {
     const src = readFileSync(file, 'utf8')
     if (/slots\.select|slotsApi\.select/.test(src)) hits.push(`${file}: slots.select`)
+    if (/setNavViewSelector/.test(src)) hits.push(`${file}: setNavViewSelector`)
   }
-  assert.deepEqual(hits, [], 'alpha.3 production must not call slots.select:\n' + hits.join('\n'))
+  assert.deepEqual(hits, [], 'alpha.3 production must not use removed navigation APIs:\n' + hits.join('\n'))
 })
 
 test('sessionCwd resolves path from useWorkspaces items by sessionId', () => {

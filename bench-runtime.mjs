@@ -5,8 +5,8 @@ import { getActiveScope, subscribeFocus } from './bench-shared.mjs'
 import { ATTR, CSS } from './bench-styles.mjs'
 import { registerView } from './bench-view.mjs'
 import { wrapVisionPage } from './src/ui/workspace/vision-page-boundary.mjs'
-import { navigate, setNavViewSelector } from './src/ui/workspace/vision-navigation-store.mjs'
 import { MONITOR_SECTIONS, VIEW_HMI, VIEW_MONITOR, shouldRouteFocus } from './src/ui/workspace/vision-route.mjs'
+import { requestOpenViewFromScope } from './src/ui/workspace/vision-view-request.mjs'
 import { createDebugWorkspace } from './src/ui/workspace/debug-workspace.mjs'
 import { createMonitorWorkspace } from './src/ui/workspace/monitor-workspace.mjs'
 
@@ -54,36 +54,16 @@ export function apply(ctx) {
     )
   }
 
-  function selectView(viewId) {
-    try {
-      const slotsApi = ctx.get ? ctx.get('slots') : null
-      if (slotsApi && typeof slotsApi.select === 'function') slotsApi.select('conversation.view', viewId)
-    } catch {}
-  }
-
   function openHmi(target) {
-    const active = getActiveScope()
-    navigate(
-      active.sessionId,
-      active.cwd,
-      { viewId: VIEW_HMI, section: '', target: target || {} },
-      { source: 'manual' },
-    )
-    selectView(VIEW_HMI)
+    requestOpenViewFromScope(VIEW_HMI, { section: '', target: target || {}, source: 'manual' })
   }
 
   function openFrames() {
-    const active = getActiveScope()
-    navigate(
-      active.sessionId,
-      active.cwd,
-      { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES },
-      { source: 'manual' },
-    )
-    selectView(VIEW_MONITOR)
+    requestOpenViewFromScope(VIEW_MONITOR, {
+      section: MONITOR_SECTIONS.FRAMES,
+      source: 'manual',
+    })
   }
-
-  setNavViewSelector(selectView)
 
   const SettingsPage = createSettingsPage(React, t, post)
   const DebugWorkspace = wrapVisionPage(React, createDebugWorkspace(React, t, post), 'debug', t)
@@ -97,23 +77,27 @@ export function apply(ctx) {
   const stopSettings = registerSettings(ctx, React, t, SettingsPage)
   const stopView = registerView(ctx, React, t, DebugWorkspace, HmiView, MonitorWorkspace)
 
-  let lastRouteKey = ''
+  const lastRouteKeyBySession = new Map()
   const applyFocus = (fs, changedCwd) => {
     const active = getActiveScope()
     const focusSessionId = String((fs && fs.sessionId) || '')
-    if (focusSessionId !== String(active.sessionId || '')) return
+    if (!active.sessionId || focusSessionId !== String(active.sessionId || '')) return
+    const previousRouteKey = lastRouteKeyBySession.get(active.sessionId) || ''
     const decision = shouldRouteFocus({
       activeCwd: active.cwd,
       activeSessionId: active.sessionId,
       changedCwd,
       focus: fs,
-      previousRouteKey: lastRouteKey,
+      previousRouteKey,
     })
     if (!decision.route) return
-    const result = navigate(active.sessionId, active.cwd, decision, { source: 'agent' })
-    if (!result || result.applied === false) return
-    lastRouteKey = decision.routeKey
-    selectView(decision.viewId)
+    lastRouteKeyBySession.set(active.sessionId, decision.routeKey)
+    requestOpenViewFromScope(decision.viewId, {
+      section: decision.section,
+      target: decision.target,
+      routeKey: decision.routeKey,
+      source: 'agent',
+    })
   }
   const focusUnsub = subscribeFocus('', (fs, cwd) => applyFocus(fs, cwd))
 

@@ -43,18 +43,20 @@ export function useSessionCwd(React, props) {
 
 // Token-guarded active page scope — unmounting a stale session page must never
 // wipe the session/cwd/view set by a newer page.
-const ACTIVE_SCOPE = { token: '', sessionId: '', cwd: '', viewId: '', seq: 0 }
+const ACTIVE_SCOPE = { token: '', sessionId: '', cwd: '', viewId: '', openView: null, seq: 0 }
 
 function applyScope(scope) {
   if (scope && typeof scope === 'object') {
     ACTIVE_SCOPE.sessionId = String(scope.sessionId || '')
     ACTIVE_SCOPE.cwd = String(scope.cwd || '')
     ACTIVE_SCOPE.viewId = String(scope.viewId || '')
+    ACTIVE_SCOPE.openView = typeof scope.openView === 'function' ? scope.openView : null
     return
   }
   ACTIVE_SCOPE.sessionId = ''
   ACTIVE_SCOPE.cwd = String(scope || '')
   ACTIVE_SCOPE.viewId = ''
+  ACTIVE_SCOPE.openView = null
 }
 
 export function setActiveScope(token, scope) {
@@ -68,6 +70,7 @@ export function clearActiveScope(token) {
   ACTIVE_SCOPE.sessionId = ''
   ACTIVE_SCOPE.cwd = ''
   ACTIVE_SCOPE.viewId = ''
+  ACTIVE_SCOPE.openView = null
   ACTIVE_SCOPE.token = ''
   return ''
 }
@@ -77,5 +80,6 @@ export function getActiveScope() {
     sessionId: ACTIVE_SCOPE.sessionId,
     cwd: ACTIVE_SCOPE.cwd,
     viewId: ACTIVE_SCOPE.viewId,
+    openView: ACTIVE_SCOPE.openView,
   }
 }

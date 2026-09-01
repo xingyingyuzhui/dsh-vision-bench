@@ -82,6 +82,7 @@
     "src/ui/client/client-entry.mjs",
     "src/ui/workspace/vision-route.mjs",
     "src/ui/workspace/vision-navigation-store.mjs",
+    "src/ui/workspace/vision-view-request.mjs",
     "src/ui/workspace/vision-page-boundary.mjs",
     "src/ui/workspace/workspace-tabs.mjs",
     "src/ui/workspace/monitor-workspace.mjs",

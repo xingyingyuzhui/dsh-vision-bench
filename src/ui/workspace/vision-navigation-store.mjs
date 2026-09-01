@@ -10,7 +10,6 @@ const LISTENERS = new Map()
 let hydrated = false
 let storageOverride = null
 let nowFn = () => Date.now()
-let viewSelector = null
 
 export function navKey(sessionId, cwd) {
   return `${String(sessionId || '')}\0${String(cwd || '')}`
@@ -23,10 +22,6 @@ export function setNavNow(fn) {
 export function setNavStorage(storage) {
   storageOverride = storage || null
   hydrated = false
-}
-
-export function setNavViewSelector(fn) {
-  viewSelector = typeof fn === 'function' ? fn : null
 }
 
 function currentNow(opts) {
@@ -267,13 +262,7 @@ export function restoreNav(sessionId, cwd, opts = {}) {
 }
 
 export function restoreUserLocation(sessionId, cwd, opts = {}) {
-  const restored = restoreNav(sessionId, cwd, opts)
-  if (restored?.applied && restored.viewId && typeof viewSelector === 'function') {
-    try {
-      viewSelector(restored.viewId)
-    } catch {}
-  }
-  return restored
+  return restoreNav(sessionId, cwd, opts)
 }
 
 export function subscribeNav(sessionId, cwd, fn) {
