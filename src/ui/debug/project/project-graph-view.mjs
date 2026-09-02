@@ -10,10 +10,12 @@ export function createProjectGraphView(React) {
     graph,
     selectedId,
     onSelect,
+    onClearSelect,
     capped,
     edgesCapped,
-    orphanEdges,
-    truncatedIncludeEdges,
+    nodesCapped,
+    truncation,
+    maxEdges,
   }) {
     const el = React.createElement
     const hostRef = React.useRef(null)
@@ -108,6 +110,30 @@ export function createProjectGraphView(React) {
     }
 
     const transform = `translate(${pan.x},${pan.y}) scale(${scale})`
+    const stats = truncation && typeof truncation === 'object' ? truncation : {}
+    const edgeLimit = Number(maxEdges) > 0 ? Number(maxEdges) : Number(graph?.maxEdges) || 120
+    const hints = []
+
+    if (capped || edgesCapped || nodesCapped) {
+      hints.push('图谱已截断，仅展示部分节点/依赖')
+    }
+    if (stats.backendTruncated) {
+      hints.push('后端已截断依赖列表，当前视图可能不完整')
+    }
+    if (stats.cappedEdgeCount > 0) {
+      hints.push(`仅展示前 ${edgeLimit} 条依赖（另有 ${stats.cappedEdgeCount} 条未绘制）`)
+    } else if (stats.inputEdgeCount > stats.renderedEdgeCount && stats.renderedEdgeCount > 0) {
+      const skipped = stats.unresolvedEdgeCount + stats.filteredEdgeCount
+      if (skipped > 0) {
+        hints.push(`${skipped} 条依赖未纳入当前视图`)
+      }
+    }
+    if (stats.unresolvedEdgeCount > 0) {
+      hints.push(`${stats.unresolvedEdgeCount} 条边未解析`)
+    }
+    if (stats.filteredEdgeCount > 0) {
+      hints.push(`${stats.filteredEdgeCount} 条边被筛选隐藏`)
+    }
 
     return el(
       'div',
@@ -117,7 +143,7 @@ export function createProjectGraphView(React) {
         { className: 'dvb-graph-toolbar' },
         el(
           'button',
-          { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: fit },
+          { type: 'button', className: 'dvb-btn dvb-btn-sm', 'aria-label': '适应画布', onClick: fit },
           '适应画布',
         ),
         el(
@@ -125,6 +151,7 @@ export function createProjectGraphView(React) {
           {
             type: 'button',
             className: 'dvb-btn dvb-btn-sm',
+            'aria-label': '重置缩放为 100%',
             onClick() {
               setScale(1)
               setPan({ x: 24, y: 24 })
@@ -133,13 +160,7 @@ export function createProjectGraphView(React) {
           '100%',
         ),
         el('span', { className: 'dvb-graph-legend' }, '● 正常 ○ 缺失 △ 外'),
-        capped || edgesCapped
-          ? el('span', { className: 'dvb-hint dvb-need' }, '图谱已截断，仅展示部分节点/依赖')
-          : null,
-        truncatedIncludeEdges
-          ? el('span', { className: 'dvb-hint dvb-need' }, '仅展示前 120 条依赖')
-          : null,
-        orphanEdges > 0 ? el('span', { className: 'dvb-hint' }, `${orphanEdges} 条边未解析`) : null,
+        ...hints.map((msg, i) => el('span', { key: `hint-${i}`, className: 'dvb-hint dvb-need' }, msg)),
       ),
       el(
         'div',
@@ -185,7 +206,7 @@ export function createProjectGraphView(React) {
               }),
               el(
                 'text',
-                { x: cluster.x + 12, y: cluster.y + 16, className: 'dvb-graph-cluster-label' },
+                { x: cluster.x + 12, y: cluster.y + 18, className: 'dvb-graph-cluster-label' },
                 cluster.label,
               ),
             ),
@@ -205,16 +226,31 @@ export function createProjectGraphView(React) {
           layout.nodes.map((node) => {
             const selected = node.id === selectedId
             const neighbor = hood.nodeIds.has(node.id)
+            const ariaLabel = `${node.label}，${node.groupName}${selected ? '，已选中' : ''}`
             return el(
               'g',
               {
                 key: node.id,
                 className: `dvb-graph-node${selected ? ' is-on' : ''}${neighbor ? ' is-near' : ''}`,
                 'data-kind': node.kind,
+                role: 'button',
+                tabIndex: 0,
+                'aria-label': ariaLabel,
                 transform: `translate(${node.x},${node.y})`,
                 onClick(ev) {
                   ev.stopPropagation()
                   onSelect(node)
+                },
+                onKeyDown(ev) {
+                  if (ev.key === 'Enter' || ev.key === ' ') {
+                    ev.preventDefault()
+                    ev.stopPropagation()
+                    onSelect(node)
+                  } else if (ev.key === 'Escape') {
+                    ev.preventDefault()
+                    ev.stopPropagation()
+                    onClearSelect?.()
+                  }
                 },
               },
               el('rect', {

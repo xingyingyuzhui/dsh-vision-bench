@@ -14,7 +14,7 @@ function basenameOf(path) {
 /**
  * @param {unknown[]} groups
  * @param {unknown[]} includeEdges
- * @param {{ maxNodes?: number, maxEdges?: number, filter?: string, search?: string }} [opts]
+ * @param {{ maxNodes?: number, maxEdges?: number, filter?: string, search?: string, backendTruncated?: boolean }} [opts]
  */
 export function buildProjectGraph(groups, includeEdges, opts = {}) {
   const maxNodes = Number(opts.maxNodes) > 0 ? Number(opts.maxNodes) : DEFAULT_MAX_NODES
@@ -23,6 +23,7 @@ export function buildProjectGraph(groups, includeEdges, opts = {}) {
   const needle = String(opts.search || '')
     .trim()
     .toLowerCase()
+  const backendTruncated = !!opts.backendTruncated
 
   const nodes = []
   const clusters = []
@@ -72,19 +73,28 @@ export function buildProjectGraph(groups, includeEdges, opts = {}) {
   const nodeSet = new Set(nodes.map((n) => n.id))
   const edges = []
   let edgesCapped = false
-  let orphan = 0
+  let unresolvedEdgeCount = 0
+  let filteredEdgeCount = 0
+  let cappedEdgeCount = 0
+  const inputEdges = Array.isArray(includeEdges) ? includeEdges : []
+  const inputEdgeCount = inputEdges.length
 
-  for (const raw of Array.isArray(includeEdges) ? includeEdges : []) {
+  for (const raw of inputEdges) {
     if (edges.length >= maxEdges) {
       edgesCapped = true
-      break
+      cappedEdgeCount += 1
+      continue
     }
     const fromHit = findProjectFile(groups, raw?.from)
     const toHit = findProjectFile(groups, raw?.to || raw?.name)
     const from = fromHit ? fileTreeId(fromHit.file) : ''
     const to = toHit ? fileTreeId(toHit.file) : ''
-    if (!from || !to || !nodeSet.has(from) || !nodeSet.has(to)) {
-      orphan += 1
+    if (!from || !to) {
+      unresolvedEdgeCount += 1
+      continue
+    }
+    if (!nodeSet.has(from) || !nodeSet.has(to)) {
+      filteredEdgeCount += 1
       continue
     }
     edges.push({
@@ -95,14 +105,27 @@ export function buildProjectGraph(groups, includeEdges, opts = {}) {
     })
   }
 
+  const renderedEdgeCount = edges.length
+  const orphanEdges = unresolvedEdgeCount + filteredEdgeCount
+
   return {
     nodes,
     edges,
     clusters,
+    maxEdges,
+    maxNodes,
     capped: nodesCapped || edgesCapped,
     edgesCapped,
     nodesCapped,
-    orphanEdges: orphan,
+    orphanEdges,
+    truncation: {
+      inputEdgeCount,
+      renderedEdgeCount,
+      unresolvedEdgeCount,
+      filteredEdgeCount,
+      cappedEdgeCount,
+      backendTruncated,
+    },
   }
 }
 

@@ -8,6 +8,7 @@ import React from 'react'
 import { createElement } from 'react'
 import { createMapView } from '../bench-map.mjs'
 import { findProjectFile, jumpErrorForHit } from '../src/ui/debug/project/project-tree-model.mjs'
+import { shouldIgnoreProjectSearchShortcut } from '../src/ui/debug/project/project-workspace.mjs'
 import { createDebugWorkspace } from '../src/ui/workspace/debug-workspace.mjs'
 import { clearNavStore, navigate } from '../src/ui/workspace/vision-navigation-store.mjs'
 import { DEBUG_SECTIONS, VIEW_DEBUG } from '../src/ui/workspace/vision-route.mjs'
@@ -227,6 +228,128 @@ test('图谱点击节点打开源码预览', async () => {
     await new Promise((r) => setTimeout(r, 30))
   })
   await waitFor(() => assert.ok(tree.container.textContent.includes('int main(void)')), { timeout: 6000 })
+  tree.unmount()
+})
+
+test('图谱节点具备键盘可访问属性', async () => {
+  const { post } = makePost()
+  const t = (k) => ({ projectMap: '工程结构', opening: '打开中' })[k] || k
+  const Map = createMapView(React, t, post)
+  const tree = render(
+    createElement(Map, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
+  await waitFor(() => assert.ok(tree.container.textContent.includes('树形')), { timeout: 6000 })
+  const graphBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '图谱')
+  await act(async () => {
+    graphBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 30))
+  })
+  await waitFor(() => assert.ok(tree.container.querySelector('.dvb-graph-node')), { timeout: 6000 })
+  const node = tree.container.querySelector('.dvb-graph-node')
+  assert.equal(node.getAttribute('role'), 'button')
+  assert.equal(node.getAttribute('tabindex'), '0')
+  assert.ok(node.getAttribute('aria-label')?.includes('main.c'))
+  const fitBtn = Array.from(tree.container.querySelectorAll('button')).find(
+    (b) => b.getAttribute('aria-label') === '适应画布',
+  )
+  assert.ok(fitBtn, 'fit button has aria-label')
+  const resetBtn = Array.from(tree.container.querySelectorAll('button')).find(
+    (b) => b.getAttribute('aria-label') === '重置缩放为 100%',
+  )
+  assert.ok(resetBtn, 'reset zoom button has aria-label')
+  tree.unmount()
+})
+
+test('图谱节点 Enter 键可打开预览', async () => {
+  const { post } = makePost()
+  const t = (k) => ({ projectMap: '工程结构', opening: '打开中' })[k] || k
+  const Map = createMapView(React, t, post)
+  const tree = render(
+    createElement(Map, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
+  await waitFor(() => assert.ok(tree.container.textContent.includes('树形')), { timeout: 6000 })
+  const graphBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '图谱')
+  await act(async () => {
+    graphBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 30))
+  })
+  await waitFor(() => assert.ok(tree.container.querySelector('.dvb-graph-node')), { timeout: 6000 })
+  const node = tree.container.querySelector('.dvb-graph-node')
+  await act(async () => {
+    node.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await new Promise((r) => setTimeout(r, 30))
+  })
+  await waitFor(() => assert.ok(tree.container.textContent.includes('int main(void)')), { timeout: 6000 })
+  tree.unmount()
+})
+
+test('/ 快捷键在输入控件与对话框内不抢占焦点', async () => {
+  const { post } = makePost()
+  const t = (k) => ({ projectMap: '工程结构', opening: '打开中' })[k] || k
+  const Map = createMapView(React, t, post)
+  const tree = render(
+    createElement(Map, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
+  await waitFor(() => assert.ok(tree.container.querySelector('.dvb-map-search')), { timeout: 6000 })
+  const search = tree.container.querySelector('.dvb-map-search')
+  const button = tree.container.querySelector('.dvb-project-view-toggle button')
+  const dialog = win.document.createElement('div')
+  dialog.setAttribute('role', 'dialog')
+  const dialogInput = win.document.createElement('input')
+  dialog.appendChild(dialogInput)
+  win.document.body.appendChild(dialog)
+
+  assert.equal(
+    shouldIgnoreProjectSearchShortcut({ key: '/', defaultPrevented: false, target: search }),
+    true,
+    'input',
+  )
+  assert.equal(
+    shouldIgnoreProjectSearchShortcut({ key: '/', defaultPrevented: false, target: button }),
+    true,
+    'button',
+  )
+  assert.equal(
+    shouldIgnoreProjectSearchShortcut({
+      key: '/',
+      defaultPrevented: false,
+      target: { tagName: 'DIV', isContentEditable: true, getAttribute: () => null, closest: () => null },
+    }),
+    true,
+    'contenteditable',
+  )
+  assert.equal(
+    shouldIgnoreProjectSearchShortcut({
+      key: '/',
+      defaultPrevented: false,
+      target: Object.assign(win.document.createElement('div'), {
+        getAttribute: () => 'textbox',
+        closest: () => null,
+      }),
+    }),
+    true,
+    'role=textbox',
+  )
+  assert.equal(
+    shouldIgnoreProjectSearchShortcut({ key: '/', defaultPrevented: false, target: dialogInput }),
+    true,
+    'dialog descendant',
+  )
+  assert.equal(
+    shouldIgnoreProjectSearchShortcut({
+      key: '/',
+      defaultPrevented: true,
+      target: tree.container,
+    }),
+    true,
+    'defaultPrevented',
+  )
+  assert.equal(
+    shouldIgnoreProjectSearchShortcut({ key: '/', defaultPrevented: false, target: tree.container }),
+    false,
+    'plain container allows shortcut',
+  )
+  dialog.remove()
   tree.unmount()
 })
 

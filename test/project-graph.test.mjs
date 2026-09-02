@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildProjectGraph, graphNeighborhood } from '../src/ui/debug/project/project-graph-model.mjs'
-import { fitViewTransform, focusNodeTransform, layoutProjectGraph, polylinePath } from '../src/ui/debug/project/project-graph-layout.mjs'
+import {
+  CLUSTER_HEADER_H,
+  fitViewTransform,
+  focusNodeTransform,
+  layoutProjectGraph,
+  polylinePath,
+} from '../src/ui/debug/project/project-graph-layout.mjs'
 
 const GROUPS = [
   {
@@ -28,6 +34,36 @@ test('buildProjectGraph maps groups to nodes and resolves include edges', () => 
   assert.equal(graph.edges[0].from, 'src/main.c')
   assert.equal(graph.edges[0].to, 'src/util.c')
   assert.equal(graph.orphanEdges, 1)
+  assert.equal(graph.truncation.inputEdgeCount, 2)
+  assert.equal(graph.truncation.renderedEdgeCount, 1)
+  assert.equal(graph.truncation.unresolvedEdgeCount, 1)
+  assert.equal(graph.truncation.filteredEdgeCount, 0)
+  assert.equal(graph.truncation.cappedEdgeCount, 0)
+  assert.equal(graph.truncation.backendTruncated, false)
+})
+
+test('buildProjectGraph reports edge cap and filter stats', () => {
+  const manyEdges = Array.from({ length: 5 }, (_, i) => ({
+    from: 'main.c',
+    to: 'util.c',
+    resolved: true,
+    tag: i,
+  }))
+  const capped = buildProjectGraph(GROUPS, manyEdges, { maxEdges: 2 })
+  assert.equal(capped.edges.length, 2)
+  assert.equal(capped.truncation.cappedEdgeCount, 3)
+  assert.equal(capped.truncation.inputEdgeCount, 5)
+  assert.equal(capped.maxEdges, 2)
+
+  const filtered = buildProjectGraph(GROUPS, [{ from: 'main.c', to: 'uart.c', resolved: true }], {
+    search: 'uart',
+  })
+  assert.equal(filtered.nodes.length, 1)
+  assert.equal(filtered.edges.length, 0)
+  assert.equal(filtered.truncation.filteredEdgeCount, 1)
+
+  const backend = buildProjectGraph(GROUPS, [], { backendTruncated: true })
+  assert.equal(backend.truncation.backendTruncated, true)
 })
 
 test('buildProjectGraph respects search filter', () => {
@@ -45,6 +81,22 @@ test('layoutProjectGraph places clusters and edges', () => {
   assert.match(polylinePath(layout.edges[0].points), /^M/)
   const fit = fitViewTransform(layout, 400, 300)
   assert.ok(fit.scale > 0)
+})
+
+test('layoutProjectGraph reserves cluster header space above nodes', () => {
+  assert.equal(CLUSTER_HEADER_H, 28)
+  const graph = buildProjectGraph(GROUPS, [])
+  const layout = layoutProjectGraph(graph)
+  const sourceCluster = layout.clusters.find((c) => c.label === 'Source')
+  assert.ok(sourceCluster, 'Source cluster present')
+  const sourceNodes = layout.nodes.filter((n) => n.groupName === 'Source')
+  assert.ok(sourceNodes.length >= 2)
+  for (const node of sourceNodes) {
+    assert.ok(
+      node.y >= sourceCluster.y + CLUSTER_HEADER_H,
+      `node ${node.label} must sit below cluster header`,
+    )
+  }
 })
 
 test('focusNodeTransform centers on a node', () => {

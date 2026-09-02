@@ -1,6 +1,7 @@
 const NODE_W = 152
 const NODE_H = 46
 const CLUSTER_PAD = 14
+export const CLUSTER_HEADER_H = 28
 const CLUSTER_GAP = 56
 const FILE_GAP = 10
 const MARGIN = 36
@@ -19,7 +20,8 @@ export function layoutProjectGraph(graph) {
     const members = (cluster.nodeIds || []).map((id) => nodeById.get(id)).filter(Boolean)
     if (!members.length) continue
     const clusterW = NODE_W + CLUSTER_PAD * 2
-    const clusterH = CLUSTER_PAD * 2 + members.length * NODE_H + (members.length - 1) * FILE_GAP
+    const nodesH = members.length * NODE_H + Math.max(0, members.length - 1) * FILE_GAP
+    const clusterH = CLUSTER_HEADER_H + CLUSTER_PAD + nodesH + CLUSTER_PAD
     const clusterY = MARGIN
 
     layoutClusters.push({
@@ -29,9 +31,10 @@ export function layoutProjectGraph(graph) {
       y: clusterY,
       w: clusterW,
       h: clusterH,
+      headerH: CLUSTER_HEADER_H,
     })
 
-    let fileY = clusterY + CLUSTER_PAD
+    let fileY = clusterY + CLUSTER_HEADER_H
     for (const node of members) {
       layoutNodes.push({
         ...node,
