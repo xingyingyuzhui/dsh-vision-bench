@@ -218,7 +218,7 @@ function routeKeyOf(sessionId, cwd, viewId, payload) {
 }
 
 export function routeAgentFocus(fs, changedCwd, lastRouteKeyBySession) {
-  const focusSessionId = String((fs && fs.sessionId) || '')
+  const focusSessionId = String(fs?.sessionId || '')
   const focusCwd = String(changedCwd || '')
   if (!focusSessionId || !focusCwd) {
     return { action: 'skip', reason: 'missing-session-or-cwd' }

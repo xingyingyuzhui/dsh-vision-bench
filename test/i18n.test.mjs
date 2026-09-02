@@ -67,12 +67,16 @@ test('tWith uses locale.bind when the locale service is present', () => {
   assert.equal(tWith(ctx, 'tabHmi'), 'HMI from locale')
 })
 
-test('client inject lists slots and locale and matches the package manifest', () => {
+test('client inject lists slots, locale, connection and matches the package manifest', () => {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..')
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-  assert.deepEqual(pkg.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-slots', '@deepseek-ai/dsh-client-locale'])
+  assert.deepEqual(pkg.dsh.client.inject, [
+    '@deepseek-ai/dsh-client-ui-slots',
+    '@deepseek-ai/dsh-client-locale',
+    '@deepseek-ai/dsh-client-connection',
+  ])
   const entry = readFileSync(join(root, 'src/ui/client/client-entry.mjs'), 'utf8')
-  assert.match(entry, /inject = \['slots', 'locale'\]/)
+  assert.match(entry, /inject = \['slots', 'locale', 'connection'\]/)
   const build = readFileSync(join(root, 'scripts/build-client.mjs'), 'utf8')
-  assert.match(build, /inject: \['slots', 'locale'\]/)
+  assert.match(build, /inject: \['slots', 'locale', 'connection'\]/)
 })

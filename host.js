@@ -5,12 +5,7 @@ import { clearFlashApprovals } from './src/application/flash/flash-approval-serv
 import { stopAllPolling } from './bench-polling-service.mjs'
 import { VISION_GUIDANCE, seedVisionBenchPreset } from './bench-preset.mjs'
 import { clearSerialMonitorState } from './bench-serial-monitor.mjs'
-import {
-  defaultDshHome,
-  journalView,
-  sweepStaleTasks,
-  touchServiceSession,
-} from './bench-store.mjs'
+import { defaultDshHome, journalView, sweepStaleTasks, touchServiceSession } from './bench-store.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
 import { toLosslessJson } from './src/application/commands/lossless-json.mjs'
 import { registerVisionHost } from './src/infrastructure/host/vision-host-client.mjs'

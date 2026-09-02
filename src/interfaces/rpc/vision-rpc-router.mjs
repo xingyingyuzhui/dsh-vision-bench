@@ -6,6 +6,7 @@ import {
   keilScan,
   keilTargets,
   listFrames,
+  listPendingWrites,
   modbusPoll,
   modbusRead,
   modbusWrite,
@@ -13,8 +14,8 @@ import {
   pointsOp,
   requestFocus,
   resolvePendingWrite,
-  listPendingWrites,
 } from '../../../bench-actions.mjs'
+import { listDir } from '../../../bench-actions.mjs'
 import { runSelfCheck } from '../../../bench-check.mjs'
 import { normalizeModbus } from '../../../bench-devices.mjs'
 import { artifactInfo, readBuildLog, readProjectFile } from '../../../bench-fs.mjs'
@@ -24,9 +25,6 @@ import { changedConnectionIds, notifyConnectionRelease } from '../../../bench-mo
 import { migrateLegacyDisabled } from '../../../bench-modbus.mjs'
 import { maybeNotifyResult, notifyBenchEvent } from '../../../bench-notify.mjs'
 import { requireWorkspaceCwd } from '../../../bench-paths.mjs'
-import { clearFlashApprovals } from '../../application/flash/flash-approval-service.mjs'
-import { probeOpenOcdHealth } from '../../application/flash/openocd-health-service.mjs'
-import { mutateConfig } from '../../application/config/config-mutation-service.mjs'
 import { ensurePolling, pollingStatus, startPolling, stopPolling } from '../../../bench-polling-service.mjs'
 import { inspectPresetHealth } from '../../../bench-preset.mjs'
 import {
@@ -52,13 +50,15 @@ import { clearFramesByConnection } from '../../../bench-store.mjs'
 import { normalizeCommand } from '../../application/commands/command-contract.mjs'
 import { losslessCommandResult } from '../../application/commands/lossless-json.mjs'
 import { executeVisionCommand } from '../../application/commands/vision-command-service.mjs'
-import { listDir } from '../../../bench-actions.mjs'
+import { mutateConfig } from '../../application/config/config-mutation-service.mjs'
+import { clearFlashApprovals } from '../../application/flash/flash-approval-service.mjs'
+import { probeOpenOcdHealth } from '../../application/flash/openocd-health-service.mjs'
 
 const WORKSPACE_CONFIG_KEYS = new Set(['conn', 'connections', 'devices', 'points', 'visualization'])
 
 /**
  * @param {unknown} body
- * @returns {unknown}
+ * @returns {any}
  */
 function normalizeConnAlias(body) {
   if (!body || typeof body !== 'object') return body
@@ -88,11 +88,17 @@ function normalizeConnAlias(body) {
  */
 async function touchSessionFromPayload(home, body) {
   const row = body && typeof body === 'object' ? /** @type {Record<string, unknown>} */ (body) : {}
-  const payload = row.payload && typeof row.payload === 'object' ? row.payload : {}
+  const payload =
+    row.payload && typeof row.payload === 'object' ? /** @type {Record<string, unknown>} */ (row.payload) : {}
   const action = row.action || payload.action
   if (action !== 'system.ping' && row.cwd && row.sessionId) {
     await touchServiceSession(home, String(row.cwd), String(row.sessionId))
   }
+}
+
+/** @param {{ error?: string, cwd?: string }} room */
+function workspaceCwdOf(room) {
+  return room && !room.error && room.cwd ? String(room.cwd) : ''
 }
 
 /**
@@ -101,6 +107,7 @@ async function touchSessionFromPayload(home, body) {
  */
 async function snapshot(home, cwd) {
   const bindings = loadBindings(home)
+  /** @type {Record<string, any>} */
   const body = {
     ok: true,
     bindings,
@@ -109,24 +116,25 @@ async function snapshot(home, cwd) {
     presetHealth: inspectPresetHealth(home),
   }
   const room = cwd ? requireWorkspaceCwd(cwd) : { error: 'no-cwd' }
-  if (!room.error) {
+  const workspaceCwd = workspaceCwdOf(room)
+  if (workspaceCwd) {
     try {
-      await migrateLegacyDisabled(home, room.cwd)
+      await migrateLegacyDisabled(home, workspaceCwd)
     } catch {
       /* migration best-effort */
     }
     try {
-      ensurePolling(home, room.cwd)
+      ensurePolling(home, workspaceCwd)
     } catch {
       /* polling best-effort */
     }
-    const workspace = loadWorkspace(home, room.cwd)
+    const workspace = loadWorkspace(home, workspaceCwd)
     body.workspace = workspace
     body.journal = journalView(body.workspace)
-    body.pendingWrites = listPendingWrites(room.cwd)
-    const sources = await listConnectedSerialSources(home, room.cwd)
+    body.pendingWrites = listPendingWrites(workspaceCwd)
+    const sources = await listConnectedSerialSources(home, workspaceCwd)
     body.serialSources = sources.sources || []
-    const states = await listConnectionStates(home, room.cwd)
+    const states = await listConnectionStates(home, workspaceCwd)
     body.connectionStates = states.connectionStates || []
   }
   return body
@@ -145,7 +153,8 @@ export function createVisionRpcRouter({ getHome }) {
   async function dispatch(endpoint, payload, signal) {
     void signal
     const home = getHome()
-    const body = payload && typeof payload === 'object' ? payload : {}
+    /** @type {Record<string, any>} */
+    const body = payload && typeof payload === 'object' ? /** @type {Record<string, any>} */ (payload) : {}
     await touchSessionFromPayload(home, body)
 
     switch (endpoint) {
@@ -165,7 +174,11 @@ export function createVisionRpcRouter({ getHome }) {
       case 'workspace/get': {
         const room = requireWorkspaceCwd(body && typeof body === 'object' ? body.cwd : undefined)
         if (room.error) return { ok: false, error: room.error }
-        return { ok: true, workspace: loadWorkspace(home, room.cwd), journal: journalView(loadWorkspace(home, room.cwd)) }
+        return {
+          ok: true,
+          workspace: loadWorkspace(home, room.cwd),
+          journal: journalView(loadWorkspace(home, room.cwd)),
+        }
       }
       case 'workspace/save': {
         const room = requireWorkspaceCwd(body && typeof body === 'object' ? body.cwd : undefined)
@@ -188,23 +201,26 @@ export function createVisionRpcRouter({ getHome }) {
         return { ok: true, workspace: saved.workspace, journal: journalView(saved.workspace) }
       }
       case 'fs/list':
-        return listDir(body && typeof body === 'object' ? body.cwd : undefined, body && typeof body === 'object' ? body.path : undefined)
-      case 'project/file': {
-        const room =
-          body && typeof body === 'object' && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
-        if (room.error) return { ok: false, error: room.error }
-        return readProjectFile(
-          room.cwd,
-          body && typeof body === 'object' ? body.path || body.file : undefined,
+        return listDir(
+          body && typeof body === 'object' ? body.cwd : undefined,
+          body && typeof body === 'object' ? body.path : undefined,
         )
+      case 'project/file': {
+        const room = body && typeof body === 'object' && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
+        if (room.error) return { ok: false, error: room.error }
+        return readProjectFile(room.cwd, body && typeof body === 'object' ? body.path || body.file : undefined)
       }
       case 'keil/log':
         return readBuildLog(home, body && typeof body === 'object' ? body.logFile : undefined)
       case 'keil/artifact':
-        return artifactInfo(body && typeof body === 'object' ? body.cwd : undefined, body && typeof body === 'object' ? body.path : undefined)
+        return artifactInfo(
+          body && typeof body === 'object' ? body.cwd : undefined,
+          body && typeof body === 'object' ? body.path : undefined,
+        )
       case 'keil/download': {
         const ran = await openocdDownload(home, body && typeof body === 'object' ? body.cwd : undefined, body)
-        if (ran && !ran.needsConfirm) maybeNotifyResult(home, body && typeof body === 'object' ? body.cwd : undefined, '烧录', ran)
+        if (ran && !ran.needsConfirm)
+          maybeNotifyResult(home, body && typeof body === 'object' ? body.cwd : undefined, '烧录', ran)
         return ran
       }
       case 'keil/scan':
@@ -228,28 +244,24 @@ export function createVisionRpcRouter({ getHome }) {
         return ran
       }
       case 'modbus/read':
-        return modbusRead(home, body && typeof body === 'object' ? body.cwd : undefined, normalizeConnAlias(body))
+        return modbusRead(home, body.cwd, normalizeConnAlias(body), {})
       case 'modbus/write': {
-        const ran = await modbusWrite(home, body && typeof body === 'object' ? body.cwd : undefined, normalizeConnAlias(body))
-        maybeNotifyResult(home, body && typeof body === 'object' ? body.cwd : undefined, '写点', ran)
+        const ran = await modbusWrite(home, body.cwd, normalizeConnAlias(body), {})
+        maybeNotifyResult(home, String(body.cwd || ''), '写点', ran)
         return ran
       }
       case 'modbus/write/approve': {
-        const room = requireWorkspaceCwd(body && typeof body === 'object' ? body.cwd : undefined)
-        if (room.error) return { ok: false, error: room.error }
-        const ran = await resolvePendingWrite(
-          home,
-          room.cwd,
-          body && typeof body === 'object' ? body.id : undefined,
-          (body && typeof body === 'object' ? body.approved : undefined) === true,
-        )
-        maybeNotifyResult(home, room.cwd, '写点', ran)
+        const room = requireWorkspaceCwd(body.cwd)
+        const workspaceCwd = workspaceCwdOf(room)
+        if (!workspaceCwd) return { ok: false, error: room.error || 'no-cwd' }
+        const ran = await resolvePendingWrite(home, workspaceCwd, String(body.id || ''), body.approved === true, {})
+        maybeNotifyResult(home, workspaceCwd, '写点', ran)
         return ran
       }
       case 'modbus/connect':
-        return connectOp(home, body && typeof body === 'object' ? body.cwd : undefined, normalizeConnAlias(body))
+        return connectOp(home, body.cwd, normalizeConnAlias(body), {})
       case 'modbus/points':
-        return pointsOp(home, body && typeof body === 'object' ? body.cwd : undefined, normalizeConnAlias(body))
+        return pointsOp(home, body.cwd, normalizeConnAlias(body))
       case 'points/flags': {
         const room = requireWorkspaceCwd(body && typeof body === 'object' ? body.cwd : undefined)
         if (room.error) return { ok: false, error: room.error }
@@ -261,12 +273,13 @@ export function createVisionRpcRouter({ getHome }) {
             error: '配置修改必须携带当前 configVersion',
           }
         }
+        /** @type {Record<string, boolean>} */
         const patch = {}
-        if (body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'monitorEnabled')) {
-          patch.monitorEnabled = body.monitorEnabled
+        if (Object.prototype.hasOwnProperty.call(body, 'monitorEnabled')) {
+          patch.monitorEnabled = Boolean(body.monitorEnabled)
         }
-        if (body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'alarmEnabled')) {
-          patch.alarmEnabled = body.alarmEnabled
+        if (Object.prototype.hasOwnProperty.call(body, 'alarmEnabled')) {
+          patch.alarmEnabled = Boolean(body.alarmEnabled)
         }
         const ran = await mutateConfig({
           home,
@@ -279,16 +292,15 @@ export function createVisionRpcRouter({ getHome }) {
           value: patch,
         })
         if (!ran || ran.ok === false) {
-          const errorCode = ran && ran.errorCode === 'POINT_NOT_FOUND' ? 'NOT_FOUND' : ran && ran.errorCode
+          const errorCode = ran && ran.errorCode === 'POINT_NOT_FOUND' ? 'NOT_FOUND' : ran?.errorCode
           const error =
-            ran && ran.errorCode === 'CONFIG_DRIFT' ? '点位配置已更新，请刷新后重试' : (ran && ran.error) || '保存失败'
+            ran && ran.errorCode === 'CONFIG_DRIFT' ? '点位配置已更新，请刷新后重试' : ran?.error || '保存失败'
           return { ok: false, error, errorCode }
         }
         const pointId = String((body && typeof body === 'object' ? body.pointId : '') || '')
-        const points = (ran.workspace && ran.workspace.modbus && ran.workspace.modbus.points) || []
-        const point = points.find((item) => item && item.id === pointId)
-        const configVersion =
-          ran.nextConfigVersion || (ran.workspace && ran.workspace.modbus && ran.workspace.modbus.configVersion)
+        const points = ran.workspace?.modbus?.points || []
+        const point = points.find((/** @type {{ id?: string }} */ item) => item && item.id === pointId)
+        const configVersion = ran.nextConfigVersion || ran.workspace?.modbus?.configVersion
         return { ok: true, point, configVersion, workspace: ran.workspace }
       }
       case 'frames/list':
@@ -302,12 +314,11 @@ export function createVisionRpcRouter({ getHome }) {
         })
       }
       case 'focus':
-        return requestFocus(home, body && typeof body === 'object' ? body.cwd : undefined, normalizeConnAlias(body))
+        return requestFocus(home, body.cwd, normalizeConnAlias(/** @type {any} */ (body)))
       case 'evidence': {
         const room = requireWorkspaceCwd(body && typeof body === 'object' ? body.cwd : undefined)
         if (room.error) return { ok: false, error: room.error }
-        const ev =
-          body && typeof body === 'object' ? body.evidence || body.evidences || body.item : undefined
+        const ev = body && typeof body === 'object' ? body.evidence || body.evidences || body.item : undefined
         const list = Array.isArray(ev) ? ev : ev ? [ev] : []
         if (!list.length) return { ok: false, error: '缺少 evidence' }
         return appendEvidence(home, room.cwd, list)
@@ -325,7 +336,7 @@ export function createVisionRpcRouter({ getHome }) {
           void notifyBenchEvent(
             home,
             room.cwd,
-            '人工操作' + (ran.request.status === 'done' ? '已完成' : '无法完成') + '：' + ran.request.text,
+            `人工操作${ran.request.status === 'done' ? '已完成' : '无法完成'}：${ran.request.text}`,
             '',
             { sessionId: ran.request.sessionId },
           ).catch(() => {})
@@ -333,22 +344,19 @@ export function createVisionRpcRouter({ getHome }) {
         return ran
       }
       case 'modbus/poll':
-        return modbusPoll(home, body && typeof body === 'object' ? body.cwd : undefined, normalizeConnAlias(body))
+        return modbusPoll(home, body.cwd, normalizeConnAlias(/** @type {any} */ (body)))
       case 'polling/start': {
-        const room =
-          body && typeof body === 'object' && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
+        const room = body && typeof body === 'object' && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
         if (room.error) return { ok: false, error: room.error }
         return startPolling(home, room.cwd, body)
       }
       case 'polling/stop': {
-        const room =
-          body && typeof body === 'object' && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
+        const room = body && typeof body === 'object' && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
         if (room.error) return { ok: false, error: room.error }
         return stopPolling(home, room.cwd, body)
       }
       case 'polling/status': {
-        const room =
-          body && typeof body === 'object' && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
+        const room = body && typeof body === 'object' && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
         if (room.error) return { ok: false, error: room.error }
         return pollingStatus(home, room.cwd)
       }
@@ -357,10 +365,10 @@ export function createVisionRpcRouter({ getHome }) {
         if (room.error) return { ok: false, error: room.error }
         const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
         const conn = pack.connections.find(
-          (c) => c.id === ((body && typeof body === 'object' ? body.connectionId || body.connId : undefined)),
+          (/** @type {{ id: string }} */ c) => c.id === (body.connectionId || body.connId),
         )
         if (!conn) return { ok: false, error: '连接不存在' }
-        if (conn.conn && conn.conn.sim) return { ok: true, skipped: true, simulated: true }
+        if (conn.conn?.sim) return { ok: true, skipped: true, simulated: true }
         return openConnectionLink(room.cwd, { connectionId: conn.id, endpoint: toEndpoint(conn) })
       }
       case 'connection/close': {
@@ -383,22 +391,24 @@ export function createVisionRpcRouter({ getHome }) {
       case 'openocd/probe':
         return probeOpenOcdHealth(home)
       case 'serial/feed': {
-        const room = requireWorkspaceCwd(body && typeof body === 'object' ? body.cwd : undefined)
+        const room = requireWorkspaceCwd(body.cwd)
         if (room.error) return { ok: false, error: room.error }
         return feedConnectionFrames(room.cwd, {
-          connectionId: (body && typeof body === 'object' ? body.connectionId : '') || '',
-          since: body && typeof body === 'object' ? body.since : undefined,
+          connectionId: String(body.connectionId || ''),
+          since: body.since,
         })
       }
-      case 'command':
+      case 'command': {
+        const payloadBody = body.payload || body
         return losslessCommandResult(
           await executeVisionCommand({
             ...normalizeCommand(body),
             home,
-            payload: body && typeof body === 'object' ? body.payload || body : body,
-            action: body && typeof body === 'object' ? body.action || body.payload?.action : undefined,
+            payload: payloadBody,
+            action: String(body.action || payloadBody?.action || ''),
           }),
         )
+      }
       default:
         return {
           ok: false,

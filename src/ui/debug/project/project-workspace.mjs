@@ -5,8 +5,8 @@ import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
 import { createSourceEditor } from '../../components/source-editor.mjs'
 import { getNav, subscribeNav } from '../../workspace/vision-navigation-store.mjs'
 import { DEBUG_SECTIONS, VIEW_DEBUG } from '../../workspace/vision-route.mjs'
-import { createProjectGraphView } from './project-graph-view.mjs'
 import { buildProjectGraph } from './project-graph-model.mjs'
+import { createProjectGraphView } from './project-graph-view.mjs'
 import { createProjectPreviewPanel } from './project-preview-panel.mjs'
 import {
   emptyPreviewState,
@@ -16,7 +16,6 @@ import {
   saveProjectViewMode,
   tagMappedState,
 } from './project-shared.mjs'
-import { createProjectTreePanel } from './project-tree-panel.mjs'
 import {
   buildProjectTree,
   fileTreeId,
@@ -24,6 +23,7 @@ import {
   findProjectFile,
   jumpErrorForHit,
 } from './project-tree-model.mjs'
+import { createProjectTreePanel } from './project-tree-panel.mjs'
 
 export function shouldIgnoreProjectSearchShortcut(ev) {
   if (!ev || ev.key !== '/') return true
@@ -220,12 +220,7 @@ export function createProjectWorkspace(React, t, post) {
       const ac = new AbortController()
       setBusy(true)
       setError('')
-      postWithAbort(
-        post,
-        '/dsh-vision-bench/keil/map',
-        { cwd, project: keil.project, target: keil.target },
-        ac.signal,
-      )
+      postWithAbort(post, '/dsh-vision-bench/keil/map', { cwd, project: keil.project, target: keil.target }, ac.signal)
         .then((data) => {
           if (!shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityKey, mountedRef)) return
           applyMapResponse(data, reqIdentity)
@@ -485,11 +480,7 @@ export function createProjectWorkspace(React, t, post) {
       el(
         'div',
         { className: 'dvb-project-split' },
-        el(
-          'div',
-          { className: 'dvb-project-nav' },
-          el('div', { className: 'dvb-project-nav-scroll' }, navBody),
-        ),
+        el('div', { className: 'dvb-project-nav' }, el('div', { className: 'dvb-project-nav-scroll' }, navBody)),
         el(PreviewPanel, {
           preview,
           identityKey,

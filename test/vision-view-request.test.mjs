@@ -294,11 +294,7 @@ test('routeAgentFocus opens view when the same session is mounted', () => {
     },
   })
   const keys = new Map()
-  const routed = routeAgentFocus(
-    { sessionId: 's1', request: { frameId: 'f1', connectionId: 'c1' } },
-    '/ws',
-    keys,
-  )
+  const routed = routeAgentFocus({ sessionId: 's1', request: { frameId: 'f1', connectionId: 'c1' } }, '/ws', keys)
   assert.equal(routed.action, 'open')
   requestOpenView(routed.props, routed.request.viewId, routed.request)
   assert.equal(opened[0].view, VIEW_MONITOR)

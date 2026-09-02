@@ -1,6 +1,6 @@
-import { languageForPath } from './project-tree-model.mjs'
 import { createProjectConfigPanel } from './project-config-panel.mjs'
 import { matchesIdentity } from './project-shared.mjs'
+import { languageForPath } from './project-tree-model.mjs'
 
 export function createProjectPreviewPanel(React, t, SourceEditor) {
   const ConfigPanel = createProjectConfigPanel(React, t)
@@ -24,11 +24,7 @@ export function createProjectPreviewPanel(React, t, SourceEditor) {
       el(
         'div',
         { className: 'dvb-panel-head' },
-        el(
-          'span',
-          { className: 'dvb-panel-title' },
-          activePreview?.rel ? `源码 · ${activePreview.rel}` : '源码预览',
-        ),
+        el('span', { className: 'dvb-panel-title' }, activePreview?.rel ? `源码 · ${activePreview.rel}` : '源码预览'),
         activePreview?.truncated ? el('span', { className: 'dvb-hint dvb-need' }, '超过 256KB，已截断') : null,
         activePreview?.rel
           ? el(

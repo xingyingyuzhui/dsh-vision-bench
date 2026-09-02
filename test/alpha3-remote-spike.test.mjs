@@ -22,31 +22,32 @@ test('Vision does not depend on dsh-typert-protocol or api-remotes', () => {
   assert.equal('@deepseek-ai/dsh-api-remotes' in deps, false)
 })
 
-test('client inject does not claim a Remote namespace that Host cannot provide', () => {
-  assert.deepEqual(pkg.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-slots', '@deepseek-ai/dsh-client-locale'])
+test('client inject uses connection for authenticated RPC, not Typert remote', () => {
   const entry = readFileSync(join(root, 'src/ui/client/client-entry.mjs'), 'utf8')
-  assert.match(entry, /inject = \['slots', 'locale'\]/)
+  assert.match(entry, /inject = \['slots', 'locale', 'connection'\]/)
   assert.doesNotMatch(entry, /['"]remote['"]/)
 })
 
-test('host inject has webServer, not a first-party remotes service', () => {
+test('host inject registers Connection RPC and keeps only the Agent command bridge', () => {
   const host = readFileSync(join(root, 'host.js'), 'utf8')
-  assert.match(host, /inject = \['webServer', 'tools', 'agentPresets', 'systemPrompt'\]/)
+  assert.match(host, /inject = \['connection', 'webServer', 'tools', 'agentPresets', 'systemPrompt'\]/)
+  assert.match(host, /connection\.rpc\.handle/)
   assert.doesNotMatch(host, /dsh-api-remotes/)
   assert.doesNotMatch(host, /TypertRemoteService/)
 })
 
-test('ADR-012 records that official Remote packaging is blocked for thin JS', () => {
+test('ADR-012 records Connection RPC as the supported alpha.3 browser transport', () => {
   const adr = readFileSync(join(root, 'docs/architecture/ADR-012-remote-transport.md'), 'utf8')
-  assert.match(adr, /TypertRemoteService/)
-  assert.match(adr, /typert.host.js/)
-  assert.match(adr, /Do not fake authentication with a static/)
+  assert.match(adr, /connection\.rpc\.handle/)
+  assert.match(adr, /connection\.rpc\.call/)
+  assert.match(adr, /Do not fake authentication/)
 })
 
 test('browser client does not send the retired static Vision header', () => {
   const runtime = readFileSync(join(root, 'bench-runtime.mjs'), 'utf8')
   assert.doesNotMatch(runtime, /X-DSH-Vision-Bench/)
+  assert.match(runtime, /createVisionRpcPost/)
   const host = readFileSync(join(root, 'host.js'), 'utf8')
   assert.match(host, /x-dsh-vision-capability/)
-  assert.doesNotMatch(host, /headers\[CSRF\]/)
+  assert.doesNotMatch(host, /const browser = origin/)
 })

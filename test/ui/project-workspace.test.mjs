@@ -5,12 +5,8 @@ import { Window } from 'happy-dom'
 import React from 'react'
 import { createElement } from 'react'
 import { beginRequest, shouldApplyRequest } from '../../src/ui/common/latest-request-gate.mjs'
+import { matchesIdentity, projectIdentityKey, tagMappedState } from '../../src/ui/debug/project/project-shared.mjs'
 import { createProjectWorkspace } from '../../src/ui/debug/project/project-workspace.mjs'
-import {
-  matchesIdentity,
-  projectIdentityKey,
-  tagMappedState,
-} from '../../src/ui/debug/project/project-shared.mjs'
 import { alpha3PageProps } from '../fixtures/harness-alpha3-props.mjs'
 
 let win

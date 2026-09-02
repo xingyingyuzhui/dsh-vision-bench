@@ -127,10 +127,11 @@ test('frames view wires identity + virtualizer via build pipeline', async () => 
   assert.ok(client.indexOf('vision-bench-monitor') >= 0, 'generated client includes monitor workspace')
 })
 
-test('cli wiring: frames/clear route exists in host', async () => {
-  const host = readFileSync(join(root, 'host.js'), 'utf8')
-  assert.match(host, /frames\/clear/, 'host should expose POST /dsh-vision-bench/frames/clear')
-  assert.match(host, /connectionId|all/, 'clear route should accept connectionId or all')
+test('cli wiring: frames/clear endpoint exists in RPC contract', async () => {
+  const contract = readFileSync(join(root, 'src/shared/vision-rpc-contract.mjs'), 'utf8')
+  const router = readFileSync(join(root, 'src/interfaces/rpc/vision-rpc-router.mjs'), 'utf8')
+  assert.match(contract, /frames\/clear/, 'RPC contract should expose frames/clear')
+  assert.match(router, /connectionId|all/, 'clear handler should accept connectionId or all')
 })
 
 // keep the "file exists" contract assertion (not a behavior claim)

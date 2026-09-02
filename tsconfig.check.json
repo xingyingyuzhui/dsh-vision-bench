@@ -20,11 +20,5 @@
     "src/interfaces/**/*.mjs",
     "src/types/**/*.d.ts"
   ],
-  "exclude": [
-    "node_modules",
-    "client.js",
-    "test",
-    "coverage",
-    "bench-*.mjs"
-  ]
+  "exclude": ["node_modules", "client.js", "test", "coverage", "bench-*.mjs"]
 }

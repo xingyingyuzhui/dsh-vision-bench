@@ -1,5 +1,5 @@
-import { graphNeighborhood } from './project-graph-model.mjs'
 import { fitViewTransform, focusNodeTransform, layoutProjectGraph, polylinePath } from './project-graph-layout.mjs'
+import { graphNeighborhood } from './project-graph-model.mjs'
 
 function clamp(n, min, max) {
   return Math.min(max, Math.max(min, n))
@@ -182,15 +182,23 @@ export function createProjectGraphView(React) {
             viewBox: `0 0 ${layout.width} ${layout.height}`,
             style: { transform, transformOrigin: '0 0' },
           },
-          el('defs', null, el('marker', {
-            id: 'dvb-graph-arrow',
-            markerWidth: 8,
-            markerHeight: 8,
-            refX: 7,
-            refY: 4,
-            orient: 'auto',
-            markerUnits: 'strokeWidth',
-          }, el('path', { d: 'M0,0 L8,4 L0,8 Z', className: 'dvb-graph-arrowhead' }))),
+          el(
+            'defs',
+            null,
+            el(
+              'marker',
+              {
+                id: 'dvb-graph-arrow',
+                markerWidth: 8,
+                markerHeight: 8,
+                refX: 7,
+                refY: 4,
+                orient: 'auto',
+                markerUnits: 'strokeWidth',
+              },
+              el('path', { d: 'M0,0 L8,4 L0,8 Z', className: 'dvb-graph-arrowhead' }),
+            ),
+          ),
           layout.clusters.map((cluster) =>
             el(
               'g',
@@ -204,11 +212,7 @@ export function createProjectGraphView(React) {
                 ry: 10,
                 className: 'dvb-graph-cluster-box',
               }),
-              el(
-                'text',
-                { x: cluster.x + 12, y: cluster.y + 18, className: 'dvb-graph-cluster-label' },
-                cluster.label,
-              ),
+              el('text', { x: cluster.x + 12, y: cluster.y + 18, className: 'dvb-graph-cluster-label' }, cluster.label),
             ),
           ),
           layout.edges.map((edge) => {
@@ -270,9 +274,7 @@ export function createProjectGraphView(React) {
           }),
         ),
       ),
-      !reducedMotion
-        ? el('div', { className: 'dvb-hint dvb-graph-hint' }, '拖拽平移 · 滚轮缩放 · 点击节点预览')
-        : null,
+      !reducedMotion ? el('div', { className: 'dvb-hint dvb-graph-hint' }, '拖拽平移 · 滚轮缩放 · 点击节点预览') : null,
     )
   }
 }

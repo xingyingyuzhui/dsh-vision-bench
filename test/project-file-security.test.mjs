@@ -1,11 +1,14 @@
 // Task5/0.19.3: /project/file — 工作区内、拒绝符号链接逃逸、扩展名白名单、256KB 上限。
 import assert from 'node:assert/strict'
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { readProjectFile } from '../bench-fs.mjs'
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 async function setup() {
   const home = await mkdtemp(join(tmpdir(), 'pfs-'))
@@ -91,13 +94,11 @@ test('超过 256KB 的文件截断返回 truncated', async () => {
   await rm(home, { recursive: true, force: true })
 })
 
-test('POST 路由清单存在 disposer 且为只读语义（源码契约）', async () => {
-  const host = await import('../host.js')
+test('project/file RPC handler exists and host registers command bridge only', async () => {
   const fs = await import('../bench-fs.mjs')
   assert.equal(typeof fs.readProjectFile, 'function')
-  const src = (await import('node:fs/promises')).readFile(new URL('../host.js', import.meta.url), 'utf8')
-  const s = await src
-  assert.ok(s.includes("route('/dsh-vision-bench/project/file'"), 'project/file 路由存在')
-  assert.ok(s.includes('ctx.webServer.register(entry)'), '路由统一注册归还 disposer')
-  void host
+  const router = readFileSync(join(root, 'src/interfaces/rpc/vision-rpc-router.mjs'), 'utf8')
+  const host = readFileSync(join(root, 'host.js'), 'utf8')
+  assert.ok(router.includes("case 'project/file'"), 'project/file RPC handler exists')
+  assert.ok(host.includes('ctx.webServer.register(entry)'), 'command bridge still registers a disposer')
 })

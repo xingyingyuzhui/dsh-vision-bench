@@ -5,6 +5,7 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { installDomStub } from './dom-stub.mjs'
 import { alpha3PageProps } from './fixtures/harness-alpha3-props.mjs'
+import { createMockVisionConnection } from './fixtures/mock-vision-connection.mjs'
 
 // Execute the GENERATED bundle exactly like the DSH web loader would
 // (factory(require) -> apply(ctx)) and mount every registered page with a
@@ -85,6 +86,7 @@ function makeCtx(pages) {
   return {
     pages,
     slots,
+    connection: createMockVisionConnection(async () => ({ ok: true })),
     get(key) {
       return key === 'slots' ? slots : null
     },
@@ -106,7 +108,7 @@ function makeCtx(pages) {
 
 test('every registered bench page mounts without runtime errors', async () => {
   const mod = loadBundle()
-  assert.deepEqual(mod.inject, ['slots', 'locale'])
+  assert.deepEqual(mod.inject, ['slots', 'locale', 'connection'])
   const pages = {}
   mod.apply(makeCtx(pages))
   const mounted = Object.entries(pages).filter(([, comp]) => typeof comp === 'function')

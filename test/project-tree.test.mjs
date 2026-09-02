@@ -299,16 +299,8 @@ test('/ 快捷键在输入控件与对话框内不抢占焦点', async () => {
   dialog.appendChild(dialogInput)
   win.document.body.appendChild(dialog)
 
-  assert.equal(
-    shouldIgnoreProjectSearchShortcut({ key: '/', defaultPrevented: false, target: search }),
-    true,
-    'input',
-  )
-  assert.equal(
-    shouldIgnoreProjectSearchShortcut({ key: '/', defaultPrevented: false, target: button }),
-    true,
-    'button',
-  )
+  assert.equal(shouldIgnoreProjectSearchShortcut({ key: '/', defaultPrevented: false, target: search }), true, 'input')
+  assert.equal(shouldIgnoreProjectSearchShortcut({ key: '/', defaultPrevented: false, target: button }), true, 'button')
   assert.equal(
     shouldIgnoreProjectSearchShortcut({
       key: '/',

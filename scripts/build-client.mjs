@@ -158,7 +158,7 @@ function wrapModuleLoader(vendorJs, vendorCss, clientJs) {
     ${clientJs}
     return {
       name: 'dsh-vision-bench',
-      inject: ['slots', 'locale'],
+      inject: ['slots', 'locale', 'connection'],
       apply: DvbClient.apply,
     }
   },

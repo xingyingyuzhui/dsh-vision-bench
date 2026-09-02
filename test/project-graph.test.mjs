@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildProjectGraph, graphNeighborhood } from '../src/ui/debug/project/project-graph-model.mjs'
 import {
   CLUSTER_HEADER_H,
   fitViewTransform,
@@ -8,6 +7,7 @@ import {
   layoutProjectGraph,
   polylinePath,
 } from '../src/ui/debug/project/project-graph-layout.mjs'
+import { buildProjectGraph, graphNeighborhood } from '../src/ui/debug/project/project-graph-model.mjs'
 
 const GROUPS = [
   {
@@ -92,10 +92,7 @@ test('layoutProjectGraph reserves cluster header space above nodes', () => {
   const sourceNodes = layout.nodes.filter((n) => n.groupName === 'Source')
   assert.ok(sourceNodes.length >= 2)
   for (const node of sourceNodes) {
-    assert.ok(
-      node.y >= sourceCluster.y + CLUSTER_HEADER_H,
-      `node ${node.label} must sit below cluster header`,
-    )
+    assert.ok(node.y >= sourceCluster.y + CLUSTER_HEADER_H, `node ${node.label} must sit below cluster header`)
   }
 })
 

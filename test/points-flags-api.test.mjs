@@ -3,11 +3,10 @@ import { mkdirSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Readable } from 'node:stream'
 import test from 'node:test'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
-import { _internal, apply } from '../host.js'
 import { mutateConfig } from '../src/application/config/config-mutation-service.mjs'
+import { createVisionRpcRouter } from '../src/interfaces/rpc/vision-rpc-router.mjs'
 
 const seedV3 = (home, cwd) => {
   mkdirSync(cwd, { recursive: true })
@@ -142,51 +141,11 @@ test('flags.update ignores extra fields such as name and alarmMin', async () => 
 test('/points/flags returns saved point and maps CONFIG_DRIFT', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-flags-http-'))
   const cwd = join(home, 'board')
-  const routes = []
-  let stop
-  apply({
-    webServer: {
-      register(entry) {
-        routes.push(entry)
-        return () => {}
-      },
-    },
-    tools: {
-      register() {
-        return () => {}
-      },
-    },
-    effect(factory) {
-      stop = factory()
-    },
-  })
-  _internal.setDshHome(home)
-  const csrf = { origin: 'http://127.0.0.1:3080', 'content-type': 'application/json' }
-  const invoke = (body) => {
-    const handler = routes.find((r) => r.path === '/dsh-vision-bench/points/flags').handler
-    const stream = Readable.from([Buffer.from(JSON.stringify(body))])
-    stream.method = 'POST'
-    stream.headers = csrf
-    stream.socket = { remoteAddress: '127.0.0.1' }
-    return new Promise((resolve) => {
-      const box = {
-        status: 0,
-        body: '',
-        writeHead(code) {
-          box.status = code
-        },
-        end(text) {
-          box.body = text
-          resolve(JSON.parse(text))
-        },
-      }
-      handler(stream, box)
-    })
-  }
+  const { dispatch } = createVisionRpcRouter({ getHome: () => home })
   try {
     const ws0 = seedV3(home, cwd)
     const cv0 = ws0.modbus.configVersion
-    const ran = await invoke({
+    const ran = await dispatch('points/flags', {
       cwd,
       pointId: 'p1',
       monitorEnabled: true,
@@ -198,7 +157,7 @@ test('/points/flags returns saved point and maps CONFIG_DRIFT', async () => {
     assert.equal(ran.point.alarmEnabled, true)
     assert.ok(ran.workspace && ran.workspace.modbus)
     assert.ok(ran.configVersion > cv0)
-    const drift = await invoke({
+    const drift = await dispatch('points/flags', {
       cwd,
       pointId: 'p1',
       alarmEnabled: false,
@@ -207,7 +166,7 @@ test('/points/flags returns saved point and maps CONFIG_DRIFT', async () => {
     assert.equal(drift.ok, false)
     assert.equal(drift.errorCode, 'CONFIG_DRIFT')
     assert.match(drift.error, /刷新后重试/)
-    const missing = await invoke({
+    const missing = await dispatch('points/flags', {
       cwd,
       pointId: 'no-such',
       alarmEnabled: true,
@@ -215,12 +174,11 @@ test('/points/flags returns saved point and maps CONFIG_DRIFT', async () => {
     })
     assert.equal(missing.ok, false)
     assert.equal(missing.errorCode, 'NOT_FOUND')
-    const noVersion = await invoke({ cwd, pointId: 'p1', monitorEnabled: true })
+    const noVersion = await dispatch('points/flags', { cwd, pointId: 'p1', monitorEnabled: true })
     assert.equal(noVersion.ok, false)
     assert.equal(noVersion.errorCode, 'CONFIG_VERSION_REQUIRED')
     assert.equal(loadWorkspace(home, cwd).modbus.configVersion, ran.configVersion)
   } finally {
-    if (stop) stop()
     await rm(home, { recursive: true, force: true })
   }
 })

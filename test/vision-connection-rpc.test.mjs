@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { apply as applyRuntime } from '../bench-runtime.mjs'
-import { createVisionRpcPost, callVisionRpc } from '../src/infrastructure/host/vision-rpc-client.mjs'
-import { createVisionRpcRouter } from '../src/interfaces/rpc/vision-rpc-router.mjs'
 import { _internal, apply as applyHost } from '../host.js'
+import { callVisionRpc, createVisionRpcPost } from '../src/infrastructure/host/vision-rpc-client.mjs'
+import { createVisionRpcRouter } from '../src/interfaces/rpc/vision-rpc-router.mjs'
 import {
   VISION_HTTP_TO_RPC,
   VISION_RPC_CHANNEL,

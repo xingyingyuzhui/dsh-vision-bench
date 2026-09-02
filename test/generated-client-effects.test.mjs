@@ -12,6 +12,7 @@ import { Window } from 'happy-dom'
 import React from 'react'
 import { createElement } from 'react'
 import { alpha3PageProps } from './fixtures/harness-alpha3-props.mjs'
+import { createMockVisionConnection } from './fixtures/mock-vision-connection.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 let win
@@ -103,39 +104,29 @@ function installDom() {
 
 before(async () => {
   installDom()
-  // the GENERATED runtime's post() uses fetch — intercept it so the bundle's
-  // real components talk to our fake backend
-  globalThis.fetch = async (url, init) => {
-    const path = String(url)
-    let payload = { ok: true }
-    try {
-      const body = init && init.body ? JSON.parse(String(init.body)) : {}
-      if (/\/dsh-vision-bench\/state$/.test(path)) {
-        stateCalls++
-        payload = {
-          ok: true,
-          workspace: {
-            modbus: {
-              version: 3,
-              connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }],
-              devices: [],
-              points: [],
-              framesByConnection: frames,
-              configVersion: 7,
-            },
+  const rpcBackend = async (endpoint) => {
+    if (endpoint === 'state') {
+      stateCalls++
+      return {
+        ok: true,
+        workspace: {
+          modbus: {
+            version: 3,
+            connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3', sim: true } }],
+            devices: [],
+            points: [],
+            framesByConnection: frames,
+            configVersion: 7,
           },
-          health: {},
-        }
-      } else if (/serial\/ports$/.test(path)) {
-        payload = { ok: true, ports: ['COM3'] }
-      } else if (/serial\/feed$/.test(path)) {
-        payload = { ok: true, open: true, error: '', lastId: 0, lines: [] }
+        },
+        health: {},
       }
-    } catch {
-      /* keep {ok:true} */
     }
-    return new win.Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (endpoint === 'serial/ports') return { ok: true, ports: ['COM3'] }
+    if (endpoint === 'serial/feed') return { ok: true, open: true, error: '', lastId: 0, lines: [] }
+    return { ok: true }
   }
+  globalThis.__visionRpcBackend = rpcBackend
   const src = readFileSync(join(root, 'client.js'), 'utf8')
   let loaded = null
   const sandboxWindow = {
@@ -249,6 +240,7 @@ test('Task10: generated client renders the real frames tab with 5000 rows (1–4
   }
   const ctx = {
     slots,
+    connection: createMockVisionConnection(async (endpoint) => globalThis.__visionRpcBackend(endpoint)),
     get(key) {
       return key === 'slots' ? slots : null
     },

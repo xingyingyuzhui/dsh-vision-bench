@@ -7,9 +7,7 @@ export type ConnectionRpcFailure = {
   details: object
 }
 
-export type ConnectionRpcResult<T = unknown> =
-  | { ok: true; value: T }
-  | { ok: false; error: ConnectionRpcFailure }
+export type ConnectionRpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: ConnectionRpcFailure }
 
 export type ConnectionRpcLike = {
   rpc?: {
@@ -22,7 +20,7 @@ export type ConnectionRpcLike = {
     handle?: (
       channel: string,
       handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<ConnectionRpcResult<unknown>>,
-    ) => (() => Promise<void>) | Promise<(() => Promise<void>)>
+    ) => (() => Promise<void>) | Promise<() => Promise<void>>
   }
 }
 
@@ -87,9 +85,7 @@ export type OpenOcdProbeResponse = {
   versionLine?: string
 }
 
-export type HttpApiPaths =
-  | '/dsh-vision-bench/command'
-  | string
+export type HttpApiPaths = '/dsh-vision-bench/command' | string
 
 export type VisionRpcEndpoint =
   | 'state'
