@@ -58,6 +58,17 @@ export function findProjectFile(groups, file) {
   return hits[0]
 }
 
+export function findFileByTreeId(groups, id) {
+  const want = String(id || '')
+  if (!want) return null
+  for (const group of Array.isArray(groups) ? groups : []) {
+    for (const file of group.files || []) {
+      if (fileTreeId(file) === want) return { file, group }
+    }
+  }
+  return null
+}
+
 export function jumpErrorForHit(hit, file) {
   if (!hit) return `未找到文件：${file || ''}`
   if (hit.kind === 'outside') return '工作区外文件不能打开'

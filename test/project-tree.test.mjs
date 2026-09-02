@@ -176,13 +176,54 @@ test('文件可展开函数列表并可预览源码', async () => {
     createElement(Map, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
   )
   await waitFor(() => assert.ok(tree.container.textContent.includes('Source')), { timeout: 6000 })
-  // 找 main.c 所在行的"预览"按钮
-  const previewBtn = Array.from(tree.container.querySelectorAll('.dvb-map-file-actions button')).find(
-    (b) => b.textContent === '预览',
+  assert.ok(tree.container.querySelector('.dvb-project-split'), '左右分栏布局')
+  const fileBtn = Array.from(tree.container.querySelectorAll('.dvb-map-file-name')).find(
+    (b) => b.textContent === 'main.c',
   )
-  assert.ok(previewBtn, '文件行有预览按钮')
+  assert.ok(fileBtn, '文件行可点击预览')
   await act(async () => {
-    previewBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    fileBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 30))
+  })
+  await waitFor(() => assert.ok(tree.container.textContent.includes('int main(void)')), { timeout: 6000 })
+  tree.unmount()
+})
+
+test('工程结构支持树形/图谱切换', async () => {
+  const { post } = makePost()
+  const t = (k) => ({ projectMap: '工程结构', opening: '打开中' })[k] || k
+  const Map = createMapView(React, t, post)
+  const tree = render(
+    createElement(Map, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
+  await waitFor(() => assert.ok(tree.container.textContent.includes('树形')), { timeout: 6000 })
+  const graphBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '图谱')
+  assert.ok(graphBtn, '图谱切换按钮')
+  await act(async () => {
+    graphBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 30))
+  })
+  await waitFor(() => assert.ok(tree.container.querySelector('.dvb-graph-wrap')), { timeout: 6000 })
+  tree.unmount()
+})
+
+test('图谱点击节点打开源码预览', async () => {
+  const { post } = makePost()
+  const t = (k) => ({ projectMap: '工程结构', opening: '打开中' })[k] || k
+  const Map = createMapView(React, t, post)
+  const tree = render(
+    createElement(Map, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
+  await waitFor(() => assert.ok(tree.container.textContent.includes('树形')), { timeout: 6000 })
+  const graphBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '图谱')
+  await act(async () => {
+    graphBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 30))
+  })
+  await waitFor(() => assert.ok(tree.container.querySelector('.dvb-graph-node')), { timeout: 6000 })
+  const node = tree.container.querySelector('.dvb-graph-node')
+  await act(async () => {
+    node.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
     await new Promise((r) => setTimeout(r, 30))
   })
   await waitFor(() => assert.ok(tree.container.textContent.includes('int main(void)')), { timeout: 6000 })

@@ -20,40 +20,6 @@ export const HMI_CSS = [
   'body[' + ATTR + '] .dvb-table tr{display:table-row}',
   'body[' + ATTR + '] .dvb-table th,body[' + ATTR + '] .dvb-table td{display:table-cell;vertical-align:middle}',
   'body[' + ATTR + '] .dvb-map-meta{font-size:11px;opacity:.55}',
-  'body[' + ATTR + '] .dvb-map-block{display:flex;flex-direction:column;gap:3px;margin:4px 0}',
-  'body[' + ATTR + '] .dvb-map-label{font-size:11px;font-weight:600;opacity:.7}',
-  'body[' +
-    ATTR +
-    '] .dvb-map-path,.dvb-map-file{font-size:12px;line-height:1.4;padding:2px 0;display:flex;gap:8px;justify-content:space-between}',
-  'body[' +
-    ATTR +
-    '] .dvb-map-path{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;opacity:.8}',
-  'body[' + ATTR + '] .dvb-map-defs{font-size:11px;opacity:.78;line-height:1.45}',
-  'body[' + ATTR + '] .dvb-map-group{margin-top:8px}',
-  'body[' + ATTR + '] .dvb-map-group-name{font-size:12px;font-weight:600;padding:4px 0}',
-  'body[' + ATTR + '] .dvb-map-file-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-  'body[' + ATTR + '] .dvb-map-file-mark{font-size:11px;opacity:.65;flex:none}',
-  'body[' + ATTR + '] .dvb-map-funcs{font-size:11px;opacity:.62;padding:0 0 4px 8px;line-height:1.4}',
-  'body[' + ATTR + '] .dvb-map-tree{outline:none}',
-  'body[' +
-    ATTR +
-    '] .dvb-map-file-row.is-on .dvb-map-file,.dvb-map-file-row.is-on{background:var(--dsw-alias-bg-layer-2,rgba(128,128,128,.1))}',
-  'body[' +
-    ATTR +
-    '] .dvb-source-editor{border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.28));border-radius:4px;min-height:160px;overflow:hidden}',
-  'body[' + ATTR + '] .dvb-source-editor .cm-editor{height:100%}',
-  'body[' + ATTR + '] .dvb-cm-jump{background:rgba(79,142,247,.22)}',
-  'body[' +
-    ATTR +
-    '] .dvb-map-file[data-kind="missing"] .dvb-map-file-name,body[' +
-    ATTR +
-    '] .dvb-map-path[data-kind="missing"]{color:var(--dsw-alias-label-danger,#c62828)}',
-  'body[' + ATTR + '] .dvb-map-file[data-kind="unread"] .dvb-map-file-name{opacity:.55}',
-  'body[' +
-    ATTR +
-    '] .dvb-map-file[data-kind="out"] .dvb-map-file-name,body[' +
-    ATTR +
-    '] .dvb-map-path[data-kind="out"]{opacity:.6}',
   'body[' +
     ATTR +
     '] .dvb-hmi-tabs{display:flex;gap:4px;align-items:center;flex-wrap:nowrap;overflow:auto;padding:4px 0 6px;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.18));scrollbar-width:thin}',
@@ -139,29 +105,6 @@ export const HMI_CSS = [
   'body[' + ATTR + '] .dvb-col-monitor,.dvb-col-alarm{position:relative;z-index:1;pointer-events:auto}',
   'body[' + ATTR + '] .dvb-btn-icon{padding:0 3px;min-width:18px;font-size:10px;opacity:.75}',
   'body[' + ATTR + '] .dvb-btn-danger{color:var(--dsw-alias-label-danger,#c62828)}',
-  'body[' + ATTR + '] .dvb-map-search{min-width:150px;flex:1 1 180px}',
-  'body[' + ATTR + '] .dvb-map-filter{width:auto}',
-  'body[' +
-    ATTR +
-    '] .dvb-map-group-name{display:flex;gap:6px;align-items:center;font-weight:600;padding:4px 0;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.14))}',
-  'body[' + ATTR + '] .dvb-map-file-row{padding:2px 0 2px 14px}',
-  'body[' + ATTR + '] .dvb-map-file{display:flex;gap:6px;align-items:center;flex-wrap:wrap}',
-  'body[' + ATTR + '] .dvb-map-file[data-kind="missing"]{opacity:.75}',
-  'body[' + ATTR + '] .dvb-map-file[data-kind="unread"]{opacity:.85}',
-  'body[' + ATTR + '] .dvb-map-file[data-kind="out"]{opacity:.6}',
-  'body[' + ATTR + '] .dvb-map-file-name{font-family:ui-monospace,Menlo,monospace;font-size:12px}',
-  'body[' +
-    ATTR +
-    '] .dvb-map-file.dvb-map-jump .dvb-map-file-name{outline:2px solid #e0912f;outline-offset:1px;border-radius:4px}',
-  'body[' + ATTR + '] .dvb-map-funcs{display:flex;flex-direction:column;gap:2px;padding:2px 0 2px 26px}',
-  'body[' +
-    ATTR +
-    '] .dvb-map-func{display:flex;gap:8px;align-items:center;font-family:ui-monospace,Menlo,monospace;font-size:11px}',
-  'body[' + ATTR + '] .dvb-map-func[data-jump="true"]{background:rgba(224,145,47,.14);border-radius:4px;padding:0 4px}',
-  'body[' + ATTR + '] .dvb-map-toggle{min-width:18px;padding:0 2px;font-size:10px}',
-  'body[' + ATTR + '] .dvb-map-toggle-void{opacity:.35}',
-  'body[' + ATTR + '] .dvb-map-cfg-toggle{margin:4px 0;width:100%;text-align:left;font-size:12px}',
-  'body[' + ATTR + '] .dvb-map-preview{max-height:320px;overflow:auto;white-space:pre;font-size:11px;line-height:1.5}',
   'body[' + ATTR + '] .dvb-dev-cards{display:flex;flex-direction:column;gap:8px}',
   'body[' +
     ATTR +

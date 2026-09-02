@@ -117,7 +117,7 @@ test('frames, alarms, visualization, HMI and debug resolve cwd through session-s
     'src/ui/monitor/visualization/visualization-page.mjs',
     'src/ui/monitor/journal/journal-page.mjs',
     'src/ui/hmi/hmi-page.mjs',
-    'src/ui/debug/project/project-page.mjs',
+    'src/ui/debug/project/project-workspace.mjs',
     'src/ui/workspace/monitor-workspace.mjs',
     'src/ui/workspace/debug-workspace.mjs',
   ]

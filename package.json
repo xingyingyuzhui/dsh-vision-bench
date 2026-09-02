@@ -97,6 +97,7 @@
     "src/ui/common/session-scope.mjs",
     "src/ui/styles/base.mjs",
     "src/ui/styles/hmi.mjs",
+    "src/ui/styles/project.mjs",
     "src/ui/styles/sidebar.mjs",
     "src/ui/styles/visualization.mjs",
     "src/ui/styles/frames.mjs",
@@ -232,6 +233,14 @@
     "src/ui/vendor/codemirror-runtime.mjs",
     "src/ui/styles/table.mjs",
     "src/ui/debug/project/project-page.mjs",
+    "src/ui/debug/project/project-workspace.mjs",
+    "src/ui/debug/project/project-tree-panel.mjs",
+    "src/ui/debug/project/project-preview-panel.mjs",
+    "src/ui/debug/project/project-config-panel.mjs",
+    "src/ui/debug/project/project-shared.mjs",
+    "src/ui/debug/project/project-graph-model.mjs",
+    "src/ui/debug/project/project-graph-layout.mjs",
+    "src/ui/debug/project/project-graph-view.mjs",
     "src/ui/debug/project/project-tree-model.mjs"
   ],
   "repository": {
