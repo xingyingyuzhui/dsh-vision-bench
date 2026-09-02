@@ -7,6 +7,58 @@ import test from 'node:test'
 import { loadWorkspace, openTask, saveWorkspace } from '../bench-store.mjs'
 import { _internal, apply, inject, name } from '../host.js'
 import { clearFlashApprovals, defaultFlashApprovals } from '../src/application/flash/flash-approval-service.mjs'
+import { VISION_RPC_CHANNEL } from '../src/shared/vision-rpc-contract.mjs'
+
+function createMockConnection() {
+  /** @type {((endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>) | null} */
+  let handler = null
+  let disposed = false
+  return {
+    rpc: {
+      handle(channel, fn) {
+        assert.equal(channel, VISION_RPC_CHANNEL)
+        handler = fn
+        return () => {
+          disposed = true
+          handler = null
+          return Promise.resolve()
+        }
+      },
+      async call(_channel, endpoint, payload, signal) {
+        if (!handler) throw new Error('rpc handler missing')
+        return handler(endpoint, payload, signal)
+      },
+    },
+    get disposed() {
+      return disposed
+    },
+    get hasHandler() {
+      return handler != null
+    },
+  }
+}
+
+function createHostCtx(connection) {
+  const routes = []
+  const ctx = {
+    connection,
+    webServer: {
+      register(entry) {
+        routes.push(entry)
+        return () => {}
+      },
+    },
+    tools: {
+      register() {
+        return () => {}
+      },
+    },
+    effect(factory) {
+      ctx._stop = factory()
+    },
+  }
+  return { ctx, routes }
+}
 
 function req(method, headers, body, addr = '127.0.0.1') {
   const stream = Readable.from([body ? Buffer.from(body) : Buffer.alloc(0)])
@@ -31,43 +83,28 @@ function resBox() {
 
 const csrf = { origin: 'http://127.0.0.1:3080', 'content-type': 'application/json' }
 
+function withCapability(headers = csrf) {
+  const cap = _internal.issueBridgeCapability()
+  return { ...headers, 'x-dsh-vision-capability': cap }
+}
+
 test('host named exports', async () => {
   assert.equal(name, 'dsh-vision-bench')
-  assert.deepEqual(inject, ['webServer', 'tools', 'agentPresets', 'systemPrompt'])
+  assert.deepEqual(inject, ['connection', 'webServer', 'tools', 'agentPresets', 'systemPrompt'])
 })
 
-test('/state returns idle ioRuntime without starting a Worker', async () => {
+test('state returns idle ioRuntime without starting a Worker', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-host-io-'))
-  const routes = []
+  const connection = createMockConnection()
+  const { ctx } = createHostCtx(connection)
   let stop
-  apply({
-    webServer: {
-      register(entry) {
-        routes.push(entry)
-        return () => {}
-      },
-    },
-    tools: {
-      register() {
-        return () => {}
-      },
-    },
-    effect(factory) {
-      stop = factory()
-    },
-  })
+  apply(ctx)
+  stop = ctx._stop
   _internal.setDshHome(home)
   try {
-    const state = routes.find((r) => r.path === '/dsh-vision-bench/state').handler
-    const box = resBox()
-    await new Promise((resolve) => {
-      box.res.end = (text) => {
-        box.body = text
-        resolve()
-      }
-      state(req('POST', csrf), box.res)
-    })
-    const snap = JSON.parse(box.body)
+    const result = await connection.rpc.call(VISION_RPC_CHANNEL, 'state', {}, AbortSignal.timeout(5000))
+    assert.equal(result.ok, true)
+    const snap = result.value
     assert.equal(snap.ok, true)
     assert.ok(snap.ioRuntime)
     assert.equal(snap.ioRuntime.state, 'idle')
@@ -80,14 +117,15 @@ test('/state returns idle ioRuntime without starting a Worker', async () => {
   }
 })
 
-test('apply registers state and bindings routes and disposes them', async () => {
+test('apply registers only agent command bridge and disposes RPC', async () => {
   const disposed = []
-  const routes = []
+  const connection = createMockConnection()
   const ctx = {
+    connection,
     webServer: {
       register(entry) {
-        routes.push(entry)
-        return () => disposed.push(entry.path)
+        disposed.push(entry.path)
+        return () => {}
       },
     },
     tools: {
@@ -100,47 +138,21 @@ test('apply registers state and bindings routes and disposes them', async () => 
     },
   }
   apply(ctx)
-  const paths = routes.map((r) => r.path)
-  assert.ok(paths.includes('/dsh-vision-bench/state'))
-  assert.ok(paths.includes('/dsh-vision-bench/openocd/probe'))
+  assert.deepEqual(disposed, ['/dsh-vision-bench/command'])
+  assert.ok(connection.hasHandler)
   const hostSrc = await (await import('node:fs/promises')).readFile(new URL('../host.js', import.meta.url), 'utf8')
   assert.match(hostSrc, /Vision预设未更新/)
   assert.match(hostSrc, /clearFlashApprovals\(\)/)
   assert.doesNotMatch(hostSrc, /roster copy is best-effort/)
-  assert.ok(paths.includes('/dsh-vision-bench/fs/list'))
-  assert.ok(paths.includes('/dsh-vision-bench/keil/build'))
-  assert.ok(paths.includes('/dsh-vision-bench/keil/map'))
-  assert.ok(paths.includes('/dsh-vision-bench/modbus/read'))
-  assert.ok(paths.includes('/dsh-vision-bench/modbus/poll'))
-  assert.ok(paths.includes('/dsh-vision-bench/serial/ports'))
-  assert.ok(paths.includes('/dsh-vision-bench/connection/open'))
-  assert.ok(paths.includes('/dsh-vision-bench/connection/close'))
-  assert.ok(paths.includes('/dsh-vision-bench/serial/feed'))
-  assert.ok(paths.includes('/dsh-vision-bench/command'))
-  assert.ok(!paths.includes('/dsh-vision-bench/config/draft'))
-  assert.ok(!paths.includes('/dsh-vision-bench/config/draft/apply'))
-  assert.ok(!paths.includes('/dsh-vision-bench/serial/open'))
-  assert.ok(!paths.includes('/dsh-vision-bench/serial/close'))
+  assert.doesNotMatch(hostSrc, /const browser = origin/)
+  assert.doesNotMatch(hostSrc, /route\('\/dsh-vision-bench\/state'/)
   ctx._stop()
-  assert.deepEqual(disposed, paths)
+  assert.equal(connection.disposed, true)
 })
 
 test('plugin dispose 清空刷写审批仓库', async () => {
-  const ctx = {
-    webServer: {
-      register() {
-        return () => {}
-      },
-    },
-    tools: {
-      register() {
-        return () => {}
-      },
-    },
-    effect(factory) {
-      ctx._stop = factory()
-    },
-  }
+  const connection = createMockConnection()
+  const ctx = createHostCtx(connection).ctx
   clearFlashApprovals()
   apply(ctx)
   defaultFlashApprovals.create({
@@ -158,43 +170,32 @@ test('plugin dispose 清空刷写审批仓库', async () => {
   assert.equal(defaultFlashApprovals.size(), 0)
 })
 
-test('routes reject GET, missing capability, forged static header, and foreign origin', async () => {
-  const routes = []
-  apply({
-    webServer: {
-      register(entry) {
-        routes.push(entry)
-        return () => {}
-      },
-    },
-    tools: {
-      register() {
-        return () => {}
-      },
-    },
-    effect() {},
-  })
+test('command bridge rejects GET, missing capability, forged header, and foreign origin', async () => {
+  const connection = createMockConnection()
+  const { ctx, routes } = createHostCtx(connection)
+  apply(ctx)
   const handler = routes[0].handler
 
   let box = resBox()
-  handler(req('GET', csrf), box.res)
+  handler(req('GET', withCapability()), box.res)
   assert.equal(box.status, 405)
 
   box = resBox()
-  handler(req('POST', {}), box.res)
+  handler(req('POST', csrf), box.res)
   assert.equal(box.status, 403)
   assert.match(box.body, /missing capability/)
 
   box = resBox()
-  handler(req('POST', { 'x-dsh-vision-bench': '1' }), box.res)
+  handler(req('POST', { ...withCapability(), 'x-dsh-vision-capability': 'wrong-token' }), box.res)
+  assert.equal(box.status, 403)
+  assert.match(box.body, /invalid capability/)
+
+  box = resBox()
+  handler(req('POST', { ...withCapability(), origin: 'https://evil.example' }), box.res)
   assert.equal(box.status, 403)
 
   box = resBox()
-  handler(req('POST', { 'x-dsh-vision-bench': '1', origin: 'https://evil.example' }), box.res)
-  assert.equal(box.status, 403)
-
-  box = resBox()
-  handler(req('POST', csrf, '', '8.8.8.8'), box.res)
+  handler(req('POST', withCapability(), '', '8.8.8.8'), box.res)
   assert.equal(box.status, 403)
   assert.match(box.body, /loopback only/)
 })
@@ -204,20 +205,11 @@ test('HTTP system.ping does not bind or mutate the workspace session', async () 
   const cwd = join(home, 'board')
   await mkdir(cwd)
   saveWorkspace(home, cwd, {})
-  const routes = []
+  const connection = createMockConnection()
+  const { ctx, routes } = createHostCtx(connection)
   let stop = () => {}
-  apply({
-    webServer: {
-      register(entry) {
-        routes.push(entry)
-        return () => {}
-      },
-    },
-    tools: { register: () => () => {} },
-    effect(factory) {
-      stop = factory()
-    },
-  })
+  apply(ctx)
+  stop = ctx._stop
   _internal.setDshHome(home)
   try {
     const command = routes.find((r) => r.path === '/dsh-vision-bench/command').handler
@@ -230,7 +222,7 @@ test('HTTP system.ping does not bind or mutate the workspace session', async () 
       command(
         req(
           'POST',
-          csrf,
+          withCapability(),
           JSON.stringify({
             action: 'system.ping',
             payload: { action: 'system.ping' },
@@ -250,50 +242,27 @@ test('HTTP system.ping does not bind or mutate the workspace session', async () 
   }
 })
 
-test('state and save round-trip against an isolated home', async () => {
+test('state and bindings round-trip against an isolated home', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-host-'))
-  const routes = []
-  apply({
-    webServer: {
-      register(entry) {
-        routes.push(entry)
-        return () => {}
-      },
-    },
-    tools: {
-      register() {
-        return () => {}
-      },
-    },
-    effect() {},
-  })
+  const connection = createMockConnection()
+  const { ctx } = createHostCtx(connection)
+  apply(ctx)
   _internal.setDshHome(home)
-  const state = routes.find((r) => r.path === '/dsh-vision-bench/state').handler
-  const save = routes.find((r) => r.path === '/dsh-vision-bench/bindings').handler
 
-  const emptyBox = resBox()
-  await new Promise((resolve) => {
-    emptyBox.res.end = (text) => {
-      emptyBox.body = text
-      resolve()
-    }
-    state(req('POST', csrf), emptyBox.res)
-  })
-  const empty = JSON.parse(emptyBox.body)
+  const empty = (await connection.rpc.call(VISION_RPC_CHANNEL, 'state', {}, AbortSignal.timeout(5000))).value
   assert.equal(empty.ok, true)
   assert.equal(empty.bindings.python, '')
   assert.equal(empty.health.python.bound, false)
 
   const abs = join(home, 'python3')
-  const saveBox = resBox()
-  await new Promise((resolve) => {
-    saveBox.res.end = (text) => {
-      saveBox.body = text
-      resolve()
-    }
-    save(req('POST', csrf, JSON.stringify({ bindings: { python: abs } })), saveBox.res)
-  })
-  const saved = JSON.parse(saveBox.body)
+  const saved = (
+    await connection.rpc.call(
+      VISION_RPC_CHANNEL,
+      'bindings/save',
+      { bindings: { python: abs } },
+      AbortSignal.timeout(5000),
+    )
+  ).value
   assert.equal(saved.ok, true)
   assert.equal(saved.bindings.python, abs)
 
@@ -304,77 +273,46 @@ test('state snapshot includes journal and workspace save cannot wipe tasks', asy
   const home = await mkdtemp(join(tmpdir(), 'dvb-host-j-'))
   const cwd = join(home, 'board')
   await mkdir(cwd)
-  const routes = []
-  apply({
-    webServer: {
-      register(entry) {
-        routes.push(entry)
-        return () => {}
-      },
-    },
-    tools: {
-      register() {
-        return () => {}
-      },
-    },
-    effect() {},
-  })
+  const connection = createMockConnection()
+  const { ctx } = createHostCtx(connection)
+  apply(ctx)
   _internal.setDshHome(home)
   try {
     const project = join(cwd, 'app.uvprojx')
     saveWorkspace(home, cwd, { keil: { project, target: 'Debug' } })
     await openTask(home, cwd, { type: 'build', source: 'agent', sessionId: 'sess-3', summary: '编译 Debug' })
 
-    const state = routes.find((r) => r.path === '/dsh-vision-bench/state').handler
-    const box = resBox()
-    await new Promise((resolve) => {
-      box.res.end = (text) => {
-        box.body = text
-        resolve()
-      }
-      state(req('POST', csrf, JSON.stringify({ cwd })), box.res)
-    })
-    const snap = JSON.parse(box.body)
+    const snap = (await connection.rpc.call(VISION_RPC_CHANNEL, 'state', { cwd }, AbortSignal.timeout(5000))).value
     assert.equal(snap.ok, true)
     assert.equal(snap.journal.running.length, 1)
     assert.equal(snap.journal.running[0].source, 'agent')
     assert.equal(snap.workspace.tasks[0].status, 'running')
 
-    const save = routes.find((r) => r.path === '/dsh-vision-bench/workspace').handler
-    const saveBox = resBox()
-    await new Promise((resolve) => {
-      saveBox.res.end = (text) => {
-        saveBox.body = text
-        resolve()
-      }
-      save(
-        req(
-          'POST',
-          csrf,
-          JSON.stringify({
-            cwd,
-            keil: { project, target: 'Debug', artifact: 'hex' },
-            tasks: [],
-            timeline: [],
-          }),
-        ),
-        saveBox.res,
+    const saved = (
+      await connection.rpc.call(
+        VISION_RPC_CHANNEL,
+        'workspace/save',
+        {
+          cwd,
+          keil: { project, target: 'Debug', artifact: 'hex' },
+          tasks: [],
+          timeline: [],
+        },
+        AbortSignal.timeout(5000),
       )
-    })
-    const saved = JSON.parse(saveBox.body)
+    ).value
     assert.equal(saved.ok, true)
     assert.equal(saved.workspace.tasks[0].status, 'running')
     assert.equal(saved.journal.running.length, 1)
 
-    const rejectedBox = resBox()
-    await new Promise((resolve) => {
-      rejectedBox.res.end = (text) => {
-        rejectedBox.body = text
-        resolve()
-      }
-      save(req('POST', csrf, JSON.stringify({ cwd, modbus: { points: [], version: 3 } })), rejectedBox.res)
-    })
-    const rejected = JSON.parse(rejectedBox.body)
+    const rejected = (
+      await connection.rpc.call(
+        VISION_RPC_CHANNEL,
+        'workspace/save',
+        { cwd, modbus: { points: [], version: 3 } },
+        AbortSignal.timeout(5000),
+      )
+    ).value
     assert.equal(rejected.ok, false)
     assert.equal(rejected.errorCode, 'CONFIG_COMMAND_REQUIRED')
   } finally {

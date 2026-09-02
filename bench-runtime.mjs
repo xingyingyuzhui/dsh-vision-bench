@@ -10,7 +10,13 @@ import { requestOpenView, requestOpenViewFromScope, routeAgentFocus } from './sr
 import { createDebugWorkspace } from './src/ui/workspace/debug-workspace.mjs'
 import { createMonitorWorkspace } from './src/ui/workspace/monitor-workspace.mjs'
 
+import { createVisionRpcPost } from './src/infrastructure/host/vision-rpc-client.mjs'
+
 export function apply(ctx) {
+  if (!ctx.connection?.rpc?.call || typeof ctx.connection.rpc.call !== 'function') {
+    throw new Error('dsh-vision-bench: Client requires ctx.connection.rpc.call')
+  }
+
   const React = require('react')
   const slots = ctx.slots
   if (slots == null || React == null) return
@@ -39,18 +45,7 @@ export function apply(ctx) {
   }
 
   function post(path, payload, timeoutMs) {
-    return fetch(path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload || {}),
-      cache: 'no-store',
-      signal: AbortSignal.timeout(timeoutMs || 15000),
-    }).then((res) =>
-      res.json().then((data) => {
-        if (!res.ok) throw new Error((data && data.error) || 'http ' + res.status)
-        return data
-      }),
-    )
+    return createVisionRpcPost(ctx.connection)(path, payload, timeoutMs)
   }
 
   function openHmi(target) {

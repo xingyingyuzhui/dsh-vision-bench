@@ -110,6 +110,28 @@ test('scope.cwd remains a documented short-term fallback', () => {
   assert.equal(sessionCwd(props), '/legacy/scope')
 })
 
+test('client and host inject connection for authenticated RPC', () => {
+  const clientEntry = readFileSync(join(root, 'src/ui/client/client-entry.mjs'), 'utf8')
+  const hostSrc = readFileSync(join(root, 'host.js'), 'utf8')
+  assert.match(clientEntry, /inject = \['slots', 'locale', 'connection'\]/)
+  assert.match(hostSrc, /inject = \['connection', 'webServer', 'tools', 'agentPresets', 'systemPrompt'\]/)
+  assert.match(hostSrc, /connection\.rpc\.handle/)
+})
+
+test('bench-runtime post uses Connection RPC instead of fetch', () => {
+  const src = readFileSync(join(root, 'bench-runtime.mjs'), 'utf8')
+  assert.match(src, /createVisionRpcPost/)
+  assert.doesNotMatch(src, /\bfetch\s*\(/)
+})
+
+test('host.js no longer registers browser business HTTP routes', () => {
+  const src = readFileSync(join(root, 'host.js'), 'utf8')
+  assert.doesNotMatch(src, /route\('\/dsh-vision-bench\/state'/)
+  assert.doesNotMatch(src, /route\('\/dsh-vision-bench\/modbus\/write'/)
+  assert.match(src, /\/dsh-vision-bench\/command/)
+  assert.doesNotMatch(src, /const browser = origin/)
+})
+
 test('frames, alarms, visualization, HMI and debug resolve cwd through session-scope', () => {
   const files = [
     'src/ui/monitor/frames/frames-page.mjs',

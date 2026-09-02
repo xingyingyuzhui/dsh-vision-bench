@@ -1,6 +1,33 @@
 import type { VisionBenchResult } from './modbus'
 import type { WorkspaceConfig, WorkspaceRuntime } from './workspace'
 
+export type ConnectionRpcFailure = {
+  code: string
+  message: string
+  details: object
+}
+
+export type ConnectionRpcResult<T = unknown> =
+  | { ok: true; value: T }
+  | { ok: false; error: ConnectionRpcFailure }
+
+export type ConnectionRpcLike = {
+  rpc?: {
+    call?: (
+      channel: string,
+      endpoint: string,
+      payload: unknown,
+      signal?: AbortSignal,
+    ) => Promise<ConnectionRpcResult<unknown>>
+    handle?: (
+      channel: string,
+      handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<ConnectionRpcResult<unknown>>,
+    ) => (() => Promise<void>) | Promise<(() => Promise<void>)>
+  }
+}
+
+export type VisionRpcTransport = 'connection-rpc' | 'in-process' | 'http'
+
 export type HttpRequestLike = {
   method?: string
   headers?: Record<string, string | string[] | undefined>
@@ -21,7 +48,7 @@ export type HostBridgeDescriptor = {
   origin: string
   inProcess: boolean
   available?: boolean
-  transport?: 'in-process' | 'http'
+  transport?: VisionRpcTransport
   roundtripMs?: number
   errorCode?: string
   error?: string
@@ -30,7 +57,7 @@ export type HostBridgeDescriptor = {
 export type HostPingData = {
   service: 'dsh-vision-bench' | string
   version: string
-  transport: 'in-process' | 'http'
+  transport: VisionRpcTransport
   pid: number
   timestamp: string
 }
@@ -61,11 +88,18 @@ export type OpenOcdProbeResponse = {
 }
 
 export type HttpApiPaths =
-  | '/dsh-vision-bench/state'
-  | '/dsh-vision-bench/openocd/probe'
-  | '/dsh-vision-bench/workspace'
-  | '/dsh-vision-bench/modbus/write'
-  | '/dsh-vision-bench/modbus/write/approve'
-  | '/dsh-vision-bench/focus'
   | '/dsh-vision-bench/command'
+  | string
+
+export type VisionRpcEndpoint =
+  | 'state'
+  | 'bindings/save'
+  | 'workspace/save'
+  | 'project/file'
+  | 'keil/map'
+  | 'keil/build'
+  | 'modbus/read'
+  | 'modbus/write'
+  | 'modbus/write/approve'
+  | 'command'
   | string
