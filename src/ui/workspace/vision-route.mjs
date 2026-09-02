@@ -35,6 +35,8 @@ function targetOf(req) {
     alarmId: String(r.alarmId || ''),
     visualizationId: String(r.visualizationId || ''),
     trendKey: String(r.trendKey || ''),
+    file: String(r.file || ''),
+    line: Number(r.line) || 0,
   }
 }
 
@@ -146,6 +148,8 @@ export function shouldRouteFocus({ activeCwd, activeSessionId, changedCwd, focus
     target.trendKey,
     target.visualizationId,
     target.alarmId,
+    target.file,
+    target.line,
   ].join('|')
   const mapped = routeForKind(kind)
   if (previousRouteKey && previousRouteKey === routeKey) {

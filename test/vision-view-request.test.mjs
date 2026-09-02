@@ -14,6 +14,7 @@ import { MONITOR_SECTIONS, VIEW_DEBUG, VIEW_HMI, VIEW_MONITOR } from '../src/ui/
 import {
   acceptQueuedVisionRequest,
   applyConsumedViewRequest,
+  applyQueuedSameView,
   clearAllVisionRequests,
   consumeViewRequest,
   decodeFocusToken,
@@ -21,6 +22,7 @@ import {
   enqueueVisionRequest,
   peekVisionRequest,
   requestOpenView,
+  routeAgentFocus,
   takeVisionRequest,
 } from '../src/ui/workspace/vision-view-request.mjs'
 import { alpha3PageProps } from './fixtures/harness-alpha3-props.mjs'
@@ -246,5 +248,155 @@ test('same routeKey is deduped per session', () => {
   assert.equal(first.deduped, false)
   assert.equal(second.deduped, true)
   assert.equal(peekVisionRequest('s1').viewId, VIEW_HMI)
+  clearAllVisionRequests()
+})
+
+test('queued request cwd must match before peek/take', () => {
+  clearAllVisionRequests()
+  enqueueVisionRequest('s1', {
+    viewId: VIEW_MONITOR,
+    cwd: '/ws/a',
+    section: MONITOR_SECTIONS.FRAMES,
+    routeKey: 'rk-a',
+  })
+  assert.equal(peekVisionRequest('s1', '/ws/b'), null)
+  assert.equal(peekVisionRequest('s1', '/ws/a').section, MONITOR_SECTIONS.FRAMES)
+  assert.equal(takeVisionRequest('s1', VIEW_MONITOR, '/ws/b'), null)
+  assert.equal(takeVisionRequest('s1', VIEW_MONITOR, '/ws/a').section, MONITOR_SECTIONS.FRAMES)
+  clearAllVisionRequests()
+})
+
+test('routeAgentFocus enqueues when Vision scope is not mounted for the session', () => {
+  clearAllVisionRequests()
+  clearActiveScope()
+  const keys = new Map()
+  const routed = routeAgentFocus(
+    { sessionId: 's-chat', request: { frameId: 'f1', connectionId: 'c1' } },
+    '/ws/chat',
+    keys,
+  )
+  assert.equal(routed.action, 'enqueue')
+  assert.equal(peekVisionRequest('s-chat', '/ws/chat').viewId, VIEW_MONITOR)
+  assert.equal(peekVisionRequest('s-chat', '/ws/chat').section, MONITOR_SECTIONS.FRAMES)
+  clearAllVisionRequests()
+})
+
+test('routeAgentFocus opens view when the same session is mounted', () => {
+  clearAllVisionRequests()
+  clearNavStore()
+  const opened = []
+  const token = setActiveScope('', {
+    sessionId: 's1',
+    cwd: '/ws',
+    viewId: VIEW_HMI,
+    openView(view, focus) {
+      opened.push({ view, focus })
+    },
+  })
+  const keys = new Map()
+  const routed = routeAgentFocus(
+    { sessionId: 's1', request: { frameId: 'f1', connectionId: 'c1' } },
+    '/ws',
+    keys,
+  )
+  assert.equal(routed.action, 'open')
+  requestOpenView(routed.props, routed.request.viewId, routed.request)
+  assert.equal(opened[0].view, VIEW_MONITOR)
+  clearActiveScope(token)
+  clearNavStore()
+  clearAllVisionRequests()
+})
+
+test('viewRequest without cwd enqueues and completes once cwd is ready', () => {
+  clearNavStore()
+  clearAllVisionRequests()
+  const React = fakeReact()
+  const Page = function Inner() {
+    return null
+  }
+  let completes = 0
+  const token = encodeFocusToken({
+    section: MONITOR_SECTIONS.FRAMES,
+    target: { frameId: 'f9' },
+    routeKey: 'rk-queued',
+    source: 'agent',
+  })
+  const props = {
+    ...alpha3PageProps({
+      sessionId: 's1',
+      items: [],
+      useWorkspaces: (select) => (typeof select === 'function' ? select({ items: [] }) : { items: [] }),
+    }),
+    viewRequest: { view: VIEW_MONITOR, focus: token },
+    completeViewRequest() {
+      completes += 1
+    },
+  }
+  const Wrapped = wrapVisionPage(React, Page, 'monitor')
+  Wrapped(props)
+  assert.equal(completes, 1)
+  assert.equal(peekVisionRequest('s1').section, MONITOR_SECTIONS.FRAMES)
+  const mounted = {
+    ...alpha3PageProps({ sessionId: 's1', path: '/ws' }),
+    openView() {},
+  }
+  setActiveScope('', { sessionId: 's1', cwd: '/ws', viewId: VIEW_MONITOR, openView: mounted.openView })
+  Wrapped(mounted)
+  assert.equal(getNav('s1', '/ws').section, MONITOR_SECTIONS.FRAMES)
+  assert.equal(peekVisionRequest('s1', '/ws'), null)
+  clearNavStore()
+  clearAllVisionRequests()
+})
+
+test('same monitor view auto-applies queued frames section without openView', () => {
+  clearNavStore()
+  clearAllVisionRequests()
+  const token = setActiveScope('', { sessionId: 's1', cwd: '/ws', viewId: VIEW_MONITOR })
+  navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.ALARMS }, { source: 'init' })
+  enqueueVisionRequest('s1', {
+    sessionId: 's1',
+    cwd: '/ws',
+    viewId: VIEW_MONITOR,
+    section: MONITOR_SECTIONS.FRAMES,
+    routeKey: 'agent-frames',
+    source: 'agent',
+  })
+  const applied = applyQueuedSameView('s1', '/ws', VIEW_MONITOR)
+  assert.equal(applied.applied, true)
+  assert.equal(getNav('s1', '/ws').section, MONITOR_SECTIONS.FRAMES)
+  assert.equal(peekVisionRequest('s1', '/ws'), null)
+  clearActiveScope(token)
+  clearNavStore()
+  clearAllVisionRequests()
+})
+
+test('manual lease blocks same-view auto apply but accept restores agent target', () => {
+  clearNavStore()
+  clearAllVisionRequests()
+  let now = 8_000_000
+  setNavNow(() => now)
+  const token = setActiveScope('', { sessionId: 's1', cwd: '/ws', viewId: VIEW_MONITOR })
+  navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.ALARMS }, { source: 'manual' })
+  enqueueVisionRequest('s1', {
+    sessionId: 's1',
+    cwd: '/ws',
+    viewId: VIEW_MONITOR,
+    section: MONITOR_SECTIONS.FRAMES,
+    routeKey: 'agent-frames-2',
+    source: 'agent',
+  })
+  const blocked = applyQueuedSameView('s1', '/ws', VIEW_MONITOR)
+  assert.equal(blocked.applied, false)
+  assert.equal(getNav('s1', '/ws').section, MONITOR_SECTIONS.ALARMS)
+  const props = {
+    ...alpha3PageProps({ sessionId: 's1', path: '/ws' }),
+    openView() {},
+  }
+  const accepted = acceptQueuedVisionRequest(props)
+  assert.equal(accepted.applied, true)
+  assert.equal(getNav('s1', '/ws').section, MONITOR_SECTIONS.FRAMES)
+  clearActiveScope(token)
+  setNavNow(null)
+  clearNavStore()
   clearAllVisionRequests()
 })

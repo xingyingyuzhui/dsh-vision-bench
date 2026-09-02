@@ -228,7 +228,7 @@ export function navigate(sessionId, cwd, route, opts = {}) {
   }
 
   // Agent: blocked requests must not mutate any location fields.
-  if (existing && Number(existing.leaseUntil) > now) {
+  if (existing && Number(existing.leaseUntil) > now && !opts.forceApply) {
     return { ...shape(existing), applied: false }
   }
 

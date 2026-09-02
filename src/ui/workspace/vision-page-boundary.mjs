@@ -4,7 +4,9 @@ import { VIEW_DEBUG, VIEW_HMI, VIEW_MONITOR } from './vision-route.mjs'
 import {
   acceptQueuedVisionRequest,
   applyConsumedViewRequest,
+  applyQueuedSameView,
   consumeViewRequest,
+  enqueueVisionRequest,
   peekVisionRequest,
   shouldHandleViewRequest,
   subscribeVisionQueue,
@@ -34,7 +36,7 @@ export function wrapVisionPage(React, Page, pageId, t) {
     const viewId = viewIdForPage(pageId)
     const tokenRef = React.useRef('')
     const handledRef = React.useRef('')
-    const [, setQueueTick] = React.useState(0)
+    const [queueTick, setQueueTick] = React.useState(0)
     React.useEffect(() => {
       tokenRef.current = setActiveScope(`ws-${String(pageId)}-${Math.random().toString(36).slice(2, 8)}`, {
         sessionId,
@@ -51,15 +53,40 @@ export function wrapVisionPage(React, Page, pageId, t) {
     React.useEffect(() => {
       const req = props.viewRequest
       const decision = consumeViewRequest(req, viewId)
-      if (!decision.complete && !decision.consume) return undefined
+      if (!decision.consume && !decision.complete) return undefined
       const key = `${sessionId}\0${req?.view || ''}\0${String(req?.focus || '')}`
       if (!shouldHandleViewRequest(handledRef, key)) return undefined
-      if (decision.consume && cwd) applyConsumedViewRequest(sessionId, cwd, viewId, decision.payload)
-      if (decision.complete && typeof props.completeViewRequest === 'function') props.completeViewRequest()
+      if (decision.consume) {
+        if (cwd) {
+          applyConsumedViewRequest(sessionId, cwd, viewId, decision.payload)
+        } else {
+          enqueueVisionRequest(sessionId, {
+            sessionId,
+            cwd: '',
+            viewId,
+            section: decision.payload.section,
+            target: decision.payload.target,
+            routeKey: decision.payload.routeKey,
+            source: decision.payload.source,
+          })
+        }
+        if (typeof props.completeViewRequest === 'function') props.completeViewRequest()
+      } else if (decision.complete) {
+        if (typeof props.completeViewRequest === 'function') props.completeViewRequest()
+      }
       return undefined
     }, [props.viewRequest, viewId, sessionId, cwd, props.completeViewRequest])
-    const queued = peekVisionRequest(sessionId)
-    const showGo = !!queued && (queued.viewId !== viewId || (cwd && isManualNavLeaseActive(sessionId, cwd)))
+    React.useEffect(() => {
+      if (!cwd || !sessionId || !viewId) return undefined
+      applyQueuedSameView(sessionId, cwd, viewId)
+      return undefined
+    }, [cwd, sessionId, viewId, queueTick])
+    const queued = peekVisionRequest(sessionId, cwd)
+    const showGo =
+      !!queued &&
+      (queued.viewId !== viewId ||
+        (queued.cwd && cwd && queued.cwd !== cwd) ||
+        (cwd && isManualNavLeaseActive(sessionId, cwd)))
     const goLabel = typeof t === 'function' ? t('goAgentTarget') : '前往 Agent 目标'
     if (!cwd) {
       return el(

@@ -1,12 +1,12 @@
 import { createHmiView } from './bench-hmi.mjs'
 import { COPY, NS, interpolate, tWith } from './bench-i18n.mjs'
 import { createSettingsPage, registerSettings } from './bench-settings.mjs'
-import { getActiveScope, subscribeFocus } from './bench-shared.mjs'
+import { subscribeFocus } from './bench-shared.mjs'
 import { ATTR, CSS } from './bench-styles.mjs'
 import { registerView } from './bench-view.mjs'
 import { wrapVisionPage } from './src/ui/workspace/vision-page-boundary.mjs'
-import { MONITOR_SECTIONS, VIEW_HMI, VIEW_MONITOR, shouldRouteFocus } from './src/ui/workspace/vision-route.mjs'
-import { requestOpenViewFromScope } from './src/ui/workspace/vision-view-request.mjs'
+import { MONITOR_SECTIONS, VIEW_HMI, VIEW_MONITOR } from './src/ui/workspace/vision-route.mjs'
+import { requestOpenView, requestOpenViewFromScope, routeAgentFocus } from './src/ui/workspace/vision-view-request.mjs'
 import { createDebugWorkspace } from './src/ui/workspace/debug-workspace.mjs'
 import { createMonitorWorkspace } from './src/ui/workspace/monitor-workspace.mjs'
 
@@ -78,25 +78,10 @@ export function apply(ctx) {
 
   const lastRouteKeyBySession = new Map()
   const applyFocus = (fs, changedCwd) => {
-    const active = getActiveScope()
-    const focusSessionId = String((fs && fs.sessionId) || '')
-    if (!active.sessionId || focusSessionId !== String(active.sessionId || '')) return
-    const previousRouteKey = lastRouteKeyBySession.get(active.sessionId) || ''
-    const decision = shouldRouteFocus({
-      activeCwd: active.cwd,
-      activeSessionId: active.sessionId,
-      changedCwd,
-      focus: fs,
-      previousRouteKey,
-    })
-    if (!decision.route) return
-    lastRouteKeyBySession.set(active.sessionId, decision.routeKey)
-    requestOpenViewFromScope(decision.viewId, {
-      section: decision.section,
-      target: decision.target,
-      routeKey: decision.routeKey,
-      source: 'agent',
-    })
+    const routed = routeAgentFocus(fs, changedCwd, lastRouteKeyBySession)
+    if (routed.action === 'open') {
+      requestOpenView(routed.props, routed.request.viewId, routed.request)
+    }
   }
   const focusUnsub = subscribeFocus('', (fs, cwd) => applyFocus(fs, cwd))
 
