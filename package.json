@@ -95,6 +95,7 @@
     "src/ui/common/focus-store.mjs",
     "src/ui/common/agent-reference.mjs",
     "src/ui/common/session-scope.mjs",
+    "src/ui/common/latest-request-gate.mjs",
     "src/ui/styles/base.mjs",
     "src/ui/styles/hmi.mjs",
     "src/ui/styles/project.mjs",

@@ -17,8 +17,23 @@ export function copyText(text, onDone) {
   if (typeof onDone === 'function') onDone(line)
 }
 
-export function emptyPreviewState(rel = '') {
-  return { loading: false, rel, text: '', lines: 0, truncated: false, error: '' }
+/** Page identity: session + cwd + Keil project + target. */
+export function projectIdentityKey(sessionId, cwd, keil) {
+  const k = keil && typeof keil === 'object' ? keil : {}
+  return [String(sessionId || ''), String(cwd || ''), String(k.project || ''), String(k.target || '')].join('\0')
+}
+
+export function emptyPreviewState(rel = '', identityKey = '') {
+  return { loading: false, rel, text: '', lines: 0, truncated: false, error: '', identityKey }
+}
+
+export function tagMappedState(details, identityKey) {
+  if (!details) return null
+  return { ...details, identityKey }
+}
+
+export function matchesIdentity(state, identityKey) {
+  return !!state && state.identityKey === identityKey
 }
 
 export function projectViewStorageKey(sessionId, cwd) {

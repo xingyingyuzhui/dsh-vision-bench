@@ -1,5 +1,6 @@
 // 工程结构 — 树形/图谱双视图 + 左右分栏（导航 + 源码预览）。
 import { subscribeState } from '../../../../bench-shared.mjs'
+import { beginRequest, postWithAbort, shouldApplyRequest } from '../../common/latest-request-gate.mjs'
 import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
 import { createSourceEditor } from '../../components/source-editor.mjs'
 import { getNav, subscribeNav } from '../../workspace/vision-navigation-store.mjs'
@@ -10,7 +11,10 @@ import { createProjectPreviewPanel } from './project-preview-panel.mjs'
 import {
   emptyPreviewState,
   loadProjectViewMode,
+  matchesIdentity,
+  projectIdentityKey,
   saveProjectViewMode,
+  tagMappedState,
 } from './project-shared.mjs'
 import { createProjectTreePanel } from './project-tree-panel.mjs'
 import {
@@ -20,6 +24,25 @@ import {
   findProjectFile,
   jumpErrorForHit,
 } from './project-tree-model.mjs'
+
+export function shouldIgnoreProjectSearchShortcut(ev) {
+  if (!ev || ev.key !== '/') return true
+  if (ev.defaultPrevented) return true
+  const target = ev.target
+  if (!target) return false
+  if (target.isContentEditable) return true
+  if (typeof target.closest === 'function') {
+    if (target.closest('[contenteditable="true"]')) return true
+    if (target.closest('[role="textbox"]')) return true
+    if (target.closest('[role="dialog"]')) return true
+    if (target.closest('.cm-editor')) return true
+  }
+  const tag = String(target.tagName || '').toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'button') return true
+  const role = target.getAttribute ? target.getAttribute('role') : ''
+  if (role === 'textbox' || role === 'dialog') return true
+  return false
+}
 
 export function createProjectWorkspace(React, t, post) {
   const SourceEditor = createSourceEditor(React)
@@ -49,13 +72,59 @@ export function createProjectWorkspace(React, t, post) {
     const mappedRef = React.useRef(null)
     const applyJumpRef = React.useRef(() => {})
     const searchRef = React.useRef(null)
-    mappedRef.current = mapped
+    const mapRequestRef = React.useRef(0)
+    const previewRequestRef = React.useRef(0)
+    const mountedRef = React.useRef(true)
+    const prevIdentityRef = React.useRef('')
+
+    const identityKey = projectIdentityKey(sessionId, cwd, keil)
+    const activeMapped = matchesIdentity(mapped, identityKey) ? mapped : null
+    mappedRef.current = activeMapped
+
+    React.useEffect(() => {
+      mountedRef.current = true
+      return () => {
+        mountedRef.current = false
+      }
+    }, [])
+
+    React.useEffect(() => {
+      if (prevIdentityRef.current === identityKey) return
+      const prev = prevIdentityRef.current
+      prevIdentityRef.current = identityKey
+      const splitKey = (key) => {
+        const parts = String(key || '').split('\0')
+        return { sessionId: parts[0] || '', cwd: parts[1] || '', project: parts[2] || '', target: parts[3] || '' }
+      }
+      const was = splitKey(prev)
+      const now = splitKey(identityKey)
+      const workspaceChanged = was.sessionId !== now.sessionId || was.cwd !== now.cwd
+      const keilChanged = was.project !== now.project || was.target !== now.target
+      const keilHydrated = !was.project && !!now.project
+
+      setMapped(null)
+      setError('')
+      setBusy(false)
+      setPreview(null)
+      setCopied('')
+      setJumpLine(0)
+      mappedRef.current = null
+
+      if (workspaceChanged || (keilChanged && !keilHydrated)) {
+        setSearch('')
+        setFilter('all')
+        setOpenGroups({})
+        setOpenFiles({})
+        setCfgOpen(false)
+        setSelectedId('')
+        pendingJumpRef.current = null
+      }
+    }, [identityKey])
 
     React.useEffect(() => {
       const onKey = (ev) => {
         if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey) return
-        const tag = String(ev.target?.tagName || '').toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+        if (shouldIgnoreProjectSearchShortcut(ev)) return
         ev.preventDefault()
         searchRef.current?.focus()
       }
@@ -76,7 +145,6 @@ export function createProjectWorkspace(React, t, post) {
     React.useEffect(() => {
       if (!cwd) {
         setKeil({ project: '', target: '' })
-        setMapped(null)
         return undefined
       }
       return subscribeState(
@@ -93,79 +161,99 @@ export function createProjectWorkspace(React, t, post) {
       )
     }, [cwd, post, sessionId, props?.scope?.sessionId])
 
+    const applyMapResponse = React.useCallback(
+      (data, reqIdentity) => {
+        if (data && data.ok === false) {
+          setMapped(null)
+          setError(data.error || t('loadFail'))
+          return
+        }
+        setError('')
+        const details = data?.result?.details ? data.result.details : null
+        setMapped(tagMappedState(details, reqIdentity))
+        if (details) {
+          const nextGroups = details.groups || []
+          const next = {}
+          for (const g of nextGroups) next[g.name] = true
+          setOpenGroups(next)
+        }
+      },
+      [t],
+    )
+
     const reloadMap = React.useCallback(() => {
       if (!cwd || !keil.project) return Promise.resolve()
+      const requestId = beginRequest(mapRequestRef)
+      const reqIdentity = identityKey
+      const ac = new AbortController()
       setBusy(true)
       setError('')
-      return post('/dsh-vision-bench/keil/map', { cwd, project: keil.project, target: keil.target })
+      return postWithAbort(
+        post,
+        '/dsh-vision-bench/keil/map',
+        { cwd, project: keil.project, target: keil.target },
+        ac.signal,
+      )
         .then((data) => {
-          if (data && data.ok === false) {
-            setMapped(null)
-            setError(data.error || t('loadFail'))
-            return
-          }
-          setError('')
-          setMapped(data?.result?.details ? data.result.details : null)
-          if (data?.result?.details) {
-            const nextGroups = data.result.details.groups || []
-            const next = {}
-            for (const g of nextGroups) next[g.name] = true
-            setOpenGroups(next)
-          }
+          if (!shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityKey, mountedRef)) return
+          applyMapResponse(data, reqIdentity)
         })
         .catch((err) => {
+          if (!shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityKey, mountedRef)) return
+          if (err?.name === 'AbortError') return
           setMapped(null)
           setError(String(err?.message || t('loadFail')))
         })
-        .finally(() => setBusy(false))
-    }, [cwd, keil.project, keil.target, post, t])
+        .finally(() => {
+          if (shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityKey, mountedRef)) {
+            setBusy(false)
+          }
+        })
+    }, [applyMapResponse, cwd, identityKey, keil.project, keil.target, post, t])
 
     React.useEffect(() => {
-      let stop = false
       if (!cwd || !keil.project) {
-        setMapped(null)
         return undefined
       }
+      const requestId = beginRequest(mapRequestRef)
+      const reqIdentity = identityKey
+      const ac = new AbortController()
       setBusy(true)
       setError('')
-      post('/dsh-vision-bench/keil/map', { cwd, project: keil.project, target: keil.target })
+      postWithAbort(
+        post,
+        '/dsh-vision-bench/keil/map',
+        { cwd, project: keil.project, target: keil.target },
+        ac.signal,
+      )
         .then((data) => {
-          if (stop) return
-          if (data && data.ok === false) {
-            setMapped(null)
-            setError(data.error || t('loadFail'))
-            return
-          }
-          setError('')
-          setMapped(data?.result?.details ? data.result.details : null)
-          if (data?.result?.details) {
-            const nextGroups = data.result.details.groups || []
-            const next = {}
-            for (const g of nextGroups) next[g.name] = true
-            setOpenGroups(next)
-          }
+          if (!shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityKey, mountedRef)) return
+          applyMapResponse(data, reqIdentity)
         })
         .catch((err) => {
-          if (!stop) {
-            setMapped(null)
-            setError(String(err?.message || t('loadFail')))
-          }
+          if (!shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityKey, mountedRef)) return
+          if (err?.name === 'AbortError') return
+          setMapped(null)
+          setError(String(err?.message || t('loadFail')))
         })
         .finally(() => {
-          if (!stop) setBusy(false)
+          if (shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityKey, mountedRef)) {
+            setBusy(false)
+          }
         })
       return () => {
-        stop = true
+        ac.abort()
       }
-    }, [cwd, keil.project, keil.target, post, t])
+    }, [applyMapResponse, cwd, identityKey, keil.project, keil.target, post, t])
 
-    const counts = mapped?.counts ? mapped.counts : {}
-    const groups = mapped && Array.isArray(mapped.groups) ? mapped.groups : []
-    const truncated = mapped?.truncated && typeof mapped.truncated === 'object' ? mapped.truncated : {}
+    const counts = activeMapped?.counts ? activeMapped.counts : {}
+    const groups = activeMapped && Array.isArray(activeMapped.groups) ? activeMapped.groups : []
+    const truncated =
+      activeMapped?.truncated && typeof activeMapped.truncated === 'object' ? activeMapped.truncated : {}
     const tree = buildProjectTree(groups, { filter, search })
     const graph = React.useMemo(
-      () => buildProjectGraph(groups, mapped?.include_edges || [], { filter, search }),
-      [groups, mapped?.include_edges, filter, search],
+      () => buildProjectGraph(groups, activeMapped?.include_edges || [], { filter, search }),
+      [groups, activeMapped?.include_edges, filter, search],
     )
 
     const selectedHit = selectedId ? findFileByTreeId(groups, selectedId) : null
@@ -176,27 +264,42 @@ export function createProjectWorkspace(React, t, post) {
     const openPreview = React.useCallback(
       (file, line = 0) => {
         const rel = file.rel || file.path || file.name
+        const reqIdentity = identityKey
+        const requestId = beginRequest(previewRequestRef)
+        const ac = new AbortController()
         setJumpLine(Number(line) || 0)
-        setPreview({ ...emptyPreviewState(rel), loading: true, rel })
-        post('/dsh-vision-bench/project/file', { cwd, path: rel })
+        setPreview({ ...emptyPreviewState(rel, reqIdentity), loading: true, rel, identityKey: reqIdentity })
+        postWithAbort(post, '/dsh-vision-bench/project/file', { cwd, path: rel }, ac.signal)
           .then((data) => {
+            if (!shouldApplyRequest(previewRequestRef, requestId, reqIdentity, identityKey, mountedRef)) return
             setPreview(
               data?.ok
-                ? { rel: data.rel, text: data.text, lines: data.lines, truncated: !!data.truncated, error: '' }
+                ? {
+                    rel: data.rel,
+                    text: data.text,
+                    lines: data.lines,
+                    truncated: !!data.truncated,
+                    error: '',
+                    identityKey: reqIdentity,
+                    loading: false,
+                  }
                 : {
-                    ...emptyPreviewState(rel),
+                    ...emptyPreviewState(rel, reqIdentity),
                     error: data?.error || '读取失败',
                   },
             )
           })
-          .catch((err) =>
+          .catch((err) => {
+            if (!shouldApplyRequest(previewRequestRef, requestId, reqIdentity, identityKey, mountedRef)) return
+            if (err?.name === 'AbortError') return
             setPreview({
-              ...emptyPreviewState(rel),
+              ...emptyPreviewState(rel, reqIdentity),
               error: String(err?.message || '读取失败'),
-            }),
-          )
+            })
+          })
+        return () => ac.abort()
       },
-      [cwd, post],
+      [cwd, identityKey, post],
     )
 
     const selectFile = (file, line = 0) => {
@@ -233,9 +336,9 @@ export function createProjectWorkspace(React, t, post) {
     applyJumpRef.current = applyPendingJump
 
     React.useEffect(() => {
-      mappedRef.current = mapped
+      mappedRef.current = activeMapped
       applyJumpRef.current()
-    }, [mapped])
+    }, [activeMapped])
 
     React.useEffect(() => {
       const take = (nav) => {
@@ -250,7 +353,7 @@ export function createProjectWorkspace(React, t, post) {
     }, [cwd, sessionId, props?.sessionId, props?.scope?.sessionId])
 
     const truncatedBanner =
-      mapped &&
+      activeMapped &&
       (truncated.files || truncated.includes || truncated.defines || truncated.include_edges || truncated.functions)
 
     const navBody =
@@ -331,11 +434,11 @@ export function createProjectWorkspace(React, t, post) {
             '图谱',
           ),
         ),
-        mapped
+        activeMapped
           ? el(
               'span',
               { className: 'dvb-project-chip' },
-              `${mapped.target || ''} · ${String(counts.files || 0)} 文件 · ${String(graph.edges.length)} 依赖`,
+              `${activeMapped.target || ''} · ${String(counts.files || 0)} 文件 · ${String(graph.edges.length)} 依赖`,
             )
           : null,
         focusLabel ? el('span', { className: 'dvb-project-focus-chip', title: focusLabel }, focusLabel) : null,
@@ -389,6 +492,7 @@ export function createProjectWorkspace(React, t, post) {
         ),
         el(PreviewPanel, {
           preview,
+          identityKey,
           jumpLine,
           mapped,
           counts,
