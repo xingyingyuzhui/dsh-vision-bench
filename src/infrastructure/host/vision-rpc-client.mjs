@@ -14,8 +14,7 @@ import { VISION_RPC_CHANNEL, httpPathToRpcEndpoint } from '../../shared/vision-r
 function unwrapRpcResult(result) {
   if (!result || /** @type {{ ok?: boolean }} */ (result).ok !== true) {
     const row = result && typeof result === 'object' ? /** @type {{ error?: { message?: string } }} */ (result) : null
-    const message =
-      row && row.error && typeof row.error.message === 'string' ? row.error.message : 'vision rpc failed'
+    const message = row?.error && typeof row.error.message === 'string' ? row.error.message : 'vision rpc failed'
     throw new Error(message)
   }
   return /** @type {{ value?: unknown }} */ (result).value

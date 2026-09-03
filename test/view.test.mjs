@@ -62,7 +62,10 @@ test('debug run keeps structured ok:false instead of turning it into null', asyn
     join(dirname(fileURLToPath(import.meta.url)), '..', 'src/infrastructure/host/vision-rpc-client.mjs'),
     'utf8',
   )
-  assert.match(rpcClient, /data\.ok === false/)
+  // Transport layer only: outer result.ok !== true throws. Business ok:false resolves.
+  assert.match(rpcClient, /ok !== true/)
+  assert.match(rpcClient, /unwrapRpcResult/)
+  assert.doesNotMatch(rpcClient, /data\.ok === false/)
   assert.doesNotMatch(runtime, /if \(data && data\.ok === false\) throw/)
   assert.match(src, /persist\([\s\S]*?\)\.then\(\(\) => \{\s*loadTargets/)
 })

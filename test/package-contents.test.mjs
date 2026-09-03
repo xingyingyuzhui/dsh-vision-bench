@@ -56,12 +56,14 @@ test('package.json: version tracks package and no legacy python modbus files', a
   ]) {
     await assert.rejects(access(new URL('../' + bad, import.meta.url)), bad + ' deleted from source')
   }
-  // UI 版本 chip 与 package 一致（禁止手改 client.js）
+  // UI 版本 chip 由构建注入；源码使用 __DVB_BUILD_VERSION__，未注入时显示 vdev
   const hmi = await readFile(new URL('../src/ui/hmi/device-card.mjs', import.meta.url), 'utf8')
-  assert.ok(
-    hmi.includes("'v" + pkg.version + "'") || hmi.includes('"v' + pkg.version + '"'),
-    'HMI version chip matches package.json',
-  )
+  assert.ok(hmi.includes('__DVB_BUILD_VERSION__'), 'HMI version chip is build-injected')
+  assert.ok(hmi.includes("'vdev'") || hmi.includes('"vdev"'), 'unbundled source falls back to vdev')
+  assert.ok(!/v0\.\d+\.\d+/.test(hmi), 'source must not hardcode a semver chip')
+  const build = await readFile(new URL('../scripts/build-client.mjs', import.meta.url), 'utf8')
+  assert.ok(build.includes('__DVB_BUILD_VERSION__'), 'build injects package version')
+  assert.ok(build.includes('pkg.version'), 'build reads package.json version')
 })
 
 test('bench-run script map keeps Keil python and drops OpenOCD python', async () => {
