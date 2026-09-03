@@ -6,6 +6,22 @@ import { VISION_RPC_CHANNEL, httpPathToRpcEndpoint } from '../../shared/vision-r
  */
 
 /**
+ * Unwrap Connection RPC transport result.
+ * Transport failure → throw. Business payloads (including ok:false) → return as-is.
+ * @param {unknown} result
+ * @returns {unknown}
+ */
+function unwrapRpcResult(result) {
+  if (!result || /** @type {{ ok?: boolean }} */ (result).ok !== true) {
+    const row = result && typeof result === 'object' ? /** @type {{ error?: { message?: string } }} */ (result) : null
+    const message =
+      row && row.error && typeof row.error.message === 'string' ? row.error.message : 'vision rpc failed'
+    throw new Error(message)
+  }
+  return /** @type {{ value?: unknown }} */ (result).value
+}
+
+/**
  * @param {ConnectionRpcLike} connection
  * @returns {(path: string, payload?: unknown, timeoutMs?: number) => Promise<unknown>}
  */
@@ -14,27 +30,10 @@ export function createVisionRpcPost(connection) {
     throw new Error('dsh-vision-bench: connection.rpc.call is required')
   }
   const rpcCall = connection.rpc.call
-  if (typeof rpcCall !== 'function') {
-    throw new Error('dsh-vision-bench: connection.rpc.call is required')
-  }
   return function post(path, payload, timeoutMs) {
     const endpoint = httpPathToRpcEndpoint(path)
     const signal = AbortSignal.timeout(Number(timeoutMs) > 0 ? Number(timeoutMs) : 15000)
-    return rpcCall(VISION_RPC_CHANNEL, endpoint, payload || {}, signal).then((result) => {
-      if (!result || result.ok !== true) {
-        const message =
-          result && result.ok === false && result.error && typeof result.error.message === 'string'
-            ? result.error.message
-            : 'vision rpc failed'
-        throw new Error(message)
-      }
-      const data = result.value
-      if (data && typeof data === 'object' && 'ok' in data && data.ok === false) {
-        const row = /** @type {{ error?: string }} */ (data)
-        throw new Error(row.error || 'vision request failed')
-      }
-      return data
-    })
+    return rpcCall(VISION_RPC_CHANNEL, endpoint, payload || {}, signal).then(unwrapRpcResult)
   }
 }
 
@@ -50,12 +49,5 @@ export async function callVisionRpc(connection, endpoint, payload, signal) {
     throw new Error('dsh-vision-bench: connection.rpc.call is required')
   }
   const result = await connection.rpc.call(VISION_RPC_CHANNEL, endpoint, payload || {}, signal)
-  if (!result || result.ok !== true) {
-    const message =
-      result && result.ok === false && result.error && typeof result.error.message === 'string'
-        ? result.error.message
-        : 'vision rpc failed'
-    throw new Error(message)
-  }
-  return result.value
+  return unwrapRpcResult(result)
 }

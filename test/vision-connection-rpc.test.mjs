@@ -50,15 +50,133 @@ test('createVisionRpcPost maps path and unwraps rpc result', async () => {
   assert.equal(mock.calls[0].endpoint, 'state')
 })
 
-test('createVisionRpcPost surfaces business failures', async () => {
+test('createVisionRpcPost resolves structured business failures', async () => {
+  const cases = [
+    { ok: false, error: 'denied', errorCode: 'CONFIG_DRIFT' },
+    { ok: false, needsConfirm: true, request: { requestId: 'r1' } },
+    { ok: false, rejected: true },
+  ]
+  for (const value of cases) {
+    const post = createVisionRpcPost({
+      rpc: {
+        async call() {
+          return { ok: true, value }
+        },
+      },
+    })
+    const data = await post('/dsh-vision-bench/state', {})
+    assert.deepEqual(data, value)
+  }
+})
+
+test('createVisionRpcPost rejects outer RPC transport failures', async () => {
   const post = createVisionRpcPost({
     rpc: {
       async call() {
-        return { ok: true, value: { ok: false, error: 'denied' } }
+        return { ok: false, error: { code: 'forbidden', message: 'unauthenticated', details: {} } }
       },
     },
   })
-  await assert.rejects(() => post('/dsh-vision-bench/state', {}), /denied/)
+  await assert.rejects(() => post('/dsh-vision-bench/state', {}), /unauthenticated/)
+})
+
+test('createVisionRpcPost rejects unknown paths before calling RPC', async () => {
+  let called = 0
+  const post = createVisionRpcPost({
+    rpc: {
+      async call() {
+        called += 1
+        return { ok: true, value: { ok: true } }
+      },
+    },
+  })
+  assert.throws(() => post('/dsh-vision-bench/no-such', {}), /unknown RPC path/)
+  assert.equal(called, 0)
+})
+
+test('flash start via RPC post resolves needsConfirm into confirm card state', async () => {
+  const post = createVisionRpcPost({
+    rpc: {
+      async call(_ch, endpoint) {
+        if (endpoint === 'keil/download') {
+          return {
+            ok: true,
+            value: {
+              ok: false,
+              needsConfirm: true,
+              request: { requestId: 'flash-1', file: 'app.bin', size: 12 },
+              error: '烧录会改写设备 Flash，需要用户确认',
+            },
+          }
+        }
+        return { ok: true, value: { ok: true } }
+      },
+    },
+  })
+  let flash = { busy: true, confirm: null, result: null }
+  const setFlash = (fn) => {
+    flash = typeof fn === 'function' ? fn(flash) : fn
+  }
+  const data = await post('/dsh-vision-bench/keil/download', { cwd: '/ws' }, 20000)
+  if (data && data.needsConfirm) {
+    setFlash((prev) => ({ ...prev, busy: false, confirm: data.request }))
+  } else {
+    setFlash((prev) => ({
+      ...prev,
+      busy: false,
+      confirm: null,
+      result: { ok: false, error: 'should not enter failure branch' },
+    }))
+  }
+  assert.equal(flash.busy, false)
+  assert.equal(flash.confirm?.requestId, 'flash-1')
+  assert.equal(flash.result, null)
+})
+
+test('points/flags CONFIG_DRIFT via RPC post remains structured for retry', async () => {
+  let calls = 0
+  const post = createVisionRpcPost({
+    rpc: {
+      async call(_ch, endpoint, payload) {
+        calls += 1
+        if (endpoint === 'points/flags') {
+          if (payload.expectedConfigVersion === 10) {
+            return { ok: true, value: { ok: false, errorCode: 'CONFIG_DRIFT', error: '点位配置已更新，请刷新后重试' } }
+          }
+          return {
+            ok: true,
+            value: {
+              ok: true,
+              point: { id: 'p1', monitorEnabled: true },
+              configVersion: 11,
+            },
+          }
+        }
+        if (endpoint === 'state') {
+          return { ok: true, value: { ok: true, workspace: { modbus: { configVersion: 11 } } } }
+        }
+        return { ok: true, value: { ok: true } }
+      },
+    },
+  })
+  const first = await post('/dsh-vision-bench/points/flags', {
+    cwd: '/ws',
+    pointId: 'p1',
+    monitorEnabled: true,
+    expectedConfigVersion: 10,
+  })
+  assert.equal(first.ok, false)
+  assert.equal(first.errorCode, 'CONFIG_DRIFT')
+  const fresh = await post('/dsh-vision-bench/state', { cwd: '/ws' })
+  const second = await post('/dsh-vision-bench/points/flags', {
+    cwd: '/ws',
+    pointId: 'p1',
+    monitorEnabled: true,
+    expectedConfigVersion: fresh.workspace.modbus.configVersion,
+  })
+  assert.equal(second.ok, true)
+  assert.equal(second.point.monitorEnabled, true)
+  assert.equal(calls, 3)
 })
 
 test('bench-runtime apply fails closed without connection', () => {
