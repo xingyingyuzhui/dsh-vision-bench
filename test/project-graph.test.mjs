@@ -8,6 +8,7 @@ import {
   polylinePath,
 } from '../src/ui/debug/project/project-graph-layout.mjs'
 import { buildProjectGraph, graphNeighborhood } from '../src/ui/debug/project/project-graph-model.mjs'
+import { graphTruncationHints } from '../src/ui/debug/project/project-graph-view.mjs'
 
 const GROUPS = [
   {
@@ -64,6 +65,72 @@ test('buildProjectGraph reports edge cap and filter stats', () => {
 
   const backend = buildProjectGraph(GROUPS, [], { backendTruncated: true })
   assert.equal(backend.truncation.backendTruncated, true)
+})
+
+test('buildProjectGraph reports node cap when files exceed maxNodes', () => {
+  const graph = buildProjectGraph(GROUPS, [], { maxNodes: 2 })
+  assert.equal(graph.nodes.length, 2)
+  assert.equal(graph.nodesCapped, true)
+  assert.equal(graph.capped, true)
+  assert.equal(graph.maxNodes, 2)
+  assert.deepEqual(graphTruncationHints(graph), ['节点已截断，仅展示前 2 个文件'])
+})
+
+test('graphTruncationHints reports the actual edge limit and dropped count', () => {
+  const manyEdges = Array.from({ length: 7 }, () => ({ from: 'main.c', to: 'util.c', resolved: true }))
+  const graph = buildProjectGraph(GROUPS, manyEdges, { maxEdges: 3 })
+  assert.equal(graph.edgesCapped, true)
+  assert.deepEqual(graphTruncationHints(graph), ['仅展示前 3 条依赖（另有 4 条未绘制）'])
+
+  const defaultLimit = buildProjectGraph(
+    GROUPS,
+    Array.from({ length: 125 }, () => ({ from: 'main.c', to: 'util.c' })),
+  )
+  assert.equal(defaultLimit.maxEdges, 120)
+  assert.deepEqual(graphTruncationHints(defaultLimit), ['仅展示前 120 条依赖（另有 5 条未绘制）'])
+})
+
+test('graphTruncationHints surfaces backend truncation from the model', () => {
+  const graph = buildProjectGraph(GROUPS, [{ from: 'main.c', to: 'util.c' }], { backendTruncated: true })
+  assert.equal(graph.truncation.backendTruncated, true)
+  assert.deepEqual(graphTruncationHints(graph), ['后端已截断依赖列表，当前视图可能不完整'])
+})
+
+test('graphTruncationHints reports unresolved and filtered edges separately', () => {
+  const unresolved = buildProjectGraph(GROUPS, [
+    { from: 'main.c', to: 'nowhere.h', resolved: false },
+    { from: 'ghost.c', to: 'util.c' },
+  ])
+  assert.equal(unresolved.truncation.unresolvedEdgeCount, 2)
+  assert.deepEqual(graphTruncationHints(unresolved), ['2 条依赖未解析到工程文件'])
+
+  const filtered = buildProjectGraph(GROUPS, [{ from: 'main.c', to: 'uart.c' }], { search: 'uart' })
+  assert.equal(filtered.truncation.filteredEdgeCount, 1)
+  assert.deepEqual(graphTruncationHints(filtered), ['1 条依赖被当前筛选隐藏'])
+})
+
+test('graphTruncationHints stays silent for a clean graph', () => {
+  const graph = buildProjectGraph(GROUPS, [
+    { from: 'main.c', to: 'util.c', resolved: true },
+    { from: 'util.c', to: 'uart.c', resolved: true },
+  ])
+  assert.equal(graph.capped, false)
+  assert.equal(graph.edges.length, 2)
+  assert.deepEqual(graphTruncationHints(graph), [])
+  assert.deepEqual(graphTruncationHints(null), [])
+})
+
+test('graphTruncationHints combines several causes in a stable order', () => {
+  const edges = [
+    ...Array.from({ length: 4 }, () => ({ from: 'main.c', to: 'util.c' })),
+    { from: 'main.c', to: 'missing.h', resolved: false },
+  ]
+  const graph = buildProjectGraph(GROUPS, edges, { maxEdges: 2, maxNodes: 2, backendTruncated: true })
+  assert.deepEqual(graphTruncationHints(graph), [
+    '节点已截断，仅展示前 2 个文件',
+    '仅展示前 2 条依赖（另有 3 条未绘制）',
+    '后端已截断依赖列表，当前视图可能不完整',
+  ])
 })
 
 test('buildProjectGraph respects search filter', () => {

@@ -5,18 +5,41 @@ function clamp(n, min, max) {
   return Math.min(max, Math.max(min, n))
 }
 
+/**
+ * Human-readable truncation hints derived from the graph model's own metadata.
+ * Returns an empty list when nothing was dropped, so a clean graph shows no warning.
+ * @param {ReturnType<import('./project-graph-model.mjs').buildProjectGraph> | null | undefined} graph
+ * @returns {string[]}
+ */
+export function graphTruncationHints(graph) {
+  if (!graph || typeof graph !== 'object') return []
+  const stats = graph.truncation && typeof graph.truncation === 'object' ? graph.truncation : {}
+  const maxNodes = Number(graph.maxNodes) > 0 ? Number(graph.maxNodes) : 0
+  const maxEdges = Number(graph.maxEdges) > 0 ? Number(graph.maxEdges) : 0
+  const hints = []
+
+  if (graph.nodesCapped) {
+    hints.push(maxNodes ? `节点已截断，仅展示前 ${maxNodes} 个文件` : '节点已截断，仅展示部分文件')
+  }
+  if (graph.edgesCapped || stats.cappedEdgeCount > 0) {
+    const dropped = Number(stats.cappedEdgeCount) || 0
+    const tail = dropped > 0 ? `（另有 ${dropped} 条未绘制）` : ''
+    hints.push(maxEdges ? `仅展示前 ${maxEdges} 条依赖${tail}` : `依赖已截断${tail}`)
+  }
+  if (stats.backendTruncated) {
+    hints.push('后端已截断依赖列表，当前视图可能不完整')
+  }
+  if (stats.unresolvedEdgeCount > 0) {
+    hints.push(`${stats.unresolvedEdgeCount} 条依赖未解析到工程文件`)
+  }
+  if (stats.filteredEdgeCount > 0) {
+    hints.push(`${stats.filteredEdgeCount} 条依赖被当前筛选隐藏`)
+  }
+  return hints
+}
+
 export function createProjectGraphView(React) {
-  return function ProjectGraphView({
-    graph,
-    selectedId,
-    onSelect,
-    onClearSelect,
-    capped,
-    edgesCapped,
-    nodesCapped,
-    truncation,
-    maxEdges,
-  }) {
+  return function ProjectGraphView({ graph, selectedId, onSelect, onClearSelect }) {
     const el = React.createElement
     const hostRef = React.useRef(null)
     const layout = React.useMemo(() => layoutProjectGraph(graph), [graph])
@@ -110,30 +133,7 @@ export function createProjectGraphView(React) {
     }
 
     const transform = `translate(${pan.x},${pan.y}) scale(${scale})`
-    const stats = truncation && typeof truncation === 'object' ? truncation : {}
-    const edgeLimit = Number(maxEdges) > 0 ? Number(maxEdges) : Number(graph?.maxEdges) || 120
-    const hints = []
-
-    if (capped || edgesCapped || nodesCapped) {
-      hints.push('图谱已截断，仅展示部分节点/依赖')
-    }
-    if (stats.backendTruncated) {
-      hints.push('后端已截断依赖列表，当前视图可能不完整')
-    }
-    if (stats.cappedEdgeCount > 0) {
-      hints.push(`仅展示前 ${edgeLimit} 条依赖（另有 ${stats.cappedEdgeCount} 条未绘制）`)
-    } else if (stats.inputEdgeCount > stats.renderedEdgeCount && stats.renderedEdgeCount > 0) {
-      const skipped = stats.unresolvedEdgeCount + stats.filteredEdgeCount
-      if (skipped > 0) {
-        hints.push(`${skipped} 条依赖未纳入当前视图`)
-      }
-    }
-    if (stats.unresolvedEdgeCount > 0) {
-      hints.push(`${stats.unresolvedEdgeCount} 条边未解析`)
-    }
-    if (stats.filteredEdgeCount > 0) {
-      hints.push(`${stats.filteredEdgeCount} 条边被筛选隐藏`)
-    }
+    const hints = graphTruncationHints(graph)
 
     return el(
       'div',
