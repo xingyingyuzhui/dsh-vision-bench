@@ -7,7 +7,8 @@ export { modbusWrite, resolvePendingWrite } from './write-service.mjs'
 export { modbusPoll, migrateLegacyDisabled, deviceAlarms } from './polling-service.mjs'
 export {
   createPendingWrite,
-  popPendingWrite,
+  peekPendingWrite,
+  takePendingWrite,
   listPendingWrites,
 } from './write-approval-service.mjs'
 export { listFrames } from './frame-service.mjs'

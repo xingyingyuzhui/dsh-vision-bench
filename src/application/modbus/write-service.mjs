@@ -67,7 +67,7 @@ import {
   runReadTx,
   transportOf,
 } from './modbus-runtime-context.mjs'
-import { createPendingWrite, popPendingWrite } from './write-approval-service.mjs'
+import { createPendingWrite, takePendingWrite } from './write-approval-service.mjs'
 /**
  * @typedef {import('../../types/modbus.js').ModbusCommandBody} ModbusCommandBody
  * @typedef {import('../../types/modbus.js').ModbusOperationOptions} ModbusOperationOptions
@@ -446,13 +446,16 @@ export const modbusWrite = async (home, cwd, body, opts) => {
  * @param {string} cwd
  * @param {string} id
  * @param {boolean} approved
- * @param {ModbusOperationOptions} opts
+ * @param {ModbusOperationOptions & { sessionId?: string }} [opts]
  */
-export const resolvePendingWrite = async (home, cwd, id, approved, opts) => {
+export const resolvePendingWrite = async (home, cwd, id, approved, opts = {}) => {
   const room = /** @type {{ cwd: string, error?: string }} */ (requireWorkspaceCwd(cwd))
   if (room.error) return { ok: false, error: room.error }
-  const entry = popPendingWrite(room.cwd, id)
-  if (!entry) return { ok: false, error: '请求不存在或已过期' }
+  // Ownership is checked before the entry is consumed: a foreign or anonymous
+  // caller must neither write, reject, nor evict the owner's request.
+  const taken = takePendingWrite(room.cwd, id, opts.sessionId ? String(opts.sessionId) : '')
+  if (!taken.ok) return { ok: false, error: taken.error, errorCode: taken.errorCode }
+  const entry = taken.entry
   if (approved !== true) {
     await recordBenchEvent(
       home,

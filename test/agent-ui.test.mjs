@@ -174,7 +174,7 @@ test('buildAgentRef produces stable ID+configVersion+timeRange and read/write er
     }
     saveWorkspace(home, cwd, { modbus: { connections: [cDrift] } })
     const { resolvePendingWrite } = await import('../bench-modbus.mjs')
-    const drifted = await resolvePendingWrite(home, cwd, first.requestId, true)
+    const drifted = await resolvePendingWrite(home, cwd, first.requestId, true, { sessionId: 's1' })
     assert.equal(drifted.ok, false)
     assert.equal(drifted.errorCode, ERROR_CODES.ENDPOINT_DRIFT)
   } finally {
@@ -236,7 +236,7 @@ test('Agent live ops need deviceId on multi-device connections; pending write bi
     assert.equal(first.request.endpoint.configVersion, loadWorkspace(home, cwd).modbus.configVersion)
     assert.equal(first.request.endpoint.unitId, 1)
     // 33) rejection leaves the device untouched
-    assert.equal((await resolvePendingWrite(home, cwd, first.requestId, false)).rejected, true)
+    assert.equal((await resolvePendingWrite(home, cwd, first.requestId, false, { sessionId: 's1' })).rejected, true)
     assert.equal((loadWorkspace(home, cwd).modbus.values || []).length, 0)
     // 32) switching the Unit ID before approval voids the old request
     const second = await runVisionBench(
@@ -250,7 +250,7 @@ test('Agent live ops need deviceId on multi-device connections; pending write bi
         devices: loadWorkspace(home, cwd).modbus.devices.map((d) => (d.id === 'd1' ? { ...d, unitId: 3 } : d)),
       },
     })
-    const driftedUnit = await resolvePendingWrite(home, cwd, second.requestId, true)
+    const driftedUnit = await resolvePendingWrite(home, cwd, second.requestId, true, { sessionId: 's2' })
     assert.equal(driftedUnit.ok, false)
     assert.equal(driftedUnit.errorCode, ERROR_CODES.ENDPOINT_DRIFT)
   } finally {
@@ -322,7 +322,7 @@ test('approved write reports protocol result and readback consistency (§16.5-34
       cwd,
       { source: 'agent', sessionId: 's1' },
     )
-    const okRun = await resolvePendingWrite(home, cwd, okReq.requestId, true, { transport })
+    const okRun = await resolvePendingWrite(home, cwd, okReq.requestId, true, { transport, sessionId: 's1' })
     assert.equal(okRun.ok, true)
     assert.match(okRun.summary, /回读一致/)
     assert.deepEqual(okRun.readback, [7])
@@ -333,7 +333,7 @@ test('approved write reports protocol result and readback consistency (§16.5-34
       cwd,
       { source: 'agent', sessionId: 's1' },
     )
-    const badRun = await resolvePendingWrite(home, cwd, badReq.requestId, true, { transport })
+    const badRun = await resolvePendingWrite(home, cwd, badReq.requestId, true, { transport, sessionId: 's1' })
     assert.equal(badRun.ok, false)
     assert.equal(badRun.errorCode, ERROR_CODES.WRITE_READBACK_MISMATCH)
     assert.match(badRun.summary || badRun.error, /回读不一致/)

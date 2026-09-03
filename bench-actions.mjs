@@ -14,9 +14,10 @@ export {
   modbusWrite,
   pickConnPatch,
   pointsOp,
-  popPendingWrite,
+  peekPendingWrite,
   requestFocus,
   resolvePendingWrite,
+  takePendingWrite,
 } from './bench-modbus.mjs'
 export { _internal } from './bench-modbus.mjs'
 

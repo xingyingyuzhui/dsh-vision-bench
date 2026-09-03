@@ -285,7 +285,7 @@ test('runVisionBench write action requires user approval then executes', async (
     const untouched = loadWorkspace(home, cwd).modbus.values
     assert.equal((untouched || []).length, 0)
 
-    const ran = await resolvePendingWrite(home, cwd, first.requestId, true)
+    const ran = await resolvePendingWrite(home, cwd, first.requestId, true, { sessionId: 's1' })
     assert.equal(ran.ok, true)
     assert.deepEqual(ran.target, [42, 43])
     assert.deepEqual(ran.readback, [42, 43])
@@ -301,7 +301,7 @@ test('runVisionBench write action requires user approval then executes', async (
     const rec = ws.modbus.values.filter((item) => ptIds.has(item.key) || ptIds.has(item.pointId))
     assert.equal(rec.length, 2)
 
-    const gone = await resolvePendingWrite(home, cwd, first.requestId, false)
+    const gone = await resolvePendingWrite(home, cwd, first.requestId, false, { sessionId: 's1' })
     assert.equal(gone.ok, false)
   } finally {
     await rm(home, { recursive: true, force: true })
@@ -331,7 +331,7 @@ test('rejecting a pending agent write leaves the device untouched', async () => 
       { source: 'agent', sessionId: 's1' },
     )
     assert.equal(first.needsConfirm, true)
-    const ran = await resolvePendingWrite(home, cwd, first.requestId, false)
+    const ran = await resolvePendingWrite(home, cwd, first.requestId, false, { sessionId: 's1' })
     assert.equal(ran.ok, true)
     assert.equal(ran.rejected, true)
     const ws = loadWorkspace(home, cwd)
@@ -381,7 +381,7 @@ test('approving a pending write whose device vanished fails cleanly', async () =
         points: [{ name: '保持', function: 3, address: 0 }],
       },
     })
-    const ran = await resolvePendingWrite(home, cwd, first.requestId, true)
+    const ran = await resolvePendingWrite(home, cwd, first.requestId, true, { sessionId: 's1' })
     assert.equal(ran.ok, false)
     assert.match(ran.error, /设备连接已变更/)
     const ws = loadWorkspace(home, cwd)
@@ -444,7 +444,7 @@ test('approval refuses when the device endpoint drifted', async () => {
         activeId: 'm1',
       },
     })
-    const ran = await resolvePendingWrite(home, cwd, first.requestId, true)
+    const ran = await resolvePendingWrite(home, cwd, first.requestId, true, { sessionId: 's-origin' })
     assert.equal(ran.ok, false)
     assert.match(ran.error, /设备连接已变更/)
     const ws = loadWorkspace(home, cwd)
@@ -488,7 +488,7 @@ test('same-endpoint approval still executes', async () => {
     assert.equal(first.needsConfirm, true)
     // Touch unrelated workspace state; the endpoint fingerprint must not care.
     saveWorkspace(home, cwd, { keil: { target: 'Debug' } })
-    const ran = await resolvePendingWrite(home, cwd, first.requestId, true)
+    const ran = await resolvePendingWrite(home, cwd, first.requestId, true, { sessionId: 's-origin' })
     assert.equal(ran.ok, true)
     assert.deepEqual(ran.readback, [6])
   } finally {
@@ -529,7 +529,7 @@ test('missing approved field fails closed instead of approving', async () => {
     assert.equal(first.needsConfirm, true)
     // Route-level semantics: resolvePendingWrite treats anything but exactly
     // true as a rejection.
-    const ran = await resolvePendingWrite(home, cwd, first.requestId, undefined)
+    const ran = await resolvePendingWrite(home, cwd, first.requestId, undefined, { sessionId: 's1' })
     assert.equal(ran.rejected, true)
     const ws = loadWorkspace(home, cwd)
     assert.equal((ws.modbus.devices[0].values || []).length, 0)

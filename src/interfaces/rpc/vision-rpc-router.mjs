@@ -104,8 +104,9 @@ function workspaceCwdOf(room) {
 /**
  * @param {string} home
  * @param {string | undefined} cwd
+ * @param {string} [sessionId] pending writes are only exposed to their owning session
  */
-async function snapshot(home, cwd) {
+async function snapshot(home, cwd, sessionId) {
   const bindings = loadBindings(home)
   /** @type {Record<string, any>} */
   const body = {
@@ -131,7 +132,7 @@ async function snapshot(home, cwd) {
     const workspace = loadWorkspace(home, workspaceCwd)
     body.workspace = workspace
     body.journal = journalView(body.workspace)
-    body.pendingWrites = listPendingWrites(workspaceCwd)
+    body.pendingWrites = listPendingWrites(workspaceCwd, sessionId)
     const sources = await listConnectedSerialSources(home, workspaceCwd)
     body.serialSources = sources.sources || []
     const states = await listConnectionStates(home, workspaceCwd)
@@ -142,7 +143,7 @@ async function snapshot(home, cwd) {
 
 /**
  * @param {{ getHome: () => string }} deps
- * @returns {{ dispatch: (endpoint: string, payload: unknown, signal?: AbortSignal) => Promise<unknown>, snapshot: (cwd?: string) => Promise<unknown> }}
+ * @returns {{ dispatch: (endpoint: string, payload: unknown, signal?: AbortSignal) => Promise<unknown>, snapshot: (cwd?: string, sessionId?: string) => Promise<unknown> }}
  */
 export function createVisionRpcRouter({ getHome }) {
   /**
@@ -151,15 +152,15 @@ export function createVisionRpcRouter({ getHome }) {
    * @param {AbortSignal | undefined} signal
    */
   async function dispatch(endpoint, payload, signal) {
-    void signal
     const home = getHome()
     /** @type {Record<string, any>} */
     const body = payload && typeof payload === 'object' ? /** @type {Record<string, any>} */ (payload) : {}
+    const operationOptions = signal ? { signal } : {}
     await touchSessionFromPayload(home, body)
 
     switch (endpoint) {
       case 'state':
-        return snapshot(home, body && typeof body === 'object' ? String(body.cwd || '') || undefined : undefined)
+        return snapshot(home, String(body.cwd || '') || undefined, String(body.sessionId || ''))
       case 'bindings/get':
         return {
           ok: true,
@@ -218,7 +219,12 @@ export function createVisionRpcRouter({ getHome }) {
           body && typeof body === 'object' ? body.path : undefined,
         )
       case 'keil/download': {
-        const ran = await openocdDownload(home, body && typeof body === 'object' ? body.cwd : undefined, body)
+        const ran = await openocdDownload(
+          home,
+          body && typeof body === 'object' ? body.cwd : undefined,
+          body,
+          operationOptions,
+        )
         if (ran && !ran.needsConfirm)
           maybeNotifyResult(home, body && typeof body === 'object' ? body.cwd : undefined, '烧录', ran)
         return ran
@@ -239,14 +245,19 @@ export function createVisionRpcRouter({ getHome }) {
           body && typeof body === 'object' ? body.target : undefined,
         )
       case 'keil/build': {
-        const ran = await keilBuild(home, body && typeof body === 'object' ? body.cwd : undefined, body)
+        const ran = await keilBuild(
+          home,
+          body && typeof body === 'object' ? body.cwd : undefined,
+          body,
+          operationOptions,
+        )
         maybeNotifyResult(home, body && typeof body === 'object' ? body.cwd : undefined, '编译', ran)
         return ran
       }
       case 'modbus/read':
-        return modbusRead(home, body.cwd, normalizeConnAlias(body), {})
+        return modbusRead(home, body.cwd, normalizeConnAlias(body), operationOptions)
       case 'modbus/write': {
-        const ran = await modbusWrite(home, body.cwd, normalizeConnAlias(body), {})
+        const ran = await modbusWrite(home, body.cwd, normalizeConnAlias(body), operationOptions)
         maybeNotifyResult(home, String(body.cwd || ''), '写点', ran)
         return ran
       }
@@ -254,7 +265,11 @@ export function createVisionRpcRouter({ getHome }) {
         const room = requireWorkspaceCwd(body.cwd)
         const workspaceCwd = workspaceCwdOf(room)
         if (!workspaceCwd) return { ok: false, error: room.error || 'no-cwd' }
-        const ran = await resolvePendingWrite(home, workspaceCwd, String(body.id || ''), body.approved === true, {})
+        const ran = await resolvePendingWrite(home, workspaceCwd, String(body.id || ''), body.approved === true, {
+          ...operationOptions,
+          source: 'user',
+          sessionId: String(body.sessionId || ''),
+        })
         maybeNotifyResult(home, workspaceCwd, '写点', ran)
         return ran
       }
@@ -418,7 +433,7 @@ export function createVisionRpcRouter({ getHome }) {
     }
   }
 
-  return { dispatch, snapshot: (cwd) => snapshot(getHome(), cwd) }
+  return { dispatch, snapshot: (cwd, sessionId) => snapshot(getHome(), cwd, sessionId) }
 }
 
 export { clearFlashApprovals }
