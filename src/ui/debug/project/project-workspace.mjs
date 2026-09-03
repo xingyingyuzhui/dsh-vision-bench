@@ -44,6 +44,28 @@ export function shouldIgnoreProjectSearchShortcut(ev) {
   return false
 }
 
+const NO_EDGES = Object.freeze([])
+
+/** Abort the controller held in `ref` (if any) and clear the slot. */
+function abortRef(ref) {
+  const ac = ref.current
+  ref.current = null
+  if (ac) ac.abort()
+}
+
+/** Replace the controller held in `ref`, aborting the previous same-kind request first. */
+function swapAbortController(ref) {
+  abortRef(ref)
+  const ac = new AbortController()
+  ref.current = ac
+  return ac
+}
+
+/** Drop the slot only if it still points at `ac` (a newer request may already own it). */
+function releaseAbortController(ref, ac) {
+  if (ref.current === ac) ref.current = null
+}
+
 export function createProjectWorkspace(React, t, post) {
   const SourceEditor = createSourceEditor(React)
   const TreePanel = createProjectTreePanel(React)
@@ -74,10 +96,16 @@ export function createProjectWorkspace(React, t, post) {
     const searchRef = React.useRef(null)
     const mapRequestRef = React.useRef(0)
     const previewRequestRef = React.useRef(0)
+    const mapAbortRef = React.useRef(null)
+    const previewAbortRef = React.useRef(null)
     const mountedRef = React.useRef(true)
     const prevIdentityRef = React.useRef('')
 
     const identityKey = projectIdentityKey(sessionId, cwd, keil)
+    // Live identity for async gates: callbacks must compare against the render-time
+    // value, not the identityKey closed over when the request started.
+    const identityRef = React.useRef(identityKey)
+    identityRef.current = identityKey
     const activeMapped = matchesIdentity(mapped, identityKey) ? mapped : null
     mappedRef.current = activeMapped
 
@@ -85,6 +113,8 @@ export function createProjectWorkspace(React, t, post) {
       mountedRef.current = true
       return () => {
         mountedRef.current = false
+        abortRef(mapAbortRef)
+        abortRef(previewAbortRef)
       }
     }, [])
 
@@ -101,6 +131,13 @@ export function createProjectWorkspace(React, t, post) {
       const workspaceChanged = was.sessionId !== now.sessionId || was.cwd !== now.cwd
       const keilChanged = was.project !== now.project || was.target !== now.target
       const keilHydrated = !was.project && !!now.project
+
+      // Invalidate every in-flight request from the previous identity before the
+      // map effect (declared later) starts the request for the new one.
+      beginRequest(mapRequestRef)
+      beginRequest(previewRequestRef)
+      abortRef(mapAbortRef)
+      abortRef(previewAbortRef)
 
       setMapped(null)
       setError('')
@@ -181,74 +218,66 @@ export function createProjectWorkspace(React, t, post) {
       [t],
     )
 
-    const reloadMap = React.useCallback(() => {
-      if (!cwd || !keil.project) return Promise.resolve()
+    /**
+     * Start (or restart) the map request for the current identity. Any earlier map
+     * request is aborted so only the newest one may ever touch page state.
+     * @returns {{ promise: Promise<void>, ac: AbortController } | null}
+     */
+    const startMapRequest = React.useCallback(() => {
+      if (!cwd || !keil.project) return null
       const requestId = beginRequest(mapRequestRef)
       const reqIdentity = identityKey
-      const ac = new AbortController()
+      const ac = swapAbortController(mapAbortRef)
+      const mayApply = () => shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityRef.current, mountedRef)
       setBusy(true)
       setError('')
-      return postWithAbort(
+      const promise = postWithAbort(
         post,
         '/dsh-vision-bench/keil/map',
         { cwd, project: keil.project, target: keil.target },
         ac.signal,
       )
         .then((data) => {
-          if (!shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityKey, mountedRef)) return
+          if (!mayApply()) return
           applyMapResponse(data, reqIdentity)
         })
         .catch((err) => {
-          if (!shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityKey, mountedRef)) return
           if (err?.name === 'AbortError') return
+          if (!mayApply()) return
           setMapped(null)
           setError(String(err?.message || t('loadFail')))
         })
         .finally(() => {
-          if (shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityKey, mountedRef)) {
-            setBusy(false)
-          }
+          releaseAbortController(mapAbortRef, ac)
+          if (mayApply()) setBusy(false)
         })
+      return { promise, ac }
     }, [applyMapResponse, cwd, identityKey, keil.project, keil.target, post, t])
 
+    const reloadMap = React.useCallback(() => {
+      const started = startMapRequest()
+      return started ? started.promise : Promise.resolve()
+    }, [startMapRequest])
+
     React.useEffect(() => {
-      if (!cwd || !keil.project) {
-        return undefined
-      }
-      const requestId = beginRequest(mapRequestRef)
-      const reqIdentity = identityKey
-      const ac = new AbortController()
-      setBusy(true)
-      setError('')
-      postWithAbort(post, '/dsh-vision-bench/keil/map', { cwd, project: keil.project, target: keil.target }, ac.signal)
-        .then((data) => {
-          if (!shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityKey, mountedRef)) return
-          applyMapResponse(data, reqIdentity)
-        })
-        .catch((err) => {
-          if (!shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityKey, mountedRef)) return
-          if (err?.name === 'AbortError') return
-          setMapped(null)
-          setError(String(err?.message || t('loadFail')))
-        })
-        .finally(() => {
-          if (shouldApplyRequest(mapRequestRef, requestId, reqIdentity, identityKey, mountedRef)) {
-            setBusy(false)
-          }
-        })
+      const started = startMapRequest()
+      if (!started) return undefined
       return () => {
-        ac.abort()
+        started.ac.abort()
+        releaseAbortController(mapAbortRef, started.ac)
       }
-    }, [applyMapResponse, cwd, identityKey, keil.project, keil.target, post, t])
+    }, [startMapRequest])
 
     const counts = activeMapped?.counts ? activeMapped.counts : {}
     const groups = activeMapped && Array.isArray(activeMapped.groups) ? activeMapped.groups : []
     const truncated =
       activeMapped?.truncated && typeof activeMapped.truncated === 'object' ? activeMapped.truncated : {}
     const tree = buildProjectTree(groups, { filter, search })
+    const includeEdges = Array.isArray(activeMapped?.include_edges) ? activeMapped.include_edges : NO_EDGES
+    const backendTruncated = Boolean(truncated.include_edges)
     const graph = React.useMemo(
-      () => buildProjectGraph(groups, activeMapped?.include_edges || [], { filter, search }),
-      [groups, activeMapped?.include_edges, filter, search],
+      () => buildProjectGraph(groups, includeEdges, { filter, search, backendTruncated }),
+      [groups, includeEdges, filter, search, backendTruncated],
     )
 
     const selectedHit = selectedId ? findFileByTreeId(groups, selectedId) : null
@@ -261,12 +290,16 @@ export function createProjectWorkspace(React, t, post) {
         const rel = file.rel || file.path || file.name
         const reqIdentity = identityKey
         const requestId = beginRequest(previewRequestRef)
-        const ac = new AbortController()
+        // Opening another file, changing identity or unmounting aborts this request;
+        // the controller lives in previewAbortRef rather than being handed back to the caller.
+        const ac = swapAbortController(previewAbortRef)
+        const mayApply = () =>
+          shouldApplyRequest(previewRequestRef, requestId, reqIdentity, identityRef.current, mountedRef)
         setJumpLine(Number(line) || 0)
         setPreview({ ...emptyPreviewState(rel, reqIdentity), loading: true, rel, identityKey: reqIdentity })
         postWithAbort(post, '/dsh-vision-bench/project/file', { cwd, path: rel }, ac.signal)
           .then((data) => {
-            if (!shouldApplyRequest(previewRequestRef, requestId, reqIdentity, identityKey, mountedRef)) return
+            if (!mayApply()) return
             setPreview(
               data?.ok
                 ? {
@@ -285,14 +318,16 @@ export function createProjectWorkspace(React, t, post) {
             )
           })
           .catch((err) => {
-            if (!shouldApplyRequest(previewRequestRef, requestId, reqIdentity, identityKey, mountedRef)) return
             if (err?.name === 'AbortError') return
+            if (!mayApply()) return
             setPreview({
               ...emptyPreviewState(rel, reqIdentity),
               error: String(err?.message || '读取失败'),
             })
           })
-        return () => ac.abort()
+          .finally(() => {
+            releaseAbortController(previewAbortRef, ac)
+          })
       },
       [cwd, identityKey, post],
     )
@@ -357,14 +392,13 @@ export function createProjectWorkspace(React, t, post) {
           ? el(GraphView, {
               graph,
               selectedId,
-              capped: graph.capped,
-              edgesCapped: graph.edgesCapped,
-              orphanEdges: graph.orphanEdges,
-              truncatedIncludeEdges: !!truncated.include_edges,
               onSelect(node) {
                 const hit = findFileByTreeId(groups, node.id)
                 if (!hit) return
                 selectFile({ ...hit.file, _group: hit.group.name })
+              },
+              onClearSelect() {
+                setSelectedId('')
               },
             })
           : el('div', { className: 'dvb-hint' }, '暂无依赖图谱可显示。请确认工程含 #include 依赖或放宽筛选。')
