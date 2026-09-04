@@ -68,6 +68,15 @@ function safeError(error) {
 function queryTimeoutMs(action) {
   if (action === 'build' || action === 'write' || action === 'map') return 120000
   if (action === 'system.ping') return 3000
+  if (action === 'debug.start' || action === 'debug.stop') return 30000
+  if (
+    action.startsWith('debug.run') ||
+    action.startsWith('debug.pause') ||
+    action.startsWith('debug.step') ||
+    action.startsWith('debug.inspect')
+  ) {
+    return 10000
+  }
   return 10000
 }
 
@@ -178,10 +187,11 @@ async function tryHostHttp(cmd) {
 }
 
 /**
+ * Universal host command dispatcher for agent tools and internal callers.
  * @param {Partial<AgentCommandEnvelope> & { action?: string, requireHost?: boolean, timeoutMs?: number }} cmd
  * @returns {Promise<AgentCommandResult>}
  */
-export async function dispatchVisionCommand(cmd) {
+export async function dispatchHostCommand(cmd) {
   const input = cmd && typeof cmd === 'object' ? cmd : { action: '' }
   const source = input.source === 'agent' || input.source === 'system' ? input.source : 'user'
   if (hostHandle && typeof hostHandle.dispatch === 'function') {
@@ -190,12 +200,37 @@ export async function dispatchVisionCommand(cmd) {
     )
   }
   if (input.requireHost !== true) {
-    const { executeVisionCommand } = await import('../../application/commands/vision-command-service.mjs')
-    return /** @type {AgentCommandResult} */ (finalizeAgentCommandResult(await executeVisionCommand(input), source))
+    const { executeHostCommand } = await import('../../application/commands/host-command-service.mjs')
+    return /** @type {AgentCommandResult} */ (finalizeAgentCommandResult(await executeHostCommand(input), source))
   }
   return /** @type {AgentCommandResult} */ (
     finalizeAgentCommandResult(await tryHostHttp(/** @type {AgentCommandEnvelope} */ (input)), source)
   )
+}
+
+/**
+ * @param {Partial<AgentCommandEnvelope> & { action?: string, requireHost?: boolean, timeoutMs?: number }} cmd
+ * @returns {Promise<AgentCommandResult>}
+ */
+export async function dispatchVisionCommand(cmd) {
+  return dispatchHostCommand(cmd)
+}
+
+/**
+ * Dispatches a vision_debug command to Host, ensuring debug. namespace prefix.
+ * @param {Partial<AgentCommandEnvelope> & { action?: string, requireHost?: boolean, timeoutMs?: number }} cmd
+ * @returns {Promise<AgentCommandResult>}
+ */
+export async function dispatchVisionDebugCommand(cmd) {
+  const input = cmd && typeof cmd === 'object' ? cmd : { action: '' }
+  const rawAction = String(input.action || '')
+  const action = rawAction.startsWith('debug.') ? rawAction : `debug.${rawAction}`
+  const payload = input.payload && typeof input.payload === 'object' ? { ...input.payload, action } : { action }
+  return dispatchHostCommand({
+    ...input,
+    action,
+    payload,
+  })
 }
 
 /** @returns {HostBridgeDescriptor} */

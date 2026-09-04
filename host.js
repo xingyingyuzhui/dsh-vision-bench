@@ -1,17 +1,22 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { stopVisionIoBroker } from './bench-io-broker.mjs'
 import { setAgentsRegistry } from './bench-notify.mjs'
-import { clearFlashApprovals } from './src/application/flash/flash-approval-service.mjs'
 import { stopAllPolling } from './bench-polling-service.mjs'
 import { VISION_GUIDANCE, seedVisionBenchPreset } from './bench-preset.mjs'
 import { clearSerialMonitorState } from './bench-serial-monitor.mjs'
 import { defaultDshHome, journalView, sweepStaleTasks, touchServiceSession } from './bench-store.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
 import { toLosslessJson } from './src/application/commands/lossless-json.mjs'
+import {
+  createDebugRuntime,
+  getSharedDebugRuntime,
+  setSharedDebugRuntime,
+} from './src/application/debug/debug-runtime.mjs'
+import { clearFlashApprovals } from './src/application/flash/flash-approval-service.mjs'
 import { registerVisionHost } from './src/infrastructure/host/vision-host-client.mjs'
+import { visionDebugTool } from './src/interfaces/agent/vision-debug-tool.mjs'
 import { createVisionCommandDispatcher, handleCommand } from './src/interfaces/http/vision-command-routes.mjs'
 import { createVisionRpcRouter } from './src/interfaces/rpc/vision-rpc-router.mjs'
-import { createDebugRuntime } from './src/application/debug/debug-runtime.mjs'
 import { VISION_RPC_CHANNEL } from './src/shared/vision-rpc-contract.mjs'
 
 export const name = 'dsh-vision-bench'
@@ -38,7 +43,7 @@ const readJsonBody = (req, cap = BODY_CAP) =>
     req.on('data', (chunk) => {
       size += chunk.length
       if (size > cap) {
-        reject(new Error('body too large'))
+        reject(new Error('payload too large'))
         req.destroy()
         return
       }
@@ -46,21 +51,39 @@ const readJsonBody = (req, cap = BODY_CAP) =>
     })
     req.on('end', () => {
       try {
-        const text = Buffer.concat(chunks).toString('utf8').trim()
-        resolveBody(text.length === 0 ? {} : JSON.parse(text))
-      } catch {
-        reject(new Error('invalid json body'))
+        const text = Buffer.concat(chunks).toString('utf8')
+        resolveBody(text ? JSON.parse(text) : {})
+      } catch (err) {
+        reject(err)
       }
     })
     req.on('error', reject)
   })
 
-/** 带 sessionId 的请求自动归属当前 Session（后台告警通知目标）。 */
+const issueBridgeCapability = () => {
+  bridgeCapability = randomUUID()
+  process.env.VISION_BENCH_CAPABILITY = bridgeCapability
+  return bridgeCapability
+}
+
+const clearBridgeCapability = () => {
+  bridgeCapability = ''
+  delete process.env.VISION_BENCH_CAPABILITY
+}
+
+const capabilityMatches = (provided) => {
+  if (!bridgeCapability || !provided) return false
+  const a = Buffer.from(bridgeCapability)
+  const b = Buffer.from(String(provided))
+  if (a.length !== b.length) return false
+  return timingSafeEqual(a, b)
+}
+
 const readBodyAndTouchSession = async (req) => {
   const body = await readJsonBody(req)
-  const action = body && (body.action || body.payload?.action)
-  if (action !== 'system.ping' && body && body.cwd && body.sessionId) {
-    await touchServiceSession(dshHome, body.cwd, body.sessionId)
+  const sessionId = body && typeof body === 'object' && body.sessionId ? String(body.sessionId) : ''
+  if (sessionId) {
+    touchServiceSession(sessionId, dshHome)
   }
   return body
 }
@@ -74,25 +97,6 @@ function socketAddress(req) {
   return req?.socket?.remoteAddress || req?.connection?.remoteAddress || ''
 }
 
-function capabilityMatches(got) {
-  if (!bridgeCapability || !got) return false
-  const a = Buffer.from(String(got))
-  const b = Buffer.from(bridgeCapability)
-  if (a.length !== b.length) return false
-  return timingSafeEqual(a, b)
-}
-
-function issueBridgeCapability() {
-  bridgeCapability = randomUUID()
-  process.env.VISION_BENCH_CAPABILITY = bridgeCapability
-  return bridgeCapability
-}
-
-function clearBridgeCapability() {
-  if (process.env.VISION_BENCH_CAPABILITY === bridgeCapability) delete process.env.VISION_BENCH_CAPABILITY
-  bridgeCapability = ''
-}
-
 const guard = (req, res) => {
   if (req.method !== 'POST') {
     writeJson(res, 405, { ok: false, error: 'method not allowed' })
@@ -102,10 +106,10 @@ const guard = (req, res) => {
     writeJson(res, 403, { ok: false, error: 'loopback only' })
     return false
   }
-  const headers = req.headers || {}
-  const origin = headers.origin || headers.Origin || ''
+  const headers = (req && req.headers) || {}
+  const origin = headers.origin || headers.Origin
   if (origin && !LOOPBACK_ORIGIN.test(origin)) {
-    writeJson(res, 403, { ok: false, error: 'origin not allowed' })
+    writeJson(res, 403, { ok: false, error: 'forbidden origin' })
     return false
   }
   const ctype = String(headers['content-type'] || headers['Content-Type'] || '')
@@ -147,7 +151,8 @@ export function apply(ctx, config = {}) {
   dshHome = defaultDshHome()
   const role = config.role === 'agent' ? 'agent' : 'host'
   if (role === 'agent') {
-    const stopTool = ctx.tools.register(visionBenchTool(dshHome))
+    const stopBenchTool = ctx.tools.register(visionBenchTool(dshHome))
+    const stopDebugTool = ctx.tools.register(visionDebugTool(dshHome))
     let stopGuidance = () => {}
     try {
       if (ctx.systemPrompt && typeof ctx.systemPrompt.section === 'function') {
@@ -160,7 +165,8 @@ export function apply(ctx, config = {}) {
       }
     } catch {}
     ctx.effect(() => () => {
-      if (typeof stopTool === 'function') stopTool()
+      if (typeof stopBenchTool === 'function') stopBenchTool()
+      if (typeof stopDebugTool === 'function') stopDebugTool()
       if (typeof stopGuidance === 'function') stopGuidance()
     })
     return
@@ -178,7 +184,7 @@ export function apply(ctx, config = {}) {
     /* agent registry is optional */
   }
 
-  const debugRuntime = createDebugRuntime()
+  const debugRuntime = getSharedDebugRuntime()
   const router = createVisionRpcRouter({ getHome: () => dshHome, debugRuntime })
   const commandDispatcher = createVisionCommandDispatcher(dshHome)
   const stopHost = registerVisionHost(commandDispatcher)
@@ -232,6 +238,7 @@ export function apply(ctx, config = {}) {
     clearFlashApprovals()
     void stopVisionIoBroker('plugin-dispose')
     void debugRuntime.shutdown('plugin-dispose').catch(() => {})
+    setSharedDebugRuntime(null)
   })
 }
 

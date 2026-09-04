@@ -128,6 +128,10 @@ export const VISION_GUIDANCE = [
   '- Points have two independent switches: monitorEnabled (visualization data source; enable it then associate the point in a visualization component) and alarmEnabled (threshold alarms). Never conflate them.',
   '- Visualization components are read via action=visualization (list/get) and mutated via add/update/remove/layout. layout requires expectedConfigVersion and items[{id,x,y,w,h}]. Old propose* ops return OP_REMOVED.',
   '- Switch component writes are high-impact: they still require user confirmation and readback, exactly like point writes.',
+  '- Firmware runtime diagnosis uses vision_debug, not raw GDB/OpenOCD commands.',
+  '- For unexplained value changes, prefer watchpoint → run → inspect snapshot.',
+  '- Never start a second hardware debug session when target lease is busy.',
+  '- Debug snapshots are evidence; cite snapshot ids in diagnosis.',
 ].join('\n')
 
 const LEGACY_VISION_PERSONAS = [

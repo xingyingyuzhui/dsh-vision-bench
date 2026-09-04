@@ -72,11 +72,16 @@ test('agent role registers vision_bench and skips HTTP routes', async () => {
     },
     { role: 'agent' },
   )
-  assert.equal(tools.length, 1)
-  assert.equal(tools[0].name, 'vision_bench')
-  assert.equal(tools[0].parameters.type, 'object')
-  assert.ok(tools[0].parameters.properties.action.enum.includes('map'))
-  assert.ok(tools[0].parameters.required.includes('action'))
+  assert.equal(tools.length, 2)
+  const benchTool = tools.find((t) => t.name === 'vision_bench')
+  const debugTool = tools.find((t) => t.name === 'vision_debug')
+  assert.ok(benchTool)
+  assert.ok(debugTool)
+  assert.equal(benchTool.parameters.type, 'object')
+  assert.ok(benchTool.parameters.properties.action.enum.includes('map'))
+  assert.ok(benchTool.parameters.required.includes('action'))
+  assert.equal(debugTool.parameters.type, 'object')
+  assert.ok(debugTool.parameters.properties.action.enum.includes('breakpoint'))
 })
 
 test('ensurePresetOverlay appends the agent-plane row and persona', async () => {

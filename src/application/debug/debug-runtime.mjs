@@ -372,6 +372,99 @@ export function createDebugRuntime(deps = {}) {
           return { ok: true, removed: Boolean(bp) }
         }
 
+        case 'addWatchpoint': {
+          const wpId = command.id || `wp_${Date.now()}_${session.watchpoints.size + 1}`
+          const wp = {
+            id: wpId,
+            expression: command.expression,
+            accessType: command.accessType || command.access || 'write',
+            verified: true,
+          }
+          session.watchpoints.set(wpId, wp)
+          if (session.backend?.addWatchpoint) {
+            await session.backend.addWatchpoint(wp)
+          }
+          session.eventRing.push({
+            debugSessionId: session.debugSessionId,
+            ownerSessionId: session.ownerSessionId,
+            workspaceCwd: session.workspaceCwd,
+            backend: session.backendKind,
+            type: DEBUG_EVENT_TYPES.WATCHPOINT_CREATED,
+            payload: wp,
+          })
+          return { ok: true, watchpoint: wp }
+        }
+
+        case 'removeWatchpoint': {
+          const wp = session.watchpoints.get(command.id)
+          if (wp) {
+            session.watchpoints.delete(command.id)
+            if (session.backend?.removeWatchpoint) {
+              await session.backend.removeWatchpoint(wp)
+            }
+            session.eventRing.push({
+              debugSessionId: session.debugSessionId,
+              ownerSessionId: session.ownerSessionId,
+              workspaceCwd: session.workspaceCwd,
+              backend: session.backendKind,
+              type: DEBUG_EVENT_TYPES.WATCHPOINT_REMOVED,
+              payload: { id: command.id },
+            })
+          }
+          return { ok: true, removed: Boolean(wp) }
+        }
+
+        case 'reset':
+        case 'resetHalt': {
+          if (session.backend?.resetHalt) {
+            await session.backend.resetHalt()
+          }
+          session.state = transition(session.state, 'paused')
+          session.eventRing.push({
+            debugSessionId: session.debugSessionId,
+            ownerSessionId: session.ownerSessionId,
+            workspaceCwd: session.workspaceCwd,
+            backend: session.backendKind,
+            type: DEBUG_EVENT_TYPES.PAUSED,
+            payload: { reason: 'reset' },
+          })
+          return { ok: true, state: session.state }
+        }
+
+        case 'evaluate': {
+          let value = ''
+          if (session.backend?.evaluate) {
+            value = await session.backend.evaluate(command.expression)
+          }
+          return { ok: true, expression: command.expression, value }
+        }
+
+        case 'inspect': {
+          const include = command.include || 'all'
+          if (command.address || include === 'memory') {
+            let memory = ''
+            if (session.backend?.readMemory && command.address) {
+              memory = await session.backend.readMemory(command.address, Number(command.length) || 32)
+            }
+            return { ok: true, memory, address: command.address }
+          }
+          const [stack, locals, registers] = await Promise.all([
+            session.backend?.stack ? session.backend.stack().catch(() => []) : session.stack,
+            session.backend?.locals ? session.backend.locals().catch(() => []) : session.variables,
+            session.backend?.registers ? session.backend.registers().catch(() => []) : [],
+          ])
+          session.stack = stack
+          session.variables = locals
+          return {
+            ok: true,
+            location: session.location,
+            stack,
+            variables: locals,
+            registers,
+            state: session.state,
+          }
+        }
+
         default: {
           if (session.backend && typeof session.backend.command === 'function') {
             const res = await session.backend.command(command)
@@ -462,4 +555,26 @@ export function createDebugRuntime(deps = {}) {
       leaseManager.clearAll()
     },
   }
+}
+
+/** @type {ReturnType<typeof createDebugRuntime> | null} */
+let defaultSharedDebugRuntime = null
+
+/**
+ * Gets or initializes the singleton DebugRuntime for the current host lifecycle.
+ * @returns {ReturnType<typeof createDebugRuntime>}
+ */
+export function getSharedDebugRuntime() {
+  if (!defaultSharedDebugRuntime) {
+    defaultSharedDebugRuntime = createDebugRuntime()
+  }
+  return defaultSharedDebugRuntime
+}
+
+/**
+ * Sets or clears the shared DebugRuntime (used in host lifecycle or testing).
+ * @param {ReturnType<typeof createDebugRuntime> | null} [runtime]
+ */
+export function setSharedDebugRuntime(runtime = null) {
+  defaultSharedDebugRuntime = runtime
 }
