@@ -48,8 +48,10 @@ Requires DSH 0.1.2-alpha.3. Install from an `npm pack` tarball, not a `link:` ch
 - **三个原生工作区**：Harness `conversation.view` 上的 **调试** / **上位机** / **监控**。调试内是工作台（编译烧录与构建日志）和工程结构；监控内是可视化、告警、串口报文、操作记录。不再注册 Vision 侧栏页面，也不再要求安装 `dsh-better-sidebar`。点表值 / 可视化 / 告警共享同一实时值来源，一次采集同时驱动，不重复占串口
 - **Agent 联动**：`vision_bench` 支持 `visualization` 动作（list/get/add/update/remove/layout）——组件读取实时回显，修改直接保存（所有配置修改必须携带最近一次 status/list/get 返回的 `configVersion`；`CONFIG_DRIFT` 后必须重新 list/get 再基于新版本重试；`layout` 必须携带 `items[{id,x,y,w,h}]`；`propose*` 返回 `OP_REMOVED`；ID 冲突返回 `VIZ_TARGET_MISMATCH`）。Agent 可以直接修改连接、设备、点位和可视化配置，调整布局后当前 Session 可视化页面实时同步。Host 校验后原子保存并记入操作记录。真实设备写入和烧录仍需用户批准：烧录走服务端 `requestId` 批准卡，OpenOCD 只烧录哈希校验后的固件快照。`focus` 支持仅凭 `visualizationId` 聚焦组件；`points` 返回 `monitorEnabled/alarmEnabled/trendEnabled/runtimeStatus` 与阈值；组件右侧 Agent 图标把结构化引用追加到当前 Session 输入框
 - **工程结构**：组/文件/函数三级展开折叠，文件与函数搜索，缺失/不可读/工作区外筛选，只读源码预览（工作区内 + 防符号链接逃逸 + 扩展名白名单 + 256KB 上限），Include/宏/依赖折叠于“编译配置”；编译错误显示文件:行号，一键“定位”打开工程结构并高亮；完整日志支持搜索与错误/警告筛选
+- **运行调试与仿真**：支持 OpenOCD/GDB 硬件在线调试及 Keil UVSOCK 模拟仿真，具备断点、观察点、步进、变量树、寄存器与内存读取；提供 Agent 专属工具 `vision_debug`（与 `vision_bench` 严格隔离）及 `debug_snapshot` 诊断证据；集成程序调用图、数据依赖图及 Archify 故障因果叙事链分析。
+- **闭环验证 (Verify)**：支持场景化断言测试（Debug 表达式、Modbus 点位遥测、无异常/故障停机、无告警、数值区间稳定度），自动生成 PASS/FAIL 结论与证据链沉淀。
 
-还没做：CAN 监视、验证流程（verify）。
+还没做：CAN 监视。
 
 ## 安装
 

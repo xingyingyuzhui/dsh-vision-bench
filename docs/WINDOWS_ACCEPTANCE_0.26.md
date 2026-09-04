@@ -25,9 +25,21 @@
 
 ## 二级 Tab
 
-- [ ] 调试：工作台 / 工程结构
+- [ ] 调试：工作台 / 工程结构 / 运行调试
 - [ ] 监控：可视化 / 告警 / 串口报文 / 操作记录
 - [ ] 同 cwd 两个 Session 互不串扰（导航、状态轮询、Agent Focus）
+
+## 调试与仿真链（本轮未验收）
+
+- [ ] OpenOCD / GDB 硬件调试链路（启动、单步、断点、观察点、变量查看）
+- [ ] Keil UVSOCK 仿真调试链路（无实体硬件运行模拟）
+- [ ] `vision_debug` Agent 专属工具与会话隔离调用
+- [ ] 调试诊断快照创建与证据绑定
+
+## 闭环验证（Verify）
+
+- [ ] 场景断言自动化评估（debug.expression, modbus.point, no.exception, no.alarm, range）
+- [ ] PASS/FAIL 自动化判断与 Evidence 写入操作记录
 
 ## 设备链（本轮未验收）
 
