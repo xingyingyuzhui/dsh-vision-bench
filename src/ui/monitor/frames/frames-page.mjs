@@ -14,6 +14,7 @@ import {
   buildAgentRef,
   copyAgentRef,
   dispatchAgentRef,
+  formatErrorMessage,
   getFramesLog,
   hasHarnessInput,
 } from '../../../../bench-shared.mjs'
@@ -698,8 +699,8 @@ export function createFramesPage(React, t, post, hooks) {
             ),
           )
         : null,
-      serial.error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, serial.error) : null,
-      error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
+      serial.error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, formatErrorMessage(serial.error)) : null,
+      error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, formatErrorMessage(error)) : null,
       copied ? el('div', { className: 'dvb-hint' }, copied) : null,
       !filtered.length && vendorVirtualizer() === null
         ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, '虚拟列表依赖未加载')

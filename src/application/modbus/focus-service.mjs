@@ -26,7 +26,6 @@ import { planScopedReadBatches } from '../../../bench-pollplan.mjs'
 import { portKey } from '../../../bench-portlock.mjs'
 import {
   finishTask,
-  loadWorkspace,
   normalizeFocusRequest,
   normalizeFocusState,
   openTask,
@@ -34,6 +33,7 @@ import {
   recordBenchEvent,
   saveWorkspaceAsync,
 } from '../../../bench-store.mjs'
+import { ensureWorkspaceClaimed, modbusForSession } from './workspace-session-view.mjs'
 import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from '../../../bench-targets.mjs'
 import { endpointFingerprint, endpointLabelText, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
@@ -79,9 +79,9 @@ import {
 export const requestFocus = async (home, cwd, body) => {
   const room = /** @type {{ cwd: string, error?: string }} */ (requireWorkspaceCwd(cwd))
   if (room.error) return { ok: false, error: room.error, errorCode: ERROR_CODES.TARGET_REQUIRED }
-  const workspace = loadWorkspace(home, room.cwd)
-  const pack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
   const origin = originOf(body)
+  const workspace = await ensureWorkspaceClaimed(home, room.cwd, origin.sessionId)
+  const pack = /** @type {ModbusWorkspace} */ (modbusForSession(workspace, origin.sessionId))
   const rawTarget = body && (body.target || body.focus || body) ? body.target || body.focus || body : {}
   const target =
     normalizeFocusRequest(rawTarget) ||

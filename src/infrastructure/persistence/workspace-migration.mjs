@@ -50,6 +50,10 @@ export function splitWorkspaceParts(workspace) {
       visualization: persistableVisualization(modbus.visualization),
       activeConnectionId: modbus.activeConnectionId || '',
       activeDeviceId: modbus.activeDeviceId || '',
+      // Session-private scope layers (share flags, per-session slices, legacy claim marker).
+      share: modbus.share || null,
+      sessionConfigs: modbus.sessionConfigs || {},
+      privateClaimSessionId: modbus.privateClaimSessionId || '',
     },
   }
   const runtime = {
@@ -97,6 +101,9 @@ export function mergeWorkspaceParts(config, runtime) {
       visualization: cfgMb.visualization || { schemaVersion: 2, columns: 12, components: [] },
       activeConnectionId: cfgMb.activeConnectionId || '',
       activeDeviceId: cfgMb.activeDeviceId || '',
+      share: cfgMb.share || null,
+      sessionConfigs: cfgMb.sessionConfigs || {},
+      privateClaimSessionId: cfgMb.privateClaimSessionId || '',
       values: rtMb.values || [],
       alarmState: rtMb.alarmState || {},
       alarmActive: rtMb.alarmActive || {},

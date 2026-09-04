@@ -1,4 +1,4 @@
-import { pickJournal } from '../../../../bench-shared.mjs'
+import { formatErrorMessage, pickJournal } from '../../../../bench-shared.mjs'
 import { ERROR_CODES } from '../../../domain/modbus/errors.mjs'
 
 export function usePendingWrites(React, post, cwd, sessionId, setPending, setJournal, setWorkspace, setError, t) {
@@ -13,7 +13,7 @@ export function usePendingWrites(React, post, cwd, sessionId, setPending, setJou
           setError(t('pendingWriteSessionMismatch'))
         } else {
           setPending((prev) => prev.filter((item) => item.id !== id))
-          if (data && data.ok === false && !data.rejected) setError(data.error || t('fail'))
+          if (data && data.ok === false && !data.rejected) setError(formatErrorMessage(data.error) || t('fail'))
         }
         return post('/dsh-vision-bench/state', sid ? { cwd, sessionId: sid } : { cwd })
       })

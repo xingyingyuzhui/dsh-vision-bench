@@ -1,5 +1,5 @@
 import { encodeValue, normalizeWriteValues } from '../../../bench-points.mjs'
-import { pickJournal, pushFramesLog } from '../../../bench-shared.mjs'
+import { formatErrorMessage, pickJournal, pushFramesLog } from '../../../bench-shared.mjs'
 import { rtuOccupierAmong, tcpOccupierAmong } from './hmi-controller.mjs'
 
 /** Live read/write, connection link, and polling actions. */
@@ -73,7 +73,7 @@ export function createHmiLiveActions(ctx, core) {
             modbus: { ...workspaceRef.current.modbus, values: data.values },
           }
         }
-        if (data.ok === false && data.error) setError(data.error)
+        if (data.ok === false && data.error) setError(formatErrorMessage(data.error))
         return post('/dsh-vision-bench/state', { cwd })
       })
       .then((data) => {
@@ -185,7 +185,15 @@ export function createHmiLiveActions(ctx, core) {
     setError('')
     return post('/dsh-vision-bench/connection/open', { cwd, connectionId: id }, 15000)
       .then(async (data) => {
-        if (data && data.ok === false) setError(data.error || t('fail'))
+        if (data && data.ok === false) setError(formatErrorMessage(data.error) || t('fail'))
+        const pack = normalizePack()
+        const conn = (pack.connections || []).find((c) => c.id === id)
+        const isServer = conn?.role === 'server' || conn?.role === 'slave'
+        if (!isServer) {
+          const pollingCfg = pack.pollingByConnection?.[id] || {}
+          const intervalMs = pollingCfg.intervalMs || 1000
+          await post('/dsh-vision-bench/polling/start', { cwd, connectionId: id, intervalMs }, 15000).catch(() => {})
+        }
         try {
           await refreshConnectionState()
         } catch (error) {
@@ -207,9 +215,10 @@ export function createHmiLiveActions(ctx, core) {
     if (!cwd || !id) return Promise.resolve()
     setLinkBusy(id)
     setError('')
+    post('/dsh-vision-bench/polling/stop', { cwd, connectionId: id }, 15000).catch(() => {})
     return post('/dsh-vision-bench/connection/close', { cwd, connectionId: id }, 15000)
       .then(async (data) => {
-        if (data && data.ok === false) setError(data.error || t('fail'))
+        if (data && data.ok === false) setError(formatErrorMessage(data.error) || t('fail'))
         try {
           await refreshConnectionState()
         } catch (error) {
@@ -249,7 +258,7 @@ export function createHmiLiveActions(ctx, core) {
     const url = d.watchEnabled ? '/dsh-vision-bench/polling/stop' : '/dsh-vision-bench/polling/start'
     return post(url, { cwd, connectionId: d.activeConnId }, 15000)
       .then(async (data) => {
-        if (data?.ok === false) setError(data.error || t('fail'))
+        if (data?.ok === false) setError(formatErrorMessage(data.error) || t('fail'))
         try {
           await refreshConnectionState()
         } catch (error) {
@@ -282,7 +291,7 @@ export function createHmiLiveActions(ctx, core) {
       15000,
     )
       .then(async (data) => {
-        if (data?.ok === false) setError(data.error || t('fail'))
+        if (data?.ok === false) setError(formatErrorMessage(data.error) || t('fail'))
         try {
           await refreshConnectionState()
         } catch (error) {

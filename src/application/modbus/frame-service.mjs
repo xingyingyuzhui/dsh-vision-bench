@@ -26,14 +26,13 @@ import { planScopedReadBatches } from '../../../bench-pollplan.mjs'
 import { portKey } from '../../../bench-portlock.mjs'
 import {
   finishTask,
-  loadWorkspace,
   normalizeFocusRequest,
   normalizeFocusState,
   openTask,
   pruneBuildLogs,
   recordBenchEvent,
-  saveWorkspace,
 } from '../../../bench-store.mjs'
+import { ensureWorkspaceClaimedSync, modbusForSession } from './workspace-session-view.mjs'
 import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from '../../../bench-targets.mjs'
 import { endpointFingerprint, endpointLabelText, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
@@ -79,9 +78,9 @@ import {
 export const listFrames = (home, cwd, body) => {
   const room = /** @type {{ cwd: string, error?: string }} */ (requireWorkspaceCwd(cwd))
   if (room.error) return { ok: false, error: room.error, errorCode: ERROR_CODES.TARGET_REQUIRED }
-  const workspace = loadWorkspace(home, room.cwd)
-  const pack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
   const origin = originOf(body)
+  const workspace = ensureWorkspaceClaimedSync(home, room.cwd, origin.sessionId)
+  const pack = /** @type {ModbusWorkspace} */ (modbusForSession(workspace, origin.sessionId))
   const cidArg = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
   const didArg = body?.deviceId ? String(body.deviceId).trim() : ''
   const frameId = body && (body.frameId || body.id) ? String(body.frameId || body.id).trim() : ''

@@ -2,6 +2,12 @@ import { evaluateAlarms } from './bench-alarm.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { workspaceRepository } from './bench-store.mjs'
 import { sampleTrendValues } from './bench-trend-store.mjs'
+import {
+  normalizeSessionConfigs,
+  unionScopedConnections,
+  unionScopedDevices,
+  unionScopedPoints,
+} from './src/domain/modbus/config-scope.mjs'
 
 const mergePointValues = (current, incoming) => {
   const byId = new Map()
@@ -37,10 +43,14 @@ export const appendTransactionFrame = (home, cwd, frame) =>
 const commit = (home, cwd, input, kind) =>
   workspaceRepository(home).mutateRuntime(cwd, (ws) => {
     const pack = normalizeModbus(ws.modbus)
+    const sessionConfigs = normalizeSessionConfigs(pack.sessionConfigs)
+    const points = unionScopedPoints(pack.points, sessionConfigs)
+    const connections = unionScopedConnections(pack.connections, sessionConfigs)
+    const devices = unionScopedDevices(pack.devices, sessionConfigs)
     const cid = String((input && input.connectionId) || '')
     const did = String((input && input.deviceId) || '')
-    const connOk = !cid || pack.connections.some((c) => c.id === cid)
-    const devOk = !did || pack.devices.some((d) => d.id === did)
+    const connOk = !cid || connections.some((c) => c.id === cid)
+    const devOk = !did || devices.some((d) => d.id === did)
     const drift =
       (input &&
         input.baseConfigVersion &&
@@ -50,27 +60,27 @@ const commit = (home, cwd, input, kind) =>
       !devOk
     let values = pack.values
     if (!drift && input && Array.isArray(input.pointValues) && input.pointValues.length) {
-      const allowed = new Set(pack.points.map((p) => p.id))
+      const allowed = new Set(points.map((p) => p.id))
       const incoming = input.pointValues.filter((rec) => rec && allowed.has(rec.pointId || rec.key))
       values = mergePointValues(pack.values, incoming)
     }
     let framesByConnection = pack.framesByConnection
     if (input && input.frame) {
       const frame = drift ? { ...input.frame, status: 'error', error: 'CONFIG_DRIFT' } : input.frame
-      if (!cid || pack.connections.some((c) => c.id === cid) || drift) {
+      if (!cid || connections.some((c) => c.id === cid) || drift) {
         framesByConnection = appendFrame(pack.framesByConnection, cid, frame)
       }
     }
     const alarmEval = evaluateAlarms({
-      points: pack.points,
+      points,
       values,
       prevState: pack.alarmState || pack.alarmActive,
       pollingByConnection: pack.pollingByConnection,
-      connections: pack.connections,
+      connections,
       opts: { deadband: 1 },
     })
     // Task3/0.19.3: 采样发生在提交阶段 — 与页面是否打开无关
-    const pointsById = Object.fromEntries((pack.points || []).map((p) => [p.id, p]))
+    const pointsById = Object.fromEntries((points || []).map((p) => [p.id, p]))
     const trend = sampleTrendValues(pack.trend || {}, input && input.pointValues, pointsById)
     const patch = {
       values,

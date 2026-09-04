@@ -6,7 +6,7 @@ export function renderBatchPanel(el, t, ctx) {
   void ctx.d
   return el(
     'div',
-    { className: 'dvb-write-panel' },
+    { className: 'dvb-write-panel dvb-batch-panel' },
     el(
       'div',
       { className: 'dvb-toolbar' },
@@ -66,6 +66,17 @@ export function renderBatchPanel(el, t, ctx) {
         'button',
         { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick: generateBatch },
         t('batchGenerate'),
+      ),
+      el(
+        'button',
+        {
+          type: 'button',
+          className: 'dvb-btn',
+          onClick() {
+            setBatch((prev) => ({ ...prev, open: false }))
+          },
+        },
+        t('csvCancel') || '收起',
       ),
     ),
   )

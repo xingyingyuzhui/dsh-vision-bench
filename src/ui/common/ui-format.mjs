@@ -63,6 +63,22 @@ export function formatClock(at) {
   }
 }
 
+export function formatErrorMessage(err, fallback = '') {
+  if (!err) return ''
+  if (typeof err === 'string') return err
+  if (typeof err === 'object') {
+    if (typeof err.message === 'string' && err.message) return err.message
+    if (typeof err.error === 'string' && err.error) return err.error
+    if (typeof err.code === 'string' && err.code) return err.code
+    try {
+      return JSON.stringify(err)
+    } catch {
+      return String(err)
+    }
+  }
+  return String(err || fallback)
+}
+
 export function sourceLabel(t, source) {
   if (source === 'agent') return t('sourceAgent')
   if (source === 'system') return t('sourceSystem')

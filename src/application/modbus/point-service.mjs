@@ -32,8 +32,8 @@ import {
   openTask,
   pruneBuildLogs,
   recordBenchEvent,
-  saveWorkspaceAsync,
 } from '../../../bench-store.mjs'
+import { ensureWorkspaceClaimed, modbusForSession, saveSessionModbusPatch } from './workspace-session-view.mjs'
 import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from '../../../bench-targets.mjs'
 import { endpointFingerprint, endpointLabelText, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
@@ -79,8 +79,9 @@ import {
 export const pointsOp = async (home, cwd, body) => {
   const room = /** @type {{ cwd: string, error?: string }} */ (requireWorkspaceCwd(cwd))
   if (room.error) return { ok: false, error: room.error }
-  const workspace = loadWorkspace(home, room.cwd)
-  const pack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
+  const sessionId = String(body?.sessionId || '')
+  const workspace = await ensureWorkspaceClaimed(home, room.cwd, sessionId)
+  const pack = /** @type {ModbusWorkspace} */ (modbusForSession(workspace, sessionId))
   const op = body?.op
   const cidArg = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
   const didArg = body?.deviceId ? String(body.deviceId).trim() : ''
@@ -165,14 +166,13 @@ export const pointsOp = async (home, cwd, body) => {
         points = points.map((p, i) => (i === idx ? { ...p, ...next, id: points[idx].id } : p))
       }
     }
-    const saved = await saveWorkspaceAsync(home, room.cwd, { modbus: { points, version: 3 } })
+    const saved = await saveSessionModbusPatch(home, room.cwd, sessionId, { modbus: { points, version: 3 } })
     if (!saved.ok) return saved
+    const view = /** @type {ModbusWorkspace} */ (saved.view || modbusForSession(saved.workspace, sessionId))
     return {
       ok: true,
       action: 'points',
-      points: /** @type {ModbusWorkspace} */ (saved.workspace.modbus).points.map((p) =>
-        compactPointRow(p, saved.workspace.modbus.values),
-      ),
+      points: view.points.map((p) => compactPointRow(p, view.values)),
     }
   }
   if (op === 'remove') {
@@ -197,7 +197,9 @@ export const pointsOp = async (home, cwd, body) => {
       return !idSet.has(k) || !kept.some((p) => p.id === k)
     })
     if (kept.length === pack.points.length) return { ok: false, error: '没有匹配的点位' }
-    const saved = await saveWorkspaceAsync(home, room.cwd, { modbus: { points: kept, values: keptValues, version: 3 } })
+    const saved = await saveSessionModbusPatch(home, room.cwd, sessionId, {
+      modbus: { points: kept, values: keptValues, version: 3 },
+    })
     if (!saved.ok) return saved
     return { ok: true, action: 'points', removed: ids.length }
   }
@@ -214,13 +216,13 @@ export const pointsOp = async (home, cwd, body) => {
         const k = v.key || v.pointId
         return kept.some((p) => p.id === k)
       })
-      const saved = await saveWorkspaceAsync(home, room.cwd, {
+      const saved = await saveSessionModbusPatch(home, room.cwd, sessionId, {
         modbus: { points: kept, values: keptValues, version: 3 },
       })
       if (!saved.ok) return saved
       return { ok: true, action: 'points', cleared: true }
     }
-    const saved = await saveWorkspaceAsync(home, room.cwd, {
+    const saved = await saveSessionModbusPatch(home, room.cwd, sessionId, {
       modbus: { points: [], values: [], alarmActive: {}, alarmState: {}, version: 3 },
     })
     if (!saved.ok) return saved

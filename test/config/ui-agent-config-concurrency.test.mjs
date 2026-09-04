@@ -6,7 +6,12 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
 import { executeVisionCommand } from '../../src/application/commands/vision-command-service.mjs'
+import { projectModbusForSession } from '../../src/application/modbus/config-scope-service.mjs'
 import { createHmiCommandClient } from '../../src/ui/hmi/hmi-command-client.mjs'
+
+function sessionPack(home, cwd, sessionId) {
+  return projectModbusForSession(loadWorkspace(home, cwd).modbus, sessionId)
+}
 
 function seed(home, cwd) {
   mkdirSync(cwd)
@@ -29,12 +34,12 @@ test('stale UI config command cannot erase a point added by Agent', async () => 
     assert.equal(path, '/dsh-vision-bench/command')
     return executeVisionCommand({ ...body, home })
   }
-  const ui = createHmiCommandClient(post, cwd, 'ui-session')
+  const ui = createHmiCommandClient(post, cwd, 'session-1')
   try {
     const agent = await executeVisionCommand({
       home,
       cwd,
-      sessionId: 'agent-session',
+      sessionId: 'session-1',
       source: 'agent',
       action: 'config',
       payload: {
@@ -55,7 +60,7 @@ test('stale UI config command cannot erase a point added by Agent', async () => 
     assert.equal(staleUi.ok, false)
     assert.equal(staleUi.errorCode, 'CONFIG_DRIFT')
     assert.deepEqual(
-      loadWorkspace(home, cwd).modbus.points.map((point) => point.id),
+      sessionPack(home, cwd, 'session-1').points.map((point) => point.id),
       ['p1', 'p2'],
     )
 
@@ -67,7 +72,7 @@ test('stale UI config command cannot erase a point added by Agent', async () => 
       currentVersion,
     )
     assert.equal(freshUi.ok, true, freshUi.error)
-    const finalPoints = loadWorkspace(home, cwd).modbus.points
+    const finalPoints = sessionPack(home, cwd, 'session-1').points
     assert.equal(finalPoints.find((point) => point.id === 'p1').name, 'P1 from fresh UI')
     assert.ok(finalPoints.some((point) => point.id === 'p2'))
   } finally {

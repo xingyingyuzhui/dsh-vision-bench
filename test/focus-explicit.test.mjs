@@ -38,46 +38,32 @@ test('Task14: Agent focus 只有 foreground=true 才抢焦点 badgeOnly=true 不
       address: 0,
     }
     saveWorkspace(home, cwd, { modbus: { version: 3, connections: [c1], devices: [d1], points: [p1] } })
+    const agentFocus = (extra) =>
+      requestFocus(home, cwd, {
+        source: 'agent',
+        sessionId: 's-focus',
+        target: { connectionId: 'c1', deviceId: 'd1', pointId: 'p1' },
+        ...extra,
+      })
     // Agent focus without explicit foreground -> should be badgeOnly
-    const noFg = await requestFocus(home, cwd, {
-      source: 'agent',
-      target: { connectionId: 'c1', deviceId: 'd1', pointId: 'p1' },
-    })
+    const noFg = await agentFocus({})
     assert.equal(noFg.ok, true)
     assert.equal(noFg.badgeOnly, true, 'agent focus without foreground must be badgeOnly')
     assert.equal(shouldStealFocus({ source: 'agent', type: 'read' }, noFg), false)
     // explicit foreground true -> not badgeOnly
-    const fg = await requestFocus(home, cwd, {
-      source: 'agent',
-      target: { connectionId: 'c1', pointId: 'p1' },
-      foreground: true,
-    })
+    const fg = await agentFocus({ foreground: true })
     assert.equal(fg.ok, true)
     assert.equal(fg.badgeOnly, false, 'foreground=true should clear badgeOnly')
-    const withSession = await requestFocus(home, cwd, {
-      source: 'agent',
-      sessionId: 's-focus',
-      target: { connectionId: 'c1', pointId: 'p1' },
-      foreground: true,
-    })
+    const withSession = await agentFocus({ foreground: true })
     assert.equal(withSession.ok, true)
     assert.equal(withSession.sessionId, 's-focus')
     assert.equal(loadWorkspace(home, cwd).focus.sessionId, 's-focus')
     // badgeOnly true even with foreground true? badgeOnly wins
-    const both = await requestFocus(home, cwd, {
-      source: 'agent',
-      target: { connectionId: 'c1', pointId: 'p1' },
-      badgeOnly: true,
-      foreground: true,
-    })
+    const both = await agentFocus({ badgeOnly: true, foreground: true })
     assert.equal(both.ok, true)
     assert.equal(both.badgeOnly, true)
     // foreground false -> badgeOnly
-    const fgFalse = await requestFocus(home, cwd, {
-      source: 'agent',
-      target: { connectionId: 'c1', pointId: 'p1' },
-      foreground: false,
-    })
+    const fgFalse = await agentFocus({ foreground: false })
     assert.equal(fgFalse.ok, true)
     assert.equal(fgFalse.badgeOnly, true)
   } finally {

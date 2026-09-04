@@ -43,8 +43,7 @@ Requires DSH 0.1.2-alpha.3. Install from an `npm pack` tarball, not a `link:` ch
 - **点表元数据**：每段可带倍率 / 偏移 / 单位 / 告警上下限；CSV 导入导出（剪贴板往返）批量编辑
 - **阈值告警**：采集时评估越限，越限/恢复写入「操作记录」并通知当前会话；监控「告警」回看记录
 - **监视与可视化**：点位“监视”开关决定是否成为可视化数据源（读取/采集/写后回读在提交阶段写入每工作区每点位 600 样本环形缓存；关闭监视仍可读取但停止新增历史样本，也不删除已关联组件）。“告警”开关是真正的总开关：关闭后不再判断并立即把已有激活告警转为恢复状态，阈值保留可再次开启；两者相互独立，按工程值阈值判断。**监控→可视化**以组件为中心：GridStack 拖拽缩放；曲线/柱状图优先 ECharts（无运行时则 uPlot / CSS fallback）；数值卡/开关（FC01 确认写+读回）。组件可新建/编辑/删除；关联点位只列已监视且符合类型约束的点位；数据源失效时组件保留并提示修复，不自动删除
-- **多设备**：主机询问控制板，多连接（COM3/COM4 等）并发时各连接事务、报文来源与游标互不串线，每连接独立队列保序
-- **从机（未启用）**：本版本不提供 Modbus 从机模式，UI 与 Agent 层均显式拒绝（`ROLE_NOT_SUPPORTED`）；真正的 Slave Server 单独立项
+- **从机连接支持**：支持配置与创建 Modbus 从机（Slave / Server）连接，支持从机监听状态管理与点表寄存器映射；从机连接下被动响应外部主站请求，不启动主动轮询采集
 - **会话协作**：Vision 自动服务当前 Session，不再提供手动绑定/解绑；后台 Session 的操作只记录，不抢当前页面焦点。Agent 定位目标时目标短时高亮并在右下角轻提示「Agent 已定位到 …」，可一次性返回原位置
 - **三个原生工作区**：Harness `conversation.view` 上的 **调试** / **上位机** / **监控**。调试内是工作台（编译烧录与构建日志）和工程结构；监控内是可视化、告警、串口报文、操作记录。不再注册 Vision 侧栏页面，也不再要求安装 `dsh-better-sidebar`。点表值 / 可视化 / 告警共享同一实时值来源，一次采集同时驱动，不重复占串口
 - **Agent 联动**：`vision_bench` 支持 `visualization` 动作（list/get/add/update/remove/layout）——组件读取实时回显，修改直接保存（所有配置修改必须携带最近一次 status/list/get 返回的 `configVersion`；`CONFIG_DRIFT` 后必须重新 list/get 再基于新版本重试；`layout` 必须携带 `items[{id,x,y,w,h}]`；`propose*` 返回 `OP_REMOVED`；ID 冲突返回 `VIZ_TARGET_MISMATCH`）。Agent 可以直接修改连接、设备、点位和可视化配置，调整布局后当前 Session 可视化页面实时同步。Host 校验后原子保存并记入操作记录。真实设备写入和烧录仍需用户批准：烧录走服务端 `requestId` 批准卡，OpenOCD 只烧录哈希校验后的固件快照。`focus` 支持仅凭 `visualizationId` 聚焦组件；`points` 返回 `monitorEnabled/alarmEnabled/trendEnabled/runtimeStatus` 与阈值；组件右侧 Agent 图标把结构化引用追加到当前 Session 输入框

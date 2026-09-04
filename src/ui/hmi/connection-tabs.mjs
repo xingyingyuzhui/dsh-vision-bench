@@ -8,6 +8,7 @@ export function renderConnectionTabs(el, t, ctx) {
     journal,
     activeConnId,
     connections,
+    connectionStates = [],
     hmiTab,
     setHmiTab,
     moreOpen,
@@ -19,6 +20,15 @@ export function renderConnectionTabs(el, t, ctx) {
     addConnection,
   } = ctx
   void t
+  function statusOfConn(connId) {
+    const cm = (connectionStates || []).find((x) => x.connectionId === connId)
+    const st = cm ? cm.status || 'disconnected' : 'disconnected'
+    if (st === 'connected') return { kind: 'live', text: '已连接' }
+    if (st === 'connecting') return { kind: 'warn', text: '连接中' }
+    if (st === 'disconnecting') return { kind: 'warn', text: '断开中' }
+    if (st === 'error') return { kind: 'err', text: '连接异常' }
+    return { kind: 'idle', text: '未连接' }
+  }
   function connEndpointLabel(c) {
     const cc = c?.conn || {}
     if (cc.mode === 'tcp') {
@@ -82,6 +92,7 @@ export function renderConnectionTabs(el, t, ctx) {
     visibleConns.map((c) => {
       const isActive = hmiTab === c.id
       const b = badgeForConn(c.id)
+      const stInfo = statusOfConn(c.id)
       const occupied =
         c.conn && c.conn.mode === 'rtu' && c.conn.port
           ? findRtuOccupier(c.conn.port, c.id)
@@ -96,18 +107,17 @@ export function renderConnectionTabs(el, t, ctx) {
           role: 'tab',
           'aria-selected': isActive ? 'true' : 'false',
           className: 'dvb-tab' + (isActive ? ' is-on' : '') + (occupied ? ' is-warn' : ''),
-          title: c.name + ' · ' + connLabel(c.conn || {}) + (occupied ? ' · COM冲突: ' + occupied : ''),
+          title: c.name + ' · ' + connLabel(c.conn || {}) + ' · ' + stInfo.text + (occupied ? ' · COM冲突: ' + occupied : ''),
           onClick() {
             selectConnection(c.id)
           },
         },
+        el('span', {
+          className: 'dvb-tab-dot',
+          'data-kind': stInfo.kind,
+          title: '状态: ' + stInfo.text,
+        }),
         el('span', { className: 'dvb-tab-label' }, connTabLabel(c)),
-        isActive
-          ? el('span', {
-              className: 'dvb-tab-dot',
-              'data-kind': c.enabled === false ? 'idle' : pending.length ? 'warn' : 'live',
-            })
-          : null,
         b.anomaly || b.pend || b.running
           ? el(
               'span',
@@ -141,17 +151,24 @@ export function renderConnectionTabs(el, t, ctx) {
                 overflowConns.map((c) => {
                   const isActive = hmiTab === c.id
                   const b = badgeForConn(c.id)
+                  const stInfo = statusOfConn(c.id)
                   return el(
                     'button',
                     {
                       key: c.id,
                       type: 'button',
                       className: 'dvb-tab' + (isActive ? ' is-on' : ''),
+                      title: c.name + ' · ' + connLabel(c.conn || {}) + ' · ' + stInfo.text,
                       onClick() {
                         selectConnection(c.id)
                         setMoreOpen(false)
                       },
                     },
+                    el('span', {
+                      className: 'dvb-tab-dot',
+                      'data-kind': stInfo.kind,
+                      title: '状态: ' + stInfo.text,
+                    }),
                     el('span', null, connTabLabel(c)),
                     b.anomaly || b.pend || b.running
                       ? el(

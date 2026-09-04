@@ -285,7 +285,7 @@ function flagHarness(opts = {}) {
     activeConnectionId: 'c1',
     activeDeviceId: 'd1',
   }
-  let workspace = { modbus: structuredClone(pack) }
+  let workspace = { modbus: structuredClone(pack), ...(opts.session ? { session: opts.session } : {}) }
   const workspaceRef = { current: workspace }
   const flagPatches = []
   const errors = []
@@ -293,6 +293,7 @@ function flagHarness(opts = {}) {
     t: (key) => key,
     post: opts.post,
     cwd: '/tmp/ws',
+    sessionId: opts.sessionId,
     commandClient: {
       refresh:
         opts.refresh ||
@@ -548,4 +549,41 @@ test('CONFIG_DRIFT 刷新后携带新版本重试，监视和告警都保留', a
   assert.equal(h.point.monitorEnabled, true)
   assert.equal(h.point.trendEnabled, true)
   assert.equal(h.point.alarmEnabled, true)
+})
+
+test('persistPointFlags passes sessionId from ctx or falls back to boundId, and details error', async () => {
+  let capturedBody1 = null
+  const h1 = flagHarness({
+    sessionId: 'session-explicit-456',
+    post: async (_path, body) => {
+      capturedBody1 = body
+      return { ok: true, point: { id: 'p1', monitorEnabled: true } }
+    },
+  })
+  await h1.actions.persistPointFlags('p1', { monitorEnabled: true })
+  assert.equal(capturedBody1?.sessionId, 'session-explicit-456')
+
+  // Fallback to workspace boundId
+  let capturedBody2 = null
+  const h2 = flagHarness({
+    session: { boundId: 'session-bound-789' },
+    post: async (_path, body) => {
+      capturedBody2 = body
+      return { ok: true, point: { id: 'p1', monitorEnabled: true } }
+    },
+  })
+  await h2.actions.persistPointFlags('p1', { monitorEnabled: true })
+  assert.equal(capturedBody2?.sessionId, 'session-bound-789')
+
+  // Exposing backend error detail instead of swallowing
+  const h3 = flagHarness({
+    post: async () => ({
+      ok: false,
+      errorCode: 'SESSION_REQUIRED',
+      error: '该工作区已按会话隔离，配置修改必须携带 sessionId',
+    }),
+    refresh: async () => ({ ok: true, workspace: { modbus: baseMb() } }),
+  })
+  await h3.actions.persistPointFlags('p1', { monitorEnabled: true })
+  assert.match(h3.error, /该工作区已按会话隔离/)
 })

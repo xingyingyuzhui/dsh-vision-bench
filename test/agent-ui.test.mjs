@@ -8,6 +8,8 @@ import { ERROR_CODES, listFrames, modbusWrite, requestFocus, resolvePendingWrite
 import { agentRefToText, buildAgentRef, getFocusState, setFocusState } from '../bench-shared.mjs'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
 import { runVisionBench } from '../bench-tool.mjs'
+import { projectModbusForSession } from '../src/application/modbus/config-scope-service.mjs'
+import { saveSessionModbusPatch } from '../src/application/modbus/workspace-session-view.mjs'
 
 test('Agent frames requires explicit connectionId (TARGET_REQUIRED) and lists with stable id', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-agent-frames-'))
@@ -33,8 +35,11 @@ test('Agent frames requires explicit connectionId (TARGET_REQUIRED) and lists wi
     assert.equal(ok.configVersion, loadWorkspace(home, cwd).modbus.configVersion)
     // Device disabled -> DEVICE_DISABLED
     const disabledC1 = { ...c1, enabled: false }
-    saveWorkspace(home, cwd, { modbus: { connections: [disabledC1, c2] } })
-    const disabled = listFrames(home, cwd, { source: 'agent', connectionId: 'c1' })
+    const disabledSaved = await saveSessionModbusPatch(home, cwd, 's1', {
+      modbus: { connections: [disabledC1, c2] },
+    })
+    assert.equal(disabledSaved.ok, true, disabledSaved.error)
+    const disabled = listFrames(home, cwd, { source: 'agent', sessionId: 's1', connectionId: 'c1' })
     assert.equal(disabled.ok, false)
     assert.equal(disabled.errorCode, ERROR_CODES.DEVICE_DISABLED)
   } finally {
@@ -172,8 +177,8 @@ test('buildAgentRef produces stable ID+configVersion+timeRange and read/write er
       enabled: true,
       conn: { mode: 'rtu', port: 'COM11', sim: true },
     }
-    saveWorkspace(home, cwd, { modbus: { connections: [cDrift] } })
-    const { resolvePendingWrite } = await import('../bench-modbus.mjs')
+    const driftedPatch = await saveSessionModbusPatch(home, cwd, 's1', { modbus: { connections: [cDrift] } })
+    assert.equal(driftedPatch.ok, true, driftedPatch.error)
     const drifted = await resolvePendingWrite(home, cwd, first.requestId, true, { sessionId: 's1' })
     assert.equal(drifted.ok, false)
     assert.equal(drifted.errorCode, ERROR_CODES.ENDPOINT_DRIFT)
@@ -243,14 +248,17 @@ test('Agent live ops need deviceId on multi-device connections; pending write bi
       home,
       { action: 'write', connectionId: 'c1', deviceId: 'd1', function: 3, address: 0, values: [6] },
       cwd,
-      { source: 'agent', sessionId: 's2' },
+      { source: 'agent', sessionId: 's1' },
     )
-    saveWorkspace(home, cwd, {
+    const unitPatch = await saveSessionModbusPatch(home, cwd, 's1', {
       modbus: {
-        devices: loadWorkspace(home, cwd).modbus.devices.map((d) => (d.id === 'd1' ? { ...d, unitId: 3 } : d)),
+        devices: projectModbusForSession(loadWorkspace(home, cwd).modbus, 's1').devices.map((d) =>
+          d.id === 'd1' ? { ...d, unitId: 3 } : d,
+        ),
       },
     })
-    const driftedUnit = await resolvePendingWrite(home, cwd, second.requestId, true, { sessionId: 's2' })
+    assert.equal(unitPatch.ok, true, unitPatch.error)
+    const driftedUnit = await resolvePendingWrite(home, cwd, second.requestId, true, { sessionId: 's1' })
     assert.equal(driftedUnit.ok, false)
     assert.equal(driftedUnit.errorCode, ERROR_CODES.ENDPOINT_DRIFT)
   } finally {

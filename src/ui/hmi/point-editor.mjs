@@ -57,15 +57,6 @@ export function renderNewPointRow(el, t, ctx) {
     ),
     el(
       'td',
-      { className: 'dvb-col-alarm' },
-      renderFlagSwitch(el, t, {
-        checked: newPointDraft.alarmEnabled === true,
-        title: '参与告警判断',
-        onToggle: (next) => setNewPointDraft((prev) => ({ ...prev, alarmEnabled: next })),
-      }),
-    ),
-    el(
-      'td',
       { className: 'dvb-col-scale' },
       el('input', {
         className: 'dvb-input dvb-input-mono',
@@ -93,6 +84,15 @@ export function renderNewPointRow(el, t, ctx) {
         className: 'dvb-input',
         value: newPointDraft.unit,
         onChange: (e) => setNewPointDraft((prev) => ({ ...prev, unit: e.target.value })),
+      }),
+    ),
+    el(
+      'td',
+      { className: 'dvb-col-alarm' },
+      renderFlagSwitch(el, t, {
+        checked: newPointDraft.alarmEnabled === true,
+        title: '参与告警判断',
+        onToggle: (next) => setNewPointDraft((prev) => ({ ...prev, alarmEnabled: next })),
       }),
     ),
     el(

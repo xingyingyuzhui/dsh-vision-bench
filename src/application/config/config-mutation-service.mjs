@@ -2,7 +2,6 @@
 import { normalizeModbus, normalizePointV3, validateConnections } from '../../../bench-devices.mjs'
 import { normalizeTimelineEvent, prepend, trimTimeline } from '../../../bench-journal.mjs'
 import { notifyConnectionRelease } from '../../../bench-modbus-transport.mjs'
-import { notifyBenchEvent } from '../../../bench-notify.mjs'
 import { requireWorkspaceCwd } from '../../../bench-paths.mjs'
 import { listConnectionStates } from '../../../bench-serial-monitor.mjs'
 import { normalizeWorkspace, workspaceKey } from '../../../bench-store.mjs'
@@ -14,12 +13,19 @@ import {
   validateVisualizationComponent,
   visualizationSchemaGuard,
 } from '../../../bench-visualization-model.mjs'
-import { explicitId, parseOperation } from '../../domain/config/config-operation.mjs'
+import { SESSION_SCOPED_SCOPES, explicitId, parseOperation } from '../../domain/config/config-operation.mjs'
+import { isScopePartitioned, omitSessionConfigs } from '../../domain/modbus/config-scope.mjs'
 import { ERROR_CODES, fail } from '../../domain/modbus/errors.mjs'
 import { applyPointPatch } from '../../domain/modbus/point-patch.mjs'
 import { resolveHierarchy } from '../../domain/modbus/target-resolver.mjs'
 import { pickConnPatch } from '../../domain/modbus/validation.mjs'
 import { createWorkspaceRepository } from '../../infrastructure/persistence/workspace-repository.mjs'
+import {
+  applyShareFlags,
+  claimLegacyPrivate,
+  foldModbusFromSession,
+  projectModbusForSession,
+} from '../modbus/config-scope-service.mjs'
 import { validateWorkspaceConfig } from './config-validation-service.mjs'
 
 const TIMELINE_WINDOW = 360
@@ -28,7 +34,6 @@ const TIMELINE_WINDOW = 360
  * @typedef {import('../../types/http-api.js').PostCommitWarning} PostCommitWarning
  * @typedef {(home: string) => { mutateConfig: Function }} RepositoryFactory
  * @typedef {(cwd: string, ids: string[]) => unknown} ReleaseConnections
- * @typedef {(home: string, cwd: string, summary: string, extra?: string, meta?: object) => Promise<unknown> | unknown} NotifyEvent
  * @typedef {(home: string, cwd: string, opts?: object) => Promise<{ connectionStates?: object[] }> | { connectionStates?: object[] }} ListConnectionStates
  */
 
@@ -36,7 +41,6 @@ const TIMELINE_WINDOW = 360
  * @param {{
  *   repositoryFactory?: RepositoryFactory,
  *   releaseConnections?: ReleaseConnections,
- *   notifyEvent?: NotifyEvent,
  *   listConnectionStates?: ListConnectionStates,
  * }} [deps]
  */
@@ -44,7 +48,6 @@ export function createConfigMutationService(deps = {}) {
   const repositoryFactory =
     deps.repositoryFactory || ((home) => createWorkspaceRepository({ home, keyOf: workspaceKey, normalizeWorkspace }))
   const releaseConnections = deps.releaseConnections || notifyConnectionRelease
-  const notifyEvent = deps.notifyEvent || notifyBenchEvent
   const listStates = deps.listConnectionStates || listConnectionStates
 
   /**
@@ -62,14 +65,17 @@ export function createConfigMutationService(deps = {}) {
     if (!Number.isInteger(spec.expectedConfigVersion) || spec.expectedConfigVersion <= 0) {
       return fail(ERROR_CODES.CONFIG_VERSION_REQUIRED, '配置修改必须携带当前 configVersion')
     }
+    const sessionId = String(spec.sessionId || '').trim()
     const repo = repositoryFactory(home)
     /** @type {{ releaseConnectionIds?: string[], summary?: string, extras?: any }} */
     let postCommit = {}
     const saved = await repo.mutateConfig(room.cwd, spec.expectedConfigVersion, async (/** @type {any} */ current) => {
+      const scoped = resolveMutationScope(current, sessionId, scope)
+      if (!scoped.ok) return scoped
       const applied = await applyOperation(
         home,
         room.cwd,
-        current,
+        scoped.workspace,
         {
           scope,
           op,
@@ -77,7 +83,7 @@ export function createConfigMutationService(deps = {}) {
           target: spec.target || {},
           value: spec.value || {},
           source: spec.source || 'user',
-          sessionId: spec.sessionId || '',
+          sessionId,
         },
         listStates,
       )
@@ -86,8 +92,12 @@ export function createConfigMutationService(deps = {}) {
       if (errors.length) {
         return { ok: false, errorCode: 'CONFIG_INVALID', error: errors.join('；') }
       }
+      if (scoped.projected) {
+        // The operation ran on the session's flat view; fold it back into the layered store.
+        applied.workspace.modbus = foldModbusFromSession(scoped.base, applied.workspace.modbus, sessionId)
+      }
       const summary = applied.summary || raw
-      stampTimeline(applied.workspace, spec.source, spec.sessionId, summary)
+      stampTimeline(applied.workspace, spec.source, sessionId, summary)
       postCommit = {
         releaseConnectionIds: applied.postCommit?.releaseConnectionIds || [],
         summary,
@@ -110,22 +120,14 @@ export function createConfigMutationService(deps = {}) {
         })
       }
     }
-    if (spec.source !== 'agent') {
-      try {
-        await Promise.resolve(
-          notifyEvent(home, String(room.cwd), String(postCommit.summary || raw || ''), '', {
-            sessionId: spec.sessionId || '',
-            source: spec.source || 'user',
-          }),
-        )
-      } catch (error) {
-        postCommitWarnings.push({
-          code: 'EVENT_NOTIFY_FAILED',
-          message: error instanceof Error ? error.message : String(error || '事件通知失败'),
-        })
-      }
-    }
+    // User UI edits (HMI / visualization layout drag, point toggles, etc.) must NOT
+    // steer/followup the Agent — that burns tokens on every drag. Agent-sourced
+    // mutations already get their outcome via the command response. High-impact
+    // notices (write reject, endpoint drift, compile/flash failure) still go
+    // through notifyBenchEvent / maybeNotifyResult elsewhere.
     const applied = postCommit.extras || {}
+    // Callers (UI / agent / points-flags RPC) work on the session's effective topology.
+    const workspace = sessionScopedWorkspace(saved.workspace, sessionId)
 
     return {
       ok: true,
@@ -136,12 +138,15 @@ export function createConfigMutationService(deps = {}) {
       changedVisualizationIds: applied.changedVisualizationIds || [],
       affectedVisualizations: applied.affectedVisualizations || [],
       affectedAlarms: applied.affectedAlarms || [],
-      workspace: saved.workspace,
-      visualization: saved.workspace.modbus.visualization,
+      workspace,
+      visualization: workspace.modbus.visualization,
       layout: applied.layout,
-      points: saved.workspace.modbus.points,
-      connections: saved.workspace.modbus.connections,
-      devices: saved.workspace.modbus.devices,
+      points: workspace.modbus.points,
+      connections: workspace.modbus.connections,
+      devices: workspace.modbus.devices,
+      share: workspace.modbus.share,
+      published: applied.published,
+      revoked: applied.revoked,
       configVersion: saved.nextConfigVersion,
       postCommitWarnings,
     }
@@ -158,6 +163,60 @@ const defaultConfigMutation = createConfigMutationService()
  */
 export async function mutateConfig(spec) {
   return defaultConfigMutation.mutateConfig(spec)
+}
+
+/**
+ * Decide which modbus layer an operation runs against.
+ *
+ * - `share.*` edits the layered store directly (publish / revoke move slices between layers).
+ * - With a sessionId: claim legacy flat topology for that session if still unclaimed,
+ *   then run the op on the session's projected flat view (folded back afterwards).
+ * - Without a sessionId: allowed only while the workspace is still unpartitioned
+ *   (legacy single-layer behaviour); once any session owns a private layer the caller
+ *   must identify itself.
+ *
+ * @param {any} current layered workspace loaded inside the repository lock
+ * @param {string} sessionId
+ * @param {string} scope
+ * @returns {{ ok: true, workspace: any, base: any, projected: boolean } | { ok: false, errorCode: string, error: string, retryable: boolean, details: Record<string, unknown> }}
+ */
+function resolveMutationScope(current, sessionId, scope) {
+  const claimed = claimLegacyPrivate(current.modbus, sessionId)
+  const base = claimed.modbus
+  if (!sessionId) {
+    if (SESSION_SCOPED_SCOPES.has(scope) && isScopePartitioned(base)) {
+      return {
+        ok: false,
+        errorCode: ERROR_CODES.SESSION_REQUIRED,
+        error: '该工作区已按会话隔离，配置修改必须携带 sessionId',
+        retryable: false,
+        details: {},
+      }
+    }
+    return { ok: true, workspace: current, base, projected: false }
+  }
+  if (scope === 'share') {
+    return { ok: true, workspace: { ...current, modbus: base }, base, projected: false }
+  }
+  return {
+    ok: true,
+    workspace: { ...current, modbus: projectModbusForSession(base, sessionId) },
+    base,
+    projected: true,
+  }
+}
+
+/**
+ * Effective (flat) workspace view for the caller's session; other sessions' private
+ * layers are never returned. Without a session the layered store is returned as-is
+ * (only reachable for unpartitioned legacy workspaces).
+ * @param {any} workspace
+ * @param {string} sessionId
+ * @returns {any}
+ */
+function sessionScopedWorkspace(workspace, sessionId) {
+  const modbus = sessionId ? projectModbusForSession(workspace.modbus, sessionId) : workspace.modbus
+  return { ...workspace, modbus: omitSessionConfigs(modbus) }
 }
 
 /**
@@ -230,9 +289,47 @@ async function applyOperation(home, cwd, current, ctx, listStates) {
   if (scope === 'connection') return applyConnection(home, cwd, workspace, op, target, value, listStates)
   if (scope === 'device') return applyDevice(workspace, op, target, value)
   if (scope === 'flags') return applyFlags(workspace, op, target, value)
+  if (scope === 'share') return applyShare(workspace, op, value, sessionId)
   void source
-  void sessionId
   return { ok: false, errorCode: 'UNKNOWN_OP', error: `未知配置操作: ${ctx.raw}` }
+}
+
+/**
+ * `share.update`: flags may arrive as `value.share` or flat on `value`; `value.confirmed`
+ * acknowledges the revoke dialog. Runs on the LAYERED modbus (see resolveMutationScope).
+ * @param {any} workspace
+ * @param {any} op
+ * @param {any} value
+ * @param {string} sessionId
+ * @returns {any}
+ */
+function applyShare(workspace, op, value, sessionId) {
+  if (op !== 'update') return { ok: false, errorCode: 'UNKNOWN_OP', error: 'share 仅支持 update' }
+  const src = value && typeof value === 'object' ? value : {}
+  const flags = src.share && typeof src.share === 'object' ? src.share : src
+  const ran = applyShareFlags(workspace.modbus, sessionId, flags, { confirmed: src.confirmed === true })
+  if (!ran.ok) {
+    return {
+      ok: false,
+      errorCode: ran.errorCode,
+      error: ran.error,
+      needsConfirm: ran.needsConfirm === true,
+      revoked: ran.revoked || [],
+    }
+  }
+  workspace.modbus = ran.modbus
+  const parts = []
+  if (ran.published.length) parts.push(`共享 ${ran.published.join('/')}`)
+  if (ran.revoked.length) parts.push(`取消共享 ${ran.revoked.join('/')}`)
+  return {
+    ok: true,
+    workspace,
+    summary: parts.length ? `工作区共享：${parts.join('；')}` : '更新工作区共享设置',
+    changedIds: [],
+    share: ran.modbus.share,
+    published: ran.published,
+    revoked: ran.revoked,
+  }
 }
 
 /**

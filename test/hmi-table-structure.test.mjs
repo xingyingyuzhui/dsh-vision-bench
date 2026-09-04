@@ -18,21 +18,31 @@ test('连接表表头为四列：名称|角色|端点/状态|操作', async () =
   assert.match(hmi, /el\('th',\s*null,\s*'操作'\)/)
 })
 
-test('设备工具栏顺序：添加点位→批量添加→读取→编辑点位→导入→导出→AI；编辑设备在卡片右上角', async () => {
-  const m = hmi.match(
-    /addPoint[\s\S]*?batchAdd[\s\S]*?readAll[\s\S]*?ptEdit[\s\S]*?csvImport[\s\S]*?csvExport[\s\S]*?'AI'/,
+test('设备工具栏顺序：常态为 编辑点位→导入→导出→AI（已移除单次读取）；编辑态为 添加点位→批量添加→保存→取消', async () => {
+  const normalOrder = hmi.match(
+    /ptEdit[\s\S]*?csvImport[\s\S]*?csvExport[\s\S]*?'AI'/,
   )
-  assert.ok(m, 'toolbar order must match plan')
+  assert.ok(normalOrder, 'normal toolbar order must match plan')
+  const editOrder = hmi.match(
+    /addPoint[\s\S]*?batchAdd[\s\S]*?ptSave[\s\S]*?csvCancel/,
+  )
+  assert.ok(editOrder, 'editing toolbar order must match plan')
+  // 彻底移除设备工具栏上的单次手动读取按钮
+  assert.doesNotMatch(hmi, /readAll\(d\.id\)/)
   // 编辑设备在设备头右上角，不在工具栏
   assert.match(hmi, /dvb-dev-head[\s\S]*?devEdit[\s\S]*?编辑设备/)
-  assert.doesNotMatch(hmi, /readAll[\s\S]{0,800}?devEdit[\s\S]{0,200}?ptEdit/)
   assert.doesNotMatch(hmi, /devPts\.length \+ ' 个点位'/)
   // 设备编辑一行：保存|取消|删除设备
   assert.match(hmi, /dvb-dev-edit-row/)
   assert.match(hmi, /devSave[\s\S]*?csvCancel[\s\S]*?devDelete/)
-  // 点位编辑独立保存
+  // 点位编辑独立保存与加行按钮
   assert.match(hmi, /savePointsEdit/)
   assert.match(hmi, /enterPointsEdit/)
+  assert.match(hmi, /dvb-btn-dashed/)
+  // 单连接页面头部：添加设备右侧渲染连接/断开按钮
+  assert.match(hmi, /openAddDevice[\s\S]*?unlinkConnection[\s\S]*?linkConnection/)
+  // 编辑连接提供采集间隔下拉框
+  assert.match(hmi, /watchIv[\s\S]*?intervalMs[\s\S]*?POLL_INTERVALS/)
 })
 
 test('连接总览卡片只在全部连接 tab 渲染', async () => {

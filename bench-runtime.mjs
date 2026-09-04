@@ -5,6 +5,7 @@ import { subscribeFocus } from './bench-shared.mjs'
 import { ATTR, CSS } from './bench-styles.mjs'
 import { registerView } from './bench-view.mjs'
 import { wrapVisionPage } from './src/ui/workspace/vision-page-boundary.mjs'
+import { getActiveScope } from './src/ui/common/session-scope.mjs'
 import { MONITOR_SECTIONS, VIEW_HMI, VIEW_MONITOR } from './src/ui/workspace/vision-route.mjs'
 import { requestOpenView, requestOpenViewFromScope, routeAgentFocus } from './src/ui/workspace/vision-view-request.mjs'
 import { createDebugWorkspace } from './src/ui/workspace/debug-workspace.mjs'
@@ -59,7 +60,7 @@ export function apply(ctx) {
     })
   }
 
-  const SettingsPage = createSettingsPage(React, t, post)
+  const SettingsPage = createSettingsPage(React, t, post, { getScope: getActiveScope })
   const DebugWorkspace = wrapVisionPage(React, createDebugWorkspace(React, t, post), 'debug', t)
   const HmiView = wrapVisionPage(React, createHmiView(React, t, post), 'hmi', t)
   const MonitorWorkspace = wrapVisionPage(

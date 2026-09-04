@@ -52,6 +52,7 @@ export function normalizeCommand(input) {
     signal: raw.signal,
     requireHost: raw.requireHost === true,
     timeoutMs: Number(raw.timeoutMs) > 0 ? Number(raw.timeoutMs) : undefined,
+    transport: raw.transport || payload.transport,
   }
 }
 

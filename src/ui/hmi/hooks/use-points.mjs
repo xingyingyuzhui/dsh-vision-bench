@@ -1,3 +1,5 @@
+import { usePointColWidths } from './use-point-col-widths.mjs'
+
 export function usePoints(React) {
   const [editingDeviceId, setEditingDeviceId] = React.useState('')
   const [editingPointsDeviceId, setEditingPointsDeviceId] = React.useState('')
@@ -13,6 +15,16 @@ export function usePoints(React) {
   const [csvNote, setCsvNote] = React.useState('')
   const [flagSavingByPoint, setFlagSavingByPoint] = React.useState({})
   const flagRequestSeq = React.useRef({})
+  const {
+    colWidths,
+    colWidthsByDevice,
+    getColWidths,
+    setColWidths,
+    onStartResize,
+    resetColWidth,
+    totalTableWidth,
+  } = usePointColWidths(React)
+
   return {
     editingDeviceId,
     setEditingDeviceId,
@@ -41,5 +53,13 @@ export function usePoints(React) {
     flagSavingByPoint,
     setFlagSavingByPoint,
     flagRequestSeq,
+    colWidths,
+    colWidthsByDevice,
+    getColWidths,
+    setColWidths,
+    onStartResize,
+    resetColWidth,
+    totalTableWidth,
   }
 }
+

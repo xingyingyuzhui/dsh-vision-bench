@@ -1,7 +1,7 @@
 // @ts-check
 import { normalizeModbus } from '../../../../bench-devices.mjs'
-import { loadWorkspace } from '../../../../bench-store.mjs'
 import { mutateConfig } from '../../config/config-mutation-service.mjs'
+import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
 
 /**
  * @param {any} home
@@ -14,7 +14,8 @@ import { mutateConfig } from '../../config/config-mutation-service.mjs'
 export async function handleVisualizationCommand(home, args, room, origin, opts) {
   if (args?.action !== 'visualization') return null
   const action = args.action
-  const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+  const workspace = await ensureWorkspaceClaimed(home, room.cwd, origin.sessionId)
+  const pack = modbusForSession(workspace, origin.sessionId)
   const cv = pack.configVersion || 1
   const viz = pack.visualization || { schemaVersion: 2, components: [] }
   if (viz.unsupported) {

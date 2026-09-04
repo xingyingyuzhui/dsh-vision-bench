@@ -211,9 +211,32 @@ test('router dispatch serves state and rejects unknown endpoints', async () => {
   try {
     const snap = await router.dispatch('state', { cwd }, AbortSignal.timeout(5000))
     assert.equal(snap.ok, true)
+    assert.deepEqual(snap.globalShare, {
+      enabled: false,
+      connections: false,
+      points: false,
+      visualization: false,
+    })
     const missing = await router.dispatch('missing/endpoint', {}, AbortSignal.timeout(5000))
     assert.equal(missing.ok, false)
     assert.equal(missing.errorCode, 'NOT_FOUND')
+
+    // Test saving global share without cwd
+    const saved = await router.dispatch('bindings/save', {
+      bindings: { python: '', uv4: '', openocd: '' },
+      share: { enabled: true, connections: true, points: true, visualization: false },
+    }, AbortSignal.timeout(5000))
+    assert.equal(saved.ok, true)
+    assert.equal(saved.globalShare.enabled, true)
+    assert.equal(saved.globalShare.connections, true)
+
+    // Verify state without cwd reflects updated globalShare
+    const snapNoCwd = await router.dispatch('state', {}, AbortSignal.timeout(5000))
+    assert.equal(snapNoCwd.ok, true)
+    assert.equal(snapNoCwd.globalShare.enabled, true)
+    assert.equal(snapNoCwd.globalShare.connections, true)
+    assert.equal(snapNoCwd.globalShare.points, true)
+    assert.equal(snapNoCwd.globalShare.visualization, false)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

@@ -91,8 +91,8 @@ test('页面契约：无绑定 UI、无大块聚焦面板、无完整时间线�
   // 阶段四：上位机不再嵌入串口报文卡片
   assert.ok(!/查看全部报文/.test(hmi), 'no frames card in HMI')
   assert.ok(!/serialPanel/.test(hmi), 'no serialPanel in HMI')
-  // Task2: 采集按钮（开始采集/停止采集）而不使用“监视”措辞
-  assert.ok(/collectStart/.test(hmi) && /collectStop/.test(hmi), 'collection buttons present')
+  // Task2: 持续采集由“连接”/“断开”按钮统领驱动
+  assert.ok(/linkConnection/.test(hmi) && /unlinkConnection/.test(hmi), 'link connection buttons present')
   // TaskP1/0.20.0: 点位表 — 无 更新时间 列；普通状态无 写入/读取/编辑/删除 文字按钮
   assert.ok(!/el\('th', null, t\('time'\)\)/.test(hmi), 'no 更新时间 column')
   assert.ok(!/t\('quickWrite'\)/.test(hmi), 'no 写入 text button')
@@ -173,7 +173,7 @@ test('Task10: 一次读取同步进入 点表值/监视/曲线/告警（单一�
     home,
     { action: 'write', connectionId: 'c1', deviceId: 'd1', function: 3, address: 0, values: [70] },
     cwd,
-    { source: 'manual', sessionId: '' },
+    { source: 'manual', sessionId: 's1' },
   )
   alarm = loadWorkspace(home, cwd).modbus.alarmActive || {}
   const rec2 = alarm.p1 || alarm['p1']

@@ -33,7 +33,8 @@ function fakeTransport() {
     closed,
     openConnection: async (req) => {
       opened.push(req)
-      if (req.endpoint && req.endpoint.port === 'COM3') return { ok: true, data: { state: 'connected' } }
+      if (req.endpoint && (req.endpoint.port === 'COM3' || req.endpoint.port === 'COM5'))
+        return { ok: true, data: { state: 'connected' } }
       return { ok: false, error: { code: 'CONNECT_FAILED', message: '连接失败' } }
     },
     closeConnection: async (req) => {
@@ -95,20 +96,24 @@ test('patch saves config, physical connect failure returns configured:true conne
   await rm(home, { recursive: true, force: true })
 })
 
-test('server/slave role is rejected with ROLE_NOT_SUPPORTED (UI + Agent)', async () => {
+test('server/slave role is supported and connects with role on endpoint (UI + Agent)', async () => {
   const { home, cwd } = await setup([sv])
   const t = fakeTransport()
   const ran = await connectOp(home, cwd, { connectionId: 's1' }, { transport: t })
-  assert.equal(ran.ok, false)
-  assert.equal(ran.code, 'ROLE_NOT_SUPPORTED')
-  assert.equal(t.opened.length, 0, 'never opened a client for a server role')
-  // Agent tool path also rejects
-  const viaTool = await runVisionBench(home, { action: 'connect', connectionId: 's1' }, cwd, {
-    source: 'agent',
-    sessionId: 's1',
-  })
-  assert.equal(viaTool.ok, false)
-  assert.equal(viaTool.code, 'ROLE_NOT_SUPPORTED')
+  assert.equal(ran.ok, true)
+  assert.equal(ran.connected, true)
+  assert.equal(t.opened.length, 1, 'opened connection for server role')
+  assert.equal(t.opened[0].endpoint.role, 'server')
+  // Agent tool path also connects
+  const viaTool = await runVisionBench(
+    home,
+    { action: 'connect', connectionId: 's1' },
+    cwd,
+    { source: 'agent', sessionId: 's1' },
+    { transport: t },
+  )
+  assert.equal(viaTool.ok, true)
+  assert.equal(viaTool.connected, true)
   await rm(home, { recursive: true, force: true })
 })
 

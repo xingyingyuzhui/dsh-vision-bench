@@ -7,12 +7,15 @@ export function createHmiPointActions(ctx, core) {
     t,
     post,
     cwd,
+    sessionId,
     commandClient,
     setError,
     setWorkspace,
     workspaceRef,
     flagInflight,
+    editingDeviceId,
     setEditingDeviceId,
+    editingPointsDeviceId,
     setEditingPointsDeviceId,
     deviceDraft,
     setDeviceDraft,
@@ -47,21 +50,44 @@ export function createHmiPointActions(ctx, core) {
       setError('请先选择设备')
       return
     }
+    const d = (pack.devices || []).find((x) => x.id === fixedDid)
+    let currentDrafts = pointDraftsById
+    if (editingPointsDeviceId !== fixedDid) {
+      setError('')
+      setEditingDeviceId('')
+      setDeviceDraft(null)
+      setEditingPointsDeviceId(fixedDid)
+      currentDrafts = {}
+      for (const pt of pointsOfDevice(fixedDid)) {
+        currentDrafts[pt.id] = {
+          id: pt.id,
+          connectionId: pt.connectionId,
+          connId: pt.connId || pt.connectionId,
+          deviceId: pt.deviceId,
+          name: pt.name || '',
+          function: pt.function,
+          area: pt.area || AREA_BY_FN_EDIT[pt.function] || 'holdingRegister',
+          address: pt.address,
+          scale: pt.scale,
+          offset: pt.offset,
+          unit: pt.unit || '',
+          monitorEnabled: pt.monitorEnabled === true,
+          alarmEnabled: pt.alarmEnabled === true,
+          alarmMin: pt.alarmMin == null ? '' : String(pt.alarmMin),
+          alarmMax: pt.alarmMax == null ? '' : String(pt.alarmMax),
+          trendEnabled: pt.trendEnabled === true,
+        }
+      }
+    }
     const count = Math.max(1, Math.min(Number(batch.count) || 1, 64))
-    const existingIds = new Set(
-      (pack.points || [])
-        .filter((p) => (p.connectionId || p.connId) === fixedCid && (p.deviceId || '') === fixedDid)
-        .map((p) => p.id),
-    )
+    const existingIds = new Set([
+      ...(pack.points || []).map((p) => p.id),
+      ...Object.keys(currentDrafts),
+    ])
     const existingAddr = new Set(
-      (pack.points || [])
-        .filter(
-          (p) =>
-            (p.connectionId || p.connId) === fixedCid &&
-            (p.deviceId || '') === fixedDid &&
-            p.function === Number(batch.fc),
-        )
-        .map((p) => p.address),
+      Object.values(currentDrafts)
+        .filter((p) => Number(p.function) === Number(batch.fc))
+        .map((p) => Number(p.address)),
     )
     const additions = []
     for (let i = 0; i < count; i++) {
@@ -69,8 +95,11 @@ export function createHmiPointActions(ctx, core) {
       if (existingAddr.has(address)) continue
       const id = hmiGenId('p')
       if (existingIds.has(id)) continue
+      existingIds.add(id)
+      existingAddr.add(address)
       additions.push({
         id,
+        isNew: true,
         connectionId: fixedCid,
         connId: fixedCid,
         deviceId: fixedDid,
@@ -81,9 +110,11 @@ export function createHmiPointActions(ctx, core) {
         scale: 1,
         offset: 0,
         unit: '',
+        monitorEnabled: false,
+        alarmEnabled: false,
+        alarmMin: '',
+        alarmMax: '',
         trendEnabled: false,
-        alarmMin: null,
-        alarmMax: null,
       })
     }
     if (!additions.length) {
@@ -91,11 +122,23 @@ export function createHmiPointActions(ctx, core) {
       return
     }
     setError('')
+    const nextDrafts = { ...currentDrafts }
+    for (const item of additions) {
+      nextDrafts[item.id] = item
+    }
+    setPointDraftsById(nextDrafts)
     setBatch((prev) => ({ ...prev, open: false }))
-    persist({ points: (pack.points || []).concat(additions), version: 3 })
   }
 
   function removePointRow(point) {
+    if (editingPointsDeviceId && editingPointsDeviceId === point.deviceId) {
+      setPointDraftsById((prev) => {
+        const next = { ...prev }
+        delete next[point.id]
+        return next
+      })
+      return
+    }
     const pack = normalizePack()
     persist({
       points: (pack.points || []).filter((p) => p.id !== point.id),
@@ -222,11 +265,13 @@ export function createHmiPointActions(ctx, core) {
       return next
     })
 
+    const sid = sessionId || workspaceRef?.current?.session?.boundId || ''
     const body = {
       cwd,
       pointId,
       expectedConfigVersion: packNow.configVersion || 1,
     }
+    if (sid) body.sessionId = sid
     for (const k of keys) body[k] = patch[k] === true
 
     const isLatest = () => seqKeys.every((sk) => seqAtStart[sk] === flagRequestSeq.current[sk])
@@ -312,22 +357,27 @@ export function createHmiPointActions(ctx, core) {
               .then((data2) => {
                 if (!isLatest()) return data2
                 if (!data2 || data2.ok === false) {
-                  return recoverFromFailure('点位配置已被其他操作更新，请重试').then(() => data2)
+                  const errMsg = data2?.error ? `（${data2.error}）` : ''
+                  return recoverFromFailure(`点位配置更新失败${errMsg}，请重试`).then(() => data2)
                 }
                 return applySuccess(data2)
               })
               .catch(() => recoverFromFailure('点位配置已被其他操作更新，请重试'))
           }
-          const tip = keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态'
+          const defaultTip = keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态'
+          const tip = data?.error
+            ? `${keys[0] === 'monitorEnabled' ? '监视' : '告警'}状态保存失败（${data.error}），已恢复原状态`
+            : defaultTip
           return recoverFromFailure(tip).then(() => data)
         }
         return applySuccess(data)
       })
-      .catch(() =>
-        recoverFromFailure(
-          keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态',
-        ),
-      )
+      .catch((err) => {
+        const errMsg = err && err.message ? `（${err.message}）` : ''
+        return recoverFromFailure(
+          `${keys[0] === 'monitorEnabled' ? '监视' : '告警'}状态保存失败${errMsg}，已恢复原状态`,
+        )
+      })
       .finally(() => {
         flagInflight.current = Math.max(0, flagInflight.current - 1)
         setFlagSavingByPoint((prev) => {
@@ -341,18 +391,60 @@ export function createHmiPointActions(ctx, core) {
   }
 
   function addNewPointRow(deviceId) {
+    const pack = normalizePack()
     const activeConnId = activeConnIdOf()
+    const dev = (pack.devices || []).find((x) => x.id === deviceId)
+    const fixedCid = (dev && dev.connectionId) || activeConnId
     setError('')
     setInlineWrite(null)
     setEditingDeviceId('')
     setDeviceDraft(null)
-    setBatch((prev) => ({ ...prev, open: false, deviceId: deviceId, connectionId: activeConnId }))
-    setNewPointDraft({
-      connectionId: activeConnId,
+    setNewPointDraft(null)
+    setBatch((prev) => ({ ...prev, open: false, deviceId, connectionId: fixedCid }))
+
+    let currentDrafts = pointDraftsById
+    if (editingPointsDeviceId !== deviceId) {
+      setEditingPointsDeviceId(deviceId)
+      currentDrafts = {}
+      for (const pt of pointsOfDevice(deviceId)) {
+        currentDrafts[pt.id] = {
+          id: pt.id,
+          connectionId: pt.connectionId,
+          connId: pt.connId || pt.connectionId,
+          deviceId: pt.deviceId,
+          name: pt.name || '',
+          function: pt.function,
+          area: pt.area || AREA_BY_FN_EDIT[pt.function] || 'holdingRegister',
+          address: pt.address,
+          scale: pt.scale,
+          offset: pt.offset,
+          unit: pt.unit || '',
+          monitorEnabled: pt.monitorEnabled === true,
+          alarmEnabled: pt.alarmEnabled === true,
+          alarmMin: pt.alarmMin == null ? '' : String(pt.alarmMin),
+          alarmMax: pt.alarmMax == null ? '' : String(pt.alarmMax),
+          trendEnabled: pt.trendEnabled === true,
+        }
+      }
+    }
+
+    let maxAddr = -1
+    for (const p of Object.values(currentDrafts)) {
+      const a = Number(p.address)
+      if (Number.isFinite(a) && a > maxAddr) maxAddr = a
+    }
+    const nextAddr = maxAddr >= 0 ? maxAddr + 1 : 0
+    const id = hmiGenId('p')
+    const newDraft = {
+      id,
+      isNew: true,
+      connectionId: fixedCid,
+      connId: fixedCid,
       deviceId,
       name: '',
       function: 3,
-      address: 0,
+      area: 'holdingRegister',
+      address: nextAddr <= 65535 ? nextAddr : 0,
       scale: 1,
       offset: 0,
       unit: '',
@@ -360,7 +452,9 @@ export function createHmiPointActions(ctx, core) {
       alarmEnabled: false,
       alarmMin: '',
       alarmMax: '',
-    })
+      trendEnabled: true,
+    }
+    setPointDraftsById({ ...currentDrafts, [id]: newDraft })
   }
 
   function saveNewPointDraft() {
@@ -449,41 +543,74 @@ export function createHmiPointActions(ctx, core) {
   function savePointsEdit(d) {
     const pack = normalizePack()
     const drafts = pointDraftsById || {}
-    const keyOf = (p) => (p.connectionId || '') + '|' + (p.deviceId || '') + '|' + p.function + '|' + p.address
+    const draftList = Object.values(drafts)
     const seen = new Map()
-    for (const dOf of Object.values(drafts)) {
-      if (seen.has(keyOf(dOf))) {
+
+    for (const dr of draftList) {
+      const addrNum = Math.trunc(Number(dr.address))
+      if (!Number.isFinite(addrNum) || addrNum < 0 || addrNum > 65535) {
+        setError((t('ptAddr') || '地址') + ' 0–65535')
+        return
+      }
+      const fnNum = Math.trunc(Number(dr.function) || 3)
+      if (![1, 2, 3, 4].includes(fnNum)) {
+        setError('非法功能码')
+        return
+      }
+      const key = (dr.connectionId || d.connectionId || '') + '|' + d.id + '|' + fnNum + '|' + addrNum
+      if (seen.has(key)) {
         setError('该设备下已存在相同功能码和地址的点位')
         return
       }
-      seen.set(keyOf(dOf), dOf)
+      seen.set(key, dr)
+
+      const min = dr.alarmMin !== '' && dr.alarmMin != null ? Number(dr.alarmMin) : null
+      const max = dr.alarmMax !== '' && dr.alarmMax != null ? Number(dr.alarmMax) : null
+      if (dr.alarmEnabled === true && min != null && max != null && !(min < max)) {
+        setError('下限必须小于上限: ' + (dr.name || '点位'))
+        return
+      }
     }
+
     try {
-      const nextPoints = (pack.points || []).map((p) => {
-        const dr = drafts[p.id]
-        if (!dr || (p.deviceId || '') !== d.id) return p
-        const min = dr.alarmMin !== '' ? Number(dr.alarmMin) : null
-        const max = dr.alarmMax !== '' ? Number(dr.alarmMax) : null
-        if (p.alarmEnabled === true && min != null && max != null && !(min < max)) {
-          throw new Error('下限必须小于上限: ' + (dr.name || p.name))
-        }
-        const fn = Math.trunc(Number(dr.function) || p.function)
+      const fixedCid = d.connectionId || pack.activeConnectionId || pack.connections[0]?.id || ''
+      const otherPoints = (pack.points || []).filter((p) => (p.deviceId || '') !== d.id)
+      const thisDevicePoints = draftList.map((dr) => {
+        const fnNum = Math.trunc(Number(dr.function) || 3)
+        const addrNum = Math.trunc(Number(dr.address))
+        const min = dr.alarmMin !== '' && dr.alarmMin != null ? Number(dr.alarmMin) : null
+        const max = dr.alarmMax !== '' && dr.alarmMax != null ? Number(dr.alarmMax) : null
+        const alarmOn = dr.alarmEnabled === true
+        const monitorOn = dr.monitorEnabled === true
         return {
-          ...p,
-          name: String(dr.name || '').slice(0, 40) || p.name,
-          function: [1, 2, 3, 4].includes(fn) ? fn : p.function,
-          area: AREA_BY_FN_EDIT[fn] || p.area,
-          address: Math.trunc(Number(dr.address)),
+          id: dr.id || hmiGenId('p'),
+          connectionId: dr.connectionId || fixedCid,
+          connId: dr.connId || dr.connectionId || fixedCid,
+          deviceId: d.id,
+          name: String(dr.name || '').slice(0, 40),
+          function: fnNum,
+          area:
+            dr.area ||
+            AREA_BY_FN_EDIT[fnNum] ||
+            (fnNum === 1 ? 'coil' : fnNum === 2 ? 'discreteInput' : fnNum === 4 ? 'inputRegister' : 'holdingRegister'),
+          address: addrNum,
           scale: Number(dr.scale) || 1,
           offset: Number(dr.offset) || 0,
           unit: String(dr.unit || '').slice(0, 12),
+          monitorEnabled: monitorOn,
+          alarmEnabled: alarmOn,
           alarmMin: Number.isFinite(min) ? min : null,
           alarmMax: Number.isFinite(max) ? max : null,
+          trendEnabled: dr.trendEnabled !== undefined ? dr.trendEnabled === true : monitorOn,
         }
       })
-      persist({ points: nextPoints, version: 3 })
+
+      setError('')
       setEditingPointsDeviceId('')
       setPointDraftsById({})
+      setNewPointDraft(null)
+      setBatch((prev) => ({ ...prev, open: false }))
+      persist({ points: otherPoints.concat(thisDevicePoints), version: 3 })
     } catch (err) {
       setError(String(err?.message || err))
     }
@@ -495,9 +622,11 @@ export function createHmiPointActions(ctx, core) {
   }
 
   function cancelPointsEdit() {
+    setError('')
     setEditingPointsDeviceId('')
     setPointDraftsById({})
     setNewPointDraft(null)
+    setBatch((prev) => ({ ...prev, open: false }))
   }
 
   function exportCsv(deviceId) {

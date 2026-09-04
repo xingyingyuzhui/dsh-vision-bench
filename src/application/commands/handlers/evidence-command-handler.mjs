@@ -1,7 +1,7 @@
 // @ts-check
-import { normalizeModbus } from '../../../../bench-devices.mjs'
 import { buildEvidenceRefs, listFrames, requestFocus } from '../../../../bench-modbus-forward.mjs'
-import { appendEvidence, loadWorkspace } from '../../../../bench-store.mjs'
+import { appendEvidence } from '../../../../bench-store.mjs'
+import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
 
 /**
  * @param {any} home
@@ -62,9 +62,10 @@ export async function handleEvidenceCommand(home, args, room, origin, _opts) {
 
   if (action === 'evidence') {
     const evidence = buildEvidenceRefs(home, room.cwd)
-    const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+    const workspace = await ensureWorkspaceClaimed(home, room.cwd, origin.sessionId)
+    const pack = modbusForSession(workspace, origin.sessionId)
     if (Array.isArray(args.evidence) && args.evidence.length) {
-      const appended = await appendEvidence(home, room.cwd, args.evidence)
+      const appended = await appendEvidence(home, room.cwd, args.evidence, origin.sessionId)
       if (!appended.ok) return { ok: false, action, error: appended.error, errorCode: appended.errorCode }
     }
     return { ok: true, action, evidence, configVersion: pack.configVersion || 1 }

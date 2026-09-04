@@ -199,3 +199,68 @@ test('flags.update can flip alarmEnabled alone without touching monitor', async 
     await rm(home, { recursive: true, force: true })
   }
 })
+
+test('points/flags with session-scoped partitioned workspace persists flags successfully', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-flags-session-'))
+  const cwd = join(home, 'board')
+  const { dispatch } = createVisionRpcRouter({ getHome: () => home })
+  const sid = 'test-session-123'
+  try {
+    mkdirSync(cwd, { recursive: true })
+    const ws0 = saveWorkspace(home, cwd, {
+      session: { boundId: sid },
+      modbus: {
+        version: 3,
+        configVersion: 10,
+        connections: [{ id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3' } }],
+        devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
+        points: [],
+        sessionConfigs: {
+          [sid]: {
+            points: [
+              {
+                id: 'p1',
+                connectionId: 'c1',
+                deviceId: 'd1',
+                name: '温度',
+                function: 3,
+                address: 0,
+                scale: 0.1,
+                offset: 0,
+                unit: '℃',
+                monitorEnabled: false,
+                alarmEnabled: false,
+                alarmMin: 18,
+                alarmMax: 30,
+              },
+            ],
+          },
+        },
+      },
+    }).workspace
+
+    // 1. Dispatching with explicit sessionId succeeds
+    const ran = await dispatch('points/flags', {
+      cwd,
+      sessionId: sid,
+      pointId: 'p1',
+      monitorEnabled: true,
+      expectedConfigVersion: ws0.modbus.configVersion,
+    })
+    assert.equal(ran.ok, true, ran.error)
+    assert.equal(ran.point.monitorEnabled, true)
+    assert.equal(ran.point.trendEnabled, true)
+
+    // 2. Dispatching without sessionId falls back to boundId and succeeds
+    const ran2 = await dispatch('points/flags', {
+      cwd,
+      pointId: 'p1',
+      alarmEnabled: true,
+      expectedConfigVersion: ran.configVersion,
+    })
+    assert.equal(ran2.ok, true, ran2.error)
+    assert.equal(ran2.point.alarmEnabled, true)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})

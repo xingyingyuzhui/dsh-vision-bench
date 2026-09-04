@@ -5,6 +5,17 @@ export { clampUnitId, stampPoints } from './unit-id.mjs'
 export { AREA_FN, fnOfPoint, findPointV3 } from './function-code.mjs'
 export { STALE_MS, isStaleValue, compactPointRow } from './point-value.mjs'
 export {
+  SHARE_CATEGORIES,
+  emptyShareFlags,
+  normalizeShareFlags,
+  isCategoryShared,
+  emptySessionConfig,
+  normalizeSessionConfig,
+  normalizeSessionConfigs,
+  normalizeScopeSessionId,
+  unionScopedPoints,
+} from './config-scope.mjs'
+export {
   deviceDisabledOf,
   targetRequired,
   CONN_PATCH_KEYS,

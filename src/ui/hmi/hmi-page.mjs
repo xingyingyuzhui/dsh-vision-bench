@@ -1,5 +1,7 @@
 import {
   buildInputBridge,
+  formatErrorMessage,
+  pageSessionId,
   readInputDraft,
   runningOf,
   statusBar,
@@ -26,11 +28,30 @@ export function createHmiView(React, t, post) {
   return function HmiView(props) {
     const el = React.createElement
     const cwd = useSessionCwd(React, props)
-    const sessionId = props?.sessionId || ''
+    const sessionId = pageSessionId(props) || props?.sessionId || ''
     const inputDraft = readInputDraft(props?.useInput)
     const agentBridge = buildInputBridge(props, inputDraft)
     const [busy, setBusy] = React.useState('')
-    const [error, setError] = React.useState('')
+    const [error, setErrorRaw] = React.useState('')
+    const [modal, setModal] = React.useState(null)
+    const setError = (err) => {
+      const formatted = formatErrorMessage(err)
+      setErrorRaw(formatted)
+      if (formatted) {
+        setModal({
+          open: true,
+          kind: 'err',
+          title: '操作提示',
+          message: formatted,
+          onClose: () => {
+            setModal(null)
+            setErrorRaw('')
+          },
+        })
+      } else {
+        setModal(null)
+      }
+    }
     const [ports, setPorts] = React.useState([])
     const [scanning, setScanning] = React.useState(false)
     const [frameFilter, setFrameFilter] = React.useState('all')
@@ -77,6 +98,11 @@ export function createHmiView(React, t, post) {
       flagSavingByPoint,
       setFlagSavingByPoint,
       flagRequestSeq,
+      colWidths,
+      getColWidths,
+      onStartResize,
+      resetColWidth,
+      totalTableWidth,
     } = usePoints(React)
     const {
       connForm,
@@ -249,6 +275,7 @@ export function createHmiView(React, t, post) {
       scanPorts: actions.scanPorts,
       cwd,
       saveConnEdit: actions.saveConnEdit,
+      React,
     })
     const devFormPanel = renderDeviceEditor(el, t, {
       field,
@@ -289,6 +316,7 @@ export function createHmiView(React, t, post) {
       setDevDeleteId,
       editingDeviceId,
       editingPointsDeviceId,
+      pointDraftsById,
       newPointDraft,
       setNewPointDraft,
       batch,
@@ -311,6 +339,9 @@ export function createHmiView(React, t, post) {
       addNewPointRow: actions.addNewPointRow,
       canDevice: d.canDevice,
       connMissing: d.connMissing,
+      linkConnection: actions.linkConnection,
+      unlinkConnection: actions.unlinkConnection,
+      linkBusy,
       readRunning: runningOf(journal, 'read'),
       readAll: actions.readAll,
       enterPointsEdit: actions.enterPointsEdit,
@@ -324,6 +355,11 @@ export function createHmiView(React, t, post) {
       setCsvText,
       saveNewPointDraft: actions.saveNewPointDraft,
       pointRowCtx,
+      colWidths,
+      getColWidths,
+      onStartResize,
+      resetColWidth,
+      totalTableWidth,
     })
     const pendingPanel = renderPendingPanel(el, t, { pending, resolveWrite })
     const tabBar = renderConnectionTabs(el, t, {
@@ -332,6 +368,7 @@ export function createHmiView(React, t, post) {
       journal,
       activeConnId: d.activeConnId,
       connections: d.connections,
+      connectionStates,
       hmiTab,
       setHmiTab,
       moreOpen,
@@ -349,6 +386,9 @@ export function createHmiView(React, t, post) {
       journal,
       pending,
       error,
+      setError,
+      modal,
+      setModal,
       agentCopied,
       ioStatus: d.ioStatus,
       tabBar,

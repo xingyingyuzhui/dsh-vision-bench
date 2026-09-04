@@ -14,3 +14,21 @@ export {
 export { listFrames } from './frame-service.mjs'
 export { requestFocus } from './focus-service.mjs'
 export { buildEvidenceRefs } from './evidence-service.mjs'
+export {
+  SHARE_CATEGORIES,
+  SHARE_REVOKE_CONFIRM_REQUIRED,
+  SHARE_SESSION_REQUIRED,
+  emptyShareFlags,
+  normalizeShareFlags,
+  isCategoryShared,
+  emptySessionConfig,
+  normalizeSessionConfig,
+  normalizeSessionConfigs,
+  topologyFingerprint,
+  hasTopology,
+  ensureScopeFields,
+  claimLegacyPrivate,
+  projectModbusForSession,
+  foldModbusFromSession,
+  applyShareFlags,
+} from './config-scope-service.mjs'

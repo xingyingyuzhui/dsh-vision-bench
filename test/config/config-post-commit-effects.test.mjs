@@ -79,7 +79,7 @@ test('persist success releases the connection exactly once', async () => {
   assert.equal(ran.ok, true, ran.error)
   assert.equal(released.length, 1)
   assert.deepEqual(released[0].ids, ['c1'])
-  assert.equal(notified.length, 1)
+  assert.equal(notified.length, 0, 'user UI config mutations must not steer the Agent')
   assert.equal(loadWorkspace(home, cwd).modbus.connections[0].name, 'C1b')
   await rm(home, { recursive: true, force: true })
 })
@@ -228,7 +228,34 @@ test('saved config is not rolled back when connection release fails', async () =
   await rm(home, { recursive: true, force: true })
 })
 
-test('event notify failure does not mark a saved config as failed', async () => {
+test('user-sourced config mutations do not steer the Agent either', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-pc-user-silent-'))
+  const cwd = join(home, 'board')
+  seed(home, cwd)
+  const notified = []
+  const service = createConfigMutationService({
+    releaseConnections() {},
+    notifyEvent(_h, _room, summary) {
+      notified.push(summary)
+    },
+    listConnectionStates: async () => ({ connectionStates: [] }),
+  })
+  const ran = await service.mutateConfig({
+    home,
+    cwd,
+    source: 'user',
+    sessionId: 'sess-ui',
+    expectedConfigVersion: loadWorkspace(home, cwd).modbus.configVersion,
+    operation: 'connection.update',
+    target: { connectionId: 'c1' },
+    value: { name: 'Silent', host: '10.0.0.5' },
+  })
+  assert.equal(ran.ok, true, ran.error)
+  assert.deepEqual(notified, [])
+  await rm(home, { recursive: true, force: true })
+})
+
+test('event notify is no longer invoked on config save (regression)', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-pc-n-'))
   const cwd = join(home, 'board')
   seed(home, cwd)
@@ -249,6 +276,6 @@ test('event notify failure does not mark a saved config as failed', async () => 
   })
   assert.equal(ran.ok, true, ran.error)
   assert.equal(loadWorkspace(home, cwd).modbus.connections[0].name, 'Named')
-  assert.equal(ran.postCommitWarnings[0].code, 'EVENT_NOTIFY_FAILED')
+  assert.deepEqual(ran.postCommitWarnings || [], [])
   await rm(home, { recursive: true, force: true })
 })

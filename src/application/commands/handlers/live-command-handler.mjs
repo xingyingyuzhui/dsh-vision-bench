@@ -1,10 +1,10 @@
 // @ts-check
-import { normalizeModbus } from '../../../../bench-devices.mjs'
 import { connectOp, modbusRead, modbusWrite } from '../../../../bench-modbus-forward.mjs'
 import { buildEvidenceRefs } from '../../../../bench-modbus-forward.mjs'
-import { createManualRequest, loadWorkspace } from '../../../../bench-store.mjs'
+import { createManualRequest } from '../../../../bench-store.mjs'
 import { resolveTarget } from '../../../../bench-targets.mjs'
 import { readTrendSeries } from '../../../../bench-trend-store.mjs'
+import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
 
 /** @param {any} args */
 function connectionIdOf(args) {
@@ -46,7 +46,7 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
         values,
         pointId: typeof args.pointId === 'string' ? args.pointId : undefined,
       },
-      { signal },
+      { signal, sessionId: origin.sessionId },
     )
     return { action, ...ran }
   }
@@ -78,8 +78,9 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
         deviceId: args.deviceId,
         open: action === 'openConnection',
         close: action === 'closeConnection',
+        sessionId: origin.sessionId,
       },
-      opts,
+      { ...opts, sessionId: origin.sessionId },
     )
     return { action, ...ran }
   }
@@ -116,14 +117,16 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
         deviceId: did,
         open: args.close !== true,
         close: args.close === true,
+        sessionId: origin.sessionId,
       },
-      opts,
+      { ...opts, sessionId: origin.sessionId },
     )
     return { action, ...ran }
   }
 
   if (action === 'trend') {
-    const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+    const workspace = await ensureWorkspaceClaimed(home, room.cwd, origin.sessionId)
+    const pack = modbusForSession(workspace, origin.sessionId)
     const connectionId = cid || ''
     const pointIds = Array.isArray(args.pointIds)
       ? args.pointIds
@@ -175,7 +178,8 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
   }
 
   if (action === 'alarm') {
-    const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+    const workspace = await ensureWorkspaceClaimed(home, room.cwd, origin.sessionId)
+    const pack = modbusForSession(workspace, origin.sessionId)
     const connectionId = cid || ''
     const deviceId = did || ''
     const pointId = typeof args.pointId === 'string' ? args.pointId : ''
@@ -218,7 +222,7 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
         address: args.address,
         count: args.count,
       },
-      { signal },
+      { signal, sessionId: origin.sessionId },
     )
     return { action, ...ran }
   }

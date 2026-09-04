@@ -5,6 +5,7 @@ import { hmiGenId } from './hmi-ids.mjs'
 export function createHmiConnectionActions(ctx, core) {
   const {
     cwd,
+    post,
     setError,
     setFrameFilter,
     setDevForm,
@@ -238,6 +239,8 @@ export function createHmiConnectionActions(ctx, core) {
   }
 
   function openConnEdit(connection) {
+    const pack = normalizePack()
+    const pollCfg = (pack.pollingByConnection || {})[connection.id] || {}
     setConnForm({
       open: true,
       id: connection.id,
@@ -245,6 +248,7 @@ export function createHmiConnectionActions(ctx, core) {
       role: connection.role,
       enabled: connection.enabled !== false,
       conn: { ...(connection.conn || {}) },
+      intervalMs: Number(pollCfg.intervalMs) || 1000,
     })
   }
 
@@ -272,8 +276,24 @@ export function createHmiConnectionActions(ctx, core) {
           }
         : connection,
     )
+    const isServer = connForm.role === 'server' || connForm.role === 'slave'
+    const intervalMs = Math.max(200, Number(connForm.intervalMs) || 1000)
+    const existingPoll = (pack.pollingByConnection || {})[connForm.id] || {}
+    const pollingByConnection = {
+      ...(pack.pollingByConnection || {}),
+      [connForm.id]: {
+        ...existingPoll,
+        enabled: isServer ? false : existingPoll.enabled,
+        intervalMs,
+      },
+    }
     setConnForm((previous) => ({ ...previous, open: false }))
-    persist({ connections, version: 3 })
+    persist({ connections, pollingByConnection, version: 3 })
+    if (isServer && existingPoll.enabled && post && cwd) {
+      post('/dsh-vision-bench/polling/stop', { cwd, connectionId: connForm.id }, 15000).catch(() => {})
+    } else if (!isServer && existingPoll.enabled && post && cwd) {
+      post('/dsh-vision-bench/polling/start', { cwd, connectionId: connForm.id, intervalMs }, 15000).catch(() => {})
+    }
   }
 
   function setActiveConnPatch(patch) {

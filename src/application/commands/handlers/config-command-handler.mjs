@@ -54,6 +54,7 @@ export async function handleConfigCommand(home, args, room, origin, opts) {
         connectionId: cid,
         connId: cid,
         deviceId: did,
+        sessionId: origin.sessionId,
       })
       return { action, ...ran }
     }

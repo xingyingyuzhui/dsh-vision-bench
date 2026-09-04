@@ -5,13 +5,17 @@ import { join } from 'node:path'
 import test from 'node:test'
 import {
   emptyBindings,
+  emptyGlobalShare,
   emptyWorkspace,
   loadBindings,
+  loadGlobalShare,
   loadWorkspace,
   normalizeBindings,
+  normalizeGlobalShare,
   normalizeWorkspace,
   probeBindings,
   saveBindings,
+  saveGlobalShare,
   saveWorkspace,
   validateBindings,
 } from '../bench-store.mjs'
@@ -71,6 +75,33 @@ test('saveBindings writes absolute paths under the home store', async () => {
     assert.equal(emptyWorkspace().modbus.polling.enabled, false)
     assert.equal(emptyWorkspace().modbus.sim, false)
     assert.ok(Array.isArray(emptyWorkspace().modbus.devices))
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('globalShare round-trip, default empty, and atomic save', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-share-'))
+  try {
+    assert.deepEqual(emptyGlobalShare(), {
+      enabled: false,
+      connections: false,
+      points: false,
+      visualization: false,
+    })
+    assert.deepEqual(loadGlobalShare(home), emptyGlobalShare())
+    assert.deepEqual(normalizeGlobalShare(null), emptyGlobalShare())
+    const saved = saveGlobalShare(home, { enabled: true, connections: true, points: false, visualization: true })
+    assert.equal(saved.ok, true)
+    assert.deepEqual(loadGlobalShare(home), {
+      enabled: true,
+      connections: true,
+      points: false,
+      visualization: true,
+    })
+    const disk = JSON.parse(await readFile(join(home, 'vision-bench', 'global-share.json'), 'utf8'))
+    assert.equal(disk.enabled, true)
+    assert.equal(disk.connections, true)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

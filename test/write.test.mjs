@@ -10,6 +10,8 @@ import { isWritableFunction, normalizeWriteValues, segmentCovering, writeTargetO
 import { _internal, handlePdu } from '../bench-slave.mjs'
 import { journalView, loadWorkspace, saveBindings, saveWorkspace } from '../bench-store.mjs'
 import { runVisionBench } from '../bench-tool.mjs'
+import { projectModbusForSession } from '../src/application/modbus/config-scope-service.mjs'
+import { saveSessionModbusPatch } from '../src/application/modbus/workspace-session-view.mjs'
 
 test('writeTargetOf marks coils and holding registers writable', async () => {
   assert.equal(writeTargetOf(1).writable, true)
@@ -293,7 +295,7 @@ test('runVisionBench write action requires user approval then executes', async (
     const task = journalView(ws).tasks.find((item) => item.type === 'write')
     assert.equal(task.source, 'agent')
     assert.equal(task.sessionId, 's1')
-    const pts = ws.modbus.points.filter(
+    const pts = projectModbusForSession(ws.modbus, 's1').points.filter(
       (p) => (p.function === 3 || p.area === 'holdingRegister') && (p.address === 5 || p.address === 6),
     )
     assert.equal(pts.length, 2)
@@ -375,12 +377,13 @@ test('approving a pending write whose device vanished fails cleanly', async () =
     )
     assert.equal(first.needsConfirm, true)
     // Simulate the connection drifting between request and approval.
-    saveWorkspace(home, cwd, {
-      modbus: {
-        conn: { port: 'COM9', baudrate: 9600, slave: 1, sim: true },
-        points: [{ name: '保持', function: 3, address: 0 }],
-      },
-    })
+    const claimed = projectModbusForSession(loadWorkspace(home, cwd).modbus, 's1')
+    const goneConns = (claimed.connections || []).map((c) => ({
+      ...c,
+      conn: { ...(c.conn || {}), port: 'COM9', baudrate: 9600, slave: 1, sim: true },
+    }))
+    const gone = await saveSessionModbusPatch(home, cwd, 's1', { modbus: { connections: goneConns } })
+    assert.equal(gone.ok, true, gone.error)
     const ran = await resolvePendingWrite(home, cwd, first.requestId, true, { sessionId: 's1' })
     assert.equal(ran.ok, false)
     assert.match(ran.error, /设备连接已变更/)
@@ -427,23 +430,13 @@ test('approval refuses when the device endpoint drifted', async () => {
     )
     assert.equal(first.needsConfirm, true)
     // User repoints the device at another controller before approving.
-    saveWorkspace(home, cwd, {
-      modbus: {
-        devices: [
-          {
-            id: 'm1',
-            name: '主板',
-            role: 'master',
-            mode: 'tcp',
-            host: '10.9.9.9',
-            tcpPort: 502,
-            slave: 1,
-            segments: [{ id: 's1', name: '保持', function: 3, address: 0, count: 10 }],
-          },
-        ],
-        activeId: 'm1',
-      },
-    })
+    const originPack = projectModbusForSession(loadWorkspace(home, cwd).modbus, 's-origin')
+    const driftedConns = (originPack.connections || []).map((c) => ({
+      ...c,
+      conn: { ...(c.conn || {}), host: '10.9.9.9' },
+    }))
+    const drift = await saveSessionModbusPatch(home, cwd, 's-origin', { modbus: { connections: driftedConns } })
+    assert.equal(drift.ok, true, drift.error)
     const ran = await resolvePendingWrite(home, cwd, first.requestId, true, { sessionId: 's-origin' })
     assert.equal(ran.ok, false)
     assert.match(ran.error, /设备连接已变更/)

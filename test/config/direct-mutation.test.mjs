@@ -7,6 +7,11 @@ import test from 'node:test'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
 import { runVisionBench } from '../../bench-tool.mjs'
 import { mutateConfig } from '../../src/application/config/config-mutation-service.mjs'
+import { projectModbusForSession } from '../../src/application/modbus/config-scope-service.mjs'
+
+function sessionPack(home, cwd, sessionId) {
+  return projectModbusForSession(loadWorkspace(home, cwd).modbus, sessionId)
+}
 
 async function withWs(fn) {
   const home = await mkdtemp(join(tmpdir(), 'dvb-mut-'))
@@ -49,10 +54,10 @@ test('points add accepts a batch array in one configVersion bump', async () => {
     assert.equal(added.ok, true, added.error)
     assert.equal(added.changedPointIds.length, 3)
     assert.equal(added.nextConfigVersion, before.modbus.configVersion + 1)
-    const ws = loadWorkspace(home, cwd)
-    assert.equal(ws.modbus.points.length, 3)
-    assert.equal(ws.modbus.points[0].address, 0)
-    assert.equal(ws.modbus.points[2].name, '进水温度')
+    const pack = sessionPack(home, cwd, 's1')
+    assert.equal(pack.points.length, 3)
+    assert.equal(pack.points[0].address, 0)
+    assert.equal(pack.points[2].name, '进水温度')
   })
 })
 
@@ -72,28 +77,31 @@ test('points add/update/remove apply immediately and bump configVersion', async 
     assert.equal(added.ok, true)
     assert.equal(added.changedPointIds.length, 1)
     assert.equal(added.nextConfigVersion, before.modbus.configVersion + 1)
-    const ws = loadWorkspace(home, cwd)
-    assert.equal(ws.modbus.points.length, 1)
-    assert.equal(ws.modbus.configVersion, added.nextConfigVersion)
-    assert.ok(ws.timeline.some((e) => String(e.summary || '').includes('添加点位')))
+    let pack = sessionPack(home, cwd, 's1')
+    assert.equal(pack.points.length, 1)
+    assert.equal(pack.configVersion, added.nextConfigVersion)
+    assert.ok(loadWorkspace(home, cwd).timeline.some((e) => String(e.summary || '').includes('添加点位')))
 
-    const pid = ws.modbus.points[0].id
+    const pid = pack.points[0].id
     const updated = await mutateConfig({
       home,
       cwd,
       source: 'agent',
-      expectedConfigVersion: ws.modbus.configVersion,
+      sessionId: 's1',
+      expectedConfigVersion: pack.configVersion,
       operation: 'points.update',
       target: { pointId: pid },
       value: { point: { id: pid, name: 'T2', function: 3, address: 0 } },
     })
     assert.equal(updated.ok, true)
-    assert.equal(loadWorkspace(home, cwd).modbus.points[0].name, 'T2')
+    pack = sessionPack(home, cwd, 's1')
+    assert.equal(pack.points[0].name, 'T2')
 
     const cleared = await mutateConfig({
       home,
       cwd,
-      expectedConfigVersion: loadWorkspace(home, cwd).modbus.configVersion,
+      sessionId: 's1',
+      expectedConfigVersion: pack.configVersion,
       operation: 'points.clear',
       target: {},
       value: {},
@@ -104,13 +112,14 @@ test('points add/update/remove apply immediately and bump configVersion', async 
     const removed = await mutateConfig({
       home,
       cwd,
-      expectedConfigVersion: loadWorkspace(home, cwd).modbus.configVersion,
+      sessionId: 's1',
+      expectedConfigVersion: pack.configVersion,
       operation: 'points.remove',
       target: { pointId: pid },
       value: { id: pid },
     })
     assert.equal(removed.ok, true)
-    assert.equal(loadWorkspace(home, cwd).modbus.points.length, 0)
+    assert.equal(sessionPack(home, cwd, 's1').points.length, 0)
   })
 })
 
@@ -137,17 +146,16 @@ test('visualization add is live; proposeAdd is OP_REMOVED', async () => {
       { source: 'agent', sessionId: 's1' },
     )
     assert.equal(added.ok, true)
-    const ws = loadWorkspace(home, cwd)
-    assert.equal(ws.modbus.visualization.components.length, 1)
+    assert.equal(sessionPack(home, cwd, 's1').visualization.components.length, 1)
 
     const old = await runVisionBench(
       home,
       { action: 'visualization', op: 'proposeAdd', component: { name: 'x', type: 'value', pointIds: ['p1'] } },
       cwd,
-      { source: 'agent' },
+      { source: 'agent', sessionId: 's1' },
     )
     assert.equal(old.ok, false)
     assert.equal(old.errorCode, 'OP_REMOVED')
-    assert.equal(loadWorkspace(home, cwd).modbus.visualization.components.length, 1)
+    assert.equal(sessionPack(home, cwd, 's1').visualization.components.length, 1)
   })
 })

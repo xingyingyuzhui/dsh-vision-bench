@@ -41,6 +41,8 @@ import { resolveTarget } from './bench-targets.mjs'
 import { writeJsonAtomicSync } from './src/infrastructure/persistence/atomic-json.mjs'
 import { runExclusiveSync } from './src/infrastructure/persistence/workspace-lock.mjs'
 import { ERROR_CODES } from './src/domain/modbus/errors.mjs'
+import { isScopePartitioned } from './src/domain/modbus/config-scope.mjs'
+import { projectModbusForSession } from './src/application/modbus/config-scope-service.mjs'
 import { createWorkspaceRepository } from './src/infrastructure/persistence/workspace-repository.mjs'
 
 export const BINDING_KEYS = ['python', 'uv4', 'openocd']
@@ -108,6 +110,40 @@ export const saveBindings = (home, input) => {
   mkdirSync(storeDir(home), { recursive: true })
   writeJsonAtomicSync(bindingsPath(home), bindings)
   return { ok: true, bindings }
+}
+
+export const globalSharePath = (home) => join(storeDir(home), 'global-share.json')
+
+export const emptyGlobalShare = () => ({
+  enabled: false,
+  connections: false,
+  points: false,
+  visualization: false,
+})
+
+export const normalizeGlobalShare = (input) => {
+  const src = input && typeof input === 'object' ? input : {}
+  return {
+    enabled: src.enabled === true,
+    connections: src.connections === true,
+    points: src.points === true,
+    visualization: src.visualization === true,
+  }
+}
+
+export const loadGlobalShare = (home) => {
+  try {
+    return normalizeGlobalShare(JSON.parse(readFileSync(globalSharePath(home), 'utf8')))
+  } catch {
+    return emptyGlobalShare()
+  }
+}
+
+export const saveGlobalShare = (home, input) => {
+  const share = normalizeGlobalShare(input)
+  mkdirSync(storeDir(home), { recursive: true })
+  writeJsonAtomicSync(globalSharePath(home), share)
+  return { ok: true, share }
 }
 
 export const emptyFocusState = () => ({
@@ -220,6 +256,11 @@ const stringifyConfigSlice = (modbus) => {
       devices: pack.devices || [],
       points: pack.points || [],
       visualization: pack.visualization || null,
+      // Session-private scope: share flags, private layers and the legacy claim marker
+      // are config too — flipping them changes what other sessions see.
+      share: pack.share || null,
+      sessionConfigs: pack.sessionConfigs || null,
+      privateClaimSessionId: pack.privateClaimSessionId || '',
     }
     return JSON.stringify(slice)
   } catch {
@@ -323,7 +364,10 @@ const isV3Patch = (incoming) => {
     incoming.activeConnectionId !== undefined ||
     incoming.activeDeviceId !== undefined ||
     incoming.alarmState !== undefined ||
-    incoming.visualization !== undefined
+    incoming.visualization !== undefined ||
+    incoming.share !== undefined ||
+    incoming.sessionConfigs !== undefined ||
+    incoming.privateClaimSessionId !== undefined
   )
 }
 
@@ -373,6 +417,11 @@ export const applyWorkspacePatch = (prev, input) => {
     if (incoming.trend !== undefined) mergedModbus.trend = incoming.trend
     // TaskP0/0.20.0: 可视化组件（由 normalizeWorkspace 统一规范化）
     if (incoming.visualization !== undefined) mergedModbus.visualization = incoming.visualization
+    // Session-private scope layers (normalized by normalizeModbus)
+    if (incoming.share !== undefined) mergedModbus.share = incoming.share
+    if (incoming.sessionConfigs !== undefined) mergedModbus.sessionConfigs = incoming.sessionConfigs
+    if (incoming.privateClaimSessionId !== undefined)
+      mergedModbus.privateClaimSessionId = incoming.privateClaimSessionId
     // Task1/0.18.2: explicit WHOLE-replacement semantics — merge cannot express
     // deletion. normalizeFramesByConnection pre-seeds every connection id, which
     // would resurrect cleared keys as empty arrays; normalize only provided keys.
@@ -994,11 +1043,13 @@ export const clearFramesByConnection = async (home, cwd, options) => {
   return { ok: true, cleared: all ? 'all' : connId, workspace: saved.workspace }
 }
 
-export const appendEvidence = async (home, cwd, evidence) => {
+export const appendEvidence = async (home, cwd, evidence, sessionId = '') => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
   const ws = loadWorkspace(home, room.cwd)
-  const pack = normalizeModbus(ws.modbus)
+  const sid = typeof sessionId === 'string' ? sessionId.trim() : ''
+  const pack =
+    sid || isScopePartitioned(ws.modbus) ? projectModbusForSession(ws.modbus, sid) : normalizeModbus(ws.modbus)
   const list = Array.isArray(evidence) ? evidence : evidence && typeof evidence === 'object' ? [evidence] : []
   if (!list.length) return { ok: false, error: '缺少 evidence' }
   for (const ev of list) {

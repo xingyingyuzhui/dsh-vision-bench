@@ -75,10 +75,17 @@ export const normalizeCom = (port) =>
 
 export const toEndpoint = (connection) => {
   const conn = connection && connection.conn ? connection.conn : connection || {}
+  const role =
+    connection && (connection.role === 'server' || connection.role === 'slave')
+      ? 'server'
+      : conn.role === 'server' || conn.role === 'slave'
+        ? 'server'
+        : 'client'
   const mode = conn.mode === 'tcp' ? 'tcp' : 'rtu'
   if (mode === 'tcp') {
     return {
       mode: 'tcp',
+      role,
       host: String(conn.host || '').trim(),
       tcpPort: Math.min(65535, Math.max(1, Math.trunc(Number(conn.tcpPort) || 502))),
     }
@@ -89,6 +96,7 @@ export const toEndpoint = (connection) => {
   const parity = parityRaw === 'E' || parityRaw === 'O' ? parityRaw : 'N'
   return {
     mode: 'rtu',
+    role,
     port: normalizeCom(conn.port),
     baudrate: Math.trunc(Number(conn.baudrate) || 9600),
     bytesize: [7, 8].includes(Number(conn.bytesize)) ? Number(conn.bytesize) : 8,

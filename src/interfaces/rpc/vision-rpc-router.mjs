@@ -39,12 +39,15 @@ import {
   appendEvidence,
   journalView,
   loadBindings,
+  loadGlobalShare,
   loadWorkspace,
   probeBindings,
   resolveManualRequest,
   saveBindings,
+  saveGlobalShare,
   saveWorkspaceAsync,
   touchServiceSession,
+  workspaceRepository,
 } from '../../../bench-store.mjs'
 import { clearFramesByConnection } from '../../../bench-store.mjs'
 import { normalizeCommand } from '../../application/commands/command-contract.mjs'
@@ -53,6 +56,8 @@ import { executeVisionCommand } from '../../application/commands/vision-command-
 import { mutateConfig } from '../../application/config/config-mutation-service.mjs'
 import { clearFlashApprovals } from '../../application/flash/flash-approval-service.mjs'
 import { probeOpenOcdHealth } from '../../application/flash/openocd-health-service.mjs'
+import { claimLegacyPrivate, projectModbusForSession } from '../../application/modbus/config-scope-service.mjs'
+import { isScopePartitioned, omitSessionConfigs } from '../../domain/modbus/config-scope.mjs'
 
 const WORKSPACE_CONFIG_KEYS = new Set(['conn', 'connections', 'devices', 'points', 'visualization'])
 
@@ -102,16 +107,57 @@ function workspaceCwdOf(room) {
 }
 
 /**
+ * Load the layered workspace and, when a session is present, let it claim a legacy
+ * flat topology as its private config. The claim is persisted once and does NOT bump
+ * configVersion: the claiming session's effective topology is unchanged, so pending
+ * approvals / cached views it holds must stay valid.
+ * @param {string} home
+ * @param {string} cwd
+ * @param {string} sessionId
+ */
+async function loadWorkspaceForSession(home, cwd, sessionId) {
+  const workspace = loadWorkspace(home, cwd)
+  const globalShare = loadGlobalShare(home)
+  if (globalShare.enabled && (!workspace.modbus.share || !workspace.modbus.share.enabled)) {
+    workspace.modbus.share = { ...globalShare }
+  }
+  if (!sessionId || !claimLegacyPrivate(workspace.modbus, sessionId).claimed) return workspace
+  const saved = await workspaceRepository(home).update(cwd, null, async (/** @type {any} */ current) => {
+    const claimed = claimLegacyPrivate(current.modbus, sessionId)
+    if (!claimed.claimed) return { ok: false, errorCode: 'CLAIM_RACE', error: 'workspace already claimed' }
+    return { ok: true, workspace: { ...current, modbus: claimed.modbus } }
+  })
+  // Lost the race (another session claimed in between) or write failed: fall back to the on-disk truth.
+  return saved?.ok ? saved.workspace : loadWorkspace(home, cwd)
+}
+
+/**
+ * Effective flat topology for the caller. Anonymous callers see the flat layer only while
+ * the workspace is still unpartitioned; afterwards they see no private topology.
+ * @param {any} workspace layered workspace
+ * @param {string} sessionId
+ */
+function sessionWorkspaceView(workspace, sessionId) {
+  const modbus =
+    sessionId || isScopePartitioned(workspace.modbus)
+      ? projectModbusForSession(workspace.modbus, sessionId)
+      : workspace.modbus
+  return { ...workspace, modbus: omitSessionConfigs(modbus) }
+}
+
+/**
  * @param {string} home
  * @param {string | undefined} cwd
  * @param {string} [sessionId] pending writes are only exposed to their owning session
  */
 async function snapshot(home, cwd, sessionId) {
   const bindings = loadBindings(home)
+  const globalShare = loadGlobalShare(home)
   /** @type {Record<string, any>} */
   const body = {
     ok: true,
     bindings,
+    globalShare,
     health: probeBindings(bindings),
     ioRuntime: getVisionIoBroker().snapshot(),
     presetHealth: inspectPresetHealth(home),
@@ -129,8 +175,9 @@ async function snapshot(home, cwd, sessionId) {
     } catch {
       /* polling best-effort */
     }
-    const workspace = loadWorkspace(home, workspaceCwd)
-    body.workspace = workspace
+    const session = String(sessionId || '').trim()
+    const workspace = await loadWorkspaceForSession(home, workspaceCwd, session)
+    body.workspace = sessionWorkspaceView(workspace, session)
     body.journal = journalView(body.workspace)
     body.pendingWrites = listPendingWrites(workspaceCwd, sessionId)
     const sources = await listConnectedSerialSources(home, workspaceCwd)
@@ -165,12 +212,41 @@ export function createVisionRpcRouter({ getHome }) {
         return {
           ok: true,
           bindings: loadBindings(home),
+          globalShare: loadGlobalShare(home),
           health: probeBindings(loadBindings(home)),
         }
       case 'bindings/save': {
         const saved = saveBindings(home, body && typeof body === 'object' ? body.bindings : undefined)
         if (!saved.ok) return saved
-        return { ok: true, bindings: saved.bindings, health: probeBindings(saved.bindings) }
+        if (body && body.share !== undefined) {
+          saveGlobalShare(home, body.share)
+        }
+        const sid = body && typeof body === 'object' ? String(body.sessionId || '').trim() : ''
+        const cwd = body && typeof body === 'object' ? String(body.cwd || '').trim() : ''
+        if (cwd && body.share !== undefined) {
+          try {
+            await mutateConfig({
+              home,
+              cwd,
+              sessionId: sid,
+              source: 'user',
+              action: 'config',
+              payload: {
+                cwd,
+                operation: 'share.update',
+                value: { share: body.share, confirmed: true },
+              },
+            })
+          } catch {
+            /* workspace sync best-effort */
+          }
+        }
+        return {
+          ok: true,
+          bindings: saved.bindings,
+          globalShare: loadGlobalShare(home),
+          health: probeBindings(saved.bindings),
+        }
       }
       case 'workspace/get': {
         const room = requireWorkspaceCwd(body && typeof body === 'object' ? body.cwd : undefined)
@@ -192,14 +268,37 @@ export function createVisionRpcRouter({ getHome }) {
             error: '连接、设备、点位与可视化配置必须使用增量配置命令',
           }
         }
+        const sid = body && typeof body === 'object' ? String(body.sessionId || '').trim() : ''
+        // When the workspace is partitioned, activeConnectionId / activeDeviceId
+        // must also be written to sessionConfigs[sid] because projectModbusForSession
+        // reads them from the private slice (not top-level).
+        const runtimeModbus =
+          modbus && typeof modbus === 'object' ? /** @type {Record<string, unknown>} */ (modbus) : {}
+        const touchesActiveId =
+          runtimeModbus.activeConnectionId !== undefined || runtimeModbus.activeDeviceId !== undefined
+        let patchModbus = modbus
+        if (sid && touchesActiveId) {
+          const cur = loadWorkspace(home, room.cwd)
+          if (isScopePartitioned(cur.modbus)) {
+            const sc = cur.modbus.sessionConfigs || {}
+            const sess = sc[sid] && typeof sc[sid] === 'object' ? { ...sc[sid] } : {}
+            if (runtimeModbus.activeConnectionId !== undefined)
+              sess.activeConnectionId = runtimeModbus.activeConnectionId
+            if (runtimeModbus.activeDeviceId !== undefined) sess.activeDeviceId = runtimeModbus.activeDeviceId
+            patchModbus = { ...runtimeModbus, sessionConfigs: { ...sc, [sid]: sess } }
+          }
+        }
         const prev = loadWorkspace(home, room.cwd)
         const saved = await saveWorkspaceAsync(home, room.cwd, {
           keil: body && typeof body === 'object' ? body.keil : undefined,
-          modbus: body && typeof body === 'object' ? body.modbus : undefined,
+          modbus: patchModbus,
         })
         if (!saved.ok) return { ok: false, error: saved.error, workspace: saved.workspace }
         notifyConnectionRelease(room.cwd, changedConnectionIds(prev.modbus, saved.workspace.modbus))
-        return { ok: true, workspace: saved.workspace, journal: journalView(saved.workspace) }
+        const viewWorkspace = sid
+          ? { ...saved.workspace, modbus: omitSessionConfigs(projectModbusForSession(saved.workspace.modbus, sid)) }
+          : saved.workspace
+        return { ok: true, workspace: viewWorkspace, journal: journalView(saved.workspace) }
       }
       case 'fs/list':
         return listDir(
@@ -296,11 +395,18 @@ export function createVisionRpcRouter({ getHome }) {
         if (Object.prototype.hasOwnProperty.call(body, 'alarmEnabled')) {
           patch.alarmEnabled = Boolean(body.alarmEnabled)
         }
+        let incomingSessionId = (body && typeof body === 'object' ? body.sessionId : '') || ''
+        if (!incomingSessionId) {
+          const ws = loadWorkspace(home, room.cwd)
+          if (ws?.session?.boundId) {
+            incomingSessionId = ws.session.boundId
+          }
+        }
         const ran = await mutateConfig({
           home,
           cwd: room.cwd,
           source: body && typeof body === 'object' && body.source === 'agent' ? 'agent' : 'user',
-          sessionId: (body && typeof body === 'object' ? body.sessionId : '') || '',
+          sessionId: incomingSessionId,
           expectedConfigVersion: body && typeof body === 'object' ? body.expectedConfigVersion : undefined,
           operation: 'flags.update',
           target: { pointId: body && typeof body === 'object' ? body.pointId : undefined },
@@ -336,7 +442,7 @@ export function createVisionRpcRouter({ getHome }) {
         const ev = body && typeof body === 'object' ? body.evidence || body.evidences || body.item : undefined
         const list = Array.isArray(ev) ? ev : ev ? [ev] : []
         if (!list.length) return { ok: false, error: '缺少 evidence' }
-        return appendEvidence(home, room.cwd, list)
+        return appendEvidence(home, room.cwd, list, String(body.sessionId || ''))
       }
       case 'manual/resolve': {
         const room = requireWorkspaceCwd(body && typeof body === 'object' ? body.cwd : undefined)

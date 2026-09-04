@@ -4,6 +4,12 @@
 import { normalizeAlarmState } from './bench-alarm.mjs'
 import { functionTag, normalizePoints, normalizeValueRec } from './bench-points.mjs'
 import { emptyVisualization, normalizeVisualizationForRead } from './bench-visualization-model.mjs'
+import {
+  normalizeScopeSessionId,
+  normalizeSessionConfigs,
+  normalizeShareFlags,
+  unionScopedPoints,
+} from './src/domain/modbus/config-scope.mjs'
 const TREND_KEEP_LOCAL = 600
 const normalizeTrendByPoint = (input) => {
   if (!input || typeof input !== 'object') return {}
@@ -610,8 +616,13 @@ export function normalizeModbus(input) {
     let devices = normalizeDevices(src.devices, connections)
     // ensure at least one device per connection? keep as is
     let points = normalizePointsV3(src.points, connections, devices)
-    // values: qualified
-    let values = normalizeQualifiedValues(src.values, points)
+    // Session-private scope (0.27): shared/private layers + legacy claim marker.
+    const share = normalizeShareFlags(src.share)
+    const sessionConfigs = normalizeSessionConfigs(src.sessionConfigs)
+    const privateClaimSessionId = normalizeScopeSessionId(src.privateClaimSessionId)
+    // values: qualified. Runtime values are shared at top-level, so keep entries for
+    // points living in ANY layer (shared or session-private), not just top-level.
+    let values = normalizeQualifiedValues(src.values, unionScopedPoints(points, sessionConfigs))
     // handle pollingByConnection vs polling
     let pollingByConnection
     if (src.pollingByConnection && typeof src.pollingByConnection === 'object') {
@@ -676,6 +687,9 @@ export function normalizeModbus(input) {
       alarmState,
       trend,
       visualization,
+      share,
+      sessionConfigs,
+      privateClaimSessionId,
     }
     // Legacy enumerable:false compat
     Object.defineProperties(ret, {
@@ -826,6 +840,10 @@ export function normalizeModbus(input) {
     pollingByConnection: migrated.pollingByConnection,
     framesByConnection: migrated.framesByConnection,
     alarmState: migrated.alarmState,
+    // v2/legacy never carried scope fields; start unclaimed so the first session can claim.
+    share: normalizeShareFlags(null),
+    sessionConfigs: {},
+    privateClaimSessionId: '',
   }
   Object.defineProperties(ret, {
     conn: {

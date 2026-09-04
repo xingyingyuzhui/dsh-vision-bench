@@ -26,14 +26,13 @@ import { planScopedReadBatches } from '../../../bench-pollplan.mjs'
 import { portKey } from '../../../bench-portlock.mjs'
 import {
   finishTask,
-  loadWorkspace,
   normalizeFocusRequest,
   normalizeFocusState,
   openTask,
   pruneBuildLogs,
   recordBenchEvent,
-  saveWorkspaceAsync,
 } from '../../../bench-store.mjs'
+import { ensureWorkspaceClaimed, modbusForSession, saveSessionModbusPatch } from './workspace-session-view.mjs'
 import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from '../../../bench-targets.mjs'
 import { endpointFingerprint, endpointLabelText, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
@@ -78,21 +77,19 @@ import {
  * @param {ModbusCommandBody} body
  * @param {ModbusOperationOptions} opts
  */
-export const connectOp = async (home, cwd, body, opts) => {
+export const connectOp = async (home, cwd, body, opts = {}) => {
   const room = /** @type {{ cwd: string, error?: string }} */ (requireWorkspaceCwd(cwd))
   if (room.error) return { ok: false, error: room.error }
+  const origin = originOf(body)
+  const sessionId = String(opts?.sessionId || origin.sessionId || body?.sessionId || '')
   const cidRaw = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
   if (cidRaw) {
-    const workspace = loadWorkspace(home, room.cwd)
-    const pack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
+    const workspace = await ensureWorkspaceClaimed(home, room.cwd, sessionId)
+    const pack = /** @type {ModbusWorkspace} */ (modbusForSession(workspace, sessionId))
     const target = pack.connections.find((c) => c.id === cidRaw)
     if (!target) return { ok: false, error: `连接不存在: ${cidRaw}` }
-    // Task6/0.19.2: 从机模式未启用 — 显式拒绝，不允许当主机执行
     const role = target.role || 'client'
-    if (role === 'server' || role === 'slave') {
-      return { ok: false, error: '当前版本暂未启用 Modbus 从机模式', code: 'ROLE_NOT_SUPPORTED', connectionId: cidRaw }
-    }
-    // Task5/0.19.2: close 优先 — 仅凭 connectionId 即可断开，不要求 patch
+    // close 优先 — 仅凭 connectionId 即可断开，不要求 patch
     const transport = transportOf(opts)
     if (body && body.close === true) {
       await transport.closeConnection({ cwd: room.cwd, connectionId: cidRaw })
@@ -134,7 +131,7 @@ export const connectOp = async (home, cwd, body, opts) => {
       const nextConns = Object.keys(patch).length
         ? pack.connections.map((c) => (c.id === cidRaw ? { ...c, conn: { ...c.conn, ...patch } } : c))
         : pack.connections
-      const saved = await saveWorkspaceAsync(home, room.cwd, {
+      const saved = await saveSessionModbusPatch(home, room.cwd, sessionId, {
         modbus: { connections: nextConns, devices: nextDevices, version: 3 },
       })
       if (!saved.ok) return saved
@@ -142,7 +139,7 @@ export const connectOp = async (home, cwd, body, opts) => {
         room.cwd,
         changedConnectionIds(workspace.modbus, saved.workspace.modbus).filter((id) => id !== cidRaw),
       )
-      const savedPack = /** @type {ModbusWorkspace} */ (saved.workspace.modbus)
+      const savedPack = /** @type {ModbusWorkspace} */ (saved.view || modbusForSession(saved.workspace, sessionId))
       outConn = savedPack.connections.find((c) => c.id === cidRaw)?.conn || savedPack.conn
     }
     if (outConn && outConn.sim === true) {
@@ -160,7 +157,7 @@ export const connectOp = async (home, cwd, body, opts) => {
     const opened = await transport.openConnection({
       cwd: room.cwd,
       connectionId: cidRaw,
-      endpoint: toEndpoint({ conn: outConn }),
+      endpoint: toEndpoint({ ...target, conn: outConn, role }),
     })
     if (opened.ok === false) {
       // Task5/0.19.2: 配置已保存但物理连接失败 — 不偷偷回滚
@@ -187,11 +184,12 @@ export const connectOp = async (home, cwd, body, opts) => {
     }
   }
   // legacy no-id path (kept for backward compat)
-  const prev = loadWorkspace(home, room.cwd)
-  const saved = await saveWorkspaceAsync(home, room.cwd, { modbus: { conn: pickConnPatch(body) } })
+  const prev = await ensureWorkspaceClaimed(home, room.cwd, sessionId)
+  const saved = await saveSessionModbusPatch(home, room.cwd, sessionId, { modbus: { conn: pickConnPatch(body) } })
   if (!saved.ok) return saved
   notifyConnectionRelease(room.cwd, changedConnectionIds(prev.modbus, saved.workspace.modbus))
-  return { ok: true, action: 'connect', conn: saved.workspace.modbus.conn }
+  const view = saved.view || modbusForSession(saved.workspace, sessionId)
+  return { ok: true, action: 'connect', conn: view.conn }
 }
 
 export { pickModbusPatch }

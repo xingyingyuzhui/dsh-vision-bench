@@ -6,12 +6,44 @@ const FIELDS = [
   { key: 'openocd', label: 'openocd', ph: 'openocdPh' },
 ]
 
+const SHARE_BOXES = [
+  { key: 'connections', label: 'shareConnections' },
+  { key: 'points', label: 'sharePoints' },
+  { key: 'visualization', label: 'shareVisualization' },
+]
+
+const EMPTY_SHARE = { enabled: false, connections: false, points: false, visualization: false }
+
 export function statusKind(health) {
   if (!health || !health.bound) return 'unbound'
   return health.exists ? 'ready' : 'missing'
 }
 
-export function createSettingsPage(React, t, post) {
+function normalizeShareState(flags) {
+  const src = flags && typeof flags === 'object' ? flags : {}
+  return {
+    enabled: src.enabled === true,
+    connections: src.connections === true,
+    points: src.points === true,
+    visualization: src.visualization === true,
+  }
+}
+
+function shareEffective(flags, key) {
+  return flags.enabled === true && flags[key] === true
+}
+
+function willRevoke(prev, next) {
+  return SHARE_BOXES.some((box) => shareEffective(prev, box.key) && !shareEffective(next, box.key))
+}
+
+function confirmRevoke(t) {
+  if (typeof window === 'undefined' || typeof window.confirm !== 'function') return false
+  return window.confirm(t('shareRevokeConfirm')) === true
+}
+
+export function createSettingsPage(React, t, post, options = {}) {
+  const getScope = typeof options.getScope === 'function' ? options.getScope : () => ({ cwd: '', sessionId: '' })
   return function SettingsPage() {
     const el = React.createElement
     const [bindings, setBindings] = React.useState({ python: '', uv4: '', openocd: '' })
@@ -22,21 +54,35 @@ export function createSettingsPage(React, t, post) {
     const [message, setMessage] = React.useState(null)
     const [ioRuntime, setIoRuntime] = React.useState(null)
     const [presetHealth, setPresetHealth] = React.useState(null)
+    const [share, setShare] = React.useState(EMPTY_SHARE)
+    const [configVersion, setConfigVersion] = React.useState(1)
+    const [shareBusy, setShareBusy] = React.useState(false)
 
+    const scope = getScope() || {}
+    const cwd = String(scope.cwd || '')
+    const sessionId = String(scope.sessionId || '')
     const applySnap = (data) => {
       if (data && data.bindings) setBindings(data.bindings)
       if (data && data.health) setHealth(data.health)
       if (data && data.ioRuntime) setIoRuntime(data.ioRuntime)
       if (data && data.presetHealth) setPresetHealth(data.presetHealth)
+      if (data && data.globalShare) {
+        setShare(normalizeShareState(data.globalShare))
+      } else {
+        const modbus = data && data.workspace && data.workspace.modbus
+        if (modbus && modbus.share) setShare(normalizeShareState(modbus.share))
+      }
+      const modbus = data && data.workspace && data.workspace.modbus
+      if (modbus && modbus.configVersion) setConfigVersion(Number(modbus.configVersion) || 1)
     }
 
     React.useEffect(() => {
-      post('/dsh-vision-bench/state')
+      post('/dsh-vision-bench/state', cwd ? { cwd, sessionId } : {})
         .then(applySnap)
         .catch((err) => {
           setMessage({ kind: 'err', text: String((err && err.message) || t('loadFail')) })
         })
-    }, [])
+    }, [cwd, sessionId])
 
     function setField(key, value) {
       setBindings((prev) => Object.assign({}, prev, { [key]: value }))
@@ -45,7 +91,7 @@ export function createSettingsPage(React, t, post) {
     function save() {
       setBusy(true)
       setMessage(null)
-      post('/dsh-vision-bench/bindings', { bindings })
+      post('/dsh-vision-bench/bindings', { bindings, share })
         .then((data) => {
           applySnap(data)
           setMessage({ kind: data.ok ? 'ok' : 'err', text: data.ok ? t('saved') : data.error || t('fail') })
@@ -70,60 +116,221 @@ export function createSettingsPage(React, t, post) {
         .finally(() => setChecking(false))
     }
 
+    function applyShare(nextShare, confirmed) {
+      const next = normalizeShareState(nextShare)
+      let confirmedFlag = confirmed === true
+      if (!confirmedFlag && willRevoke(share, next)) {
+        if (!confirmRevoke(t)) return
+        confirmedFlag = true
+      }
+      setShareBusy(true)
+      setMessage(null)
+      post('/dsh-vision-bench/bindings', {
+        bindings,
+        share: next,
+        cwd: cwd || undefined,
+        sessionId: sessionId || undefined,
+      })
+        .then((data) => {
+          if (data && data.ok) {
+            if (data.globalShare) setShare(normalizeShareState(data.globalShare))
+            else setShare(next)
+            setMessage({ kind: 'ok', text: t('shareSaved') })
+            return post('/dsh-vision-bench/state', cwd ? { cwd, sessionId } : {}).then(applySnap)
+          }
+          setMessage({ kind: 'err', text: (data && data.error) || t('fail') })
+        })
+        .catch((err) => {
+          setMessage({ kind: 'err', text: String((err && err.message) || t('fail')) })
+        })
+        .finally(() => setShareBusy(false))
+    }
+
+    function renderSwitch(checked, disabled, onChange, id) {
+      const isOn = checked === true
+      return el('button', {
+        id,
+        type: 'button',
+        role: 'switch',
+        'aria-checked': isOn ? 'true' : 'false',
+        disabled: disabled === true,
+        className: 'dvb-setting-switch',
+        'data-checked': isOn ? 'true' : 'false',
+        style: {
+          width: '36px',
+          height: '20px',
+          flex: 'none',
+          margin: 0,
+          border: 0,
+          padding: '2px',
+          borderRadius: '999px',
+          backgroundColor: isOn ? '#0f1115' : '#e5e5e5',
+          cursor: disabled ? 'default' : 'pointer',
+          position: 'relative',
+          boxSizing: 'border-box',
+          display: 'inline-flex',
+          alignItems: 'center',
+          opacity: disabled ? 0.45 : 1,
+          transition: 'background-color .16s ease, opacity .16s ease',
+          outline: 'none',
+        },
+        onClick(e) {
+          e.preventDefault()
+          if (!disabled && onChange) onChange(!isOn)
+        },
+        onKeyDown(e) {
+          if ((e.key === ' ' || e.key === 'Enter') && !disabled && onChange) {
+            e.preventDefault()
+            onChange(!isOn)
+          }
+        },
+      },
+      el('span', {
+        className: 'dvb-setting-switch-thumb',
+        style: {
+          display: 'block',
+          width: '16px',
+          height: '16px',
+          borderRadius: '50%',
+          backgroundColor: '#ffffff',
+          boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+          transform: isOn ? 'translateX(16px)' : 'translateX(0)',
+          transition: 'transform .16s ease',
+          pointerEvents: 'none',
+        },
+      }))
+    }
+
+    function settingRow(labelNode, controlNode, isSub = false) {
+      return el(
+        'div',
+        { className: isSub ? 'dvb-setting-row dvb-setting-subrow' : 'dvb-setting-row' },
+        el('div', { className: 'dvb-setting-label' }, labelNode),
+        el('div', { className: 'dvb-setting-control' }, controlNode),
+      )
+    }
+
     return el(
       'div',
       { className: 'dvb-page' },
       el('div', { className: 'dvb-title' }, t('settingsTitle')),
-      el('div', { className: 'dvb-hint' }, t('settingsHint')),
       el(
         'div',
         {
-          className: 'dvb-hint',
+          className: 'dvb-callout',
           'data-preset-health': presetHealth && presetHealth.ok === false ? 'err' : 'ok',
         },
-        t('presetAppliesNextSession') +
-          (presetHealth && presetHealth.generation ? ' · generation ' + presetHealth.generation : '') +
-          (presetHealth && presetHealth.error ? ' · ' + presetHealth.error : ''),
+        el('span', null, 'ℹ️'),
+        el(
+          'span',
+          null,
+          t('presetAppliesNextSession') +
+            (presetHealth && presetHealth.error ? ' (' + presetHealth.error + ')' : ''),
+        ),
       ),
-      el(
-        'div',
-        { className: 'dvb-hint' },
-        t('ioRuntime') + (ioRuntime && ioRuntime.state ? ' · ' + ioRuntime.state : ' · idle'),
+      settingRow(
+        el('span', null, t('ioRuntime')),
+        el(
+          'div',
+          {
+            className: 'dvb-status-pill',
+            'data-kind': ioRuntime && ioRuntime.state === 'unavailable' ? 'missing' : 'ready',
+          },
+          el('span', {
+            className: 'dvb-dot',
+            'data-kind': ioRuntime && ioRuntime.state === 'unavailable' ? 'missing' : 'ready',
+          }),
+          el(
+            'span',
+            null,
+            ioRuntime && ioRuntime.state ? ioRuntime.state : t('ioReady'),
+          ),
+        ),
       ),
       FIELDS.map((field) => {
         const kind = statusKind(health[field.key])
         return el(
           'div',
-          { key: field.key, className: 'dvb-row' },
+          { key: field.key, className: 'dvb-setting-row' },
           el(
             'div',
-            { className: 'dvb-label' },
+            { className: 'dvb-setting-label' },
             el('span', null, t(field.label)),
-            el('span', { className: 'dvb-status', 'data-kind': kind }, t(kind)),
+            el('span', { className: 'dvb-status-pill', 'data-kind': kind }, t(kind)),
           ),
-          el('input', {
-            className: 'dvb-input',
-            value: bindings[field.key] || '',
-            placeholder: t(field.ph),
-            spellCheck: false,
-            onChange(event) {
-              setField(field.key, event.target.value)
-            },
-          }),
+          el(
+            'div',
+            { className: 'dvb-setting-control' },
+            el('input', {
+              className: 'dvb-input-pill',
+              value: bindings[field.key] || '',
+              placeholder: t(field.ph),
+              spellCheck: false,
+              onChange(event) {
+                setField(field.key, event.target.value)
+              },
+            }),
+          ),
         )
       }),
       el(
         'div',
-        { className: 'dvb-actions' },
+        {
+          className: 'dvb-actions',
+          style: { justifyContent: 'flex-end', gap: '10px', marginTop: '6px' },
+        },
         el(
           'button',
-          { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: busy, onClick: save },
-          busy ? t('saving') : t('save'),
+          { type: 'button', className: 'dvb-btn-pill', disabled: checking, onClick: runCheck },
+          checking ? t('selfchecking') : t('selfcheck'),
         ),
         el(
           'button',
-          { type: 'button', className: 'dvb-btn', disabled: checking, onClick: runCheck },
-          checking ? t('selfchecking') : t('selfcheck'),
+          { type: 'button', className: 'dvb-btn-pill dvb-btn-pill-primary', disabled: busy, onClick: save },
+          busy ? t('saving') : t('save'),
+        ),
+      ),
+      el('div', { className: 'dvb-title', style: { marginTop: '16px' } }, t('shareTitle')),
+      el('div', { className: 'dvb-hint', style: { marginBottom: '6px' } }, t('shareHint')),
+      settingRow(
+        el('span', { style: { fontWeight: 500 } }, t('shareMaster')),
+        renderSwitch(
+          share.enabled === true,
+          shareBusy,
+          (enabled) => applyShare({ ...share, enabled }),
+          'share-master',
+        ),
+      ),
+      el(
+        'div',
+        {
+          className: 'dvb-share-subgroup',
+          style: {
+            pointerEvents: share.enabled ? 'auto' : 'none',
+          },
+        },
+        SHARE_BOXES.map((box) =>
+          settingRow(
+            el(
+              'span',
+              {
+                style: {
+                  color:
+                    share.enabled
+                      ? 'var(--dsw-alias-label-primary, inherit)'
+                      : 'var(--dsw-alias-label-tertiary, #8b93a0)',
+                },
+              },
+              t(box.label),
+            ),
+            renderSwitch(
+              share[box.key] === true,
+              shareBusy || share.enabled !== true,
+              (on) => applyShare({ ...share, [box.key]: on }),
+              'share-' + box.key,
+            ),
+            true,
+          ),
         ),
       ),
       message ? el('div', { className: 'dvb-msg', 'data-kind': message.kind }, message.text) : null,

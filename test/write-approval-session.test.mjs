@@ -6,21 +6,49 @@ import test from 'node:test'
 import { listPendingWrites, peekPendingWrite, resolvePendingWrite, takePendingWrite } from '../bench-actions.mjs'
 import { journalView, loadWorkspace, saveWorkspace } from '../bench-store.mjs'
 import { runVisionBench } from '../bench-tool.mjs'
-import { _internal } from '../host.js'
+import { saveSessionModbusPatch } from '../src/application/modbus/workspace-session-view.mjs'
 import { ERROR_CODES } from '../src/domain/modbus/errors.mjs'
 import { createVisionRpcRouter } from '../src/interfaces/rpc/vision-rpc-router.mjs'
 
 const SESSION_A = 'session-a'
 const SESSION_B = 'session-b'
 
+function boardTopology() {
+  const connections = [
+    { id: 'c1', name: 'C1', role: 'client', enabled: true, conn: { mode: 'rtu', port: 'COM3', sim: true } },
+  ]
+  const devices = [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }]
+  const points = Array.from({ length: 10 }, (_, i) => ({
+    id: `p${i}`,
+    name: 'HR' + i,
+    connectionId: 'c1',
+    deviceId: 'd1',
+    area: 'holdingRegister',
+    function: 3,
+    address: i,
+  }))
+  return { connections, devices, points, activeConnectionId: 'c1', activeDeviceId: 'd1' }
+}
+
 async function setupBoard(prefix) {
   const home = await mkdtemp(join(tmpdir(), prefix))
   const cwd = join(home, 'board')
   await mkdir(cwd)
+  const topo = boardTopology()
+  // Pre-partition so A and B each have a private copy; avoids "first opener claims all".
   saveWorkspace(home, cwd, {
     modbus: {
-      conn: { sim: true },
-      points: Array.from({ length: 10 }, (_, i) => ({ name: 'HR' + i, function: 3, address: i })),
+      version: 3,
+      configVersion: 1,
+      privateClaimSessionId: SESSION_A,
+      share: { enabled: false, connections: false, points: false, visualization: false },
+      connections: [],
+      devices: [],
+      points: [],
+      sessionConfigs: {
+        [SESSION_A]: { ...topo },
+        [SESSION_B]: { ...topo, points: topo.points.map((p) => ({ ...p })) },
+      },
     },
   })
   return { home, cwd }
@@ -188,6 +216,7 @@ test('takePendingWrite only consumes on success', async () => {
 
 test('RPC state and approve carry session ownership end to end', async () => {
   const { home, cwd } = await setupBoard('dvb-approval-rpc-')
+  const { _internal } = await import('../host.js')
   _internal.setDshHome(home)
   const router = createVisionRpcRouter({ getHome: () => home })
   const signal = () => AbortSignal.timeout(5000)
@@ -249,7 +278,11 @@ test('endpoint drift check still runs for the owning session', async () => {
       { source: 'agent', sessionId: SESSION_A },
     )
     assert.equal(first.needsConfirm, true)
-    saveWorkspace(home, cwd, { modbus: { connections: [{ ...c1, conn: { ...c1.conn, port: 'COM11' } }] } })
+    // Patch the owning session's private layer (flat saveWorkspace would only touch the shared slice).
+    const patched = await saveSessionModbusPatch(home, cwd, SESSION_A, {
+      modbus: { connections: [{ ...c1, conn: { ...c1.conn, port: 'COM11' } }] },
+    })
+    assert.equal(patched.ok, true, patched.error)
     // A foreign session is still refused before drift is evaluated and the request survives.
     const foreign = await resolvePendingWrite(home, cwd, first.requestId, true, { sessionId: SESSION_B })
     assert.equal(foreign.errorCode, ERROR_CODES.SESSION_MISMATCH)

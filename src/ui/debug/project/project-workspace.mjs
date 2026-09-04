@@ -1,5 +1,5 @@
 // 工程结构 — 树形/图谱双视图 + 左右分栏（导航 + 源码预览）。
-import { subscribeState } from '../../../../bench-shared.mjs'
+import { formatErrorMessage, subscribeState } from '../../../../bench-shared.mjs'
 import { beginRequest, postWithAbort, shouldApplyRequest } from '../../common/latest-request-gate.mjs'
 import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
 import { createSourceEditor } from '../../components/source-editor.mjs'
@@ -202,7 +202,7 @@ export function createProjectWorkspace(React, t, post) {
       (data, reqIdentity) => {
         if (data && data.ok === false) {
           setMapped(null)
-          setError(data.error || t('loadFail'))
+          setError(formatErrorMessage(data.error) || t('loadFail'))
           return
         }
         setError('')
@@ -508,7 +508,7 @@ export function createProjectWorkspace(React, t, post) {
         : !keil.project
           ? el('div', { className: 'dvb-hint' }, t('projectMapEmpty'))
           : null,
-      error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
+      error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, formatErrorMessage(error)) : null,
       truncatedBanner ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('mapTruncated')) : null,
       copied ? el('div', { className: 'dvb-hint' }, copied) : null,
       el(

@@ -24,7 +24,7 @@ export async function executeVisionCommand(input) {
         source: cmd.source,
         sessionId: cmd.sessionId,
       },
-      { signal: cmd.signal, commandId: cmd.commandId },
+      { signal: cmd.signal, commandId: cmd.commandId, transport: cmd.transport },
     )
     return envelope(cmd, result)
   })

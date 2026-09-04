@@ -24,12 +24,16 @@ export function renderDeviceCards(el, t, ctx) {
     cwd,
     activeConnId,
     openAddDevice,
+    linkConnection,
+    unlinkConnection,
+    linkBusy,
     pointsOfDevice,
     busy,
     devDeleteId,
     setDevDeleteId,
     editingDeviceId,
     editingPointsDeviceId,
+    pointDraftsById: pointDraftsByIdFromProps,
     newPointDraft,
     setNewPointDraft,
     batch,
@@ -65,7 +69,21 @@ export function renderDeviceCards(el, t, ctx) {
     setCsvText,
     saveNewPointDraft,
     pointRowCtx,
+    colWidths,
+    getColWidths,
+    onStartResize,
+    resetColWidth,
+    totalTableWidth,
   } = ctx
+
+  const activeCm = (connectionStates || []).find((x) => x.connectionId === activeConnId)
+  const activeLinkSt = activeCm ? activeCm.status || 'disconnected' : 'disconnected'
+  const isConnected = activeLinkSt === 'connected'
+  const isBusy =
+    activeLinkSt === 'connecting' ||
+    activeLinkSt === 'disconnecting' ||
+    linkBusy === activeConnId ||
+    linkBusy === 'poll'
 
   return el(
     'div',
@@ -75,7 +93,7 @@ export function renderDeviceCards(el, t, ctx) {
       { className: 'dvb-panel-head' },
       el('span', { className: 'dvb-panel-title' }, '设备 · ' + (activeConnObj ? activeConnObj.name : '')),
       el('span', { className: 'dvb-tag', title: '插件版本；改 client 后需重启 dsh web' }, pluginVersionLabel()),
-      el('span', { className: 'dvb-tag' }, activeDevices.length + ' 个设备 · ' + points.length + ' 个点位'),
+      el('span', { className: 'dvb-tag' }, (activeDevices || []).length + ' 个设备 · ' + (points || []).length + ' 个点位'),
       el(
         'button',
         {
@@ -85,6 +103,32 @@ export function renderDeviceCards(el, t, ctx) {
           onClick: openAddDevice,
         },
         '＋添加设备',
+      ),
+      el(
+        'button',
+        {
+          type: 'button',
+          className: 'dvb-btn' + (isConnected ? ' dvb-btn-danger-hover' : ' dvb-btn-primary'),
+          disabled: !cwd || !activeConnId || isBusy,
+          onClick() {
+            if (isConnected) {
+              if (typeof unlinkConnection === 'function') unlinkConnection(activeConnId)
+            } else {
+              if (typeof linkConnection === 'function') linkConnection(activeConnId)
+            }
+          },
+        },
+        isBusy
+          ? activeLinkSt === 'connecting'
+            ? '连接中…'
+            : activeLinkSt === 'disconnecting'
+              ? '断开中…'
+              : '处理中…'
+          : isConnected
+            ? t('connUnlink') || '断开'
+            : activeLinkSt === 'error'
+              ? t('connRetry') || '重试连接'
+              : t('connLink') || '连接',
       ),
     ),
     activeDevices.length
@@ -98,10 +142,12 @@ export function renderDeviceCards(el, t, ctx) {
             const confirmDel = pDel && pDel[0] === d.id
             const editingDevice = editingDeviceId === d.id
             const editingPoints = editingPointsDeviceId === d.id
+            const pointDraftsById = pointDraftsByIdFromProps || pointRowCtx?.pointDraftsById || {}
+            const ptsToRender = editingPoints ? Object.values(pointDraftsById) : devPts
             const adding = !!(newPointDraft && newPointDraft.deviceId === d.id)
             const showOps = editingPoints || adding
-            const batchOpen = batch.open && batch.deviceId === d.id
-            const cm = connectionStates.find((x) => x.connectionId === d.connectionId)
+            const batchOpen = !!(batch && batch.open && batch.deviceId === d.id)
+            const cm = (connectionStates || []).find((x) => x.connectionId === d.connectionId)
             const linkSt = cm ? cm.status || 'disconnected' : 'disconnected'
             let devStatus = { kind: 'idle', label: '未连接' }
             if (linkSt === 'connected') {
@@ -109,7 +155,7 @@ export function renderDeviceCards(el, t, ctx) {
               let comm = false
               let ok = false
               for (const p of devPts) {
-                const rs = pointRuntimeStatus(p, valueMap[p.id], alarmStateData, linkSt)
+                const rs = pointRuntimeStatus(p, valueMap ? valueMap[p.id] : undefined, alarmStateData, linkSt)
                 if (rs.key === 'alarm') alarm = true
                 else if (rs.key === 'comm-error') comm = true
                 else if (rs.key === 'ok') ok = true
@@ -221,6 +267,41 @@ export function renderDeviceCards(el, t, ctx) {
                         'button',
                         {
                           type: 'button',
+                          className: 'dvb-btn dvb-btn-sm',
+                          disabled: !cwd,
+                          onClick() {
+                            addNewPointRow(d.id)
+                          },
+                        },
+                        t('addPoint'),
+                      ),
+                      el(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'dvb-btn dvb-btn-sm' + (batchOpen ? ' is-on' : ''),
+                          'aria-pressed': batchOpen ? 'true' : 'false',
+                          onClick() {
+                            setBatch((prev) => {
+                              const same = prev.open && prev.deviceId === d.id
+                              return {
+                                ...prev,
+                                open: !same,
+                                deviceId: d.id,
+                                connectionId: d.connectionId || activeConnId,
+                              }
+                            })
+                            setCsvTarget((prev) =>
+                              prev.open && prev.deviceId === d.id ? { ...prev, open: false } : prev,
+                            )
+                          },
+                        },
+                        batchOpen ? '收起批量' : t('batchAdd') || '批量添加',
+                      ),
+                      el(
+                        'button',
+                        {
+                          type: 'button',
                           className: 'dvb-btn dvb-btn-sm dvb-btn-primary',
                           disabled: !!busy,
                           onClick() {
@@ -248,50 +329,8 @@ export function renderDeviceCards(el, t, ctx) {
                         'button',
                         {
                           type: 'button',
-                          className: 'dvb-btn dvb-btn-sm dvb-btn-primary',
-                          disabled: !cwd,
-                          onClick() {
-                            addNewPointRow(d.id)
-                          },
-                        },
-                        t('addPoint'),
-                      ),
-                      el(
-                        'button',
-                        {
-                          type: 'button',
-                          className: 'dvb-btn dvb-btn-sm' + (batchOpen ? ' is-on' : ''),
-                          'aria-pressed': batchOpen ? 'true' : 'false',
-                          onClick() {
-                            setBatch((prev) => {
-                              const same = prev.open && prev.deviceId === d.id
-                              return { ...prev, open: !same, deviceId: d.id, connectionId: activeConnId }
-                            })
-                            setCsvTarget((prev) =>
-                              prev.open && prev.deviceId === d.id ? { ...prev, open: false } : prev,
-                            )
-                          },
-                        },
-                        batchOpen ? '收起批量' : t('batchAdd') || '批量添加',
-                      ),
-                      el(
-                        'button',
-                        {
-                          type: 'button',
                           className: 'dvb-btn dvb-btn-sm',
-                          disabled: !cwd || !canDevice || connMissing || !devPts.length || !!busy || readRunning,
-                          onClick() {
-                            readAll(d.id)
-                          },
-                        },
-                        devBusy ? t('reading') : t('readAll'),
-                      ),
-                      el(
-                        'button',
-                        {
-                          type: 'button',
-                          className: 'dvb-btn dvb-btn-sm',
-                          disabled: !!devDeleteId || !devPts.length,
+                          disabled: !!devDeleteId,
                           onClick() {
                             enterPointsEdit(d)
                           },
@@ -303,7 +342,7 @@ export function renderDeviceCards(el, t, ctx) {
                         {
                           type: 'button',
                           className:
-                            'dvb-btn dvb-btn-sm' + (csvTarget.open && csvTarget.deviceId === d.id ? ' is-on' : ''),
+                            'dvb-btn dvb-btn-sm' + (csvTarget?.open && csvTarget?.deviceId === d.id ? ' is-on' : ''),
                           onClick() {
                             setCsvTarget((prev) => ({
                               ...prev,
@@ -378,31 +417,88 @@ export function renderDeviceCards(el, t, ctx) {
                     ),
                   )
                 : null,
-              batch.open && batch.deviceId === d.id
+              batch?.open && batch.deviceId === d.id
                 ? renderBatchPanel(el, t, { d, field, batch, setBatch, cwd, generateBatch })
                 : null,
-              csvTarget.open && csvTarget.deviceId === d.id
+              csvTarget?.open && csvTarget.deviceId === d.id
                 ? renderCsvPanel(el, t, { d, csvTarget, setCsvTarget, csvText, setCsvText, importCsv })
                 : null,
-              devPts.length || (newPointDraft && newPointDraft.deviceId === d.id)
-                ? el(
-                    'div',
-                    { className: 'dvb-table-wrap' },
-                    el(
-                      'table',
-                      { className: 'dvb-table dvb-point-table' },
-                      renderPointThead(el, t, { d, editingPointsDeviceId, newPointDraft }),
+              ptsToRender.length || editingPoints || (newPointDraft && newPointDraft.deviceId === d.id)
+                ? (() => {
+                    const devWidths = getColWidths ? getColWidths(d, activeConnId) : (colWidths?.[d.id] || colWidths)
+                    return el(
+                      'div',
+                      { className: 'dvb-table-wrap' },
                       el(
-                        'tbody',
-                        null,
-                        newPointDraft && newPointDraft.deviceId === d.id
-                          ? renderNewPointRow(el, t, { newPointDraft, setNewPointDraft, cwd, saveNewPointDraft })
-                          : null,
-                        devPts.map((point) => renderPointRow(el, t, { ...pointRowCtx, point, devId: d.id, showOps })),
+                        'table',
+                        {
+                          className: 'dvb-table dvb-point-table',
+                          style: {
+                            width: totalTableWidth ? `${totalTableWidth(showOps, d, activeConnId)}px` : 'max-content',
+                          },
+                        },
+                        renderPointThead(el, t, {
+                          d,
+                          editingPointsDeviceId,
+                          newPointDraft,
+                          colWidths: devWidths,
+                          onStartResize,
+                          resetColWidth,
+                        }),
+                        el(
+                          'tbody',
+                          null,
+                          newPointDraft && newPointDraft.deviceId === d.id
+                            ? renderNewPointRow(el, t, { newPointDraft, setNewPointDraft, cwd, saveNewPointDraft })
+                            : null,
+                          ptsToRender.map((point) =>
+                            renderPointRow(el, t, { ...pointRowCtx, point, devId: d.id, showOps }),
+                          ),
+                          editingPoints
+                            ? el(
+                                'tr',
+                                { className: 'dvb-table-add-tr' },
+                                el(
+                                  'td',
+                                  { colSpan: 12 },
+                                  el(
+                                    'button',
+                                    {
+                                      type: 'button',
+                                      className: 'dvb-btn-dashed',
+                                      disabled: !cwd,
+                                      onClick() {
+                                        addNewPointRow(d.id)
+                                      },
+                                    },
+                                    '＋ 添加一行点位',
+                                  ),
+                                ),
+                              )
+                            : null,
+                        ),
                       ),
+                    )
+                  })()
+                : el(
+                    'div',
+                    { className: 'dvb-empty' },
+                    el('div', { className: 'dvb-hint' }, t('noPoints')),
+                    el(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'dvb-btn dvb-btn-sm dvb-btn-primary',
+                        style: { marginTop: '8px' },
+                        disabled: !cwd,
+                        onClick() {
+                          enterPointsEdit(d)
+                          addNewPointRow(d.id)
+                        },
+                      },
+                      '＋ ' + (t('addPoint') || '添加点位'),
                     ),
-                  )
-                : el('div', { className: 'dvb-empty' }, t('noPoints')),
+                  ),
             )
           }),
         )

@@ -58,6 +58,7 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
       commandId: opts && opts.commandId,
       expectedConfigVersion: args && (args.expectedConfigVersion ?? args.configVersion),
       requireHost: opts && opts.requireHost === true,
+      transport: opts && opts.transport,
     }),
     origin.source,
   )

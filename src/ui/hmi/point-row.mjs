@@ -49,7 +49,7 @@ export function renderPointRow(el, t, ctx) {
     {
       key: point.id,
       'data-kind': 'pt',
-      className: 'dvb-pt-row' + focusHighlightClass(isFocused),
+      className: 'dvb-pt-row' + (point.isNew ? ' dvb-newpoint-row' : '') + focusHighlightClass(isFocused),
       'data-focused': isFocused ? 'true' : 'false',
       'data-editing': editing ? 'true' : 'false',
     },
@@ -65,12 +65,19 @@ export function renderPointRow(el, t, ctx) {
         : el(
             'span',
             { className: 'dvb-cell-name' },
-            el('span', null, point.name || functionCodeOf(point.function) + point.address),
+            el(
+              'span',
+              {
+                className: 'dvb-cell-name-text',
+                title: point.name || functionCodeOf(point.function) + point.address,
+              },
+              point.name || functionCodeOf(point.function) + point.address,
+            ),
             el(
               'button',
               {
                 type: 'button',
-                className: 'dvb-btn dvb-btn-sm',
+                className: 'dvb-btn dvb-btn-sm dvb-ai-btn',
                 title: '复制结构化引用（稳定 ID+配置版本）并让 Agent 分析',
                 'aria-label': '让 Agent 分析 ' + (point.name || point.id),
                 onClick() {
@@ -118,26 +125,26 @@ export function renderPointRow(el, t, ctx) {
           })
         : el('span', { className: 'dvb-val' }, String(point.address)),
     ),
-    el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' }, valueCell),
+    el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' }, point.isNew ? '—' : valueCell),
     el(
       'td',
       { className: 'dvb-col-monitor' },
       renderFlagSwitch(el, t, {
-        checked: point.monitorEnabled === true,
-        title: flagSavingByPoint[point.id + ':monitorEnabled'] ? '监视状态保存中…' : '开启后成为可视化数据源',
+        checked: point.isNew
+          ? (draft ? draft.monitorEnabled === true : point.monitorEnabled === true)
+          : (draft && draft.monitorEnabled !== undefined ? draft.monitorEnabled === true : point.monitorEnabled === true),
+        title: point.isNew
+          ? '开启后成为可视化数据源'
+          : flagSavingByPoint[point.id + ':monitorEnabled']
+            ? '监视状态保存中…'
+            : '开启后成为可视化数据源',
         onToggle: (next) => {
-          persistPointFlags(point.id, { monitorEnabled: next })
-        },
-      }),
-    ),
-    el(
-      'td',
-      { className: 'dvb-col-alarm' },
-      renderFlagSwitch(el, t, {
-        checked: point.alarmEnabled === true,
-        title: flagSavingByPoint[point.id + ':alarmEnabled'] ? '告警状态保存中…' : '参与告警判断',
-        onToggle: (next) => {
-          persistPointFlags(point.id, { alarmEnabled: next })
+          if (point.isNew) {
+            patchDraft(point.id, { monitorEnabled: next })
+          } else {
+            if (editing) patchDraft(point.id, { monitorEnabled: next })
+            persistPointFlags(point.id, { monitorEnabled: next })
+          }
         },
       }),
     ),
@@ -177,6 +184,28 @@ export function renderPointRow(el, t, ctx) {
             onChange: (e) => patchDraft(point.id, { unit: e.target.value }),
           })
         : el('span', null, point.unit || '—'),
+    ),
+    el(
+      'td',
+      { className: 'dvb-col-alarm' },
+      renderFlagSwitch(el, t, {
+        checked: point.isNew
+          ? (draft ? draft.alarmEnabled === true : point.alarmEnabled === true)
+          : (draft && draft.alarmEnabled !== undefined ? draft.alarmEnabled === true : point.alarmEnabled === true),
+        title: point.isNew
+          ? '参与告警判断'
+          : flagSavingByPoint[point.id + ':alarmEnabled']
+            ? '告警状态保存中…'
+            : '参与告警判断',
+        onToggle: (next) => {
+          if (point.isNew) {
+            patchDraft(point.id, { alarmEnabled: next })
+          } else {
+            if (editing) patchDraft(point.id, { alarmEnabled: next })
+            persistPointFlags(point.id, { alarmEnabled: next })
+          }
+        },
+      }),
     ),
     el(
       'td',

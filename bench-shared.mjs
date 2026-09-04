@@ -9,6 +9,7 @@ export {
   runningOf,
   runningSource,
   formatClock,
+  formatErrorMessage,
   sourceLabel,
   statusLabel,
   typeLabel,
@@ -62,3 +63,5 @@ export {
   clearActiveScope,
   getActiveScope,
 } from './src/ui/common/session-scope.mjs'
+export { renderModalDialog, createModalDialog } from './src/ui/components/modal-dialog.mjs'
+export { renderCustomSelect, createCustomSelect, getCustomSelect } from './src/ui/components/custom-select.mjs'

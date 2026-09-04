@@ -6,15 +6,42 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
 import { _internal, executeVisionCommand } from '../../src/application/commands/vision-command-service.mjs'
+import { projectModbusForSession } from '../../src/application/modbus/config-scope-service.mjs'
 
-function seed(home, cwd, name) {
+function sessionPack(home, cwd, sessionId) {
+  return projectModbusForSession(loadWorkspace(home, cwd).modbus, sessionId)
+}
+
+function seed(home, cwd, name, sessionIds = ['s1', 's2']) {
   mkdirSync(cwd, { recursive: true })
+  const connections = [{ id: 'c1', name, conn: { mode: 'tcp', host: '127.0.0.1', sim: true } }]
+  const devices = [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }]
+  const slice = {
+    connections,
+    devices,
+    points: [],
+    visualization: null,
+    activeConnectionId: 'c1',
+    activeDeviceId: 'd1',
+  }
+  /** @type {Record<string, typeof slice>} */
+  const sessionConfigs = {}
+  for (const id of sessionIds) {
+    sessionConfigs[id] = {
+      ...slice,
+      connections: connections.map((c) => ({ ...c })),
+      devices: devices.map((d) => ({ ...d })),
+      points: [],
+    }
+  }
   saveWorkspace(home, cwd, {
     modbus: {
       version: 3,
-      connections: [{ id: 'c1', name, conn: { mode: 'tcp', host: '127.0.0.1', sim: true } }],
-      devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
+      privateClaimSessionId: sessionIds[0],
+      connections: [],
+      devices: [],
       points: [],
+      sessionConfigs,
     },
   })
 }
@@ -47,11 +74,12 @@ test('same commandId is scoped by workspace and session', async () => {
   const r2 = await addPoint(home, b, 's1', 'cmd-shared', 2)
   assert.equal(r1.ok, true, r1.error)
   assert.equal(r2.ok, true, r2.error)
-  assert.equal(loadWorkspace(home, a).modbus.points.length, 1)
-  assert.equal(loadWorkspace(home, b).modbus.points.length, 1)
+  assert.equal(sessionPack(home, a, 's1').points.length, 1)
+  assert.equal(sessionPack(home, b, 's1').points.length, 1)
   const r3 = await addPoint(home, a, 's2', 'cmd-shared', 3)
   assert.equal(r3.ok, true, r3.error)
-  assert.equal(loadWorkspace(home, a).modbus.points.length, 2)
+  assert.equal(sessionPack(home, a, 's1').points.length, 1)
+  assert.equal(sessionPack(home, a, 's2').points.length, 1)
   await rm(home, { recursive: true, force: true })
 })
 
@@ -81,7 +109,7 @@ test('duplicate command in the same scope runs once even when concurrent', async
   const [a, b] = await Promise.all([mk(), mk()])
   assert.equal(a.ok, true, a.error)
   assert.equal(b.ok, true, b.error)
-  assert.equal(loadWorkspace(home, cwd).modbus.points.length, 1)
+  assert.equal(sessionPack(home, cwd, 's1').points.length, 1)
   await rm(home, { recursive: true, force: true })
 })
 
@@ -94,7 +122,7 @@ test('reusing commandId with a different payload returns COMMAND_ID_REUSE', asyn
   const second = await addPoint(home, cwd, 's1', 'cmd-reuse', 9)
   assert.equal(second.ok, false)
   assert.equal(second.errorCode, 'COMMAND_ID_REUSE')
-  assert.equal(loadWorkspace(home, cwd).modbus.points.length, 1)
+  assert.equal(sessionPack(home, cwd, 's1').points.length, 1)
   await rm(home, { recursive: true, force: true })
 })
 

@@ -22,6 +22,11 @@ import {
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
 import { runVisionBench, visionBenchTool } from '../bench-tool.mjs'
 import { apply } from '../host.js'
+import { projectModbusForSession } from '../src/application/modbus/config-scope-service.mjs'
+
+function sessionPack(home, cwd, sessionId) {
+  return projectModbusForSession(loadWorkspace(home, cwd).modbus, sessionId)
+}
 
 // bench-preset.mjs routes every fs call through createRequire('node:fs'), so
 // patching the shared module object here injects failures into the migration.
@@ -864,7 +869,7 @@ test('P4/0.22.0: visualization action list/get + add applies component immediate
     { source: 'agent', sessionId: 's1' },
   )
   assert.equal(res.ok, true, res.error)
-  let pack = loadWorkspace(home, cwd).modbus
+  let pack = sessionPack(home, cwd, 's1')
   assert.equal(pack.visualization.components.length, 1)
   assert.equal(pack.visualization.components[0].name, '送风趋势')
   assert.ok(pack.configVersion > cvBefore, '组件修改递增 configVersion')
@@ -888,7 +893,7 @@ test('P4/0.22.0: visualization action list/get + add applies component immediate
   )
   assert.equal(res.ok, false)
   assert.equal(res.errorCode, 'OP_REMOVED')
-  assert.equal(loadWorkspace(home, cwd).modbus.visualization.components.length, 1)
+  assert.equal(sessionPack(home, cwd, 's1').visualization.components.length, 1)
   await rm(home, { recursive: true, force: true })
 })
 
@@ -1063,7 +1068,7 @@ test('Task4/0.22.0: visualization update 保留 ID/order/settings；ID 冲突拒
     { source: 'agent', sessionId: 's1' },
   )
   assert.equal(res.ok, true, res.error)
-  let pack = loadWorkspace(home, cwd).modbus
+  let pack = sessionPack(home, cwd, 's1')
   const c = pack.visualization.components[0]
   assert.equal(c.id, 'viz_a', 'ID 不变')
   assert.equal(c.name, '改名趋势', '名称更新')

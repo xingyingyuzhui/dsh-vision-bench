@@ -1,3 +1,5 @@
+import { formatErrorMessage, renderModalDialog } from '../../../bench-shared.mjs'
+
 /** All-connections management view. */
 export function renderConnectionOverview(el, t, ctx) {
   const {
@@ -7,6 +9,9 @@ export function renderConnectionOverview(el, t, ctx) {
     journal,
     pending,
     error,
+    setError,
+    modal,
+    setModal,
     agentCopied,
     ioStatus,
     tabBar,
@@ -16,14 +21,28 @@ export function renderConnectionOverview(el, t, ctx) {
     statusBar,
     visionCollabBar,
   } = ctx
+
+  const activeModal =
+    modal ||
+    (error
+      ? {
+          open: true,
+          kind: 'err',
+          title: '操作提示',
+          message: formatErrorMessage(error),
+          onClose: () => {
+            if (typeof setModal === 'function') setModal(null)
+            if (typeof setError === 'function') setError('')
+          },
+        }
+      : null)
+
   return el(
     'div',
     { className: 'dvb-page' },
     statusBar(el, t, cwd, [
       { key: 'io', kind: ioStatus.kind, text: t('ioRuntimeShort') + ' · ' + t(ioStatus.labelKey) },
     ]),
-    visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites: pending, sessionId }),
-    error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
     agentCopied
       ? el(
           'div',
@@ -35,5 +54,6 @@ export function renderConnectionOverview(el, t, ctx) {
     focusToast,
     connListPanel,
     connFormPanel,
+    renderModalDialog(el, t, activeModal),
   )
 }

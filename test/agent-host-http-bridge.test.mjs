@@ -8,8 +8,13 @@ import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
+import { projectModbusForSession } from '../src/application/modbus/config-scope-service.mjs'
 import { dispatchVisionCommand, unregisterVisionHost } from '../src/infrastructure/host/vision-host-client.mjs'
 import { handleCommand } from '../src/interfaces/http/vision-command-routes.mjs'
+
+function sessionPack(home, cwd, sessionId) {
+  return projectModbusForSession(loadWorkspace(home, cwd).modbus, sessionId)
+}
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const fixturePath = join(root, 'test/fixtures/agent-http-child.mjs')
@@ -163,7 +168,7 @@ test('uses HTTP transport when in-process host is unavailable', async () => {
       },
     })
     assert.equal(added.ok, true, added.error)
-    assert.equal(loadWorkspace(home, cwd).modbus.points.length, 1)
+    assert.equal(sessionPack(home, cwd, 's1').points.length, 1)
   } finally {
     if (prev == null) delete process.env.VISION_BENCH_HOST_ORIGIN
     else process.env.VISION_BENCH_HOST_ORIGIN = prev
@@ -226,9 +231,9 @@ test('real Node child process talks to HTTP Host without becoming I/O owner', as
     })
     assert.equal(added.code, 0, added.stderr || JSON.stringify(added.parsed))
     assert.equal(added.parsed.result.ok, true, added.parsed.result?.error)
-    const afterAdd = loadWorkspace(home, cwd)
-    assert.equal(afterAdd.modbus.points.length, 1)
-    assert.equal(afterAdd.modbus.points[0].name, 'FromChild')
+    const afterAdd = sessionPack(home, cwd, 'sess-child')
+    assert.equal(afterAdd.points.length, 1)
+    assert.equal(afterAdd.points[0].name, 'FromChild')
 
     const patched = await spawnChild(origin, {
       cwd,
@@ -241,12 +246,12 @@ test('real Node child process talks to HTTP Host without becoming I/O owner', as
         op: 'update',
         connectionId: 'c1',
         deviceId: 'd1',
-        expectedConfigVersion: afterAdd.modbus.configVersion,
-        point: { id: afterAdd.modbus.points[0].id, name: 'ChildPatched' },
+        expectedConfigVersion: loadWorkspace(home, cwd).modbus.configVersion,
+        point: { id: afterAdd.points[0].id, name: 'ChildPatched' },
       },
     })
     assert.equal(patched.code, 0, patched.stderr || JSON.stringify(patched.parsed))
-    assert.equal(loadWorkspace(home, cwd).modbus.points[0].name, 'ChildPatched')
+    assert.equal(sessionPack(home, cwd, 'sess-child').points[0].name, 'ChildPatched')
 
     const viz = await spawnChild(origin, {
       cwd,
@@ -258,12 +263,12 @@ test('real Node child process talks to HTTP Host without becoming I/O owner', as
         action: 'visualization',
         op: 'add',
         expectedConfigVersion: loadWorkspace(home, cwd).modbus.configVersion,
-        component: { name: 'ChildGauge', type: 'value', pointIds: [loadWorkspace(home, cwd).modbus.points[0].id] },
+        component: { name: 'ChildGauge', type: 'value', pointIds: [afterAdd.points[0].id] },
       },
     })
     assert.equal(viz.code, 0, JSON.stringify(viz.parsed) + viz.stderr)
     assert.equal(viz.parsed.result.ok, true, viz.parsed.result?.error)
-    assert.equal((loadWorkspace(home, cwd).modbus.visualization?.components || []).length, 1)
+    assert.equal((sessionPack(home, cwd, 'sess-child').visualization?.components || []).length, 1)
 
     const missing = await spawnChild('', {
       cwd,

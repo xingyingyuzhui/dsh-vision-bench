@@ -32,8 +32,8 @@ import {
   openTask,
   pruneBuildLogs,
   recordBenchEvent,
-  saveWorkspaceAsync,
 } from '../../../bench-store.mjs'
+import { ensureWorkspaceClaimed, modbusForSession, saveSessionModbusPatch } from './workspace-session-view.mjs'
 import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from '../../../bench-targets.mjs'
 import { endpointFingerprint, endpointLabelText, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
@@ -80,13 +80,15 @@ import { createPendingWrite, takePendingWrite } from './write-approval-service.m
  * @param {ModbusCommandBody} body
  * @param {ModbusOperationOptions} opts
  */
-export const modbusWrite = async (home, cwd, body, opts) => {
+export const modbusWrite = async (home, cwd, body, opts = {}) => {
   const room = /** @type {{ cwd: string, error?: string }} */ (requireWorkspaceCwd(cwd))
   if (room.error) return { ok: false, error: room.error }
   const signal = signalOf(body, opts)
   if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
-  const workspace = loadWorkspace(home, room.cwd)
-  const pack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
+  const origin = originOf(body)
+  const sessionId = String(opts?.sessionId || origin.sessionId || body?.sessionId || '')
+  const workspace = await ensureWorkspaceClaimed(home, room.cwd, sessionId)
+  const pack = /** @type {ModbusWorkspace} */ (modbusForSession(workspace, sessionId))
   const cidArg = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
   const didArg = body?.deviceId ? String(body.deviceId).trim() : ''
   const targetCid = cidArg || pack.activeConnectionId || pack.connections[0]?.id || 'c1'
@@ -101,7 +103,6 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     pack.connections.find((c) => c.id === pack.activeConnectionId) ||
     pack.connections[0]
   const conn = targetConnObj ? targetConnObj.conn : pack.conn
-  const origin = originOf(body)
   // Agent explicit ID enforcement & device disabled
   {
     const need = targetRequired(origin, pack, cidArg, didArg)
@@ -298,7 +299,10 @@ export const modbusWrite = async (home, cwd, body, opts) => {
     }
     // Persist values and exit sim (local write is considered verified) - need to target correct connection's sim flag
     const nextConns = pack.connections.map((c) => (c.id === targetCid ? { ...c, conn: { ...c.conn, sim: false } } : c))
-    await saveWorkspaceAsync(home, room.cwd, { modbus: { connections: nextConns, values: vals, version: 3 } })
+    const saved = await saveSessionModbusPatch(home, room.cwd, sessionId, {
+      modbus: { connections: nextConns, values: vals, version: 3 },
+    })
+    if (saved && saved.ok === false) return saved
     return done(true, `${label}（本地生效，回读一致）`, {
       values: vals,
       simulated: true,
@@ -472,8 +476,9 @@ export const resolvePendingWrite = async (home, cwd, id, approved, opts = {}) =>
     }).catch(() => {})
     return { ok: true, rejected: true }
   }
-  const workspace = loadWorkspace(home, room.cwd)
-  const pack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
+  const sessionId = opts.sessionId ? String(opts.sessionId) : String(entry.params.sessionId || '')
+  const workspace = await ensureWorkspaceClaimed(home, room.cwd, sessionId)
+  const pack = /** @type {ModbusWorkspace} */ (modbusForSession(workspace, sessionId))
   const cid = entry.params.connectionId || entry.params.connId || pack.activeConnectionId
   const connForWrite = pack.connections.find((c) => c.id === cid)?.conn || pack.conn
   const devForWrite = (pack.devices || []).find((d) => d.id === entry.params.deviceId)

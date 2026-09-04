@@ -32,8 +32,8 @@ import {
   openTask,
   pruneBuildLogs,
   recordBenchEvent,
-  saveWorkspaceAsync,
 } from '../../../bench-store.mjs'
+import { ensureWorkspaceClaimed, modbusForSession } from './workspace-session-view.mjs'
 import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from '../../../bench-targets.mjs'
 import { endpointFingerprint, endpointLabelText, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
@@ -78,13 +78,15 @@ import {
  * @param {ModbusCommandBody} body
  * @param {ModbusOperationOptions} opts
  */
-export const modbusRead = async (home, cwd, body, opts) => {
+export const modbusRead = async (home, cwd, body, opts = {}) => {
   const room = /** @type {{ cwd: string, error?: string }} */ (requireWorkspaceCwd(cwd))
   if (room.error) return { ok: false, error: room.error }
   const signal = signalOf(body, opts)
   if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
-  const workspace = loadWorkspace(home, room.cwd)
-  const pack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
+  const origin = originOf(body)
+  const sessionId = String(opts?.sessionId || origin.sessionId || body?.sessionId || '')
+  const workspace = await ensureWorkspaceClaimed(home, room.cwd, sessionId)
+  const pack = /** @type {ModbusWorkspace} */ (modbusForSession(workspace, sessionId))
   const cidArg = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
   const didArg = body?.deviceId ? String(body.deviceId).trim() : ''
   const activeCid = pack.activeConnectionId || pack.connections[0]?.id || 'c1'
@@ -97,7 +99,6 @@ export const modbusRead = async (home, cwd, body, opts) => {
     pack.connections.find((c) => c.id === activeCid) ||
     pack.connections[0]
   const conn = targetConnObj ? targetConnObj.conn : pack.conn
-  const origin = originOf(body)
   // Explicit ID enforcement for Agent: when multiple connections exist, require connectionId
   {
     const need = targetRequired(origin, pack, cidArg, didArg)
