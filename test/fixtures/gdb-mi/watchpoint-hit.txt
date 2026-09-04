@@ -1,0 +1,2 @@
+*stopped,reason="watchpoint-trigger",wpt={number="2",exp="eev_target"},value={old="100",new="0"},frame={addr="0x08000340",func="update_eev",args=[{name="val",value="0"}],file="eev.c",fullname="/workspace/board/src/eev.c",line="88",arch="armv7e-m"},thread-id="1",stopped-threads="all"
+(gdb) 

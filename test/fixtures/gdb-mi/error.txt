@@ -1,0 +1,2 @@
+101^error,msg="No symbol \"unknown_var\" in current context."
+(gdb) 

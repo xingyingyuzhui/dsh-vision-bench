@@ -20,12 +20,13 @@ import {
   validateBindings,
 } from '../bench-store.mjs'
 
-test('normalizeBindings keeps only python/uv4/openocd strings', async () => {
+test('normalizeBindings keeps only python/uv4/openocd/gdb strings', async () => {
   assert.deepEqual(normalizeBindings(null), emptyBindings())
   assert.deepEqual(normalizeBindings({ python: ' /bin/python3 ', extra: 1, uv4: 3 }), {
     python: '/bin/python3',
     uv4: '',
     openocd: '',
+    gdb: '',
   })
 })
 

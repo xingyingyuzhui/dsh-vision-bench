@@ -1,0 +1,2 @@
+*stopped,reason="breakpoint-hit",disp="keep",bkptno="1",frame={addr="0x08000214",func="main",args=[],file="main.c",fullname="/workspace/board/src/main.c",line="42",arch="armv7e-m"},thread-id="1",stopped-threads="all"
+(gdb) 

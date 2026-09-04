@@ -29,6 +29,7 @@ export const runSelfCheck = async (home, cwd, opts = {}) => {
     health.openocd.bound && health.openocd.exists,
     bindings.openocd || '外部 OpenOCD 可执行文件，由插件通过 Node 进程封装调用',
   )
+  push('bind-gdb', health.gdb.bound && health.gdb.exists, bindings.gdb || '外部 arm-none-eabi-gdb 可执行文件')
   const presetHealth = inspectPresetHealth(home)
   push(
     'vision-preset',
@@ -49,6 +50,15 @@ export const runSelfCheck = async (home, cwd, opts = {}) => {
   const openocdReason = ocdHealth.reason || 'OpenOCD 探测失败'
   if (ocdHealth.bound && ocdHealth.exists) {
     push('openocd-runs', openocdReady, ocdHealth.versionLine || openocdReason)
+  }
+
+  let gdbReady = false
+  let gdbReason = health.gdb.bound ? (health.gdb.exists ? 'GDB 未探测' : 'GDB 路径不存在') : '未绑定 GDB'
+  if (health.gdb.bound && health.gdb.exists) {
+    const ver = await execFile(bindings.gdb, ['--version'], { timeoutMs: 10000 })
+    gdbReady = ver.exitCode === 0 && (ver.stdout || '').includes('GNU gdb')
+    gdbReason = gdbReady ? '' : firstLine(ver.stderr || ver.stdout) || '未检测到 GNU gdb 标识'
+    push('gdb-runs', gdbReady, gdbReady ? firstLine(ver.stdout) : gdbReason)
   }
 
   let ioHealth = { tcp: false, rtu: false, modbusSerial: '', serialport: '', rtuError: '', tcpError: '' }
@@ -116,6 +126,10 @@ export const runSelfCheck = async (home, cwd, opts = {}) => {
     openocdFlash: {
       ready: openocdReady,
       reason: openocdReason,
+    },
+    gdbDebug: {
+      ready: gdbReady,
+      reason: gdbReason,
     },
   }
   const bridge = describeHostBridge()

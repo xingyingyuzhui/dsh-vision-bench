@@ -1,0 +1,2 @@
+*stopped,reason="end-stepping-range",frame={addr="0x08000218",func="main",args=[],file="main.c",fullname="/workspace/board/src/main.c",line="43",arch="armv7e-m"},thread-id="1",stopped-threads="all"
+(gdb) 

@@ -45,13 +45,13 @@ import { isScopePartitioned } from './src/domain/modbus/config-scope.mjs'
 import { projectModbusForSession } from './src/application/modbus/config-scope-service.mjs'
 import { createWorkspaceRepository } from './src/infrastructure/persistence/workspace-repository.mjs'
 
-export const BINDING_KEYS = ['python', 'uv4', 'openocd']
+export const BINDING_KEYS = ['python', 'uv4', 'openocd', 'gdb']
 
 const TIMELINE_WINDOW = 360
 
 const pushEvent = (timeline, event) => trimTimeline(prepend(timeline, event, TIMELINE_WINDOW))
 
-export const emptyBindings = () => ({ python: '', uv4: '', openocd: '' })
+export const emptyBindings = () => ({ python: '', uv4: '', openocd: '', gdb: '' })
 
 export const defaultDshHome = (env = process.env, home = homedir()) => env.DSH_HOME || join(home, '.dsh')
 

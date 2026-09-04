@@ -57,6 +57,7 @@ test('runSelfCheck reports structured results without bindings', async () => {
         'bind-python',
         'bind-uv4',
         'bind-openocd',
+        'bind-gdb',
         'vision-preset',
         'workspace',
         'serial-scan',
