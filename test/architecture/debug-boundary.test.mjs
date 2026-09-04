@@ -81,12 +81,12 @@ test('debug boundary: vision_bench ACTIONS contains no debug ops (must live in v
   )
 })
 
-test('debug boundary: DebugWorkspace sections only contain known sections (workbench, project)', () => {
-  // Baseline check: Phase 0 expected sections are WORKBENCH and PROJECT
+test('debug boundary: DebugWorkspace sections only contain known sections (workbench, project, runtime)', () => {
+  // Phase 7: expected sections are WORKBENCH, PROJECT, and RUNTIME
   const sectionValues = Object.values(DEBUG_SECTIONS).sort()
   assert.deepEqual(
     sectionValues,
-    ['project', 'workbench'],
-    'DebugWorkspace must only have known sections before Phase 7',
+    ['project', 'runtime', 'workbench'],
+    'DebugWorkspace must only have known sections in Phase 7',
   )
 })

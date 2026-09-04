@@ -11,11 +11,11 @@ import {
   shouldRouteFocus,
 } from '../../src/ui/workspace/vision-route.mjs'
 
-test('workspace ids and debug IA A: workbench + project only', () => {
+test('workspace ids and debug IA A: workbench + project + runtime', () => {
   assert.equal(VIEW_DEBUG, 'vision-bench-debug')
   assert.equal(VIEW_HMI, 'vision-bench-hmi')
   assert.equal(VIEW_MONITOR, 'vision-bench-monitor')
-  assert.deepEqual(DEBUG_SECTIONS, { WORKBENCH: 'workbench', PROJECT: 'project' })
+  assert.deepEqual(DEBUG_SECTIONS, { WORKBENCH: 'workbench', PROJECT: 'project', RUNTIME: 'runtime' })
   assert.equal(Object.keys(DEBUG_SECTIONS).includes('LOG'), false)
   assert.deepEqual(Object.values(MONITOR_SECTIONS).sort(), ['alarms', 'frames', 'journal', 'visualization'].sort())
 })

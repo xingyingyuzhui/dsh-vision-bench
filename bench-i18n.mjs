@@ -7,6 +7,7 @@ export const COPY = {
     tabHmi: '上位机',
     tabMonitor: '监控',
     sectionWorkbench: '工作台',
+    sectionRuntime: '运行调试',
     settingsTitle: '本机程序',
     settingsHint: 'Keil 编译与固件烧录依赖本机程序。Modbus 串口通信使用内置运行时。',
     shareTitle: '工作区共享',
@@ -363,6 +364,7 @@ export const COPY = {
     tabHmi: 'HMI',
     tabMonitor: 'Monitor',
     sectionWorkbench: 'Workbench',
+    sectionRuntime: 'Runtime Debug',
     settingsTitle: 'Local programs',
     settingsHint:
       'Keil compilation and firmware flashing rely on local programs. Modbus communication uses the built-in runtime.',

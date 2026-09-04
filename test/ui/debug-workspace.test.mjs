@@ -20,7 +20,7 @@ function makeReact() {
   }
 }
 
-test('debug workspace only has workbench and project sections', () => {
+test('debug workspace has workbench, project, and runtime sections', () => {
   clearNavStore()
   const React = makeReact()
   const Page = createDebugWorkspace(
@@ -33,7 +33,7 @@ test('debug workspace only has workbench and project sections', () => {
   assert.equal(tree.props['data-section'], DEBUG_SECTIONS.WORKBENCH)
   const tabs = tree.children[0]
   const ids = (tabs.children || []).map((btn) => btn.props['data-section'])
-  assert.deepEqual(ids, [DEBUG_SECTIONS.WORKBENCH, DEBUG_SECTIONS.PROJECT])
+  assert.deepEqual(ids, [DEBUG_SECTIONS.WORKBENCH, DEBUG_SECTIONS.PROJECT, DEBUG_SECTIONS.RUNTIME])
   assert.equal(ids.includes('log'), false)
 })
 

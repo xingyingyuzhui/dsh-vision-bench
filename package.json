@@ -273,7 +273,17 @@
     "src/ui/debug/project/project-graph-model.mjs",
     "src/ui/debug/project/project-graph-layout.mjs",
     "src/ui/debug/project/project-graph-view.mjs",
-    "src/ui/debug/project/project-tree-model.mjs"
+    "src/ui/debug/project/project-tree-model.mjs",
+    "src/ui/styles/runtime.mjs",
+    "src/ui/debug/runtime/runtime-controller.mjs",
+    "src/ui/debug/runtime/use-debug-events.mjs",
+    "src/ui/debug/runtime/debug-toolbar.mjs",
+    "src/ui/debug/runtime/debug-approval-card.mjs",
+    "src/ui/debug/runtime/stack-panel.mjs",
+    "src/ui/debug/runtime/variables-panel.mjs",
+    "src/ui/debug/runtime/breakpoint-panel.mjs",
+    "src/ui/debug/runtime/debug-timeline-panel.mjs",
+    "src/ui/debug/runtime/runtime-page.mjs"
   ],
   "repository": {
     "type": "git",

@@ -12,6 +12,7 @@ export const MONITOR_SECTIONS = {
 export const DEBUG_SECTIONS = {
   WORKBENCH: 'workbench',
   PROJECT: 'project',
+  RUNTIME: 'runtime',
 }
 
 const MONITOR_SECTION_SET = new Set(Object.values(MONITOR_SECTIONS))
@@ -37,6 +38,10 @@ function targetOf(req) {
     trendKey: String(r.trendKey || ''),
     file: String(r.file || ''),
     line: Number(r.line) || 0,
+    debugSessionId: String(r.debugSessionId || ''),
+    breakpointId: String(r.breakpointId || ''),
+    watchpointId: String(r.watchpointId || ''),
+    snapshotId: String(r.snapshotId || ''),
   }
 }
 
@@ -51,6 +56,7 @@ export function focusKindOf(focus) {
     (req.trendKey ? 'trend' : '') ||
     (req.alarmId ? 'alarm' : '') ||
     (req.taskId || req.journalId ? 'journal' : '') ||
+    (req.debugSessionId || req.breakpointId || req.watchpointId || req.snapshotId ? 'runtime' : '') ||
     (req.file || req.function || req.build ? 'file' : '') ||
     (req.pointId || req.connectionId || req.deviceId ? 'point' : '') ||
     'point'
@@ -69,6 +75,16 @@ export function routeForKind(kind) {
   }
   if (kind === 'journal' || kind === 'task') {
     return { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.JOURNAL, tab: 'journal' }
+  }
+  if (
+    kind === 'debug' ||
+    kind === 'breakpoint' ||
+    kind === 'watchpoint' ||
+    kind === 'snapshot' ||
+    kind === 'debug-event' ||
+    kind === 'runtime'
+  ) {
+    return { viewId: VIEW_DEBUG, section: DEBUG_SECTIONS.RUNTIME, tab: 'runtime' }
   }
   if (kind === 'file' || kind === 'function' || kind === 'build') {
     return { viewId: VIEW_DEBUG, section: DEBUG_SECTIONS.PROJECT, tab: 'project' }
