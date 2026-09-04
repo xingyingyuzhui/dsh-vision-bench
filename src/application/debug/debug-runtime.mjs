@@ -19,7 +19,15 @@ export function createDebugRuntime(deps = {}) {
   const leaseManager = deps.leaseManager || new TargetLeaseManager()
   const backendFactory =
     deps.backendFactory ||
-    (async (kind) => {
+    (async (kind, ctx) => {
+      if (kind === 'keil-simulator') {
+        const { KeilSimBackend } = await import('../../infrastructure/debug/keil/keil-sim-backend.mjs')
+        return new KeilSimBackend(ctx)
+      }
+      if (kind === 'gdb-openocd') {
+        const { GdbBackend } = await import('../../infrastructure/debug/gdb-mi/gdb-backend.mjs')
+        return new GdbBackend(ctx)
+      }
       throw new DebugError(DEBUG_ERRORS.BACKEND_UNAVAILABLE, `调试后端暂不可用: ${kind}`)
     })
   const onJournalEvent = deps.onJournalEvent || null
