@@ -23,7 +23,7 @@ test('translate falls back and interpolates', async () => {
   assert.equal(translate('zh', 'tabMonitor'), '监控')
   assert.equal(translate('zh', 'sectionWorkbench'), '工作台')
   assert.equal(translate('zh', 'agentBuilding'), 'Agent 正在编译')
-  assert.equal(translate('zh', 'needBindingsBuild'), '未绑定 Python / Keil UV4')
+  assert.equal(translate('zh', 'needBindingsBuild'), '未绑定 Keil UV4')
   assert.equal(translate('zh', 'ioRuntime').includes('Modbus'), true)
   assert.equal(translate('zh', 'shareTitle'), '工作区共享')
   assert.equal(translate('en', 'shareTitle'), 'Workspace sharing')

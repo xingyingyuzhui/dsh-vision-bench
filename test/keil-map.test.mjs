@@ -1,15 +1,12 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { mkdtemp } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
 import { keilMap } from '../bench-actions.mjs'
 import { saveBindings, saveWorkspace } from '../bench-store.mjs'
 import { runVisionBench } from '../bench-tool.mjs'
-import { findPython } from './python.mjs'
+import { mapProject } from '../src/application/keil/project-service.mjs'
 
 const UVPROJX = `<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <Project>
@@ -28,7 +25,7 @@ const UVPROJX = `<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
       </TargetOption>
       <Groups>
         <Group>
-          <GroupName>User</GroupName>
+          <GroupName>Source</GroupName>
           <Files>
             <File>
               <FileName>main.c</FileName>
@@ -53,9 +50,6 @@ const UVPROJX = `<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 </Project>
 `
 
-const pythonBin = findPython()
-const skipPy = pythonBin ? false : 'no Python interpreter (python3 / python / py)'
-
 async function makeProject(root) {
   const cwd = join(root, 'board')
   await mkdir(join(cwd, 'src'), { recursive: true })
@@ -70,25 +64,11 @@ async function makeProject(root) {
   return cwd
 }
 
-const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'runtime', 'keil_project.py')
-
-function runMap(project, cwd, extra = '') {
-  const code = `
-import importlib.util, json
-spec = importlib.util.spec_from_file_location("kp", ${JSON.stringify(script)})
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-${extra}
-print(json.dumps(mod.map_project(${JSON.stringify(project)}, "Debug", ${JSON.stringify(cwd)})))
-`
-  return JSON.parse(execFileSync(pythonBin, ['-c', code], { encoding: 'utf8' }))
-}
-
-test('keilMap lists groups, includes, missing and unreadable files', { skip: skipPy }, async () => {
+test('keilMap lists groups, includes, missing and unreadable files', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-map-'))
   try {
     const cwd = await makeProject(home)
-    saveBindings(home, { python: pythonBin, uv4: '', openocd: '' })
+    saveBindings(home, { python: '', uv4: '', openocd: '' })
     saveWorkspace(home, cwd, { keil: { project: join(cwd, 'app.uvprojx'), target: 'Debug' } })
     const ran = await keilMap(home, cwd)
     assert.equal(ran.ok, true, ran.error)
@@ -114,11 +94,11 @@ test('keilMap lists groups, includes, missing and unreadable files', { skip: ski
   }
 })
 
-test('vision_bench map returns compact file tree for the selected project', { skip: skipPy }, async () => {
+test('vision_bench map returns compact file tree for the selected project', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-map-tool-'))
   try {
     const cwd = await makeProject(home)
-    saveBindings(home, { python: pythonBin, uv4: '', openocd: '' })
+    saveBindings(home, { python: '', uv4: '', openocd: '' })
     const project = join(cwd, 'app.uvprojx')
     await runVisionBench(home, { action: 'select', path: project, target: 'Debug' }, cwd)
     const mapped = await runVisionBench(home, { action: 'map' }, cwd)
@@ -133,7 +113,7 @@ test('vision_bench map returns compact file tree for the selected project', { sk
   }
 })
 
-test('map does not read C/H files outside the workspace', { skip: skipPy }, async () => {
+test('map does not read C/H files outside the workspace', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dvb-map-out-'))
   try {
     const cwd = join(root, 'board')
@@ -162,7 +142,7 @@ test('map does not read C/H files outside the workspace', { skip: skipPy }, asyn
 </Project>
 `
     await writeFile(join(cwd, 'app.uvprojx'), xml)
-    const details = runMap(join(cwd, 'app.uvprojx'), cwd)
+    const details = await mapProject(join(cwd, 'app.uvprojx'), 'Debug', cwd)
     const dump = JSON.stringify(details)
     assert.equal(details.counts.files, 1)
     const file = details.groups[0].files[0]
@@ -177,11 +157,11 @@ test('map does not read C/H files outside the workspace', { skip: skipPy }, asyn
   }
 })
 
-test('map sets truncated when file cap is hit', { skip: skipPy }, async () => {
+test('map sets truncated when file cap is hit', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-map-cap-'))
   try {
     const cwd = await makeProject(home)
-    const details = runMap(join(cwd, 'app.uvprojx'), cwd, 'mod.MAX_MAP_FILES = 1')
+    const details = await mapProject(join(cwd, 'app.uvprojx'), 'Debug', cwd, { maxFiles: 1 })
     assert.equal(details.truncated.files, true)
     assert.equal(details.counts.files, 1)
     assert.equal(details.limits.files, 1)

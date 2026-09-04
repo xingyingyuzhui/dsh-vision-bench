@@ -5,7 +5,6 @@ import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { mapProject } from '../../src/application/keil/project-service.mjs'
-import { findPython } from '../python.mjs'
 
 const UVPROJX = `<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <Project>

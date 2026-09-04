@@ -4,10 +4,7 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const RUNTIME_DIR = join(dirname(fileURLToPath(import.meta.url)), 'runtime')
-const SCRIPTS = {
-  'keil_project.py': join(RUNTIME_DIR, 'keil_project.py'),
-  'keil_build.py': join(RUNTIME_DIR, 'keil_build.py'),
-}
+const SCRIPTS = {}
 
 const pythonArgv = (pythonBin, extra) => {
   const name = basename(String(pythonBin).replace(/\\/g, '/')).toLowerCase()

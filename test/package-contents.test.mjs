@@ -8,18 +8,16 @@ test('package.json: version tracks package and no legacy python modbus files', a
   assert.equal(typeof pkg.version, 'string')
   assert.match(pkg.version, /^\d+\.\d+\.\d+/)
   const files = Array.isArray(pkg.files) ? pkg.files : []
-  for (const bad of ['modbus_read.py', 'modbus_write.py', 'serial_monitor.py']) {
+  for (const bad of [
+    'modbus_read.py',
+    'modbus_write.py',
+    'serial_monitor.py',
+    'keil_build.py',
+    'keil_project.py',
+    'openocd_flash.py',
+  ]) {
     assert.ok(!files.some((f) => String(f).indexOf(bad) >= 0), bad + ' must not be packaged')
   }
-  assert.ok(
-    files.some((f) => String(f).indexOf('keil_build.py') >= 0),
-    'keil_build.py still packaged',
-  )
-  assert.ok(
-    files.some((f) => String(f).indexOf('keil_project.py') >= 0),
-    'keil_project.py still packaged',
-  )
-  assert.ok(!files.some((f) => String(f).indexOf('openocd_flash.py') >= 0), 'openocd_flash.py must not be packaged')
   assert.ok(
     files.some((f) => String(f).indexOf('openocd-runner.mjs') >= 0),
     'openocd-runner.mjs packaged',
@@ -66,10 +64,10 @@ test('package.json: version tracks package and no legacy python modbus files', a
   assert.ok(build.includes('pkg.version'), 'build reads package.json version')
 })
 
-test('bench-run script map keeps Keil python and drops OpenOCD python', async () => {
+test('bench-run script map drops Keil and OpenOCD python scripts', async () => {
   const src = await readFile(new URL('../bench-run.mjs', import.meta.url), 'utf8')
-  assert.ok(/keil_build\.py/.test(src))
-  assert.ok(/keil_project\.py/.test(src))
+  assert.ok(!/keil_build\.py/.test(src), 'no keil_build.py mapping')
+  assert.ok(!/keil_project\.py/.test(src), 'no keil_project.py mapping')
   assert.ok(!/openocd_flash\.py/.test(src), 'no openocd_flash.py mapping')
   assert.ok(!/modbus_read\.py/.test(src), 'no modbus_read.py mapping')
   assert.ok(!/modbus_write\.py/.test(src), 'no modbus_write.py mapping')

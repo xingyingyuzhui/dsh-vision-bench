@@ -62,8 +62,6 @@
     "runtime/io/rtu-capture-adapter.mjs",
     "runtime/io/frame-ring.mjs",
     "runtime/io/error-map.mjs",
-    "runtime/keil_project.py",
-    "runtime/keil_build.py",
     "src/infrastructure/process/openocd-runner.mjs",
     "cordis.patch.yml",
     "README.md",
