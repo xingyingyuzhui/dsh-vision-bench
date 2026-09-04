@@ -1,0 +1,6 @@
+Build target 'Target 1'
+compiling main.c...
+..\src\main.c(12): error: #20: identifier "foo" is undefined
+compiling stm32f4xx_it.c...
+Target not created.
+1 Error(s), 2 Warning(s).

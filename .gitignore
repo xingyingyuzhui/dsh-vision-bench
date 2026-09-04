@@ -1,5 +1,6 @@
 node_modules/
 *.log
+!test/fixtures/**/*.log
 .DS_Store
 __pycache__/
 *.pyc

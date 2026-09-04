@@ -1,0 +1,9 @@
+Build target 'Target 1'
+compiling main.c...
+linking...
+Program Size: Code=100 RO-data=8 RW-data=4 ZI-data=1024
+".\Objects\app.axf" - 0 Error(s), 0 Warning(s).
+User command #1: fromelf --bin -o Template.bin Template.axf
+*** Error: CreateProcess failed, Command: 'fromelf --bin -o Template.bin Template.axf'
+Target not created.
+1 Error(s), 0 Warning(s).
