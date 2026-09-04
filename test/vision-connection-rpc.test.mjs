@@ -222,10 +222,14 @@ test('router dispatch serves state and rejects unknown endpoints', async () => {
     assert.equal(missing.errorCode, 'NOT_FOUND')
 
     // Test saving global share without cwd
-    const saved = await router.dispatch('bindings/save', {
-      bindings: { python: '', uv4: '', openocd: '' },
-      share: { enabled: true, connections: true, points: true, visualization: false },
-    }, AbortSignal.timeout(5000))
+    const saved = await router.dispatch(
+      'bindings/save',
+      {
+        bindings: { python: '', uv4: '', openocd: '' },
+        share: { enabled: true, connections: true, points: true, visualization: false },
+      },
+      AbortSignal.timeout(5000),
+    )
     assert.equal(saved.ok, true)
     assert.equal(saved.globalShare.enabled, true)
     assert.equal(saved.globalShare.connections, true)

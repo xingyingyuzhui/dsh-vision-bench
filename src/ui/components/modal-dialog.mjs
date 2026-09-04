@@ -147,7 +147,7 @@ export function renderModalDialog(el, t, props) {
     el(
       'div',
       {
-        className: 'dvb-dialog' + (isErr ? ' is-error' : isWarn ? ' is-warn' : ''),
+        className: `dvb-dialog${isErr ? ' is-error' : isWarn ? ' is-warn' : ''}`,
         style: width ? { width } : null,
         onClick(e) {
           e.stopPropagation()
@@ -191,11 +191,7 @@ export function renderModalDialog(el, t, props) {
             )
           : null,
       ),
-      el(
-        'div',
-        { className: 'dvb-dialog-body' },
-        content || message || children,
-      ),
+      el('div', { className: 'dvb-dialog-body' }, content || message || children),
       el(
         'div',
         { className: 'dvb-dialog-footer' },
@@ -217,11 +213,7 @@ export function renderModalDialog(el, t, props) {
           'button',
           {
             type: 'button',
-            className:
-              'dvb-btn dvb-dialog-btn ' +
-              (danger
-                ? 'dvb-dialog-btn-danger dvb-btn-danger-solid'
-                : 'dvb-dialog-btn-primary dvb-btn-primary'),
+            className: `dvb-btn dvb-dialog-btn ${danger ? 'dvb-dialog-btn-danger dvb-btn-danger-solid' : 'dvb-dialog-btn-primary dvb-btn-primary'}`,
             onClick() {
               if (typeof onConfirm === 'function') onConfirm()
               else if (typeof onClose === 'function') onClose()

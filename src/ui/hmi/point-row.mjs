@@ -125,14 +125,22 @@ export function renderPointRow(el, t, ctx) {
           })
         : el('span', { className: 'dvb-val' }, String(point.address)),
     ),
-    el('td', { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' }, point.isNew ? '—' : valueCell),
+    el(
+      'td',
+      { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' },
+      point.isNew ? '—' : valueCell,
+    ),
     el(
       'td',
       { className: 'dvb-col-monitor' },
       renderFlagSwitch(el, t, {
         checked: point.isNew
-          ? (draft ? draft.monitorEnabled === true : point.monitorEnabled === true)
-          : (draft && draft.monitorEnabled !== undefined ? draft.monitorEnabled === true : point.monitorEnabled === true),
+          ? draft
+            ? draft.monitorEnabled === true
+            : point.monitorEnabled === true
+          : draft && draft.monitorEnabled !== undefined
+            ? draft.monitorEnabled === true
+            : point.monitorEnabled === true,
         title: point.isNew
           ? '开启后成为可视化数据源'
           : flagSavingByPoint[point.id + ':monitorEnabled']
@@ -190,8 +198,12 @@ export function renderPointRow(el, t, ctx) {
       { className: 'dvb-col-alarm' },
       renderFlagSwitch(el, t, {
         checked: point.isNew
-          ? (draft ? draft.alarmEnabled === true : point.alarmEnabled === true)
-          : (draft && draft.alarmEnabled !== undefined ? draft.alarmEnabled === true : point.alarmEnabled === true),
+          ? draft
+            ? draft.alarmEnabled === true
+            : point.alarmEnabled === true
+          : draft && draft.alarmEnabled !== undefined
+            ? draft.alarmEnabled === true
+            : point.alarmEnabled === true,
         title: point.isNew
           ? '参与告警判断'
           : flagSavingByPoint[point.id + ':alarmEnabled']

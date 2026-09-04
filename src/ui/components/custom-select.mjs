@@ -4,47 +4,47 @@
  */
 
 function normalizeOption(opt) {
-  if (opt == null) return null;
+  if (opt == null) return null
   if (typeof opt === 'string' || typeof opt === 'number' || typeof opt === 'boolean') {
-    return { value: opt, label: String(opt), disabled: false, title: undefined };
+    return { value: opt, label: String(opt), disabled: false, title: undefined }
   }
   if (typeof opt === 'object') {
     if (opt.props && (opt.type === 'option' || typeof opt.type === 'string')) {
-      const val = opt.props.value !== undefined ? opt.props.value : opt.props.children;
-      const label = opt.props.children != null ? String(opt.props.children) : String(val);
+      const val = opt.props.value !== undefined ? opt.props.value : opt.props.children
+      const label = opt.props.children != null ? String(opt.props.children) : String(val)
       return {
         value: val,
         label,
         disabled: !!opt.props.disabled,
         title: opt.props.title,
-      };
+      }
     }
-    const val = opt.value !== undefined ? opt.value : opt.key;
+    const val = opt.value !== undefined ? opt.value : opt.key
     return {
       value: val,
       label: opt.label != null ? String(opt.label) : String(val ?? ''),
       disabled: !!opt.disabled,
       title: opt.title,
-    };
+    }
   }
-  return null;
+  return null
 }
 
 function normalizeOptions(options, children) {
-  const result = [];
+  const result = []
   if (Array.isArray(options)) {
     for (const opt of options) {
-      const norm = normalizeOption(opt);
-      if (norm) result.push(norm);
+      const norm = normalizeOption(opt)
+      if (norm) result.push(norm)
     }
   } else if (children) {
-    const childArr = Array.isArray(children) ? children.flat(Infinity) : [children];
+    const childArr = Array.isArray(children) ? children.flat(Number.POSITIVE_INFINITY) : [children]
     for (const child of childArr) {
-      const norm = normalizeOption(child);
-      if (norm) result.push(norm);
+      const norm = normalizeOption(child)
+      if (norm) result.push(norm)
     }
   }
-  return result;
+  return result
 }
 
 export function renderCustomSelect(el, props) {
@@ -64,14 +64,18 @@ export function renderCustomSelect(el, props) {
     title,
     open: controlledOpen,
     onToggle,
-  } = props;
+  } = props
 
-  const options = normalizeOptions(rawOptions, children);
-  const isControlled = typeof controlledOpen === 'boolean';
-  const isOpen = isControlled ? controlledOpen : props.internalOpen;
+  const options = normalizeOptions(rawOptions, children)
+  const isControlled = typeof controlledOpen === 'boolean'
+  const isOpen = isControlled ? controlledOpen : props.internalOpen
 
-  const selectedOpt = options.find((opt) => String(opt.value) === String(value));
-  const displayLabel = selectedOpt ? selectedOpt.label : (value !== undefined && value !== '' ? String(value) : placeholder);
+  const selectedOpt = options.find((opt) => String(opt.value) === String(value))
+  const displayLabel = selectedOpt
+    ? selectedOpt.label
+    : value !== undefined && value !== ''
+      ? String(value)
+      : placeholder
 
   const triggerClasses = [
     'dvb-select-trigger',
@@ -80,9 +84,9 @@ export function renderCustomSelect(el, props) {
     size === 'sm' ? 'is-sm' : '',
   ]
     .filter(Boolean)
-    .join(' ');
+    .join(' ')
 
-  const wrapperClasses = ['dvb-select', className, isOpen ? 'is-open' : ''].filter(Boolean).join(' ');
+  const wrapperClasses = ['dvb-select', className, isOpen ? 'is-open' : ''].filter(Boolean).join(' ')
 
   return el(
     'div',
@@ -102,18 +106,18 @@ export function renderCustomSelect(el, props) {
         'aria-haspopup': 'listbox',
         'aria-expanded': isOpen ? 'true' : 'false',
         onClick(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (disabled) return;
+          e.preventDefault()
+          e.stopPropagation()
+          if (disabled) return
           if (typeof onToggle === 'function') {
-            onToggle(!isOpen);
+            onToggle(!isOpen)
           }
         },
         onKeyDown(e) {
           if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
-            e.preventDefault();
+            e.preventDefault()
             if (!disabled && typeof onToggle === 'function') {
-              onToggle(true);
+              onToggle(true)
             }
           }
         },
@@ -137,23 +141,19 @@ export function renderCustomSelect(el, props) {
       ? el(
           'div',
           {
-            className: 'dvb-select-dropdown' + (align === 'right' ? ' is-right' : ''),
+            className: `dvb-select-dropdown${align === 'right' ? ' is-right' : ''}`,
             style: menuStyle || null,
             role: 'listbox',
             tabIndex: -1,
             onClick(e) {
-              e.stopPropagation();
+              e.stopPropagation()
             },
           },
           options.map((opt, idx) => {
-            const isSelected = selectedOpt ? opt.value === selectedOpt.value : String(opt.value) === String(value);
-            const optClasses = [
-              'dvb-select-option',
-              isSelected ? 'is-selected' : '',
-              opt.disabled ? 'is-disabled' : '',
-            ]
+            const isSelected = selectedOpt ? opt.value === selectedOpt.value : String(opt.value) === String(value)
+            const optClasses = ['dvb-select-option', isSelected ? 'is-selected' : '', opt.disabled ? 'is-disabled' : '']
               .filter(Boolean)
-              .join(' ');
+              .join(' ')
 
             return el(
               'div',
@@ -165,14 +165,14 @@ export function renderCustomSelect(el, props) {
                 'aria-disabled': opt.disabled ? 'true' : undefined,
                 title: opt.title || undefined,
                 onClick(e) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (opt.disabled) return;
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (opt.disabled) return
                   if (typeof onChange === 'function') {
-                    onChange(opt.value);
+                    onChange(opt.value)
                   }
                   if (typeof onToggle === 'function') {
-                    onToggle(false);
+                    onToggle(false)
                   }
                 },
               },
@@ -192,11 +192,11 @@ export function renderCustomSelect(el, props) {
                     el('polyline', { points: '20 6 9 17 4 12' }),
                   )
                 : null,
-            );
+            )
           }),
         )
       : null,
-  );
+  )
 }
 
 const selectComponentCache = new WeakMap()

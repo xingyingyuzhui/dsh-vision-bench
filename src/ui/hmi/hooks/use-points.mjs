@@ -15,15 +15,8 @@ export function usePoints(React) {
   const [csvNote, setCsvNote] = React.useState('')
   const [flagSavingByPoint, setFlagSavingByPoint] = React.useState({})
   const flagRequestSeq = React.useRef({})
-  const {
-    colWidths,
-    colWidthsByDevice,
-    getColWidths,
-    setColWidths,
-    onStartResize,
-    resetColWidth,
-    totalTableWidth,
-  } = usePointColWidths(React)
+  const { colWidths, colWidthsByDevice, getColWidths, setColWidths, onStartResize, resetColWidth, totalTableWidth } =
+    usePointColWidths(React)
 
   return {
     editingDeviceId,
@@ -62,4 +55,3 @@ export function usePoints(React) {
     totalTableWidth,
   }
 }
-

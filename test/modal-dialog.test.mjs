@@ -90,9 +90,7 @@ test('renderModalDialog renders confirm dialog with cancel and danger confirm bu
   cancelBtn.props.onClick()
   assert.equal(canceled, true)
 
-  const confirmBtn = footer.children.find(
-    (c) => c && c.props && c.props.className.includes('dvb-btn-danger-solid'),
-  )
+  const confirmBtn = footer.children.find((c) => c && c.props && c.props.className.includes('dvb-btn-danger-solid'))
   assert.ok(confirmBtn)
   confirmBtn.props.onClick()
   assert.equal(confirmed, true)

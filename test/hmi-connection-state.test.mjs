@@ -9,12 +9,12 @@ import test from 'node:test'
 import { buildFramePortOptions } from '../bench-frames-model.mjs'
 import { listConnectedSerialSources, listConnectionStates } from '../bench-serial-monitor.mjs'
 import { saveWorkspace } from '../bench-store.mjs'
+import { renderConnectionForm } from '../src/ui/hmi/connection-form.mjs'
 import { renderConnectionOverview } from '../src/ui/hmi/connection-overview.mjs'
 import { renderConnectionPanel } from '../src/ui/hmi/connection-panel.mjs'
 import { renderConnectionTabs } from '../src/ui/hmi/connection-tabs.mjs'
 import { renderConnectionWorkspace } from '../src/ui/hmi/connection-workspace.mjs'
 import { renderDeviceCards } from '../src/ui/hmi/device-card.mjs'
-import { renderConnectionForm } from '../src/ui/hmi/connection-form.mjs'
 import { createHmiConnectionActions } from '../src/ui/hmi/hmi-connection-actions.mjs'
 import { createHmiLiveActions } from '../src/ui/hmi/hmi-live-actions.mjs'
 
@@ -489,14 +489,15 @@ test('renderConnectionPanel toolbar does not have collection buttons or interval
 
 test('renderDeviceCards has 连接/断开 button next to 添加设备 in panel-head, and no single 读取 button in toolbar', () => {
   const el = (type, props, ...children) => ({ type, props, children: children.flat().filter(Boolean) })
-  const t = (k) => ({
-    connLink: '连接',
-    connUnlink: '断开',
-    addDev: '＋添加设备',
-    ptEdit: '编辑点位',
-    csvImport: '导入 CSV',
-    csvExport: '导出 CSV',
-  }[k] || k)
+  const t = (k) =>
+    ({
+      connLink: '连接',
+      connUnlink: '断开',
+      addDev: '＋添加设备',
+      ptEdit: '编辑点位',
+      csvImport: '导入 CSV',
+      csvExport: '导出 CSV',
+    })[k] || k
 
   const calls = []
   const ctx = {
@@ -585,7 +586,8 @@ test('renderDeviceCards has 连接/断开 button next to 添加设备 in panel-h
 
 test('renderConnectionForm displays 采集间隔 select, openConnEdit and saveConnEdit persist intervalMs', async () => {
   const el = (type, props, ...children) => ({ type, props, children: children.flat().filter(Boolean) })
-  const t = (k) => ({ watchIv: '采集间隔', csvCancel: '取消', connSave: '保存配置', role: '角色', mode: '模式' }[k] || k)
+  const t = (k) =>
+    ({ watchIv: '采集间隔', csvCancel: '取消', connSave: '保存配置', role: '角色', mode: '模式' })[k] || k
   const field = (label, control) => ({ type: 'field', label, control })
 
   let connForm = { open: false }
@@ -732,7 +734,8 @@ test('linkConnection starts polling with intervalMs, and unlinkConnection stops 
 
 test('renderConnectionForm serial select does not show 未发现串口, provides COM1-COM20 and custom input', async () => {
   const el = (type, props, ...children) => ({ type, props, children: children.flat().filter(Boolean) })
-  const t = (k) => ({ serial: '串口', serialPick: '选择串口', serialScan: '刷新', csvCancel: '取消', connSave: '保存配置' }[k] || k)
+  const t = (k) =>
+    ({ serial: '串口', serialPick: '选择串口', serialScan: '刷新', csvCancel: '取消', connSave: '保存配置' })[k] || k
   const field = (label, control) => ({ type: 'field', label, control })
 
   let connForm = {
@@ -781,7 +784,10 @@ test('renderConnectionForm serial select does not show 未发现串口, provides
   assert.ok(optionLabels.includes('COM1'), 'Contains COM1')
   assert.ok(optionLabels.includes('COM2'), 'Contains COM2')
   assert.ok(optionLabels.includes('COM20'), 'Contains COM20')
-  assert.ok(optionLabels.some((l) => l.includes('手动输入')), 'Contains custom manual input option')
+  assert.ok(
+    optionLabels.some((l) => l.includes('手动输入')),
+    'Contains custom manual input option',
+  )
 
   // 2. Custom input mode
   ctx.connForm = { ...connForm, customPort: true, conn: { ...connForm.conn, port: '/dev/ttyUSB0' } }
@@ -799,7 +805,3 @@ test('renderConnectionForm serial select does not show 未发现串口, provides
   assert.ok(customInput, 'Rendered custom text input')
   assert.ok(listSelectBtn, 'Rendered 列表选择 button to switch back')
 })
-
-
-
-

@@ -888,7 +888,10 @@ test('不同连接/不同设备下的点位表列宽完全独立隔离，调整�
   const tree = render(createElement(Hmi, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }) }))
   await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
   await selectConn(tree)
-  await waitFor(() => assert.ok(tree.container.textContent.includes('设备1') && tree.container.textContent.includes('设备2')), { timeout: 8000 })
+  await waitFor(
+    () => assert.ok(tree.container.textContent.includes('设备1') && tree.container.textContent.includes('设备2')),
+    { timeout: 8000 },
+  )
 
   const devCards = Array.from(tree.container.querySelectorAll('.dvb-dev-card'))
   assert.equal(devCards.length, 2, '同时渲染设备1和设备2卡片')
@@ -926,6 +929,3 @@ test('不同连接/不同设备下的点位表列宽完全独立隔离，调整�
 
   tree.unmount()
 })
-
-
-

@@ -58,4 +58,3 @@ export function renderPointThead(el, t, ctx) {
     ),
   )
 }
-

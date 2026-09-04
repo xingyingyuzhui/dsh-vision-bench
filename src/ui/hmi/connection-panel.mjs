@@ -52,9 +52,7 @@ export function renderConnectionPanel(el, t, ctx) {
         },
         '＋连接',
       ),
-      activeConnObj && activeConnObj.conn && activeConnObj.conn.sim
-        ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, t('simOn'))
-        : null,
+      activeConnObj?.conn?.sim ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, t('simOn')) : null,
       el(
         'button',
         {
@@ -63,7 +61,7 @@ export function renderConnectionPanel(el, t, ctx) {
           disabled: !cwd || !activeConnObj,
           onClick: toggleSim,
         },
-        activeConnObj && activeConnObj.conn && activeConnObj.conn.sim ? '切为真实' : '切为仿真',
+        activeConnObj?.conn?.sim ? '切为真实' : '切为仿真',
       ),
     ),
     connections.length
@@ -91,9 +89,7 @@ export function renderConnectionPanel(el, t, ctx) {
               connections.map((c) => {
                 const isActive = c.id === activeConnId
                 const roleLabel =
-                  c.role === 'server' || c.role === 'slave'
-                    ? t('roleSlave') || '从机'
-                    : t('roleMaster') || '主机'
+                  c.role === 'server' || c.role === 'slave' ? t('roleSlave') || '从机' : t('roleMaster') || '主机'
                 const cm = connectionStates.find((x) => x.connectionId === c.id)
                 const st = cm ? cm.status || 'disconnected' : 'disconnected'
                 const occupiedPort =
@@ -246,8 +242,7 @@ export function renderConnectionPanel(el, t, ctx) {
           kind: 'confirm',
           title: t('deleteConnConfirmTitle') || '删除连接',
           message: (
-            t('deleteConnConfirmText') ||
-            '确定要删除连接“{name}”吗？此操作将移除该连接及其下关联的配置，不可撤销。'
+            t('deleteConnConfirmText') || '确定要删除连接“{name}”吗？此操作将移除该连接及其下关联的配置，不可撤销。'
           ).replace('{name}', deletingConn.name || deletingConn.id),
           cancelText: t('csvCancel') || '取消',
           confirmText: t('removeDevice') || '确认删除',

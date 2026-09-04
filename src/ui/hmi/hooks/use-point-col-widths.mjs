@@ -192,19 +192,7 @@ export function usePointColWidths(React) {
     (showOps, devOrKey, connId) => {
       const scopeKey = getPointTableScopeKey(devOrKey, connId)
       const widths = colWidthsByDevice[scopeKey] || DEFAULT_POINT_COL_WIDTHS
-      const keys = [
-        'name',
-        'fn',
-        'addr',
-        'value',
-        'monitor',
-        'scale',
-        'offset',
-        'unit',
-        'alarm',
-        'min',
-        'max',
-      ]
+      const keys = ['name', 'fn', 'addr', 'value', 'monitor', 'scale', 'offset', 'unit', 'alarm', 'min', 'max']
       let total = 0
       for (const k of keys) {
         total += widths[k] || DEFAULT_POINT_COL_WIDTHS[k]

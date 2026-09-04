@@ -22,6 +22,7 @@ export type AgentCommandEnvelope = {
   signal?: AbortSignal
   requireHost?: boolean
   timeoutMs?: number
+  transport?: unknown
 }
 
 export type AgentCommandResult = {

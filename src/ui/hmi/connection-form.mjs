@@ -133,16 +133,16 @@ export function renderConnectionForm(el, t, ctx) {
                         title: occupier ? '已被 ' + occupier + ' 占用' : '',
                       })
                     }
-                    STANDARD_COM_PORTS.forEach((name) => {
-                      if (scannedPaths.has(name) || (connForm.conn.port && connForm.conn.port === name)) return
+                    for (const name of STANDARD_COM_PORTS) {
+                      if (scannedPaths.has(name) || (connForm.conn.port && connForm.conn.port === name)) continue
                       const occupier = findRtuOccupier(name, connForm.id)
                       portOptions.push({
                         value: name,
-                        label: name + (occupier ? ' · 已被 ' + occupier + ' 占用' : ''),
+                        label: `${name}${occupier ? ` · 已被 ${occupier} 占用` : ''}`,
                         disabled: !!occupier,
-                        title: occupier ? '已被 ' + occupier + ' 占用' : '',
+                        title: occupier ? `已被 ${occupier} 占用` : '',
                       })
-                    })
+                    }
                     portOptions.push({
                       value: '__custom__',
                       label: '✎ 手动输入其他串口...',
@@ -307,10 +307,10 @@ export function renderConnectionForm(el, t, ctx) {
               id: 'conn-sim-switch',
               type: 'button',
               role: 'switch',
-              'aria-checked': !!connForm.conn.sim ? 'true' : 'false',
+              'aria-checked': connForm.conn.sim ? 'true' : 'false',
               'aria-label': t('sim') || '仿真',
               className: 'dvb-setting-switch',
-              'data-checked': !!connForm.conn.sim ? 'true' : 'false',
+              'data-checked': connForm.conn.sim ? 'true' : 'false',
               style: {
                 width: '36px',
                 height: '20px',
@@ -319,7 +319,7 @@ export function renderConnectionForm(el, t, ctx) {
                 border: 0,
                 padding: '2px',
                 borderRadius: '999px',
-                backgroundColor: !!connForm.conn.sim ? '#0f1115' : '#e5e5e5',
+                backgroundColor: connForm.conn.sim ? '#0f1115' : '#e5e5e5',
                 cursor: 'pointer',
                 position: 'relative',
                 boxSizing: 'border-box',
@@ -348,7 +348,7 @@ export function renderConnectionForm(el, t, ctx) {
                 borderRadius: '50%',
                 backgroundColor: '#ffffff',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                transform: !!connForm.conn.sim ? 'translateX(16px)' : 'translateX(0)',
+                transform: connForm.conn.sim ? 'translateX(16px)' : 'translateX(0)',
                 transition: 'transform .16s ease',
                 pointerEvents: 'none',
               },

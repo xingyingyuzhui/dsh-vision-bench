@@ -107,7 +107,13 @@ export function renderConnectionTabs(el, t, ctx) {
           role: 'tab',
           'aria-selected': isActive ? 'true' : 'false',
           className: 'dvb-tab' + (isActive ? ' is-on' : '') + (occupied ? ' is-warn' : ''),
-          title: c.name + ' · ' + connLabel(c.conn || {}) + ' · ' + stInfo.text + (occupied ? ' · COM冲突: ' + occupied : ''),
+          title:
+            c.name +
+            ' · ' +
+            connLabel(c.conn || {}) +
+            ' · ' +
+            stInfo.text +
+            (occupied ? ' · COM冲突: ' + occupied : ''),
           onClick() {
             selectConnection(c.id)
           },

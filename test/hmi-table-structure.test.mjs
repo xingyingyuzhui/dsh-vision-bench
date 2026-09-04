@@ -19,13 +19,9 @@ test('连接表表头为四列：名称|角色|端点/状态|操作', async () =
 })
 
 test('设备工具栏顺序：常态为 编辑点位→导入→导出→AI（已移除单次读取）；编辑态为 添加点位→批量添加→保存→取消', async () => {
-  const normalOrder = hmi.match(
-    /ptEdit[\s\S]*?csvImport[\s\S]*?csvExport[\s\S]*?'AI'/,
-  )
+  const normalOrder = hmi.match(/ptEdit[\s\S]*?csvImport[\s\S]*?csvExport[\s\S]*?'AI'/)
   assert.ok(normalOrder, 'normal toolbar order must match plan')
-  const editOrder = hmi.match(
-    /addPoint[\s\S]*?batchAdd[\s\S]*?ptSave[\s\S]*?csvCancel/,
-  )
+  const editOrder = hmi.match(/addPoint[\s\S]*?batchAdd[\s\S]*?ptSave[\s\S]*?csvCancel/)
   assert.ok(editOrder, 'editing toolbar order must match plan')
   // 彻底移除设备工具栏上的单次手动读取按钮
   assert.doesNotMatch(hmi, /readAll\(d\.id\)/)

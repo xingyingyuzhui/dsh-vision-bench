@@ -80,10 +80,7 @@ export function createHmiPointActions(ctx, core) {
       }
     }
     const count = Math.max(1, Math.min(Number(batch.count) || 1, 64))
-    const existingIds = new Set([
-      ...(pack.points || []).map((p) => p.id),
-      ...Object.keys(currentDrafts),
-    ])
+    const existingIds = new Set([...(pack.points || []).map((p) => p.id), ...Object.keys(currentDrafts)])
     const existingAddr = new Set(
       Object.values(currentDrafts)
         .filter((p) => Number(p.function) === Number(batch.fc))
@@ -364,7 +361,8 @@ export function createHmiPointActions(ctx, core) {
               })
               .catch(() => recoverFromFailure('点位配置已被其他操作更新，请重试'))
           }
-          const defaultTip = keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态'
+          const defaultTip =
+            keys[0] === 'monitorEnabled' ? '监视状态保存失败，已恢复原状态' : '告警状态保存失败，已恢复原状态'
           const tip = data?.error
             ? `${keys[0] === 'monitorEnabled' ? '监视' : '告警'}状态保存失败（${data.error}），已恢复原状态`
             : defaultTip
@@ -373,7 +371,7 @@ export function createHmiPointActions(ctx, core) {
         return applySuccess(data)
       })
       .catch((err) => {
-        const errMsg = err && err.message ? `（${err.message}）` : ''
+        const errMsg = err?.message ? `（${err.message}）` : ''
         return recoverFromFailure(
           `${keys[0] === 'monitorEnabled' ? '监视' : '告警'}状态保存失败${errMsg}，已恢复原状态`,
         )
@@ -394,7 +392,7 @@ export function createHmiPointActions(ctx, core) {
     const pack = normalizePack()
     const activeConnId = activeConnIdOf()
     const dev = (pack.devices || []).find((x) => x.id === deviceId)
-    const fixedCid = (dev && dev.connectionId) || activeConnId
+    const fixedCid = dev?.connectionId || activeConnId
     setError('')
     setInlineWrite(null)
     setEditingDeviceId('')

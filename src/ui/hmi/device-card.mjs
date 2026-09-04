@@ -93,7 +93,11 @@ export function renderDeviceCards(el, t, ctx) {
       { className: 'dvb-panel-head' },
       el('span', { className: 'dvb-panel-title' }, '设备 · ' + (activeConnObj ? activeConnObj.name : '')),
       el('span', { className: 'dvb-tag', title: '插件版本；改 client 后需重启 dsh web' }, pluginVersionLabel()),
-      el('span', { className: 'dvb-tag' }, (activeDevices || []).length + ' 个设备 · ' + (points || []).length + ' 个点位'),
+      el(
+        'span',
+        { className: 'dvb-tag' },
+        (activeDevices || []).length + ' 个设备 · ' + (points || []).length + ' 个点位',
+      ),
       el(
         'button',
         {
@@ -146,7 +150,7 @@ export function renderDeviceCards(el, t, ctx) {
             const ptsToRender = editingPoints ? Object.values(pointDraftsById) : devPts
             const adding = !!(newPointDraft && newPointDraft.deviceId === d.id)
             const showOps = editingPoints || adding
-            const batchOpen = !!(batch && batch.open && batch.deviceId === d.id)
+            const batchOpen = !!(batch?.open && batch.deviceId === d.id)
             const cm = (connectionStates || []).find((x) => x.connectionId === d.connectionId)
             const linkSt = cm ? cm.status || 'disconnected' : 'disconnected'
             let devStatus = { kind: 'idle', label: '未连接' }
@@ -425,7 +429,7 @@ export function renderDeviceCards(el, t, ctx) {
                 : null,
               ptsToRender.length || editingPoints || (newPointDraft && newPointDraft.deviceId === d.id)
                 ? (() => {
-                    const devWidths = getColWidths ? getColWidths(d, activeConnId) : (colWidths?.[d.id] || colWidths)
+                    const devWidths = getColWidths ? getColWidths(d, activeConnId) : colWidths?.[d.id] || colWidths
                     return el(
                       'div',
                       { className: 'dvb-table-wrap' },

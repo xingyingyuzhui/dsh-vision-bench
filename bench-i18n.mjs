@@ -367,8 +367,7 @@ export const COPY = {
     settingsHint:
       'Keil compilation and firmware flashing rely on local programs. Modbus communication uses the built-in runtime.',
     shareTitle: 'Workspace sharing',
-    shareHint:
-      'When enabled, other sessions in the same workspace can live-edit selected items.',
+    shareHint: 'When enabled, other sessions in the same workspace can live-edit selected items.',
     shareMaster: 'Share to workspace',
     shareConnections: 'Connections and devices',
     sharePoints: 'Points',
@@ -376,8 +375,7 @@ export const COPY = {
     shareRevokeConfirm: 'Turning share off hides these items from other sessions. Continue?',
     shareNeedSession: 'Open HMI or Debug first, then set sharing for this workspace.',
     shareSaved: 'Workspace sharing updated',
-    presetAppliesNextSession:
-      'Tool changes apply to new sessions. Active sessions keep their current generation.',
+    presetAppliesNextSession: 'Tool changes apply to new sessions. Active sessions keep their current generation.',
     python: 'Python (optional)',
     uv4: 'Keil UV4',
     openocd: 'OpenOCD',

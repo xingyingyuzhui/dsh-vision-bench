@@ -240,7 +240,7 @@ export function createHmiConnectionActions(ctx, core) {
 
   function openConnEdit(connection) {
     const pack = normalizePack()
-    const pollCfg = (pack.pollingByConnection || {})[connection.id] || {}
+    const pollCfg = pack.pollingByConnection?.[connection.id] || {}
     setConnForm({
       open: true,
       id: connection.id,
@@ -278,7 +278,7 @@ export function createHmiConnectionActions(ctx, core) {
     )
     const isServer = connForm.role === 'server' || connForm.role === 'slave'
     const intervalMs = Math.max(200, Number(connForm.intervalMs) || 1000)
-    const existingPoll = (pack.pollingByConnection || {})[connForm.id] || {}
+    const existingPoll = pack.pollingByConnection?.[connForm.id] || {}
     const pollingByConnection = {
       ...(pack.pollingByConnection || {}),
       [connForm.id]: {
