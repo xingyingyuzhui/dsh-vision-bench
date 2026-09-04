@@ -11,6 +11,7 @@ import { toLosslessJson } from './src/application/commands/lossless-json.mjs'
 import { registerVisionHost } from './src/infrastructure/host/vision-host-client.mjs'
 import { createVisionCommandDispatcher, handleCommand } from './src/interfaces/http/vision-command-routes.mjs'
 import { createVisionRpcRouter } from './src/interfaces/rpc/vision-rpc-router.mjs'
+import { createDebugRuntime } from './src/application/debug/debug-runtime.mjs'
 import { VISION_RPC_CHANNEL } from './src/shared/vision-rpc-contract.mjs'
 
 export const name = 'dsh-vision-bench'
@@ -177,7 +178,8 @@ export function apply(ctx, config = {}) {
     /* agent registry is optional */
   }
 
-  const router = createVisionRpcRouter({ getHome: () => dshHome })
+  const debugRuntime = createDebugRuntime()
+  const router = createVisionRpcRouter({ getHome: () => dshHome, debugRuntime })
   const commandDispatcher = createVisionCommandDispatcher(dshHome)
   const stopHost = registerVisionHost(commandDispatcher)
 
@@ -229,6 +231,7 @@ export function apply(ctx, config = {}) {
     stopAllPolling()
     clearFlashApprovals()
     void stopVisionIoBroker('plugin-dispose')
+    void debugRuntime.shutdown('plugin-dispose').catch(() => {})
   })
 }
 

@@ -38,6 +38,10 @@ export const VISION_HTTP_TO_RPC = Object.freeze({
   '/dsh-vision-bench/openocd/probe': 'openocd/probe',
   '/dsh-vision-bench/serial/feed': 'serial/feed',
   '/dsh-vision-bench/command': 'command',
+  '/dsh-vision-bench/debug/state': 'debug/state',
+  '/dsh-vision-bench/debug/command': 'debug/command',
+  '/dsh-vision-bench/debug/events/wait': 'debug/events/wait',
+  '/dsh-vision-bench/debug/approval': 'debug/approval',
 })
 
 /** @type {readonly string[]} */

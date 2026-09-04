@@ -397,18 +397,42 @@ export function createDebugRuntime(deps = {}) {
     },
 
     /**
+     * Finds an active session matching the predicate.
+     * @param {(session: import('../../types/debug.d.ts').DebugSessionView) => boolean} predicate
+     * @returns {import('../../types/debug.d.ts').DebugSessionView | null}
+     */
+    findSession(predicate) {
+      for (const session of sessions.values()) {
+        const view = toView(session)
+        if (predicate(view)) {
+          return view
+        }
+      }
+      return null
+    },
+
+    /**
+     * Lists all active debug sessions.
+     * @returns {import('../../types/debug.d.ts').DebugSessionView[]}
+     */
+    listSessions() {
+      return Array.from(sessions.values()).map(toView)
+    },
+
+    /**
      * Waits for events with cursor >= minCursor on the session event ring.
      *
      * @param {{ debugSessionId: string, ownerSessionId?: string }} scope
      * @param {number} minCursor
-     * @param {AbortSignal} [signal]
+     * @param {AbortSignal | { signal?: AbortSignal, timeoutMs?: number }} [options]
      */
-    async waitEvents(scope, minCursor, signal) {
+    async waitEvents(scope, minCursor, options) {
       const session = requireSession({
         debugSessionId: scope.debugSessionId,
         ownerSessionId: scope.ownerSessionId || '',
       })
-      return await session.eventRing.waitForEvents(minCursor, { signal })
+      const waitOpts = options instanceof AbortSignal ? { signal: options } : options || {}
+      return await session.eventRing.waitForEvents(minCursor, waitOpts)
     },
 
     /**

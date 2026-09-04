@@ -58,6 +58,7 @@ import { clearFlashApprovals } from '../../application/flash/flash-approval-serv
 import { probeOpenOcdHealth } from '../../application/flash/openocd-health-service.mjs'
 import { claimLegacyPrivate, projectModbusForSession } from '../../application/modbus/config-scope-service.mjs'
 import { isScopePartitioned, omitSessionConfigs } from '../../domain/modbus/config-scope.mjs'
+import { createDebugRpcHandler } from './debug-rpc-handler.mjs'
 
 const WORKSPACE_CONFIG_KEYS = new Set(['conn', 'connections', 'devices', 'points', 'visualization'])
 
@@ -189,10 +190,13 @@ async function snapshot(home, cwd, sessionId) {
 }
 
 /**
- * @param {{ getHome: () => string }} deps
+ * @param {{ getHome: () => string, debugRuntime?: any, debugRpcHandler?: (endpoint: string, body: any, signal?: AbortSignal) => Promise<any> }} deps
  * @returns {{ dispatch: (endpoint: string, payload: unknown, signal?: AbortSignal) => Promise<unknown>, snapshot: (cwd?: string, sessionId?: string) => Promise<unknown> }}
  */
-export function createVisionRpcRouter({ getHome }) {
+export function createVisionRpcRouter(deps) {
+  const { getHome } = deps
+  const debugRpc = deps.debugRpcHandler || createDebugRpcHandler(deps)
+
   /**
    * @param {string} endpoint
    * @param {unknown} payload
@@ -204,6 +208,10 @@ export function createVisionRpcRouter({ getHome }) {
     const body = payload && typeof payload === 'object' ? /** @type {Record<string, any>} */ (payload) : {}
     const operationOptions = signal ? { signal } : {}
     await touchSessionFromPayload(home, body)
+
+    if (endpoint.startsWith('debug/')) {
+      return debugRpc(endpoint, body, signal)
+    }
 
     switch (endpoint) {
       case 'state':

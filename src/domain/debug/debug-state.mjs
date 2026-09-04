@@ -9,8 +9,8 @@ export const VALID_TRANSITIONS = {
   idle: ['starting'],
   starting: ['ready', 'paused', 'failed', 'stopping'],
   ready: ['running', 'paused', 'stopping', 'failed'],
-  running: ['paused', 'stopping', 'failed'],
-  paused: ['running', 'stopping', 'failed'],
+  running: ['running', 'paused', 'stopping', 'failed'],
+  paused: ['running', 'paused', 'stopping', 'failed'],
   stopping: ['idle', 'failed'],
   failed: ['stopping', 'idle'],
 }
