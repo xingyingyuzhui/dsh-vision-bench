@@ -98,6 +98,12 @@ export function evidenceFromRef(ref) {
   let visualizationId = ''
   let componentType = ''
   let pointIds = []
+  let snapshotId = ''
+  let debugSessionId = ''
+  let reason = ''
+  let file = ''
+  let line = 0
+  let firmwareHash = ''
   if (kind === 'point') pointId = String(r.pointId || '')
   else if (kind === 'frame') frameId = String(r.frameId || '')
   else if (kind === 'alarm') alarmId = String(r.alarmId || '')
@@ -109,8 +115,16 @@ export function evidenceFromRef(ref) {
     componentType = String(r.componentType || r.type || '').slice(0, 16)
     pointIds = (Array.isArray(r.pointIds) ? r.pointIds : []).slice(0, 16).map((x) => String(x))
     pointId = String(pointIds[0] || r.pointId || '')
+  } else if (kind === 'debug_snapshot') {
+    snapshotId = String(r.snapshotId || r.id || '')
+    debugSessionId = String(r.debugSessionId || '')
+    reason = String(r.reason || '')
+    file = String(r.file || '')
+    line = Number(r.line) || 0
+    firmwareHash = String(r.firmwareHash || '')
   } else pointId = String(r.pointId || '')
   const id =
+    snapshotId ||
     visualizationId ||
     pointId ||
     frameId ||
@@ -135,6 +149,14 @@ export function evidenceFromRef(ref) {
     out.visualizationId = visualizationId
     out.componentType = componentType
     out.pointIds = pointIds
+  }
+  if (kind === 'debug_snapshot' || snapshotId) {
+    out.snapshotId = snapshotId
+    out.debugSessionId = debugSessionId
+    out.reason = reason
+    out.file = file
+    out.line = line
+    out.firmwareHash = firmwareHash
   }
   return out
 }

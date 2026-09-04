@@ -4,7 +4,7 @@ import { setAgentsRegistry } from './bench-notify.mjs'
 import { stopAllPolling } from './bench-polling-service.mjs'
 import { VISION_GUIDANCE, seedVisionBenchPreset } from './bench-preset.mjs'
 import { clearSerialMonitorState } from './bench-serial-monitor.mjs'
-import { defaultDshHome, journalView, sweepStaleTasks, touchServiceSession } from './bench-store.mjs'
+import { defaultDshHome, journalView, recordBenchEvent, sweepStaleTasks, touchServiceSession } from './bench-store.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
 import { toLosslessJson } from './src/application/commands/lossless-json.mjs'
 import {
@@ -185,7 +185,24 @@ export function apply(ctx, config = {}) {
     /* agent registry is optional */
   }
 
-  const debugRuntime = getSharedDebugRuntime()
+  const debugRuntime = getSharedDebugRuntime({
+    onJournalEvent: async (ev) => {
+      if (!ev || !ev.cwd) return
+      await recordBenchEvent(
+        dshHome,
+        ev.cwd,
+        {
+          action: ev.action,
+          ok: ev.ok !== false,
+          summary: ev.summary || `调试事件: ${ev.action}`,
+        },
+        {
+          sessionId: ev.sessionId || '',
+          source: ev.source || 'system',
+        },
+      ).catch(() => {})
+    },
+  })
   const router = createVisionRpcRouter({ getHome: () => dshHome, debugRuntime })
   const commandDispatcher = createVisionCommandDispatcher(dshHome)
   const stopHost = registerVisionHost(commandDispatcher)

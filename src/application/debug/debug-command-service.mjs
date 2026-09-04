@@ -233,7 +233,22 @@ export async function executeDebugCommand(input, deps = {}) {
               })
             }
           } else if (action === 'inspect') {
-            res = await runtime.command(scope, { type: 'inspect', ...payload })
+            const rawRes = /** @type {any} */ (await runtime.command(scope, { type: 'inspect', ...payload }))
+            const st = runtime.state(scope)
+            const stack = (rawRes?.stack || st?.stack || []).slice(0, 5)
+            const locals = (rawRes?.locals || st?.variables || []).slice(0, 10)
+            const lastSnap = st?.snapshots?.[st.snapshots.length - 1]
+            res = {
+              ok: true,
+              location: rawRes?.location || st?.location || null,
+              reason: rawRes?.reason || st?.stopReason || 'inspect',
+              stackTop: stack,
+              relevantVariables: locals,
+              snapshotId: lastSnap?.id || undefined,
+              stack: rawRes?.stack || stack,
+              variables: rawRes?.variables || rawRes?.locals || locals,
+              registers: rawRes?.registers || [],
+            }
           } else if (action === 'evaluate') {
             res = await runtime.command(scope, {
               type: 'evaluate',
@@ -241,10 +256,36 @@ export async function executeDebugCommand(input, deps = {}) {
               frame: payload.frame,
             })
           } else if (action === 'snapshot') {
-            res = await runtime.command(scope, {
-              type: 'snapshot',
-              reason: payload.reason || 'manual',
-            })
+            const isGet = payload.op === 'get' || Boolean(payload.snapshotId && !payload.reason)
+            if (isGet) {
+              res = await runtime.command(scope, {
+                type: 'snapshot',
+                op: 'get',
+                snapshotId: payload.snapshotId || payload.id,
+              })
+            } else {
+              const createRes = await runtime.command(scope, {
+                type: 'snapshot',
+                reason: payload.reason || 'manual',
+                watches: payload.watches,
+              })
+              if (!createRes.ok || !createRes.snapshot) {
+                res = createRes
+              } else {
+                const snap = createRes.snapshot
+                res = {
+                  ok: true,
+                  snapshotId: snap.id,
+                  reason: snap.reason,
+                  location: snap.location,
+                  stackTop: (snap.stack || []).slice(0, 5),
+                  relevantVariables: (snap.locals || []).slice(0, 10),
+                  firmwareHash: snap.firmwareHash,
+                  createdAt: snap.createdAt,
+                  snapshot: snap,
+                }
+              }
+            }
           } else if (action === 'reset') {
             res = await runtime.command(scope, {
               type: 'reset',

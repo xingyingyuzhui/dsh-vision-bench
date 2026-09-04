@@ -166,13 +166,38 @@ export const normalizeFocusRequest = (input) => {
   const trendKey = focusText(input.trendKey)
   const alarmId = focusText(input.alarmId)
   const visualizationId = focusText(input.visualizationId)
+  const snapshotId = focusText(input.snapshotId)
+  const debugSessionId = focusText(input.debugSessionId)
   const kind = typeof input.kind === 'string' ? input.kind.slice(0, 32) : ''
   const at = Number(input.at) > 0 ? Number(input.at) : Date.now()
   const by = input.by === 'agent' ? 'agent' : 'user'
   const version = Number(input.version) > 0 ? Number(input.version) : 0
-  const hasTarget = connectionId || deviceId || pointId || frameId || trendKey || alarmId || visualizationId
+  const hasTarget =
+    connectionId ||
+    deviceId ||
+    pointId ||
+    frameId ||
+    trendKey ||
+    alarmId ||
+    visualizationId ||
+    snapshotId ||
+    debugSessionId
   if (!hasTarget) return null
-  return { connectionId, deviceId, pointId, frameId, trendKey, alarmId, visualizationId, kind, at, by, version }
+  return {
+    connectionId,
+    deviceId,
+    pointId,
+    frameId,
+    trendKey,
+    alarmId,
+    visualizationId,
+    snapshotId,
+    debugSessionId,
+    kind,
+    at,
+    by,
+    version,
+  }
 }
 
 export const normalizeFocusState = (input) => {
@@ -209,6 +234,12 @@ export const normalizeFocusState = (input) => {
         const alarmId = focusText(e.alarmId || (kind === 'alarm' ? e.id : ''))
         const trendKey = focusText(e.trendKey || (kind === 'trend' ? e.id : ''))
         const visualizationId = focusText(e.visualizationId || (kind === 'visualization' ? e.id : ''))
+        const snapshotId = focusText(e.snapshotId || (kind === 'debug_snapshot' ? e.id : ''))
+        const debugSessionId = focusText(e.debugSessionId)
+        const reason = typeof e.reason === 'string' ? e.reason.slice(0, 120) : ''
+        const file = typeof e.file === 'string' ? e.file.slice(0, 256) : ''
+        const line = Number(e.line) || 0
+        const firmwareHash = typeof e.firmwareHash === 'string' ? e.firmwareHash.slice(0, 64) : ''
         const componentType = typeof e.componentType === 'string' ? e.componentType.slice(0, 16) : ''
         const pointIds = Array.isArray(e.pointIds)
           ? e.pointIds
@@ -225,7 +256,7 @@ export const normalizeFocusState = (input) => {
             : { start: at - 5 * 60 * 1000, end: at }
         const row = {
           kind,
-          id: focusText(e.id || visualizationId || pointId || frameId || trendKey || alarmId),
+          id: focusText(e.id || snapshotId || visualizationId || pointId || frameId || trendKey || alarmId),
           connectionId: focusText(e.connectionId || e.connId),
           deviceId: focusText(e.deviceId),
           pointId,
@@ -240,6 +271,14 @@ export const normalizeFocusState = (input) => {
           row.visualizationId = visualizationId
           row.componentType = componentType
           row.pointIds = pointIds
+        }
+        if (kind === 'debug_snapshot' || snapshotId) {
+          row.snapshotId = snapshotId
+          row.debugSessionId = debugSessionId
+          row.reason = reason
+          row.file = file
+          row.line = line
+          row.firmwareHash = firmwareHash
         }
         return row
       })

@@ -67,6 +67,8 @@ import {
   runReadTx,
   transportOf,
 } from './modbus-runtime-context.mjs'
+import { getSharedDebugRuntime } from '../debug/debug-runtime.mjs'
+
 /** @typedef {import('../../types/modbus.js').ModbusWorkspace} ModbusWorkspace */
 /** @typedef {import('../../types/workspace.js').VisionWorkspace} VisionWorkspace */
 /**
@@ -89,6 +91,28 @@ export const buildEvidenceRefs = (home, cwd) => {
   // log evidence: last timeline
   const lastLog = (workspace.timeline || [])[0]
   if (lastLog) refs.push({ kind: 'log', id: lastLog.id, at: lastLog.at, version: pack.configVersion || 1 })
+
+  // debug snapshot evidence: latest snapshot if active
+  try {
+    const runtime = getSharedDebugRuntime()
+    const activeSession = runtime.findSession((s) => s.workspaceCwd === cwd)
+    const latestSnapshot = activeSession?.snapshots?.[activeSession.snapshots.length - 1]
+    if (latestSnapshot) {
+      refs.push({
+        kind: 'debug_snapshot',
+        id: latestSnapshot.id,
+        snapshotId: latestSnapshot.id,
+        debugSessionId: activeSession.debugSessionId,
+        reason: latestSnapshot.reason,
+        file: latestSnapshot.location?.file || '',
+        line: latestSnapshot.location?.line || 0,
+        firmwareHash: latestSnapshot.firmwareHash || '',
+        at: latestSnapshot.createdAt || Date.now(),
+        version: pack.configVersion || 1,
+      })
+    }
+  } catch {}
+
   // point/frame/trend slices
   for (const p of pack.points.slice(0, 5))
     refs.push({

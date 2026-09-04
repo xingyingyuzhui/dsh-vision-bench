@@ -8,6 +8,7 @@ const TASK_TYPES = {
   write: { label: '写点' },
   download: { label: '下载' },
   verify: { label: '验证' },
+  debug: { label: '调试' },
 }
 const TASK_TYPE_KEYS = new Set(Object.keys(TASK_TYPES))
 const SOURCES = new Set(['user', 'agent', 'system'])
@@ -21,7 +22,22 @@ export const taskTypeLabel = (type) => {
 export const isTaskType = (type) => TASK_TYPE_KEYS.has(type)
 
 // Timeline kinds marked major survive minor-trimming when the list runs over budget.
-const MAJOR_KINDS = new Set(['select-project', 'sweep', 'build-end', 'write-end', 'download-end', 'verify-end'])
+const MAJOR_KINDS = new Set([
+  'select-project',
+  'sweep',
+  'build-end',
+  'write-end',
+  'download-end',
+  'verify-end',
+  'debug-start',
+  'debug-stop',
+  'breakpoint-hit',
+  'watchpoint-hit',
+  'debug-exception',
+  'snapshot-created',
+  'verify-pass',
+  'verify-fail',
+])
 
 export const isMajorKind = (kind) => MAJOR_KINDS.has(String(kind || ''))
 

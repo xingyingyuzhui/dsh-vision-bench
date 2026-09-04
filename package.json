@@ -226,6 +226,7 @@
     "src/types/http-api.d.ts",
     "src/types/visualization.d.ts",
     "src/types/vision-bench.d.ts",
+    "src/types/debug.d.ts",
     "docs/WINDOWS_ACCEPTANCE_0.22.md",
     "docs/WINDOWS_ACCEPTANCE_0.25.md",
     "docs/WINDOWS_ACCEPTANCE_0.26.md",

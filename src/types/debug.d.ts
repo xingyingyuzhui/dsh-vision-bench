@@ -87,6 +87,8 @@ export interface DebugSessionView {
   variables?: DebugVariable[]
   breakpoints?: DebugBreakpoint[]
   watchpoints?: DebugWatchpoint[]
+  snapshots?: DebugSnapshot[]
+  stopReason?: string
   targetKey: string
   createdAt: number
   updatedAt: number

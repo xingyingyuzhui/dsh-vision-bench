@@ -12,6 +12,7 @@ import { TargetLeaseManager } from '../../domain/debug/target-lease.mjs'
  * @param {{
  *   leaseManager?: TargetLeaseManager,
  *   backendFactory?: (backendKind: import('../../types/debug.d.ts').DebugBackendKind, ctx: any) => Promise<any>,
+ *   onJournalEvent?: ((event: any) => Promise<void>) | null,
  * }} [deps]
  */
 export function createDebugRuntime(deps = {}) {
@@ -21,6 +22,7 @@ export function createDebugRuntime(deps = {}) {
     (async (kind) => {
       throw new DebugError(DEBUG_ERRORS.BACKEND_UNAVAILABLE, `调试后端暂不可用: ${kind}`)
     })
+  const onJournalEvent = deps.onJournalEvent || null
 
   /** @type {Map<string, {
    *   debugSessionId: string,
@@ -38,6 +40,7 @@ export function createDebugRuntime(deps = {}) {
    *   watchpoints: Map<string, import('../../types/debug.d.ts').DebugWatchpoint>,
    *   snapshots: import('../../types/debug.d.ts').DebugSnapshot[],
    *   targetKey: string,
+   *   targetSpec?: Record<string, any>,
    *   createdAt: number,
    *   updatedAt: number,
    * }>} */
@@ -150,6 +153,7 @@ export function createDebugRuntime(deps = {}) {
         watchpoints: new Map(),
         snapshots: [],
         targetKey: lease.targetKey,
+        targetSpec: spec.targetSpec || {},
         createdAt: Date.now(),
         updatedAt: Date.now(),
       }
@@ -181,6 +185,17 @@ export function createDebugRuntime(deps = {}) {
           type: DEBUG_EVENT_TYPES.SESSION_READY,
           payload: { targetKey: lease.targetKey },
         })
+
+        if (onJournalEvent) {
+          await onJournalEvent({
+            action: 'debug-start',
+            ok: true,
+            summary: `硬件调试已启动: ${backendKind} (${lease.targetKey})`,
+            cwd: workspaceCwd,
+            sessionId: ownerSessionId,
+            debugSessionId,
+          }).catch(() => {})
+        }
 
         return toView(sessionRecord)
       } catch (err) {
@@ -246,6 +261,18 @@ export function createDebugRuntime(deps = {}) {
           backend: session.backendKind,
           type: DEBUG_EVENT_TYPES.SESSION_CLOSED,
         })
+
+        if (onJournalEvent) {
+          await onJournalEvent({
+            action: 'debug-stop',
+            ok: true,
+            summary: `硬件调试已停止: ${session.debugSessionId}`,
+            cwd: session.workspaceCwd,
+            sessionId: session.ownerSessionId,
+            debugSessionId: session.debugSessionId,
+          }).catch(() => {})
+        }
+
         sessions.delete(session.debugSessionId)
       }
 
@@ -310,12 +337,40 @@ export function createDebugRuntime(deps = {}) {
         }
 
         case 'snapshot': {
+          const wantedId = command.snapshotId || command.id
+          if (command.op === 'get' || (wantedId && !command.reason)) {
+            const hit = session.snapshots.find((s) => s.id === wantedId)
+            if (!hit) {
+              return { ok: false, errorCode: DEBUG_ERRORS.NOT_FOUND, error: `快照不存在: ${wantedId}` }
+            }
+            return { ok: true, snapshot: hit }
+          }
+
+          let regs = undefined
+          if (session.backend?.registers) {
+            try {
+              regs = await session.backend.registers()
+            } catch {}
+          }
+
+          const fwHash =
+            command.firmwareHash ||
+            session.backend?.firmwareHash ||
+            session.targetSpec?.artifactSha256 ||
+            session.targetSpec?.firmwareHash ||
+            ''
+
           const snap = createDebugSnapshot({
             reason: command.reason || 'manual',
             location: session.location,
             stack: session.stack,
             locals: session.variables,
+            watches: command.watches || [],
+            registers: regs,
+            firmwareHash: fwHash,
             backend: session.backendKind,
+            breakpointId: command.breakpointId,
+            watchpointId: command.watchpointId,
           })
           session.snapshots.push(snap)
           session.eventRing.push({
@@ -326,6 +381,19 @@ export function createDebugRuntime(deps = {}) {
             type: DEBUG_EVENT_TYPES.SNAPSHOT_CREATED,
             payload: { snapshotId: snap.id },
           })
+          if (onJournalEvent) {
+            await onJournalEvent({
+              action: 'snapshot-created',
+              ok: true,
+              summary: `调试诊断快照已创建: ${snap.id} (${snap.reason})`,
+              cwd: session.workspaceCwd,
+              sessionId: session.ownerSessionId,
+              debugSessionId: session.debugSessionId,
+              snapshotId: snap.id,
+              location: snap.location,
+              firmwareHash: snap.firmwareHash,
+            }).catch(() => {})
+          }
           return { ok: true, snapshot: snap }
         }
 
@@ -562,11 +630,12 @@ let defaultSharedDebugRuntime = null
 
 /**
  * Gets or initializes the singleton DebugRuntime for the current host lifecycle.
+ * @param {Parameters<typeof createDebugRuntime>[0]} [deps]
  * @returns {ReturnType<typeof createDebugRuntime>}
  */
-export function getSharedDebugRuntime() {
+export function getSharedDebugRuntime(deps = {}) {
   if (!defaultSharedDebugRuntime) {
-    defaultSharedDebugRuntime = createDebugRuntime()
+    defaultSharedDebugRuntime = createDebugRuntime(deps)
   }
   return defaultSharedDebugRuntime
 }
