@@ -1,0 +1,441 @@
+// @ts-check
+import { DEBUG_EVENT_TYPES, createDebugEventRing } from '../../domain/debug/debug-event.mjs'
+import { canTransition, transition } from '../../domain/debug/debug-state.mjs'
+import { DEBUG_ERRORS, DebugError } from '../../domain/debug/errors.mjs'
+import { createDebugSnapshot } from '../../domain/debug/snapshot.mjs'
+import { TargetLeaseManager } from '../../domain/debug/target-lease.mjs'
+
+/**
+ * Creates the host authoritative DebugRuntime service shell.
+ * Parity with ADR-013 & Phase 2 application architecture.
+ *
+ * @param {{
+ *   leaseManager?: TargetLeaseManager,
+ *   backendFactory?: (backendKind: import('../../types/debug.d.ts').DebugBackendKind, ctx: any) => Promise<any>,
+ * }} [deps]
+ */
+export function createDebugRuntime(deps = {}) {
+  const leaseManager = deps.leaseManager || new TargetLeaseManager()
+  const backendFactory =
+    deps.backendFactory ||
+    (async (kind) => {
+      throw new DebugError(DEBUG_ERRORS.BACKEND_UNAVAILABLE, `调试后端暂不可用: ${kind}`)
+    })
+
+  /** @type {Map<string, {
+   *   debugSessionId: string,
+   *   ownerSessionId: string,
+   *   workspaceCwd: string,
+   *   backendKind: import('../../types/debug.d.ts').DebugBackendKind,
+   *   backend: any,
+   *   lease: any,
+   *   state: import('../../types/debug.d.ts').DebugRunState,
+   *   eventRing: ReturnType<typeof createDebugEventRing>,
+   *   location: import('../../types/debug.d.ts').SourceLocation | null,
+   *   stack: import('../../types/debug.d.ts').DebugStackFrame[],
+   *   variables: import('../../types/debug.d.ts').DebugVariable[],
+   *   breakpoints: Map<string, import('../../types/debug.d.ts').DebugBreakpoint>,
+   *   watchpoints: Map<string, import('../../types/debug.d.ts').DebugWatchpoint>,
+   *   snapshots: import('../../types/debug.d.ts').DebugSnapshot[],
+   *   targetKey: string,
+   *   createdAt: number,
+   *   updatedAt: number,
+   * }>} */
+  const sessions = new Map()
+
+  /**
+   * Helper to verify session ownership.
+   * @param {{ debugSessionId: string, ownerSessionId: string }} scope
+   */
+  function requireSession(scope) {
+    const session = sessions.get(scope.debugSessionId)
+    if (!session) {
+      throw new DebugError(DEBUG_ERRORS.NOT_FOUND, `调试会话不存在: ${scope.debugSessionId}`, {
+        debugSessionId: scope.debugSessionId,
+      })
+    }
+    if (scope.ownerSessionId && session.ownerSessionId !== scope.ownerSessionId) {
+      throw new DebugError(DEBUG_ERRORS.NOT_OWNER, '无权操作该调试会话: 会话属主不匹配', {
+        debugSessionId: scope.debugSessionId,
+        expectedOwner: session.ownerSessionId,
+      })
+    }
+    return session
+  }
+
+  /**
+   * Formats a session into a public DebugSessionView.
+   * @param {any} session
+   * @returns {import('../../types/debug.d.ts').DebugSessionView}
+   */
+  function toView(session) {
+    return {
+      debugSessionId: session.debugSessionId,
+      workspaceCwd: session.workspaceCwd,
+      ownerSessionId: session.ownerSessionId,
+      backend: session.backendKind,
+      state: session.state,
+      location: session.location,
+      stack: session.stack,
+      variables: session.variables,
+      breakpoints: Array.from(session.breakpoints.values()),
+      watchpoints: Array.from(session.watchpoints.values()),
+      targetKey: session.targetKey,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+    }
+  }
+
+  return {
+    getLeaseManager() {
+      return leaseManager
+    },
+
+    /**
+     * Starts a new debug session.
+     * Acquires exclusive target lease and initializes backend.
+     *
+     * @param {{
+     *   debugSessionId?: string,
+     *   ownerSessionId: string,
+     *   workspaceCwd: string,
+     *   backend?: import('../../types/debug.d.ts').DebugBackendKind,
+     *   targetSpec?: Record<string, any>,
+     * }} spec
+     * @returns {Promise<import('../../types/debug.d.ts').DebugSessionView>}
+     */
+    async start(spec) {
+      const debugSessionId = spec.debugSessionId || `ds_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+      const backendKind = spec.backend || 'gdb-openocd'
+      const ownerSessionId = spec.ownerSessionId
+      const workspaceCwd = spec.workspaceCwd
+
+      if (!ownerSessionId) {
+        throw new DebugError(DEBUG_ERRORS.NOT_OWNER, '启动调试必须指定 ownerSessionId')
+      }
+
+      // 1. Acquire target lease
+      const lease = leaseManager.acquireLease(spec.targetSpec || {}, {
+        sessionId: debugSessionId,
+        ownerSessionId,
+        workspaceCwd,
+      })
+
+      const eventRing = createDebugEventRing(500)
+      const state = transition('idle', 'starting')
+
+      eventRing.push({
+        debugSessionId,
+        ownerSessionId,
+        workspaceCwd,
+        backend: backendKind,
+        type: DEBUG_EVENT_TYPES.SESSION_STARTING,
+        payload: { targetKey: lease.targetKey },
+      })
+
+      /** @type {any} */
+      const sessionRecord = {
+        debugSessionId,
+        ownerSessionId,
+        workspaceCwd,
+        backendKind,
+        backend: null,
+        lease,
+        state,
+        eventRing,
+        location: null,
+        stack: [],
+        variables: [],
+        breakpoints: new Map(),
+        watchpoints: new Map(),
+        snapshots: [],
+        targetKey: lease.targetKey,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }
+
+      sessions.set(debugSessionId, sessionRecord)
+
+      try {
+        const backend = await backendFactory(backendKind, {
+          debugSessionId,
+          ownerSessionId,
+          workspaceCwd,
+          targetSpec: spec.targetSpec,
+          eventRing,
+        })
+        sessionRecord.backend = backend
+
+        if (backend && typeof backend.start === 'function') {
+          await backend.start(spec)
+        }
+
+        sessionRecord.state = transition(sessionRecord.state, 'ready')
+        sessionRecord.updatedAt = Date.now()
+
+        eventRing.push({
+          debugSessionId,
+          ownerSessionId,
+          workspaceCwd,
+          backend: backendKind,
+          type: DEBUG_EVENT_TYPES.SESSION_READY,
+          payload: { targetKey: lease.targetKey },
+        })
+
+        return toView(sessionRecord)
+      } catch (err) {
+        sessionRecord.state = 'failed'
+        sessionRecord.updatedAt = Date.now()
+        eventRing.push({
+          debugSessionId,
+          ownerSessionId,
+          workspaceCwd,
+          backend: backendKind,
+          type: DEBUG_EVENT_TYPES.SESSION_FAILED,
+          payload: { error: err instanceof Error ? err.message : String(err) },
+        })
+        leaseManager.releaseLease(debugSessionId, ownerSessionId)
+        sessions.delete(debugSessionId)
+        throw err
+      }
+    },
+
+    /**
+     * Stops an active debug session and releases target lease.
+     *
+     * @param {{ debugSessionId: string, ownerSessionId: string }} scope
+     */
+    async stop(scope) {
+      const session = sessions.get(scope.debugSessionId)
+      if (!session) {
+        return { ok: true, alreadyStopped: true }
+      }
+
+      if (scope.ownerSessionId && session.ownerSessionId !== scope.ownerSessionId) {
+        throw new DebugError(DEBUG_ERRORS.NOT_OWNER, '无权停止该调试会话: 会话属主不匹配', {
+          debugSessionId: scope.debugSessionId,
+        })
+      }
+
+      if (canTransition(session.state, 'stopping')) {
+        session.state = transition(session.state, 'stopping')
+      }
+
+      try {
+        if (session.backend && typeof session.backend.stop === 'function') {
+          await session.backend.stop()
+        }
+      } finally {
+        session.eventRing.push({
+          debugSessionId: session.debugSessionId,
+          ownerSessionId: session.ownerSessionId,
+          workspaceCwd: session.workspaceCwd,
+          backend: session.backendKind,
+          type: DEBUG_EVENT_TYPES.SESSION_STOPPED,
+        })
+
+        if (canTransition(session.state, 'idle')) {
+          session.state = transition(session.state, 'idle')
+        }
+
+        leaseManager.releaseLease(session.debugSessionId, session.ownerSessionId)
+        session.eventRing.push({
+          debugSessionId: session.debugSessionId,
+          ownerSessionId: session.ownerSessionId,
+          workspaceCwd: session.workspaceCwd,
+          backend: session.backendKind,
+          type: DEBUG_EVENT_TYPES.SESSION_CLOSED,
+        })
+        sessions.delete(session.debugSessionId)
+      }
+
+      return { ok: true, debugSessionId: scope.debugSessionId }
+    },
+
+    /**
+     * Executes a debug command against the active session.
+     *
+     * @param {{ debugSessionId: string, ownerSessionId: string }} scope
+     * @param {{ type: string, [key: string]: any }} command
+     */
+    async command(scope, command) {
+      const session = requireSession(scope)
+      const cmdType = command?.type
+
+      if (!cmdType) {
+        throw new DebugError(DEBUG_ERRORS.COMMAND_REJECTED, '缺少调试命令类型')
+      }
+
+      switch (cmdType) {
+        case 'continue': {
+          session.state = transition(session.state, 'running')
+          session.eventRing.push({
+            debugSessionId: session.debugSessionId,
+            ownerSessionId: session.ownerSessionId,
+            workspaceCwd: session.workspaceCwd,
+            backend: session.backendKind,
+            type: DEBUG_EVENT_TYPES.RUNNING,
+          })
+          if (session.backend?.continue) await session.backend.continue()
+          return { ok: true, state: session.state }
+        }
+
+        case 'pause': {
+          if (session.backend?.pause) await session.backend.pause()
+          session.state = transition(session.state, 'paused')
+          session.eventRing.push({
+            debugSessionId: session.debugSessionId,
+            ownerSessionId: session.ownerSessionId,
+            workspaceCwd: session.workspaceCwd,
+            backend: session.backendKind,
+            type: DEBUG_EVENT_TYPES.PAUSED,
+          })
+          return { ok: true, state: session.state }
+        }
+
+        case 'step': {
+          if (session.backend?.step) {
+            await session.backend.step(command.stepType || 'over')
+          }
+          session.state = transition(session.state, 'paused')
+          session.eventRing.push({
+            debugSessionId: session.debugSessionId,
+            ownerSessionId: session.ownerSessionId,
+            workspaceCwd: session.workspaceCwd,
+            backend: session.backendKind,
+            type: DEBUG_EVENT_TYPES.STEP_COMPLETE,
+            payload: { stepType: command.stepType || 'over' },
+          })
+          return { ok: true, state: session.state }
+        }
+
+        case 'snapshot': {
+          const snap = createDebugSnapshot({
+            reason: command.reason || 'manual',
+            location: session.location,
+            stack: session.stack,
+            locals: session.variables,
+            backend: session.backendKind,
+          })
+          session.snapshots.push(snap)
+          session.eventRing.push({
+            debugSessionId: session.debugSessionId,
+            ownerSessionId: session.ownerSessionId,
+            workspaceCwd: session.workspaceCwd,
+            backend: session.backendKind,
+            type: DEBUG_EVENT_TYPES.SNAPSHOT_CREATED,
+            payload: { snapshotId: snap.id },
+          })
+          return { ok: true, snapshot: snap }
+        }
+
+        case 'addBreakpoint': {
+          const bpId = command.id || `bp_${Date.now()}_${session.breakpoints.size + 1}`
+          const bp = {
+            id: bpId,
+            file: command.file,
+            line: command.line,
+            condition: command.condition,
+            verified: true,
+          }
+          session.breakpoints.set(bpId, bp)
+          if (session.backend?.addBreakpoint) {
+            await session.backend.addBreakpoint(bp)
+          }
+          session.eventRing.push({
+            debugSessionId: session.debugSessionId,
+            ownerSessionId: session.ownerSessionId,
+            workspaceCwd: session.workspaceCwd,
+            backend: session.backendKind,
+            type: DEBUG_EVENT_TYPES.BREAKPOINT_CREATED,
+            payload: bp,
+          })
+          return { ok: true, breakpoint: bp }
+        }
+
+        case 'removeBreakpoint': {
+          const bp = session.breakpoints.get(command.id)
+          if (bp) {
+            session.breakpoints.delete(command.id)
+            if (session.backend?.removeBreakpoint) {
+              await session.backend.removeBreakpoint(bp)
+            }
+            session.eventRing.push({
+              debugSessionId: session.debugSessionId,
+              ownerSessionId: session.ownerSessionId,
+              workspaceCwd: session.workspaceCwd,
+              backend: session.backendKind,
+              type: DEBUG_EVENT_TYPES.BREAKPOINT_REMOVED,
+              payload: { id: command.id },
+            })
+          }
+          return { ok: true, removed: Boolean(bp) }
+        }
+
+        default: {
+          if (session.backend && typeof session.backend.command === 'function') {
+            const res = await session.backend.command(command)
+            return { ok: true, result: res }
+          }
+          throw new DebugError(DEBUG_ERRORS.COMMAND_REJECTED, `未知的调试命令类型: ${cmdType}`)
+        }
+      }
+    },
+
+    /**
+     * Gets the state snapshot view of a debug session.
+     *
+     * @param {{ debugSessionId: string, ownerSessionId?: string }} scope
+     * @returns {import('../../types/debug.d.ts').DebugSessionView}
+     */
+    state(scope) {
+      const session = requireSession({
+        debugSessionId: scope.debugSessionId,
+        ownerSessionId: scope.ownerSessionId || '',
+      })
+      return toView(session)
+    },
+
+    /**
+     * Waits for events with cursor >= minCursor on the session event ring.
+     *
+     * @param {{ debugSessionId: string, ownerSessionId?: string }} scope
+     * @param {number} minCursor
+     * @param {AbortSignal} [signal]
+     */
+    async waitEvents(scope, minCursor, signal) {
+      const session = requireSession({
+        debugSessionId: scope.debugSessionId,
+        ownerSessionId: scope.ownerSessionId || '',
+      })
+      return await session.eventRing.waitForEvents(minCursor, { signal })
+    },
+
+    /**
+     * Shuts down all active debug sessions and releases all leases.
+     *
+     * @param {string} [reason]
+     */
+    async shutdown(reason = 'runtime_shutdown') {
+      for (const session of sessions.values()) {
+        try {
+          if (session.backend && typeof session.backend.stop === 'function') {
+            await session.backend.stop()
+          }
+          session.eventRing.push({
+            debugSessionId: session.debugSessionId,
+            ownerSessionId: session.ownerSessionId,
+            workspaceCwd: session.workspaceCwd,
+            backend: session.backendKind,
+            type: DEBUG_EVENT_TYPES.SESSION_CLOSED,
+            payload: { reason },
+          })
+        } catch {
+          /* ignore during shutdown */
+        }
+      }
+      sessions.clear()
+      leaseManager.clearAll()
+    },
+  }
+}
