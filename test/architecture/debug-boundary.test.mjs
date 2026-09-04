@@ -90,3 +90,11 @@ test('debug boundary: DebugWorkspace sections only contain known sections (workb
     'DebugWorkspace must only have known sections in Phase 7',
   )
 })
+
+test('program boundary: ProgramModel canonical model does not import archify or infrastructure (ADR-015)', async () => {
+  const fs = await import('node:fs')
+  const src = fs.readFileSync('src/domain/program/program-model.mjs', 'utf8')
+  assert.ok(!src.includes('archify'), 'ProgramModel must never import or reference archify')
+  assert.ok(!src.includes('infrastructure'), 'ProgramModel in domain must never import infrastructure')
+  assert.ok(!src.includes('child_process'), 'ProgramModel in domain must never import child_process')
+})
