@@ -83,33 +83,5 @@ function routeEdge(from, to) {
   ]
 }
 
-export function polylinePath(points) {
-  if (!Array.isArray(points) || points.length < 2) return ''
-  return points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join(' ')
-}
-
-export function fitViewTransform(layout, viewportW, viewportH, padding = 24) {
-  const w = Number(layout?.width) || 320
-  const h = Number(layout?.height) || 240
-  const vw = Math.max(120, Number(viewportW) || 320)
-  const vh = Math.max(120, Number(viewportH) || 240)
-  const scale = Math.min((vw - padding * 2) / w, (vh - padding * 2) / h, 1.4)
-  const panX = (vw - w * scale) / 2
-  const panY = (vh - h * scale) / 2
-  return { scale, panX, panY }
-}
-
-export function focusNodeTransform(layout, nodeId, viewportW, viewportH, scale = 1.15, padding = 32) {
-  const node = (layout?.nodes || []).find((n) => n.id === nodeId)
-  if (!node) return fitViewTransform(layout, viewportW, viewportH, padding)
-  const vw = Math.max(120, Number(viewportW) || 320)
-  const vh = Math.max(120, Number(viewportH) || 240)
-  const cx = node.x + node.w / 2
-  const cy = node.y + node.h / 2
-  const clamped = Math.min(Math.max(scale, 0.5), 2.2)
-  return {
-    scale: clamped,
-    panX: vw / 2 - cx * clamped,
-    panY: vh / 2 - cy * clamped,
-  }
-}
+export { polylinePath } from '../graph/graph-svg-primitives.mjs'
+export { fitViewTransform, focusNodeTransform } from '../graph/graph-camera.mjs'
