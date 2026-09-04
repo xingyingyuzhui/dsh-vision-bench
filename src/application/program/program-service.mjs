@@ -7,6 +7,7 @@ import {
   makeFileId,
   normalizeRelPath,
 } from '../../domain/program/program-model.mjs'
+import { programModelToArchify } from '../../infrastructure/archify/archify-adapter.mjs'
 import { checkFileReadable, isInside, readSource } from '../../infrastructure/keil/keil-project-scanner.mjs'
 import { analyzeCSource, resolveModelReferences } from '../../infrastructure/program/c-source-analyzer.mjs'
 import { mapProject } from '../keil/project-service.mjs'
@@ -247,6 +248,10 @@ export function createProgramService(deps = {}) {
   return {
     loadProgramModel,
     filterProgramGraph,
+    exportArchifyIR: (
+      /** @type {import('../../types/program.d.ts').ProgramModel} */ model,
+      /** @type {any} */ options,
+    ) => programModelToArchify(model, options),
     clearCache,
   }
 }
