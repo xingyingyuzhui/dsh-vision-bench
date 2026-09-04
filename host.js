@@ -12,6 +12,7 @@ import {
   getSharedDebugRuntime,
   setSharedDebugRuntime,
 } from './src/application/debug/debug-runtime.mjs'
+import { clearDebugApprovals } from './src/application/debug/debug-approval-service.mjs'
 import { clearFlashApprovals } from './src/application/flash/flash-approval-service.mjs'
 import { registerVisionHost } from './src/infrastructure/host/vision-host-client.mjs'
 import { visionDebugTool } from './src/interfaces/agent/vision-debug-tool.mjs'
@@ -236,6 +237,7 @@ export function apply(ctx, config = {}) {
     clearSerialMonitorState()
     stopAllPolling()
     clearFlashApprovals()
+    clearDebugApprovals()
     void stopVisionIoBroker('plugin-dispose')
     void debugRuntime.shutdown('plugin-dispose').catch(() => {})
     setSharedDebugRuntime(null)

@@ -4,6 +4,7 @@ import { DEBUG_ERRORS, DebugError } from '../../domain/debug/errors.mjs'
 import { envelope, normalizeCommand } from '../commands/command-contract.mjs'
 import { globalCommandIdempotency } from '../commands/command-idempotency-cache.mjs'
 import { finalizeAgentCommandResult } from '../commands/lossless-json.mjs'
+import { defaultDebugApprovals } from './debug-approval-service.mjs'
 import { getSharedDebugRuntime } from './debug-runtime.mjs'
 
 export const DEBUG_ACTIONS = new Set([
@@ -26,13 +27,17 @@ export const DEBUG_ACTIONS = new Set([
  * Normalizes input, checks session ownership, enforces idempotency, routes to DebugRuntime, and formats envelope.
  *
  * @param {any} input
- * @param {{ debugRuntime?: ReturnType<typeof import('./debug-runtime.mjs').createDebugRuntime> }} [deps]
+ * @param {{
+ *   debugRuntime?: ReturnType<typeof import('./debug-runtime.mjs').createDebugRuntime>,
+ *   approvalStore?: ReturnType<typeof import('./debug-approval-service.mjs').createDebugApprovalStore>,
+ * }} [deps]
  * @returns {Promise<any>}
  */
 export async function executeDebugCommand(input, deps = {}) {
   const cmd = normalizeCommand(input)
   const ran = await globalCommandIdempotency.run(cmd, async () => {
     const runtime = deps.debugRuntime || getSharedDebugRuntime()
+    const approvalStore = deps.approvalStore || defaultDebugApprovals
     const rawAction = String(cmd.action || cmd.payload?.action || '').trim()
     const action = rawAction.startsWith('debug.') ? rawAction.slice(6) : rawAction
 
@@ -91,13 +96,57 @@ export async function executeDebugCommand(input, deps = {}) {
           const backendKind = /** @type {import('../../types/debug.d.ts').DebugBackendKind} */ (
             payload.backend || 'gdb-openocd'
           )
+          const targetSpec = /** @type {any} */ (payload.targetSpec || payload)
+
+          // Agent requests require approval unless already approved or pre-authorized
+          if (cmd.source === 'agent' && !payload.approved && !payload.approvalRequestId) {
+            const ticket = approvalStore.create({
+              cwd,
+              sessionId,
+              source: cmd.source,
+              backend: backendKind,
+              target: targetSpec.target,
+              interfaceName: targetSpec.interfaceName,
+              artifactPath: targetSpec.artifactPath,
+              artifactSha256: targetSpec.artifactSha256,
+            })
+            return envelope(cmd, {
+              ok: false,
+              errorCode: DEBUG_ERRORS.APPROVAL_REQUIRED,
+              error: '真机调试启动需要用户批准',
+              needsApproval: true,
+              approval: ticket,
+            })
+          }
+
+          // If approvalRequestId is provided, consume it
+          if (payload.approvalRequestId) {
+            const consumeRes = approvalStore.consume(payload.approvalRequestId, { cwd, sessionId })
+            if (!consumeRes.ok) {
+              return envelope(cmd, {
+                ok: false,
+                errorCode: consumeRes.errorCode,
+                error: consumeRes.error,
+              })
+            }
+          }
+
           const session = await runtime.start({
             debugSessionId: debugSessionId || undefined,
             ownerSessionId: sessionId,
             workspaceCwd: cwd,
             backend: backendKind,
-            targetSpec: payload.targetSpec || payload,
+            targetSpec,
           })
+
+          approvalStore.grantControlLease(session.debugSessionId, {
+            ownerSessionId: sessionId,
+            workspaceCwd: cwd,
+            artifactSha256: targetSpec.artifactSha256,
+            backend: backendKind,
+            target: targetSpec.target,
+          })
+
           return envelope(cmd, {
             ok: true,
             action: cmd.action,
@@ -116,6 +165,8 @@ export async function executeDebugCommand(input, deps = {}) {
             })
           }
           const targetId = debugSessionId || existing?.debugSessionId || ''
+          approvalStore.revokeControlLease(targetId)
+
           const res = await runtime.stop({
             debugSessionId: targetId,
             ownerSessionId: sessionId,

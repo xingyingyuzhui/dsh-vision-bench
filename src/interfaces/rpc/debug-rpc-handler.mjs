@@ -1,20 +1,23 @@
 // @ts-check
 
+import { defaultDebugApprovals } from '../../application/debug/debug-approval-service.mjs'
 import { createDebugRuntime } from '../../application/debug/debug-runtime.mjs'
 import { DEBUG_ERRORS, DebugError } from '../../domain/debug/errors.mjs'
 import { DEBUG_COMMAND_OPS, DEBUG_RPC_ENDPOINTS } from '../../shared/debug-contract.mjs'
 
 /**
  * Creates the Connection RPC handler for debug endpoints.
- * Parity with ADR-014 & Phase 4 Section 8.3.
+ * Parity with ADR-014 & Phase 4 Section 8.3 & Phase 6 Section 10.
  *
  * @param {{
  *   debugRuntime?: ReturnType<typeof createDebugRuntime>,
+ *   approvalStore?: ReturnType<typeof import('../../application/debug/debug-approval-service.mjs').createDebugApprovalStore>,
  *   getHome?: () => string,
  * }} deps
  */
 export function createDebugRpcHandler(deps) {
   const runtime = deps.debugRuntime || createDebugRuntime()
+  const approvalStore = deps.approvalStore || defaultDebugApprovals
 
   /**
    * @param {string} endpoint
@@ -39,10 +42,12 @@ export function createDebugRpcHandler(deps) {
               Boolean((sessionId && s.ownerSessionId === sessionId) || (cwd && s.workspaceCwd === cwd)),
             )
           }
+          const pendingApprovals = approvalStore.listPending({ cwd, sessionId })
           return {
             ok: true,
             active: Boolean(session),
             session,
+            pendingApprovals,
           }
         }
 
@@ -129,6 +134,65 @@ export function createDebugRpcHandler(deps) {
         }
 
         case DEBUG_RPC_ENDPOINTS.APPROVAL: {
+          const op = String(row.op || '').trim()
+
+          if (op === 'list') {
+            const pending = approvalStore.listPending({ cwd, sessionId })
+            return {
+              ok: true,
+              pending,
+            }
+          }
+
+          if (op === 'reject') {
+            const consumeRes = approvalStore.consume(row.requestId, { cwd, sessionId })
+            return {
+              ok: true,
+              rejected: true,
+              requestId: row.requestId,
+              consumed: consumeRes.ok,
+            }
+          }
+
+          if (op === 'approve') {
+            const consumeRes = approvalStore.consume(row.requestId, { cwd, sessionId })
+            if (!consumeRes.ok || !consumeRes.record) {
+              return {
+                ok: false,
+                errorCode: consumeRes.errorCode,
+                error: consumeRes.error,
+              }
+            }
+            const record = consumeRes.record
+            const session = await runtime.start({
+              debugSessionId: row.debugSessionId || undefined,
+              ownerSessionId: record.sessionId || sessionId,
+              workspaceCwd: record.cwd || cwd,
+              backend: /** @type {any} */ (record.backend),
+              targetSpec: {
+                target: record.target,
+                interfaceName: record.interfaceName,
+                artifactPath: record.artifactPath,
+                artifactSha256: record.artifactSha256,
+              },
+            })
+
+            approvalStore.grantControlLease(session.debugSessionId, {
+              ownerSessionId: record.sessionId || sessionId,
+              workspaceCwd: record.cwd || cwd,
+              artifactSha256: record.artifactSha256,
+              backend: record.backend,
+              target: record.target,
+            })
+
+            return {
+              ok: true,
+              approved: true,
+              debugSessionId: session.debugSessionId,
+              session,
+            }
+          }
+
           return {
             ok: true,
             approved: true,

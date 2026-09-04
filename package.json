@@ -165,6 +165,7 @@
     "src/application/debug/debug-runtime.mjs",
     "src/application/debug/debug-event-service.mjs",
     "src/application/debug/debug-command-service.mjs",
+    "src/application/debug/debug-approval-service.mjs",
     "src/infrastructure/debug/process/debug-process.mjs",
     "src/infrastructure/debug/openocd/openocd-debug-profile.mjs",
     "src/infrastructure/debug/openocd/openocd-debug-process.mjs",
