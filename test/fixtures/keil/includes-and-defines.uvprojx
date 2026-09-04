@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<Project>
+  <Targets>
+    <Target>
+      <TargetName>TestTarget</TargetName>
+      <TargetOption>
+        <TargetArmAds>
+          <Cads>
+            <VariousControls>
+              <IncludePath>.\inc;.\lib\inc;..\common\inc</IncludePath>
+              <Define>STM32F40_41xxx; USE_HAL_DRIVER, VECT_TAB_FLASH</Define>
+            </VariousControls>
+          </Cads>
+        </TargetArmAds>
+      </TargetOption>
+      <Groups>
+        <Group>
+          <GroupName>Drivers</GroupName>
+          <Files>
+            <File>
+              <FileName>driver.c</FileName>
+              <FilePath>drivers/driver.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+      </Groups>
+    </Target>
+  </Targets>
+</Project>

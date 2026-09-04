@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<Project>
+  <Targets>
+    <Target>
+      <TargetName>STM32F103_Flash</TargetName>
+      <TargetOption>
+        <TargetCommonOption>
+          <OutputDirectory>.\Flash\</OutputDirectory>
+          <OutputName>fw_flash</OutputName>
+        </TargetCommonOption>
+      </TargetOption>
+      <Groups>
+        <Group>
+          <GroupName>App</GroupName>
+          <Files>
+            <File>
+              <FileName>app.c</FileName>
+              <FilePath>src/app.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+      </Groups>
+    </Target>
+    <Target>
+      <TargetName>STM32F103_RAM</TargetName>
+      <TargetOption>
+        <TargetCommonOption>
+          <OutputDirectory>.\RAM\</OutputDirectory>
+          <OutputName>fw_ram</OutputName>
+        </TargetCommonOption>
+      </TargetOption>
+      <Groups>
+        <Group>
+          <GroupName>App</GroupName>
+          <Files>
+            <File>
+              <FileName>app.c</FileName>
+              <FilePath>src/app.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+      </Groups>
+    </Target>
+  </Targets>
+</Project>

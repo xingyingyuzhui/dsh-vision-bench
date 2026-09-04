@@ -17,56 +17,11 @@ const needUv4 = (bindings) => {
   return null
 }
 
-export const keilScan = async (home, cwd, opts) => {
-  const room = requireWorkspaceCwd(cwd)
-  if (room.error) return { ok: false, error: room.error }
-  const bindings = loadBindings(home)
-  const missing = needPython(bindings)
-  if (missing) return { ok: false, error: missing }
-  return runPythonScript(bindings.python, 'keil_project.py', ['scan', '--root', room.cwd, '--json'], {
-    cwd: room.cwd,
-    timeoutMs: 30000,
-    signal: signalOf(null, opts),
-  })
-}
-
-export const keilTargets = async (home, cwd, project, opts) => {
-  const room = requireWorkspaceCwd(cwd)
-  if (room.error) return { ok: false, error: room.error }
-  const bindings = loadBindings(home)
-  const missing = needPython(bindings)
-  if (missing) return { ok: false, error: missing }
-  const keil = requireKeilProject(room.cwd, project)
-  if (keil.error) return { ok: false, error: keil.error }
-  return runPythonScript(bindings.python, 'keil_project.py', ['targets', '--project', keil.project, '--json'], {
-    cwd: room.cwd,
-    timeoutMs: 15000,
-    signal: signalOf(null, opts),
-  })
-}
-
-export const keilMap = async (home, cwd, project, target, opts) => {
-  const room = requireWorkspaceCwd(cwd)
-  if (room.error) return { ok: false, error: room.error }
-  const bindings = loadBindings(home)
-  const missing = needPython(bindings)
-  if (missing) return { ok: false, error: missing }
-  const workspace = loadWorkspace(home, room.cwd)
-  const picked = project || (workspace.keil && workspace.keil.project)
-  const keil = requireKeilProject(room.cwd, picked)
-  if (keil.error) return { ok: false, error: keil.error }
-  const name = (target || (workspace.keil && workspace.keil.target) || '').trim()
-  return runPythonScript(
-    bindings.python,
-    'keil_project.py',
-    ['map', '--project', keil.project, '--target', name, '--root', room.cwd, '--json'],
-    {
-      cwd: room.cwd,
-      timeoutMs: 20000,
-      signal: signalOf(null, opts),
-    },
-  )
-}
+export {
+  keilScan,
+  keilTargets,
+  keilMap,
+} from './src/application/keil/project-service.mjs'
 
 export const keilBuild = async (home, cwd, body, opts) => {
   const room = requireWorkspaceCwd(cwd)
