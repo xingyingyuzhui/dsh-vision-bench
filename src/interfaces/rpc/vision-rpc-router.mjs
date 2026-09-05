@@ -92,7 +92,8 @@ function normalizeConnAlias(body) {
  * @param {string} home
  * @param {unknown} body
  */
-async function touchSessionFromPayload(home, body) {
+async function touchSessionFromPayload(home, body, endpoint = '') {
+  if (endpoint === 'debug/events/wait') return
   const row = body && typeof body === 'object' ? /** @type {Record<string, unknown>} */ (body) : {}
   const payload =
     row.payload && typeof row.payload === 'object' ? /** @type {Record<string, unknown>} */ (row.payload) : {}
@@ -207,7 +208,7 @@ export function createVisionRpcRouter(deps) {
     /** @type {Record<string, any>} */
     const body = payload && typeof payload === 'object' ? /** @type {Record<string, any>} */ (payload) : {}
     const operationOptions = signal ? { signal } : {}
-    await touchSessionFromPayload(home, body)
+    await touchSessionFromPayload(home, body, endpoint)
 
     if (endpoint.startsWith('debug/')) {
       return debugRpc(endpoint, body, signal)

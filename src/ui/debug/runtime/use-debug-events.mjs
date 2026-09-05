@@ -162,6 +162,10 @@ export function useDebugEvents(React, post, scope) {
             break
           }
           if (waitRes?.ok) {
+            if (waitRes.closed) {
+              // No active debug session or session closed; idle poll at 1000ms
+              await new Promise((r) => setTimeout(r, 1000))
+            }
             if (waitRes.nextCursor != null) {
               cursorRef.current = waitRes.nextCursor
             }
@@ -208,6 +212,8 @@ export function useDebugEvents(React, post, scope) {
                 }
               }
             }
+          } else {
+            await new Promise((r) => setTimeout(r, 1000))
           }
         } catch (err) {
           if (ac.signal.aborted || stopped || !mountedRef.current) {
