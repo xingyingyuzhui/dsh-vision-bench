@@ -1,7 +1,6 @@
 import { NS } from './bench-i18n.mjs'
 
 const FIELDS = [
-  { key: 'python', label: 'python', ph: 'pythonPh' },
   { key: 'uv4', label: 'uv4', ph: 'uv4Ph' },
   { key: 'openocd', label: 'openocd', ph: 'openocdPh' },
 ]
@@ -17,6 +16,16 @@ const EMPTY_SHARE = { enabled: false, connections: false, points: false, visuali
 export function statusKind(health) {
   if (!health || !health.bound) return 'unbound'
   return health.exists ? 'ready' : 'missing'
+}
+
+function ioStatusInfo(ioRuntime, t) {
+  const state = ioRuntime && ioRuntime.state
+  const isUnavailable = state === 'unavailable' || state === 'unhealthy' || state === 'stopped'
+  const kind = isUnavailable ? 'missing' : 'ready'
+  let label = t('ioReady')
+  if (state === 'starting') label = t('ioPending')
+  else if (isUnavailable) label = t('ioUnavailable')
+  return { kind, label }
 }
 
 function normalizeShareState(flags) {
@@ -214,21 +223,29 @@ export function createSettingsPage(React, t, post, options = {}) {
     return el(
       'div',
       { className: 'dvb-page' },
-      settingRow(
-        el('span', null, t('ioRuntime')),
-        el(
-          'div',
-          {
-            className: 'dvb-status-pill',
-            'data-kind': ioRuntime && ioRuntime.state === 'unavailable' ? 'missing' : 'ready',
-          },
-          el('span', {
-            className: 'dvb-dot',
-            'data-kind': ioRuntime && ioRuntime.state === 'unavailable' ? 'missing' : 'ready',
-          }),
-          el('span', null, ioRuntime && ioRuntime.state ? ioRuntime.state : t('ioReady')),
-        ),
-      ),
+      (() => {
+        const ioInfo = ioStatusInfo(ioRuntime, t)
+        return settingRow(
+          el(
+            React.Fragment,
+            null,
+            el('span', { className: 'dvb-setting-name' }, t('ioRuntime')),
+            el(
+              'span',
+              {
+                className: 'dvb-status-pill',
+                'data-kind': ioInfo.kind,
+              },
+              el('span', {
+                className: 'dvb-dot',
+                'data-kind': ioInfo.kind,
+              }),
+              el('span', null, ioInfo.label),
+            ),
+          ),
+          null,
+        )
+      })(),
       FIELDS.map((field) => {
         const kind = statusKind(health[field.key])
         return el(
@@ -237,7 +254,7 @@ export function createSettingsPage(React, t, post, options = {}) {
           el(
             'div',
             { className: 'dvb-setting-label' },
-            el('span', null, t(field.label)),
+            el('span', { className: 'dvb-setting-name' }, t(field.label)),
             el('span', { className: 'dvb-status-pill', 'data-kind': kind }, t(kind)),
           ),
           el(

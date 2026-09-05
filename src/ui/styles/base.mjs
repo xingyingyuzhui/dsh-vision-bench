@@ -30,7 +30,7 @@ export const BASE_CSS = [
   'body[' + ATTR + '] .dvb-status[data-kind="missing"]{color:var(--dsw-alias-label-danger,#c62828)}',
   'body[' +
     ATTR +
-    '] .dvb-status-pill{font-size:11px;line-height:16px;padding:1px 7px;border-radius:10px;display:inline-flex;align-items:center;border:1px solid transparent;font-weight:500;margin-left:auto}',
+    '] .dvb-status-pill{font-size:11px;line-height:16px;padding:1px 7px;border-radius:10px;display:inline-flex;align-items:center;gap:5px;border:1px solid transparent;font-weight:500;white-space:nowrap;flex-shrink:0}',
   'body[' +
     ATTR +
     '] .dvb-status-pill[data-kind="ready"]{color:var(--dsw-alias-label-success,#2e7d32);background:rgba(46,125,50,.12);border-color:rgba(46,125,50,.25)}',
@@ -67,6 +67,8 @@ export const BASE_CSS = [
   'body[' +
     ATTR +
     '] .dvb-setting-label{display:flex;align-items:center;gap:10px;flex:1;min-width:0;font-size:14px;color:var(--dsw-alias-label-primary,inherit)}',
+  'body[' + ATTR + '] .dvb-setting-name{flex-shrink:0;white-space:nowrap}',
+  'body[' + ATTR + '] .dvb-setting-row .dvb-setting-name{min-width:76px}',
   'body[' + ATTR + '] .dvb-setting-control{display:inline-flex;align-items:center;gap:10px;flex:none}',
   'body[' +
     ATTR +
