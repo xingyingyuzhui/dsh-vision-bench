@@ -31,6 +31,7 @@ test('agent-tool: vision_debug schema matches specification', () => {
     'evaluate',
     'snapshot',
     'reset',
+    'verify',
   ]
 
   assert.deepEqual(actions.sort(), expectedActions.sort())

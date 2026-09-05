@@ -3,6 +3,7 @@
 import { evaluateAssertion } from '../../domain/verify/assertion.mjs'
 import { createVerifyResult } from '../../domain/verify/result.mjs'
 import { createScenario } from '../../domain/verify/scenario.mjs'
+import { createTelemetryReader } from './telemetry-reader.mjs'
 
 /**
  * Creates the Verification Service for closed-loop assertion testing
@@ -10,6 +11,7 @@ import { createScenario } from '../../domain/verify/scenario.mjs'
  *
  * @param {{
  *   debugRuntime?: any,
+ *   telemetryReader?: any,
  *   workspaceLoader?: (cwd: string) => any,
  *   evidenceBuilder?: (cwd: string) => Array<Record<string, any>>,
  *   onJournalEvent?: ((event: any) => Promise<void>) | null,
@@ -31,46 +33,104 @@ export function createVerifyService(deps = {}) {
      *   ownerSessionId: string,
      *   debugSessionId?: string,
      *   timeoutMs?: number,
+     *   signal?: AbortSignal,
+     *   telemetryReader?: any,
+     *   artifactSha256?: string,
+     *   firmwareHash?: string,
+     *   targetIdentity?: string,
      * }} options
      * @returns {Promise<import('../../types/verify.d.ts').VerifyResult>}
      */
     async runVerification(options) {
       const startTime = Date.now()
-      const { scenario: rawScenario, workspaceCwd, ownerSessionId } = options
+      const { scenario: rawScenario, workspaceCwd, ownerSessionId, signal } = options
       const scenario = createScenario(rawScenario)
+      const timeoutMs = options.timeoutMs || scenario.timeoutMs || 60000
+
+      const telemetryReader =
+        options.telemetryReader || deps.telemetryReader || createTelemetryReader({ workspaceCwd, workspaceLoader })
 
       // Resolve debug session
       let debugSessionId = options.debugSessionId || ''
-      if (!debugSessionId && debugRuntime && typeof debugRuntime.findSession === 'function') {
-        const hit = debugRuntime.findSession((/** @type {any} */ s) => s.workspaceCwd === workspaceCwd)
-        if (hit) {
-          debugSessionId = hit.debugSessionId
+      let activeSession = null
+      if (debugRuntime) {
+        if (debugSessionId) {
+          try {
+            activeSession = debugRuntime.state({ debugSessionId, ownerSessionId })
+          } catch {}
+        } else if (typeof debugRuntime.findSession === 'function') {
+          activeSession = debugRuntime.findSession(
+            (/** @type {any} */ s) =>
+              s.ownerSessionId === ownerSessionId && (!workspaceCwd || s.workspaceCwd === workspaceCwd),
+          )
+          if (activeSession) {
+            debugSessionId = activeSession.debugSessionId
+          }
         }
+      }
+
+      if (signal?.aborted) {
+        return createVerifyResult({
+          scenario,
+          status: 'cancelled',
+          durationMs: Date.now() - startTime,
+          startAt: startTime,
+          endAt: Date.now(),
+        })
       }
 
       // 1. Run Setup if declared
       if (scenario.setup) {
         if (scenario.setup.delayMs && Number(scenario.setup.delayMs) > 0) {
-          await new Promise((r) => setTimeout(r, Math.min(10000, Number(scenario.setup?.delayMs))))
+          const delay = Math.min(timeoutMs, Number(scenario.setup.delayMs))
+          await new Promise((resolve, reject) => {
+            const timer = setTimeout(resolve, delay)
+            if (signal) {
+              signal.addEventListener(
+                'abort',
+                () => {
+                  clearTimeout(timer)
+                  reject(new Error('VERIFY_CANCELLED'))
+                },
+                { once: true },
+              )
+            }
+          })
         }
       }
 
       /** @type {import('../../types/verify.d.ts').AssertionResult[]} */
       const assertionResults = []
+      /** @type {Array<{ pointId?: string, expr?: string, timestamp: number, value: any }>} */
+      const telemetrySamples = []
 
       // 2. Evaluate each assertion
       for (const spec of scenario.assertions) {
+        if (signal?.aborted) {
+          return createVerifyResult({
+            scenario,
+            status: 'cancelled',
+            durationMs: Date.now() - startTime,
+            startAt: startTime,
+            endAt: Date.now(),
+            assertions: assertionResults,
+            telemetrySamples,
+          })
+        }
+
         let actualValue = undefined
 
         try {
           switch (spec.type) {
             case 'debug.expression': {
+              const expr = spec.expr || spec.expression || ''
               if (debugRuntime && debugSessionId) {
                 const res = await debugRuntime.command(
                   { debugSessionId, ownerSessionId },
-                  { type: 'evaluate', expression: spec.expr },
+                  { type: 'evaluate', expression: expr },
                 )
                 actualValue = res?.value
+                telemetrySamples.push({ expr, timestamp: Date.now(), value: actualValue })
               } else {
                 actualValue = undefined
               }
@@ -78,10 +138,12 @@ export function createVerifyService(deps = {}) {
             }
 
             case 'modbus.point': {
-              const ws = workspaceLoader(workspaceCwd)
-              const points = ws?.modbus?.points || []
-              const pt = points.find((/** @type {any} */ p) => p.id === spec.pointId)
-              actualValue = pt ? (pt.value ?? pt.rawValue) : undefined
+              const pointId = spec.pointId || spec.source?.pointId || ''
+              const reading = await telemetryReader.readPoint(pointId)
+              actualValue = reading ? (reading.value ?? reading.rawValue) : undefined
+              if (reading) {
+                telemetrySamples.push({ pointId, timestamp: reading.timestamp, value: actualValue })
+              }
               break
             }
 
@@ -100,10 +162,11 @@ export function createVerifyService(deps = {}) {
             }
 
             case 'no.alarm': {
+              const pointId = spec.pointId || spec.source?.pointId
               const ws = workspaceLoader(workspaceCwd)
               const alarms = ws?.alarms || []
-              if (spec.pointId) {
-                const ptAlarms = alarms.filter((/** @type {any} */ a) => a.pointId === spec.pointId && a.active)
+              if (pointId) {
+                const ptAlarms = alarms.filter((/** @type {any} */ a) => a.pointId === pointId && a.active)
                 actualValue = ptAlarms.length
               } else {
                 const active = alarms.filter((/** @type {any} */ a) => a.active)
@@ -113,55 +176,88 @@ export function createVerifyService(deps = {}) {
             }
 
             case 'range': {
-              if (spec.expr && debugRuntime && debugSessionId) {
+              const expr = spec.expr || spec.expression || spec.source?.expr || spec.source?.expression
+              const pointId = spec.pointId || spec.source?.pointId
+
+              if (expr && debugRuntime && debugSessionId) {
                 const res = await debugRuntime.command(
                   { debugSessionId, ownerSessionId },
-                  { type: 'evaluate', expression: spec.expr },
+                  { type: 'evaluate', expression: expr },
                 )
                 actualValue = res?.value
-              } else if (spec.pointId) {
-                const ws = workspaceLoader(workspaceCwd)
-                const points = ws?.modbus?.points || []
-                const pt = points.find((/** @type {any} */ p) => p.id === spec.pointId)
-                actualValue = pt ? (pt.value ?? pt.rawValue) : undefined
+                telemetrySamples.push({ expr, timestamp: Date.now(), value: actualValue })
+              } else if (pointId) {
+                const reading = await telemetryReader.readPoint(pointId)
+                actualValue = reading ? (reading.value ?? reading.rawValue) : undefined
+                if (reading) {
+                  telemetrySamples.push({ pointId, timestamp: reading.timestamp, value: actualValue })
+                }
               }
               break
             }
 
             case 'changed': {
-              if (spec.expr && debugRuntime && debugSessionId) {
+              const expr = spec.expr || spec.expression || spec.source?.expr || spec.source?.expression
+              const pointId = spec.pointId || spec.source?.pointId
+
+              if (expr && debugRuntime && debugSessionId) {
                 const res = await debugRuntime.command(
                   { debugSessionId, ownerSessionId },
-                  { type: 'evaluate', expression: spec.expr },
+                  { type: 'evaluate', expression: expr },
                 )
                 actualValue = { initial: spec.value, current: res?.value }
-              } else if (spec.pointId) {
-                const ws = workspaceLoader(workspaceCwd)
-                const points = ws?.modbus?.points || []
-                const pt = points.find((/** @type {any} */ p) => p.id === spec.pointId)
-                actualValue = { initial: spec.value, current: pt ? (pt.value ?? pt.rawValue) : undefined }
+                telemetrySamples.push({ expr, timestamp: Date.now(), value: res?.value })
+              } else if (pointId) {
+                const reading = await telemetryReader.readPoint(pointId)
+                const currentVal = reading ? (reading.value ?? reading.rawValue) : undefined
+                actualValue = { initial: spec.value, current: currentVal }
+                if (reading) {
+                  telemetrySamples.push({ pointId, timestamp: reading.timestamp, value: currentVal })
+                }
               }
               break
             }
 
             case 'stable-for-duration': {
-              const duration = Math.min(2000, Math.max(50, Number(spec.durationMs) || 100))
-              const samples = []
-              const intervalMs = Math.max(20, Math.floor(duration / 4))
+              // Real unconstrained duration bounded by scenario timeout
+              const rawDuration = Number(spec.durationMs) || 1000
+              const duration = Math.min(timeoutMs, Math.max(50, rawDuration))
+              const intervalMs =
+                typeof spec.sampleIntervalMs === 'number'
+                  ? Math.max(10, spec.sampleIntervalMs)
+                  : duration >= 3000
+                    ? 1000
+                    : Math.max(20, Math.floor(duration / 4))
 
-              for (let i = 0; i < 4; i++) {
-                if (spec.expr && debugRuntime && debugSessionId) {
+              const samples = []
+              const sampleStart = Date.now()
+              const expr = spec.expr || spec.expression || spec.source?.expr || spec.source?.expression
+              const pointId = spec.pointId || spec.source?.pointId
+
+              while (Date.now() - sampleStart <= duration) {
+                if (signal?.aborted) {
+                  throw new Error('VERIFY_CANCELLED')
+                }
+
+                if (expr && debugRuntime && debugSessionId) {
                   const res = await debugRuntime.command(
                     { debugSessionId, ownerSessionId },
-                    { type: 'evaluate', expression: spec.expr },
+                    { type: 'evaluate', expression: expr },
                   )
-                  samples.push(Number(res?.value))
-                } else if (spec.pointId) {
-                  const ws = workspaceLoader(workspaceCwd)
-                  const pt = (ws?.modbus?.points || []).find((/** @type {any} */ p) => p.id === spec.pointId)
-                  samples.push(Number(pt?.value ?? pt?.rawValue))
+                  const val = Number(res?.value)
+                  samples.push(val)
+                  telemetrySamples.push({ expr, timestamp: Date.now(), value: val })
+                } else if (pointId) {
+                  const reading = await telemetryReader.readPoint(pointId)
+                  const val = Number(reading?.value ?? reading?.rawValue)
+                  samples.push(val)
+                  telemetrySamples.push({ pointId, timestamp: Date.now(), value: val })
                 }
-                if (i < 3) await new Promise((r) => setTimeout(r, intervalMs))
+
+                if (Date.now() - sampleStart + intervalMs > duration) {
+                  break
+                }
+                await new Promise((r) => setTimeout(r, intervalMs))
               }
               actualValue = samples
               break
@@ -171,6 +267,17 @@ export function createVerifyService(deps = {}) {
               actualValue = undefined
           }
         } catch (err) {
+          if (err instanceof Error && err.message === 'VERIFY_CANCELLED') {
+            return createVerifyResult({
+              scenario,
+              status: 'cancelled',
+              durationMs: Date.now() - startTime,
+              startAt: startTime,
+              endAt: Date.now(),
+              assertions: assertionResults,
+              telemetrySamples,
+            })
+          }
           actualValue = undefined
         }
 
@@ -205,6 +312,13 @@ export function createVerifyService(deps = {}) {
         assertions: assertionResults,
         durationMs,
         evidence,
+        artifactSha256: options.artifactSha256 || activeSession?.artifact?.sha256,
+        firmwareHash: options.firmwareHash || activeSession?.firmwareHash,
+        debugSessionId,
+        targetIdentity: options.targetIdentity || activeSession?.targetIdentity,
+        startAt: startTime,
+        endAt: Date.now(),
+        telemetrySamples,
       })
 
       // 4. Record to journal timeline if callback is available

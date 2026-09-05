@@ -193,33 +193,67 @@ export function evaluateAssertion(spec, actualValue) {
     case 'stable-for-duration': {
       let isStable = true
       let maxDelta = 0
-      const tolerance = spec.tolerance != null ? Number(spec.tolerance) : 0
+      const tolerance = spec.tolerance != null ? Number(spec.tolerance) : null
+      const minBound = spec.min != null ? Number(spec.min) : null
+      const maxBound = spec.max != null ? Number(spec.max) : null
+
+      let sampleCount = 0
+      let minSample = Number.POSITIVE_INFINITY
+      let maxSample = Number.NEGATIVE_INFINITY
+      let boundsOk = true
 
       if (Array.isArray(actualValue) && actualValue.length > 0) {
         const nums = actualValue.map(Number).filter(Number.isFinite)
-        if (nums.length > 1) {
-          const min = Math.min(...nums)
-          const max = Math.max(...nums)
-          maxDelta = max - min
-          isStable = maxDelta <= tolerance
+        sampleCount = nums.length
+        if (nums.length > 0) {
+          minSample = Math.min(...nums)
+          maxSample = Math.max(...nums)
+          maxDelta = maxSample - minSample
+          if (tolerance != null && maxDelta > tolerance) {
+            isStable = false
+          }
+          if (minBound != null && minSample < minBound) {
+            isStable = false
+            boundsOk = false
+          }
+          if (maxBound != null && maxSample > maxBound) {
+            isStable = false
+            boundsOk = false
+          }
+        } else {
+          isStable = false
         }
       } else if (actualValue && typeof actualValue === 'object' && 'maxDelta' in actualValue) {
         maxDelta = Number(actualValue.maxDelta) || 0
-        isStable = maxDelta <= tolerance
+        if (tolerance != null && maxDelta > tolerance) isStable = false
       }
 
       const pass = isStable
       const targetName = spec.expr ? `表达式 [${spec.expr}]` : `点位 [${spec.pointId || ''}]`
+
+      let expectedDesc = ''
+      if (tolerance != null) expectedDesc += `波动 <= ${tolerance} `
+      if (minBound != null) expectedDesc += `>= ${minBound} `
+      if (maxBound != null) expectedDesc += `<= ${maxBound} `
+      if (!expectedDesc) expectedDesc = '保持稳定'
+
+      let msg = ''
+      if (pass) {
+        msg = `${targetName} 在持续期间保持稳定 (${sampleCount} 采样, 范围 [${minSample}, ${maxSample}], 波动 ${maxDelta})`
+      } else if (!boundsOk) {
+        msg = `${targetName} 在持续期间数值超出限定范围 [${minBound ?? '-inf'}, ${maxBound ?? '+inf'}] (实际采样范围 [${minSample}, ${maxSample}])`
+      } else {
+        msg = `${targetName} 在持续期间波动过大 (波动 ${maxDelta} > 容差 ${tolerance})`
+      }
+
       return {
         id,
         type: spec.type,
         pass,
-        actual: maxDelta,
-        expected: `<= ${tolerance}`,
+        actual: { min: minSample, max: maxSample, maxDelta, sampleCount },
+        expected: expectedDesc.trim(),
         op: '<=',
-        message: pass
-          ? `${targetName} 在持续期间保持稳定 (波动 ${maxDelta} <= 容差 ${tolerance})`
-          : `${targetName} 在持续期间波动过大 (波动 ${maxDelta} > 容差 ${tolerance})`,
+        message: msg,
         timestamp: now,
       }
     }

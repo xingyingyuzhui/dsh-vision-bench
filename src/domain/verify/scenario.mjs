@@ -42,10 +42,12 @@ export function validateScenario(scenario) {
     if (!a.type || !VALID_ASSERTION_TYPES.has(a.type)) {
       throw new Error(`第 ${i + 1} 项断言包含未知或未支持的类型: ${a.type}`)
     }
-    if (a.type === 'debug.expression' && (!a.expr || typeof a.expr !== 'string')) {
+    const expr = a.expr || a.expression || a.source?.expr || a.source?.expression
+    if (a.type === 'debug.expression' && (!expr || typeof expr !== 'string')) {
       throw new Error(`第 ${i + 1} 项 debug.expression 断言缺少 expr 表达式`)
     }
-    if (a.type === 'modbus.point' && (!a.pointId || typeof a.pointId !== 'string')) {
+    const pointId = a.pointId || a.source?.pointId
+    if (a.type === 'modbus.point' && (!pointId || typeof pointId !== 'string')) {
       throw new Error(`第 ${i + 1} 项 modbus.point 断言缺少 pointId 字段`)
     }
   }
@@ -58,15 +60,31 @@ export function validateScenario(scenario) {
  * @returns {import('../../types/verify.d.ts').ScenarioSpec}
  */
 export function createScenario(spec) {
-  validateScenario(spec)
+  if (!spec || typeof spec !== 'object') {
+    throw new Error('场景配置必须是一个非空对象')
+  }
+  const id = spec.id || `scenario_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+  const normalizedSpec = { ...spec, id }
+  validateScenario(normalizedSpec)
   return {
-    id: spec.id,
-    name: spec.name,
-    description: spec.description || '',
-    assertions: spec.assertions.map((a, index) => ({
-      ...a,
-      id: a.id || `assert_${index + 1}_${Math.random().toString(36).slice(2, 6)}`,
-    })),
+    id,
+    name: normalizedSpec.name,
+    description: normalizedSpec.description || '',
+    timeoutMs: typeof normalizedSpec.timeoutMs === 'number' ? normalizedSpec.timeoutMs : 60000,
+    assertions: normalizedSpec.assertions.map((a, index) => {
+      const expr = a.expr || a.expression || a.source?.expr || a.source?.expression
+      const pointId = a.pointId || a.source?.pointId
+      const op = a.op || a.operator || '=='
+      const value = a.value !== undefined ? a.value : a.expected
+      return {
+        ...a,
+        id: a.id || `assert_${index + 1}_${Math.random().toString(36).slice(2, 6)}`,
+        expr,
+        pointId,
+        op,
+        value,
+      }
+    }),
     targetSpec: spec.targetSpec || {},
     setup: spec.setup || {},
   }

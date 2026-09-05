@@ -4,6 +4,7 @@ import { DEBUG_ERRORS, DebugError } from '../../domain/debug/errors.mjs'
 import { envelope, normalizeCommand } from '../commands/command-contract.mjs'
 import { globalCommandIdempotency } from '../commands/command-idempotency-cache.mjs'
 import { finalizeAgentCommandResult } from '../commands/lossless-json.mjs'
+import { createVerifyCommandService } from '../verify/verify-command-service.mjs'
 import { defaultDebugApprovals } from './debug-approval-service.mjs'
 import { getSharedDebugRuntime } from './debug-runtime.mjs'
 import { startDebugSession } from './debug-start-service.mjs'
@@ -21,6 +22,7 @@ export const DEBUG_ACTIONS = new Set([
   'evaluate',
   'snapshot',
   'reset',
+  'verify',
 ])
 
 /**
@@ -31,6 +33,8 @@ export const DEBUG_ACTIONS = new Set([
  * @param {{
  *   debugRuntime?: ReturnType<typeof import('./debug-runtime.mjs').createDebugRuntime>,
  *   approvalStore?: ReturnType<typeof import('./debug-approval-service.mjs').createDebugApprovalStore>,
+ *   verifyCommandService?: any,
+ *   workspaceLoader?: any,
  * }} [deps]
  * @returns {Promise<any>}
  */
@@ -135,6 +139,39 @@ export async function executeDebugCommand(input, deps = {}) {
           return envelope(cmd, {
             action: cmd.action,
             ...res,
+          })
+        }
+
+        case 'verify': {
+          const verifyCmdService =
+            deps.verifyCommandService ||
+            createVerifyCommandService({
+              debugRuntime: runtime,
+              workspaceLoader: deps.workspaceLoader,
+            })
+          const scenario = payload.scenario || {
+            id: payload.scenarioId || `scenario_${Date.now()}`,
+            name: payload.scenarioName || 'Debug Target Verification',
+            assertions: payload.assertions || [],
+            timeoutMs: payload.timeoutMs,
+          }
+          const activeSession = findOwnedSession()
+          const verifyRes = await verifyCmdService.execute({
+            workspaceCwd: cwd,
+            ownerSessionId: sessionId,
+            scenario,
+            debugSessionId: activeSession?.debugSessionId,
+            timeoutMs: payload.timeoutMs,
+            signal: cmd.signal,
+          })
+          return envelope(cmd, {
+            ok: verifyRes.status === 'pass',
+            action: cmd.action,
+            verifyResult: verifyRes,
+            status: verifyRes.status,
+            summary: verifyRes.summary,
+            passedCount: verifyRes.passedCount,
+            totalCount: verifyRes.totalCount,
           })
         }
 

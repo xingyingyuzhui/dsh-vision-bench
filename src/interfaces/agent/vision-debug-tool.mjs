@@ -16,6 +16,7 @@ export const DEBUG_TOOL_ACTIONS = new Set([
   'evaluate',
   'snapshot',
   'reset',
+  'verify',
 ])
 
 /**
@@ -63,7 +64,8 @@ export function visionDebugTool(home) {
       'inspect: inspect registers, call stack, local variables, or target memory. ' +
       'evaluate: evaluate C expression in current scope. ' +
       'snapshot: capture forensic snapshot of current target state. ' +
-      'reset: reset target CPU and halt.',
+      'reset: reset target CPU and halt. ' +
+      'verify: execute closed-loop verification scenario against target firmware and Modbus telemetry.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -106,6 +108,9 @@ export function visionDebugTool(home) {
         snapshotId: { type: 'string', description: 'Snapshot ID to retrieve or reference' },
         op: { type: 'string', description: 'Sub-operation (e.g. get, list, remove)' },
         reason: { type: 'string', description: 'Reason for diagnostic snapshot' },
+        scenario: { type: 'object', description: 'Verification scenario specification' },
+        scenarioName: { type: 'string', description: 'Verification scenario name' },
+        timeoutMs: { type: 'number', description: 'Timeout in milliseconds for verification' },
         commandId: { type: 'string', description: 'Idempotency key' },
       },
     },
