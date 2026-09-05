@@ -17,7 +17,6 @@ export class GdbBackend {
    *   debugSessionId?: string,
    *   ownerSessionId?: string,
    *   workspaceCwd?: string,
-   *   eventRing?: { push: (event: any) => any },
    *   openocdStarter?: typeof startOpenOcdDebugProcess,
    *   miClientFactory?: typeof createMiClient,
    * }} [deps]
@@ -26,7 +25,6 @@ export class GdbBackend {
     this.debugSessionId = deps.debugSessionId || ''
     this.ownerSessionId = deps.ownerSessionId || ''
     this.workspaceCwd = deps.workspaceCwd || ''
-    this.eventRing = deps.eventRing || null
     this.openocdStarter = deps.openocdStarter || startOpenOcdDebugProcess
     this.miClientFactory = deps.miClientFactory || createMiClient
 
@@ -34,15 +32,24 @@ export class GdbBackend {
     this.openocdProcess = null
     /** @type {import('./mi-client.mjs').MIClient | null} */
     this.miClient = null
-    /** @type {import('../../../types/debug.d.ts').SourceLocation | null} */
-    this.currentLocation = null
+    /**
+     * Native location cache for GDB.
+     * Note: backend cache is NOT public/debug product state.
+     * @type {import('../../../types/debug.d.ts').SourceLocation | null}
+     */
+    this.lastNativeLocation = null
     /** @type {Map<string, string>} */
     this.breakpointMap = new Map() // bp.id -> gdb breakpoint number
     /** @type {Map<string, string>} */
     this.watchpointMap = new Map() // wp.id -> gdb watchpoint number
-    this.state = 'idle'
+    /**
+     * Native state cache for GDB.
+     * Note: backend cache is NOT public/debug product state.
+     */
+    this.nativeState = 'idle'
     this.isStopping = false
     this.firmwareHash = ''
+    this.exitEmitted = false
     this._unsubscribeAsync = null
     this._unsubscribeStream = null
     /** @type {Set<(event: import('../../../types/debug-backend.d.ts').DebugBackendEvent) => void>} */
@@ -76,13 +83,24 @@ export class GdbBackend {
   }
 
   /**
-   * Starts OpenOCD server and GDB MI client, attaches to target and resets.
+   * Emits backend.exited exactly once to prevent duplicate exit events.
+   * @param {import('../../../types/debug-backend.d.ts').DebugBackendEvent} event
+   */
+  _emitExitOnce(event) {
+    if (this.exitEmitted) return
+    this.exitEmitted = true
+    this._emit(event)
+  }
+
+  /**
+   * Starts GDB and OpenOCD processes, connects MI client, and enters halted debug state.
    *
    * @param {{
    *   targetSpec?: {
    *     artifactPath?: string,
    *     interfaceName?: string,
    *     target?: string,
+   *     probeSerial?: string,
    *     gdbPort?: number,
    *     openocdBin?: string,
    *     gdbBin?: string,
@@ -93,7 +111,7 @@ export class GdbBackend {
    * }} spec
    */
   async start(spec = {}) {
-    this.state = 'starting'
+    this.nativeState = 'starting'
     const targetSpec = spec.targetSpec || {}
     const artifactPath = targetSpec.artifactPath
     const gdbPort = targetSpec.gdbPort || 3333
@@ -123,6 +141,7 @@ export class GdbBackend {
         openocdBin,
         interfaceName: targetSpec.interfaceName,
         target: targetSpec.target,
+        probeSerial: targetSpec.probeSerial,
         gdbPort,
         cwd,
       })
@@ -149,9 +168,9 @@ export class GdbBackend {
               function: frame.func || '',
               address: frame.addr || '',
             }
-            this.currentLocation = loc
+            this.lastNativeLocation = loc
           }
-          this.state = 'paused'
+          this.nativeState = 'paused'
           this._emit({
             type: 'backend.stopped',
             reason,
@@ -164,37 +183,12 @@ export class GdbBackend {
                 : undefined,
             threadId: rec.results?.['thread-id'],
           })
-          if (this.eventRing) {
-            this.eventRing.push({
-              debugSessionId: this.debugSessionId,
-              ownerSessionId: this.ownerSessionId,
-              workspaceCwd: this.workspaceCwd,
-              backend: 'gdb-openocd',
-              type: 'debug.stopped',
-              payload: {
-                reason,
-                location: this.currentLocation,
-                rawReason: rec.results?.reason,
-                threadId: rec.results?.['thread-id'],
-              },
-            })
-          }
         } else if (rec.class === 'running') {
-          this.state = 'running'
+          this.nativeState = 'running'
           this._emit({
             type: 'backend.running',
             threadId: rec.results?.['thread-id'],
           })
-          if (this.eventRing) {
-            this.eventRing.push({
-              debugSessionId: this.debugSessionId,
-              ownerSessionId: this.ownerSessionId,
-              workspaceCwd: this.workspaceCwd,
-              backend: 'gdb-openocd',
-              type: 'debug.running',
-              payload: { threadId: rec.results?.['thread-id'] },
-            })
-          }
         }
       })
 
@@ -216,7 +210,7 @@ export class GdbBackend {
       if (this.miClient._transport?.exitPromise) {
         this.miClient._transport.exitPromise.then(
           (exitInfo) => {
-            this._emit({
+            this._emitExitOnce({
               type: 'backend.exited',
               code: exitInfo?.code ?? undefined,
               signal: exitInfo?.signal ?? undefined,
@@ -244,7 +238,7 @@ export class GdbBackend {
         const frames = await this.stack()
         if (frames.length > 0) {
           const top = frames[0]
-          this.currentLocation = {
+          this.lastNativeLocation = {
             file: top.file || '',
             line: top.line || 0,
             function: top.function,
@@ -255,7 +249,7 @@ export class GdbBackend {
         /* initial frame read is optional */
       }
 
-      this.state = 'paused'
+      this.nativeState = 'paused'
     } catch (err) {
       await this.stop()
       throw err
@@ -268,7 +262,7 @@ export class GdbBackend {
   async continue() {
     const client = this._getClient()
     const rec = await client.command('-exec-continue')
-    this.state = 'running'
+    this.nativeState = 'running'
     return rec
   }
 
@@ -285,7 +279,7 @@ export class GdbBackend {
   async pause() {
     const client = this._getClient()
     const rec = await client.command('-exec-interrupt')
-    this.state = 'paused'
+    this.nativeState = 'paused'
     return rec
   }
 
@@ -339,7 +333,7 @@ export class GdbBackend {
   async resetHalt() {
     const client = this._getClient()
     const rec = await client.command('-interpreter-exec', ['console', '"monitor reset halt"'])
-    this.state = 'paused'
+    this.nativeState = 'paused'
     return rec
   }
 
@@ -549,7 +543,7 @@ export class GdbBackend {
    */
   async stop() {
     this.isStopping = true
-    this.state = 'stopping'
+    this.nativeState = 'stopping'
 
     if (this._unsubscribeAsync) {
       try {
@@ -597,7 +591,7 @@ export class GdbBackend {
       this.openocdProcess = null
     }
 
-    this.state = 'idle'
+    this.nativeState = 'idle'
   }
 
   /**

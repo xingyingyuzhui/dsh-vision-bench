@@ -34,6 +34,34 @@ function sessionsMatch(left, right) {
 }
 
 /**
+ * @typedef {'pending' | 'approved' | 'rejected' | 'consumed'} ApprovalStatus
+ */
+
+/**
+ * @typedef {Object} ApprovalRecord
+ * @property {string} id
+ * @property {string} requestId
+ * @property {string} cwd
+ * @property {string} sessionId
+ * @property {'agent' | 'user'} source
+ * @property {string} backend
+ * @property {string} target
+ * @property {string} interfaceName
+ * @property {string} artifactPath
+ * @property {string} artifactSha256
+ * @property {string} [launchFingerprint]
+ * @property {string} [launchSummary]
+ * @property {any} [launchSpec]
+ * @property {string} risk
+ * @property {ApprovalStatus} status
+ * @property {number} createdAt
+ * @property {number} expiresAt
+ * @property {number} [approvedAt]
+ * @property {number} [consumedAt]
+ * @property {number} [rejectedAt]
+ */
+
+/**
  * In-memory store for Debug Control Approval requests and control leases.
  * Parity with ADR-013 & Phase 6 Section 10.
  *
@@ -44,20 +72,7 @@ export function createDebugApprovalStore(opts = {}) {
   const max = Number(opts.max) > 0 ? Number(opts.max) : MAX_DEBUG_APPROVALS
   const now = typeof opts.now === 'function' ? opts.now : () => Date.now()
 
-  /** @type {Map<string, {
-   *   requestId: string,
-   *   cwd: string,
-   *   sessionId: string,
-   *   source: 'agent' | 'user',
-   *   backend: string,
-   *   target: string,
-   *   interfaceName: string,
-   *   artifactPath: string,
-   *   artifactSha256: string,
-   *   risk: string,
-   *   createdAt: number,
-   *   expiresAt: number,
-   * }>} */
+  /** @type {Map<string, ApprovalRecord>} */
   const items = new Map()
 
   /** @type {Map<string, {
@@ -105,7 +120,11 @@ export function createDebugApprovalStore(opts = {}) {
    *   interfaceName?: string,
    *   artifactPath?: string,
    *   artifactSha256?: string,
+   *   launchFingerprint?: string,
+   *   launchSummary?: string,
+   *   launchSpec?: any,
    * }} spec
+   * @returns {ApprovalRecord}
    */
   function create(spec) {
     purgeExpired()
@@ -123,7 +142,11 @@ export function createDebugApprovalStore(opts = {}) {
       interfaceName: String(spec.interfaceName || ''),
       artifactPath: String(spec.artifactPath || ''),
       artifactSha256: String(spec.artifactSha256 || ''),
+      launchFingerprint: String(spec.launchFingerprint || ''),
+      launchSummary: String(spec.launchSummary || ''),
+      launchSpec: spec.launchSpec || null,
       risk: '允许对目标设备进行 halt/run/step/reset 操作',
+      status: /** @type {ApprovalStatus} */ ('pending'),
       createdAt,
       expiresAt: createdAt + ttlMs,
     }
@@ -152,6 +175,11 @@ export function createDebugApprovalStore(opts = {}) {
     ) {
       return { ok: false, errorCode: DEBUG_ERRORS.APPROVAL_SCOPE_MISMATCH, error: '调试批准请求不属于当前会话' }
     }
+    if (rec.status === 'consumed') {
+      return { ok: false, errorCode: DEBUG_ERRORS.APPROVAL_NOT_FOUND, error: '调试批准已使用' }
+    }
+    rec.status = 'approved'
+    rec.approvedAt = now()
     return { ok: true, record: rec }
   }
 
@@ -166,6 +194,8 @@ export function createDebugApprovalStore(opts = {}) {
     if (!rec) {
       return { ok: false, errorCode: DEBUG_ERRORS.APPROVAL_NOT_FOUND, error: '调试批准请求不存在' }
     }
+    rec.status = 'rejected'
+    rec.rejectedAt = now()
     items.delete(id)
     return { ok: true, rejected: true }
   }
@@ -175,6 +205,7 @@ export function createDebugApprovalStore(opts = {}) {
    *
    * @param {unknown} requestId
    * @param {{ cwd?: string, sessionId?: string }} [scope]
+   * @returns {{ ok: true, record: ApprovalRecord } | { ok: false, errorCode: string, error: string }}
    */
   function consume(requestId, scope = {}) {
     const id = String(requestId || '').trim()
@@ -213,6 +244,16 @@ export function createDebugApprovalStore(opts = {}) {
       }
     }
 
+    if (record.status !== 'approved') {
+      return {
+        ok: false,
+        errorCode: DEBUG_ERRORS.APPROVAL_REQUIRED,
+        error: '调试启动尚未获得用户批准',
+      }
+    }
+
+    record.status = 'consumed'
+    record.consumedAt = now()
     items.delete(id)
     return { ok: true, record }
   }
@@ -220,6 +261,7 @@ export function createDebugApprovalStore(opts = {}) {
   /**
    * Lists pending approval tickets for a session or workspace.
    * @param {{ cwd?: string, sessionId?: string }} [scope]
+   * @returns {ApprovalRecord[]}
    */
   function listPending(scope = {}) {
     purgeExpired()
@@ -235,6 +277,7 @@ export function createDebugApprovalStore(opts = {}) {
   /**
    * Retrieves a pending ticket by ID without consuming it.
    * @param {string} requestId
+   * @returns {ApprovalRecord | null}
    */
   function getPending(requestId) {
     purgeExpired(now(), requestId)

@@ -12,6 +12,7 @@ import {
  * @param {{
  *   interfaceName?: string,
  *   target?: string,
+ *   probeSerial?: string,
  *   gdbPort?: number,
  *   tclPort?: number | string,
  *   telnetPort?: number | string,
@@ -28,14 +29,14 @@ export function buildOpenOcdDebugArgs(options = {}) {
   const port = options.gdbPort || 3333
   const commands = [`gdb_port ${port}`, 'telnet_port disabled', 'tcl_port disabled']
 
-  const args = [
-    '-f',
-    `interface/${ifaceVal.value}.cfg`,
-    '-f',
-    `target/${targetVal.value}.cfg`,
-    '-c',
-    commands.join('; '),
-  ]
+  const args = ['-f', `interface/${ifaceVal.value}.cfg`]
+
+  if (options.probeSerial && String(options.probeSerial).trim()) {
+    const serial = String(options.probeSerial).trim().replace(/"/g, '')
+    args.push('-c', `adapter serial "${serial}"`)
+  }
+
+  args.push('-f', `target/${targetVal.value}.cfg`, '-c', commands.join('; '))
 
   return {
     ok: true,

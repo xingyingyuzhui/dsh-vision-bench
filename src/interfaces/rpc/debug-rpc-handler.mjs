@@ -1,7 +1,8 @@
 // @ts-check
-
+import { existsSync } from 'node:fs'
 import { defaultDebugApprovals } from '../../application/debug/debug-approval-service.mjs'
 import { createDebugRuntime } from '../../application/debug/debug-runtime.mjs'
+import { findOwnedDebugSession } from '../../application/debug/debug-session-scope.mjs'
 import { startDebugSession } from '../../application/debug/debug-start-service.mjs'
 import { DEBUG_ERRORS, DebugError } from '../../domain/debug/errors.mjs'
 import { DEBUG_COMMAND_OPS, DEBUG_RPC_ENDPOINTS } from '../../shared/debug-contract.mjs'
@@ -36,18 +37,24 @@ export function createDebugRpcHandler(deps) {
       switch (endpoint) {
         case DEBUG_RPC_ENDPOINTS.STATE: {
           let session = null
-          if (debugSessionId) {
-            session = runtime.state({ debugSessionId, ownerSessionId: sessionId })
-          } else if (sessionId || cwd) {
-            session = runtime.findSession((s) =>
-              Boolean((sessionId && s.ownerSessionId === sessionId) || (cwd && s.workspaceCwd === cwd)),
-            )
+          try {
+            session = findOwnedDebugSession(runtime, {
+              ownerSessionId: sessionId,
+              workspaceCwd: cwd,
+              debugSessionId,
+            })
+          } catch (err) {
+            if (err instanceof DebugError && err.code === DEBUG_ERRORS.NOT_FOUND) {
+              session = null
+            } else {
+              throw err
+            }
           }
           const pendingApprovals = approvalStore.listPending({ cwd, sessionId })
           return {
             ok: true,
-            active: Boolean(session),
-            session,
+            active: Boolean(session && session.state !== 'idle' && session.state !== 'failed'),
+            session: session || null,
             pendingApprovals,
           }
         }
@@ -77,8 +84,12 @@ export function createDebugRpcHandler(deps) {
           }
 
           if (op === 'stop') {
-            const targetId =
-              debugSessionId || runtime.findSession((s) => s.ownerSessionId === sessionId)?.debugSessionId
+            const session = findOwnedDebugSession(runtime, {
+              ownerSessionId: sessionId,
+              workspaceCwd: cwd,
+              debugSessionId,
+            })
+            const targetId = session?.debugSessionId
             if (!targetId) {
               return { ok: true, alreadyStopped: true }
             }
@@ -90,7 +101,12 @@ export function createDebugRpcHandler(deps) {
           }
 
           // Other commands require debugSessionId or an active session for the owner
-          const targetId = debugSessionId || runtime.findSession((s) => s.ownerSessionId === sessionId)?.debugSessionId
+          const session = findOwnedDebugSession(runtime, {
+            ownerSessionId: sessionId,
+            workspaceCwd: cwd,
+            debugSessionId,
+          })
+          const targetId = session?.debugSessionId
           if (!targetId) {
             return {
               ok: false,
@@ -107,7 +123,12 @@ export function createDebugRpcHandler(deps) {
         }
 
         case DEBUG_RPC_ENDPOINTS.EVENTS_WAIT: {
-          const targetId = debugSessionId || runtime.findSession((s) => s.ownerSessionId === sessionId)?.debugSessionId
+          const session = findOwnedDebugSession(runtime, {
+            ownerSessionId: sessionId,
+            workspaceCwd: cwd,
+            debugSessionId,
+          })
+          const targetId = session?.debugSessionId
           if (!targetId) {
             // When no debug session is active, throttle response to prevent tight-loop polling
             const idleThrottleMs = Math.min(1000, Math.max(0, Number(row.timeoutMs) || 1000))
@@ -165,51 +186,70 @@ export function createDebugRpcHandler(deps) {
           }
 
           if (op === 'reject') {
-            const consumeRes = approvalStore.consume(row.requestId, { cwd, sessionId })
+            const rejectRes = approvalStore.reject(row.requestId, { cwd, sessionId })
+            if (!rejectRes.ok) {
+              return {
+                ok: false,
+                errorCode: rejectRes.errorCode,
+                error: rejectRes.error,
+              }
+            }
             return {
               ok: true,
               rejected: true,
               requestId: row.requestId,
-              consumed: consumeRes.ok,
+              consumed: true,
             }
           }
 
           if (op === 'approve') {
-            const consumeRes = approvalStore.consume(row.requestId, { cwd, sessionId })
-            if (!consumeRes.ok || !consumeRes.record) {
+            const approveRes = approvalStore.approve(row.requestId, { cwd, sessionId })
+            if (!approveRes.ok) {
               return {
                 ok: false,
-                errorCode: consumeRes.errorCode,
-                error: consumeRes.error,
+                errorCode: approveRes.errorCode,
+                error: approveRes.error,
               }
             }
-            const record = consumeRes.record
-            const session = await runtime.start({
-              debugSessionId: row.debugSessionId || undefined,
-              ownerSessionId: record.sessionId || sessionId,
-              workspaceCwd: record.cwd || cwd,
-              backend: /** @type {any} */ (record.backend),
-              targetSpec: {
-                target: record.target,
-                interfaceName: record.interfaceName,
-                artifactPath: record.artifactPath,
-                artifactSha256: record.artifactSha256,
-              },
-            })
+            const record = approveRes.record
+            if (!record) {
+              return {
+                ok: false,
+                errorCode: DEBUG_ERRORS.APPROVAL_NOT_FOUND,
+                error: '审批记录不存在',
+              }
+            }
 
-            approvalStore.grantControlLease(session.debugSessionId, {
-              ownerSessionId: record.sessionId || sessionId,
-              workspaceCwd: record.cwd || cwd,
-              artifactSha256: record.artifactSha256,
-              backend: record.backend,
+            const artifactExists = Boolean(record.artifactPath && existsSync(record.artifactPath))
+            const { artifactSha256: _oldSha, ...baseTargetSpec } = record.launchSpec?.targetSpec || {}
+            const launchTargetSpec = {
+              ...baseTargetSpec,
               target: record.target,
-            })
+              interfaceName: record.interfaceName,
+              artifactPath: record.artifactPath,
+              ...(!artifactExists && record.artifactSha256 ? { artifactSha256: record.artifactSha256 } : {}),
+            }
 
+            const startRes = await startDebugSession(
+              {
+                cwd: record.cwd || cwd,
+                sessionId: record.sessionId || sessionId,
+                source: 'user',
+                backend: /** @type {import('../../types/debug.d.ts').DebugBackendKind} */ (record.backend),
+                approvalRequestId: row.requestId,
+                debugSessionId: row.debugSessionId || undefined,
+                targetSpec: launchTargetSpec,
+              },
+              { debugRuntime: runtime, approvalStore },
+            )
+            if (!startRes.ok) {
+              return startRes
+            }
             return {
               ok: true,
               approved: true,
-              debugSessionId: session.debugSessionId,
-              session,
+              debugSessionId: startRes.debugSessionId,
+              session: startRes.session,
             }
           }
 

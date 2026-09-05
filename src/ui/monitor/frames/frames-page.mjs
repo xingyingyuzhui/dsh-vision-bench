@@ -167,14 +167,16 @@ export function createFramesPage(React, t, post, hooks) {
     const portOptions = buildFramePortOptions(connections, ports, mode, serialSources)
 
     // Task3: two data layers — live keeps collecting; displayed freezes when paused
+    const isShared = Boolean(modbus?.share?.enabled && modbus?.share?.connections)
+    const frameScope = { cwd: realCwd, sessionId, isShared }
     let liveFrames = []
     if (mode === 'proto') {
       if (sel.kind === 'conn') {
         const persistedArray = framesByConnection[sel.connectionId]
-        const mem = getFramesLog(realCwd, sel.connectionId)
+        const mem = getFramesLog(frameScope, sel.connectionId)
         liveFrames = mergeFramesDedup(persistedArray, mem, 500)
       } else {
-        liveFrames = mergeFramesDedup(selectProtocolFrames(framesByConnection, 'all'), getFramesLog(realCwd), 1000)
+        liveFrames = mergeFramesDedup(selectProtocolFrames(framesByConnection, 'all'), getFramesLog(frameScope), 1000)
       }
       if (viewClearedAt > 0) liveFrames = liveFrames.filter((f) => (f.t || f.at || 0) > viewClearedAt)
     } else {

@@ -1,6 +1,7 @@
 // @ts-check
 import { DEBUG_ERRORS, DebugError } from '../../domain/debug/errors.mjs'
 import { defaultDebugApprovals } from './debug-approval-service.mjs'
+import { computeLaunchFingerprint } from './debug-launch-fingerprint.mjs'
 import { resolveDebugLaunchSpec } from './debug-launch-spec-service.mjs'
 import { getSharedDebugRuntime } from './debug-runtime.mjs'
 
@@ -14,7 +15,6 @@ import { getSharedDebugRuntime } from './debug-runtime.mjs'
  *   source?: string,
  *   backend?: import('../../types/debug.d.ts').DebugBackendKind,
  *   targetSpec?: Record<string, any>,
- *   approved?: boolean,
  *   approvalRequestId?: string,
  *   debugSessionId?: string,
  *   [key: string]: any,
@@ -48,17 +48,32 @@ export async function startDebugSession(request, deps = {}) {
     targetSpec: request.targetSpec || {},
   })
 
-  // 2. User Approval Check for Agent
-  if (source === 'agent' && !request.approved && !request.approvalRequestId) {
+  // Compute launch fingerprint for current resolved spec
+  const currentFingerprint = computeLaunchFingerprint({
+    backend: resolved.backend,
+    artifactPath: resolved.targetSpec?.artifactPath,
+    artifactSha256: resolved.targetSpec?.artifactSha256,
+    projectPath: resolved.projectPath || resolved.targetSpec?.projectPath || cwd,
+    targetName: resolved.targetName || resolved.targetSpec?.targetName,
+    interfaceName: resolved.targetSpec?.interfaceName,
+    openocdTarget: resolved.targetSpec?.target,
+    probeSerial: resolved.targetSpec?.probeSerial,
+  })
+
+  // 2. User Approval Check for Agent: Agent must provide approvalRequestId
+  if (source === 'agent' && !request.approvalRequestId) {
     const ticket = approvalStore.create({
       cwd,
       sessionId,
       source,
       backend: resolved.backend,
-      target: resolved.targetSpec.target,
-      interfaceName: resolved.targetSpec.interfaceName,
-      artifactPath: resolved.targetSpec.artifactPath,
-      artifactSha256: resolved.targetSpec.artifactSha256,
+      target: resolved.targetSpec?.target,
+      interfaceName: resolved.targetSpec?.interfaceName,
+      artifactPath: resolved.targetSpec?.artifactPath,
+      artifactSha256: resolved.targetSpec?.artifactSha256,
+      launchFingerprint: currentFingerprint,
+      launchSummary: `目标: ${resolved.targetSpec?.target || 'STM32'}, 接口: ${resolved.targetSpec?.interfaceName || 'CMSIS-DAP'}, 固件: ${resolved.targetSpec?.artifactPath}`,
+      launchSpec: resolved,
     })
     return {
       ok: false,
@@ -69,8 +84,44 @@ export async function startDebugSession(request, deps = {}) {
     }
   }
 
-  // If approvalRequestId is provided, consume it
+  // If approvalRequestId is provided, validate ticket and check for staleness
   if (request.approvalRequestId) {
+    const ticket =
+      typeof approvalStore.getPending === 'function' ? approvalStore.getPending(request.approvalRequestId) : null
+
+    if (!ticket) {
+      return {
+        ok: false,
+        errorCode: DEBUG_ERRORS.APPROVAL_NOT_FOUND,
+        error: '调试批准请求不存在或已过期',
+      }
+    }
+
+    if (ticket.status !== 'approved') {
+      return {
+        ok: false,
+        errorCode: DEBUG_ERRORS.APPROVAL_REQUIRED,
+        error: '调试启动尚未获得用户批准',
+        needsApproval: true,
+        approval: ticket,
+      }
+    }
+
+    if (ticket.launchFingerprint && ticket.launchFingerprint !== currentFingerprint) {
+      // Invalidate stale ticket
+      approvalStore.consume(request.approvalRequestId, { cwd, sessionId })
+      return {
+        ok: false,
+        errorCode: DEBUG_ERRORS.APPROVAL_STALE,
+        error: '固件、工程 Target 或调试目标在批准后已发生变化，请重新确认',
+        needsApproval: true,
+        details: {
+          ticketFingerprint: ticket.launchFingerprint,
+          currentFingerprint,
+        },
+      }
+    }
+
     const consumeRes = approvalStore.consume(request.approvalRequestId, { cwd, sessionId })
     if (!consumeRes.ok) {
       return {

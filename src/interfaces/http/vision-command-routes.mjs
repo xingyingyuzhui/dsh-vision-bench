@@ -6,13 +6,16 @@ import { losslessCommandResult } from '../../application/commands/lossless-json.
 
 /**
  * @param {any} home
+ * @param {any} [deps]
  * @returns {any}
  */
-export function createVisionCommandDispatcher(home) {
+export function createVisionCommandDispatcher(home, deps = {}) {
   return {
     /** @param {any} input */
     async dispatch(input) {
-      return losslessCommandResult(await executeHostCommand({ ...normalizeCommand(input), home: input.home || home }))
+      return losslessCommandResult(
+        await executeHostCommand({ ...normalizeCommand(input), home: input.home || home }, deps),
+      )
     },
   }
 }
@@ -20,14 +23,15 @@ export function createVisionCommandDispatcher(home) {
 /**
  * @param {any} home
  * @param {any} arg
+ * @param {any} [deps]
  * @returns {any}
  */
-export function visionCommandRoute(home, { readBodyAndTouchSession }) {
+export function visionCommandRoute(home, { readBodyAndTouchSession }, deps = {}) {
   return {
     kind: 'exact',
     path: '/dsh-vision-bench/command',
     handler: null,
-    dispatch: (/** @type {any} */ req) => handleCommand(home, req, readBodyAndTouchSession),
+    dispatch: (/** @type {any} */ req) => handleCommand(home, req, readBodyAndTouchSession, deps),
   }
 }
 
@@ -35,16 +39,20 @@ export function visionCommandRoute(home, { readBodyAndTouchSession }) {
  * @param {any} home
  * @param {any} req
  * @param {any} readBodyAndTouchSession
+ * @param {any} [deps]
  * @returns {Promise<any>}
  */
-export async function handleCommand(home, req, readBodyAndTouchSession) {
+export async function handleCommand(home, req, readBodyAndTouchSession, deps = {}) {
   const body = await readBodyAndTouchSession(req)
   return losslessCommandResult(
-    await executeHostCommand({
-      ...body,
-      home,
-      payload: body.payload || body,
-      action: body.action || body.payload?.action,
-    }),
+    await executeHostCommand(
+      {
+        ...body,
+        home,
+        payload: body.payload || body,
+        action: body.action || body.payload?.action,
+      },
+      deps,
+    ),
   )
 }

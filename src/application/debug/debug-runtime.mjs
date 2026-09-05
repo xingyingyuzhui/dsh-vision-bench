@@ -51,6 +51,7 @@ export function createDebugRuntime(deps = {}) {
    *   targetSpec?: Record<string, any>,
    *   unsubscribeBackend?: (() => void) | null,
    *   pendingExecution?: { type: string, [key: string]: any } | null,
+   *   isStopping?: boolean,
    *   createdAt: number,
    *   updatedAt: number,
    * }>} */
@@ -307,7 +308,19 @@ export function createDebugRuntime(deps = {}) {
               error: `后端调试进程意外退出 (code: ${event.code}, signal: ${event.signal})`,
             },
           })
+          session.eventRing.push({
+            debugSessionId: session.debugSessionId,
+            ownerSessionId: session.ownerSessionId,
+            workspaceCwd: session.workspaceCwd,
+            backend: session.backendKind,
+            type: DEBUG_EVENT_TYPES.SESSION_STOPPED,
+            payload: { code: event.code, signal: event.signal },
+          })
         } else {
+          if (session.state === 'stopping' || session.isStopping) {
+            // Already in graceful stop sequence, do not emit duplicate SESSION_STOPPED
+            break
+          }
           if (canTransition(session.state, 'stopping')) {
             session.state = transition(session.state, 'stopping')
           }
@@ -316,15 +329,15 @@ export function createDebugRuntime(deps = {}) {
           } else {
             session.state = 'idle'
           }
+          session.eventRing.push({
+            debugSessionId: session.debugSessionId,
+            ownerSessionId: session.ownerSessionId,
+            workspaceCwd: session.workspaceCwd,
+            backend: session.backendKind,
+            type: DEBUG_EVENT_TYPES.SESSION_STOPPED,
+            payload: { code: event.code, signal: event.signal },
+          })
         }
-        session.eventRing.push({
-          debugSessionId: session.debugSessionId,
-          ownerSessionId: session.ownerSessionId,
-          workspaceCwd: session.workspaceCwd,
-          backend: session.backendKind,
-          type: DEBUG_EVENT_TYPES.SESSION_STOPPED,
-          payload: { code: event.code, signal: event.signal },
-        })
         break
       }
 
@@ -411,6 +424,7 @@ export function createDebugRuntime(deps = {}) {
         pendingExecution: null,
         createdAt: Date.now(),
         updatedAt: Date.now(),
+        isStopping: false,
       }
 
       sessions.set(debugSessionId, sessionRecord)
@@ -435,7 +449,9 @@ export function createDebugRuntime(deps = {}) {
           await backend.start(spec)
         }
 
-        sessionRecord.state = transition(sessionRecord.state, 'ready')
+        if (sessionRecord.state === 'starting') {
+          sessionRecord.state = transition(sessionRecord.state, 'ready')
+        }
         sessionRecord.updatedAt = Date.now()
 
         eventRing.push({
@@ -470,6 +486,17 @@ export function createDebugRuntime(deps = {}) {
           type: DEBUG_EVENT_TYPES.SESSION_FAILED,
           payload: { error: err instanceof Error ? err.message : String(err) },
         })
+        if (sessionRecord.unsubscribeBackend) {
+          try {
+            sessionRecord.unsubscribeBackend()
+          } catch {}
+          sessionRecord.unsubscribeBackend = null
+        }
+        if (sessionRecord.backend && typeof sessionRecord.backend.stop === 'function') {
+          try {
+            await sessionRecord.backend.stop()
+          } catch {}
+        }
         leaseManager.releaseLease(debugSessionId, ownerSessionId)
         sessions.delete(debugSessionId)
         throw err
@@ -493,15 +520,7 @@ export function createDebugRuntime(deps = {}) {
         })
       }
 
-      if (session.unsubscribeBackend) {
-        try {
-          session.unsubscribeBackend()
-        } catch {
-          /* ignore */
-        }
-        session.unsubscribeBackend = null
-      }
-
+      session.isStopping = true
       if (canTransition(session.state, 'stopping')) {
         session.state = transition(session.state, 'stopping')
       }
@@ -511,6 +530,23 @@ export function createDebugRuntime(deps = {}) {
           await session.backend.stop()
         }
       } finally {
+        if (session.unsubscribeBackend) {
+          try {
+            session.unsubscribeBackend()
+          } catch {
+            /* ignore */
+          }
+          session.unsubscribeBackend = null
+        }
+
+        leaseManager.releaseLease(session.debugSessionId, session.ownerSessionId)
+
+        if (canTransition(session.state, 'idle')) {
+          session.state = transition(session.state, 'idle')
+        } else {
+          session.state = 'idle'
+        }
+
         session.eventRing.push({
           debugSessionId: session.debugSessionId,
           ownerSessionId: session.ownerSessionId,
@@ -519,11 +555,6 @@ export function createDebugRuntime(deps = {}) {
           type: DEBUG_EVENT_TYPES.SESSION_STOPPED,
         })
 
-        if (canTransition(session.state, 'idle')) {
-          session.state = transition(session.state, 'idle')
-        }
-
-        leaseManager.releaseLease(session.debugSessionId, session.ownerSessionId)
         session.eventRing.push({
           debugSessionId: session.debugSessionId,
           ownerSessionId: session.ownerSessionId,
@@ -853,7 +884,30 @@ export function createDebugRuntime(deps = {}) {
     },
 
     /**
-     * Finds an active session matching the predicate.
+     * Finds an active session owned by ownerSessionId with optional debugSessionId and workspaceCwd.
+     * @param {{ ownerSessionId: string, workspaceCwd?: string, debugSessionId?: string }} scope
+     * @returns {import('../../types/debug.d.ts').DebugSessionView | null}
+     */
+    findOwnedSession(scope) {
+      if (!scope?.ownerSessionId) return null
+      if (scope.debugSessionId) {
+        const session = sessions.get(scope.debugSessionId)
+        if (!session || session.ownerSessionId !== scope.ownerSessionId) return null
+        if (scope.workspaceCwd && session.workspaceCwd !== scope.workspaceCwd) return null
+        return toView(session)
+      }
+      for (const session of sessions.values()) {
+        if (session.ownerSessionId === scope.ownerSessionId) {
+          if (!scope.workspaceCwd || session.workspaceCwd === scope.workspaceCwd) {
+            return toView(session)
+          }
+        }
+      }
+      return null
+    },
+
+    /**
+     * Finds an active session matching the predicate (internal).
      * @param {(session: import('../../types/debug.d.ts').DebugSessionView) => boolean} predicate
      * @returns {import('../../types/debug.d.ts').DebugSessionView | null}
      */
@@ -876,19 +930,35 @@ export function createDebugRuntime(deps = {}) {
     },
 
     /**
-     * Waits for events with cursor >= minCursor on the session event ring.
+     * Gets events strictly after cursor (event.cursor > afterCursor).
      *
      * @param {{ debugSessionId: string, ownerSessionId?: string }} scope
-     * @param {number} minCursor
+     * @param {number} [afterCursor=0]
+     * @param {number} [limit=100]
+     * @returns {{ events: import('../../types/debug.d.ts').DebugEvent[], nextCursor: number, cursorExpired: boolean }}
+     */
+    getEvents(scope, afterCursor = 0, limit = 100) {
+      const session = requireSession({
+        debugSessionId: scope.debugSessionId,
+        ownerSessionId: scope.ownerSessionId || '',
+      })
+      return session.eventRing.getEventsAfter(afterCursor, limit)
+    },
+
+    /**
+     * Waits for events with cursor > afterCursor on the session event ring.
+     *
+     * @param {{ debugSessionId: string, ownerSessionId?: string }} scope
+     * @param {number} [afterCursor=0]
      * @param {AbortSignal | { signal?: AbortSignal, timeoutMs?: number }} [options]
      */
-    async waitEvents(scope, minCursor, options) {
+    async waitEvents(scope, afterCursor = 0, options = {}) {
       const session = requireSession({
         debugSessionId: scope.debugSessionId,
         ownerSessionId: scope.ownerSessionId || '',
       })
       const waitOpts = options instanceof AbortSignal ? { signal: options } : options || {}
-      return await session.eventRing.waitForEvents(minCursor, waitOpts)
+      return await session.eventRing.waitForEventsAfter(afterCursor, waitOpts)
     },
 
     /**

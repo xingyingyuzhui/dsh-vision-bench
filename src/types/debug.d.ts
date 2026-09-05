@@ -82,6 +82,7 @@ export interface DebugSessionView {
   ownerSessionId: string
   backend: DebugBackendKind
   state: DebugRunState
+  isStopping?: boolean
   location?: SourceLocation | null
   stack?: DebugStackFrame[]
   variables?: DebugVariable[]

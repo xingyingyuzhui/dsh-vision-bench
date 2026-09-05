@@ -67,10 +67,10 @@ function createOffsetToLocation(source) {
  *   readEdges: import('../../types/program.d.ts').ProgramDataEdge[],
  *   writeEdges: import('../../types/program.d.ts').ProgramDataEdge[],
  *   conditions: import('../../types/program.d.ts').ProgramCondition[],
- *   metadata?: { preprocessors: string[], confidence: string },
+ *   metadata?: { preprocessors?: string[], parser: string, confidence: string, preprocessed: boolean },
  * }}
  */
-export function analyzeCSourceWithAst(rawSource, fileRelPath) {
+export function analyzeCSourceWithLezer(rawSource, fileRelPath) {
   try {
     return parseWithLezerAst(rawSource, fileRelPath)
   } catch {
@@ -78,6 +78,11 @@ export function analyzeCSourceWithAst(rawSource, fileRelPath) {
     return analyzeCSourceHeuristic(rawSource, fileRelPath)
   }
 }
+
+/**
+ * Backward compatibility alias for analyzeCSourceWithLezer.
+ */
+export const analyzeCSourceWithAst = analyzeCSourceWithLezer
 
 /**
  * Internal Lezer AST traversal.
@@ -202,8 +207,10 @@ function parseWithLezerAst(rawSource, fileRelPath) {
     writeEdges,
     conditions,
     metadata: {
-      preprocessors,
+      parser: 'lezer-cpp',
       confidence: 'ast',
+      preprocessed: false,
+      preprocessors,
     },
   }
 }
@@ -401,7 +408,7 @@ function extractFunctionDefinition(ctx) {
         }
       }
 
-      if (callee && !C_KEYWORDS.has(callee) && !CONDITION_KEYWORDS.has(callee) && callee !== fnName) {
+      if (callee && !C_KEYWORDS.has(callee) && !CONDITION_KEYWORDS.has(callee)) {
         const loc = toLocation(calleePos)
         const edgeId = makeCallEdgeId(fnId, callee, loc.line)
         if (!seenCallEdgeIds.has(edgeId)) {
@@ -422,15 +429,44 @@ function extractFunctionDefinition(ctx) {
       }
     }
 
-    // b) Assignment / update writes
+    // b) Assignment / update writes & compound reads
     if (name === 'AssignmentExpression' || name === 'UpdateExpression') {
       let target = ''
       let targetPos = node.from
+      let isCompoundOrUpdate = false
 
-      const lhs = node.firstChild
-      if (lhs) {
-        target = rawSource.slice(lhs.from, lhs.to).trim()
-        targetPos = lhs.from
+      if (name === 'UpdateExpression') {
+        isCompoundOrUpdate = true
+        let targetNode = node.firstChild
+        while (
+          targetNode &&
+          (targetNode.name === 'UpdateOp' ||
+            targetNode.name === 'ArithOp' ||
+            ['++', '--'].includes(rawSource.slice(targetNode.from, targetNode.to).trim()))
+        ) {
+          targetNode = targetNode.nextSibling
+        }
+        if (targetNode) {
+          target = rawSource.slice(targetNode.from, targetNode.to).trim()
+          targetPos = targetNode.from
+        }
+      } else {
+        const lhs = node.firstChild
+        if (lhs) {
+          target = rawSource.slice(lhs.from, lhs.to).trim()
+          targetPos = lhs.from
+        }
+        let opChild = lhs ? lhs.nextSibling : null
+        while (opChild) {
+          const opText = rawSource.slice(opChild.from, opChild.to).trim()
+          if (opText) {
+            if (opText !== '=' && opText.endsWith('=')) {
+              isCompoundOrUpdate = true
+            }
+            break
+          }
+          opChild = opChild.nextSibling
+        }
       }
 
       const rootIdent = target.split(/\.|->/)[0].trim()
@@ -451,7 +487,27 @@ function extractFunctionDefinition(ctx) {
               column: loc.column,
             },
           })
-          writtenInLine.add(`${loc.line}:${rootIdent}`)
+          if (!isCompoundOrUpdate) {
+            writtenInLine.add(`${loc.line}:${rootIdent}`)
+          }
+        }
+        if (isCompoundOrUpdate) {
+          const readEdgeId = makeDataEdgeId('read', fnId, rootIdent, loc.line)
+          if (!seenReadEdgeIds.has(readEdgeId)) {
+            seenReadEdgeIds.add(readEdgeId)
+            readEdges.push({
+              id: readEdgeId,
+              kind: 'read',
+              accessorId: fnId,
+              variableName: rootIdent,
+              confidence: 'ast',
+              location: {
+                file: normRel,
+                line: loc.line,
+                column: loc.column,
+              },
+            })
+          }
         }
       }
     }

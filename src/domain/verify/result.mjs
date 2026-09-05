@@ -10,10 +10,18 @@
  *   evidence?: Array<Record<string, any>>,
  *   error?: any,
  *   status?: import('../../types/verify.d.ts').VerifyStatus,
+ *   verificationRunId?: string,
+ *   artifact?: { path?: string; sha256?: string; sizeBytes?: number },
+ *   artifactPath?: string,
  *   artifactSha256?: string,
+ *   debug?: { backend?: string; debugSessionId?: string; firmwareHash?: string; targetIdentity?: string },
+ *   backend?: string,
  *   debugSessionId?: string,
  *   firmwareHash?: string,
  *   targetIdentity?: string,
+ *   snapshots?: any[],
+ *   startedAt?: number,
+ *   finishedAt?: number,
  *   startAt?: number,
  *   endAt?: number,
  *   telemetrySamples?: Array<{ pointId?: string; expr?: string; timestamp: number; value: any }>,
@@ -74,7 +82,14 @@ export function createVerifyResult(params) {
     summary = `验证场景 [${scenario.name}]: ${passedCount}/${totalCount} 项断言通过，失败项: [${failedNames}] (FAIL)`
   }
 
+  const startedAt = startAt || Date.now() - Math.max(0, Math.round(durationMs))
+  const finishedAt = endAt || Date.now()
+  const snapshots =
+    params.snapshots ||
+    evidence.filter((e) => e && (e.kind === 'debug_snapshot' || e.kind === 'snapshot' || e.snapshotId))
+
   return {
+    verificationRunId: params.verificationRunId || `vr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     scenarioId: scenario.id || '',
     scenarioName: scenario.name,
     status,
@@ -86,12 +101,24 @@ export function createVerifyResult(params) {
     evidence,
     summary,
     timestamp: Date.now(),
+    artifact: {
+      path: params.artifactPath || params.artifact?.path,
+      sha256: artifactSha256 || params.artifact?.sha256,
+    },
     artifactSha256,
+    debug: {
+      debugSessionId,
+      backend: params.backend || params.debug?.backend,
+      targetIdentity: targetIdentity || params.debug?.targetIdentity,
+    },
     debugSessionId,
     firmwareHash,
     targetIdentity,
-    startAt,
-    endAt,
+    snapshots,
+    startedAt,
+    finishedAt,
+    startAt: startedAt,
+    endAt: finishedAt,
     telemetrySamples,
   }
 }

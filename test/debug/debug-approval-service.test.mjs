@@ -58,6 +58,8 @@ test('debug-approval-service: create, listPending, and consume ticket lifecycle'
   assert.equal(store.size(), 1, 'ticket must not be consumed on scope mismatch')
 
   // 5. Successful consume
+  const appRes = store.approve(ticket.requestId, { cwd: '/workspace/stm32', sessionId: 'sess_alice' })
+  assert.equal(appRes.ok, true)
   const consumeRes = store.consume(ticket.requestId, { cwd: '/workspace/stm32', sessionId: 'sess_alice' })
   assert.equal(consumeRes.ok, true)
   assert.equal(consumeRes.record?.requestId, ticket.requestId)

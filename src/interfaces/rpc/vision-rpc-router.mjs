@@ -59,8 +59,18 @@ import { probeOpenOcdHealth } from '../../application/flash/openocd-health-servi
 import { claimLegacyPrivate, projectModbusForSession } from '../../application/modbus/config-scope-service.mjs'
 import { isScopePartitioned, omitSessionConfigs } from '../../domain/modbus/config-scope.mjs'
 import { createDebugRpcHandler } from './debug-rpc-handler.mjs'
+import { createVerifyRpcHandler } from './verify-rpc-handler.mjs'
 
-const WORKSPACE_CONFIG_KEYS = new Set(['conn', 'connections', 'devices', 'points', 'visualization'])
+const WORKSPACE_CONFIG_KEYS = new Set([
+  'conn',
+  'connections',
+  'devices',
+  'points',
+  'visualization',
+  'sessionConfigs',
+  'share',
+  'privateClaimSessionId',
+])
 
 /**
  * @param {unknown} body
@@ -191,12 +201,20 @@ async function snapshot(home, cwd, sessionId) {
 }
 
 /**
- * @param {{ getHome: () => string, debugRuntime?: any, debugRpcHandler?: (endpoint: string, body: any, signal?: AbortSignal) => Promise<any> }} deps
+ * @param {{
+ *   getHome: () => string,
+ *   debugRuntime?: any,
+ *   debugRpcHandler?: (endpoint: string, body: any, signal?: AbortSignal) => Promise<any>,
+ *   verifyRpcHandler?: (endpoint: string, body: any, signal?: AbortSignal) => Promise<any>,
+ *   verifyCommandService?: any,
+ *   telemetryReader?: any,
+ * }} deps
  * @returns {{ dispatch: (endpoint: string, payload: unknown, signal?: AbortSignal) => Promise<unknown>, snapshot: (cwd?: string, sessionId?: string) => Promise<unknown> }}
  */
 export function createVisionRpcRouter(deps) {
   const { getHome } = deps
   const debugRpc = deps.debugRpcHandler || createDebugRpcHandler(deps)
+  const verifyRpc = deps.verifyRpcHandler || createVerifyRpcHandler(deps)
 
   /**
    * @param {string} endpoint
@@ -212,6 +230,13 @@ export function createVisionRpcRouter(deps) {
 
     if (endpoint.startsWith('debug/')) {
       return debugRpc(endpoint, body, signal)
+    }
+
+    if (endpoint.startsWith('verify/') || endpoint.startsWith('vision.verify.')) {
+      const handler = /** @type {any} */ (verifyRpc)[endpoint]
+      if (handler) {
+        return handler(body)
+      }
     }
 
     switch (endpoint) {
@@ -260,10 +285,12 @@ export function createVisionRpcRouter(deps) {
       case 'workspace/get': {
         const room = requireWorkspaceCwd(body && typeof body === 'object' ? body.cwd : undefined)
         if (room.error) return { ok: false, error: room.error }
+        const sid = body && typeof body === 'object' ? String(body.sessionId || '').trim() : ''
+        const ws = loadWorkspace(home, room.cwd)
         return {
           ok: true,
-          workspace: loadWorkspace(home, room.cwd),
-          journal: journalView(loadWorkspace(home, room.cwd)),
+          workspace: sessionWorkspaceView(ws, sid),
+          journal: journalView(ws),
         }
       }
       case 'workspace/save': {
@@ -274,7 +301,7 @@ export function createVisionRpcRouter(deps) {
           return {
             ok: false,
             errorCode: 'CONFIG_COMMAND_REQUIRED',
-            error: '连接、设备、点位与可视化配置必须使用增量配置命令',
+            error: '连接、设备、点位、可视化及会话配置必须使用增量配置命令',
           }
         }
         const sid = body && typeof body === 'object' ? String(body.sessionId || '').trim() : ''
@@ -304,9 +331,7 @@ export function createVisionRpcRouter(deps) {
         })
         if (!saved.ok) return { ok: false, error: saved.error, workspace: saved.workspace }
         notifyConnectionRelease(room.cwd, changedConnectionIds(prev.modbus, saved.workspace.modbus))
-        const viewWorkspace = sid
-          ? { ...saved.workspace, modbus: omitSessionConfigs(projectModbusForSession(saved.workspace.modbus, sid)) }
-          : saved.workspace
+        const viewWorkspace = sessionWorkspaceView(saved.workspace, sid)
         return { ok: true, workspace: viewWorkspace, journal: journalView(saved.workspace) }
       }
       case 'fs/list':

@@ -108,7 +108,12 @@ const persistEnable = async (home, cwd, connectionId, enabled, intervalMs) => {
   return { ok: true, connectionId: cid, enabled: next.enabled, intervalMs: next.intervalMs }
 }
 
+export const resetPollingService = () => {
+  stopping = false
+}
+
 export const startPolling = async (home, cwd, opts = {}) => {
+  stopping = false
   const saved = await persistEnable(home, cwd, opts.connectionId || opts.connId, true, opts.intervalMs)
   if (!saved.ok) return saved
   reconcile(home, cwd)

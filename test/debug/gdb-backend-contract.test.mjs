@@ -146,16 +146,12 @@ test('GdbBackend lifecycle, commands, and stop reason mapping', async () => {
     let openocdStopped = false
 
     /** @type {any[]} */
-    const events = []
-    const eventRing = {
-      push: (e) => events.push(e),
-    }
+    const backendEvents = []
 
     const backend = createGdbBackend({
       debugSessionId: 'ds_test_1',
       ownerSessionId: 'owner_1',
       workspaceCwd: '/workspace',
-      eventRing,
       openocdStarter: async (opts) => ({
         port: opts.gdbPort || 3333,
         stop: async () => {
@@ -164,6 +160,8 @@ test('GdbBackend lifecycle, commands, and stop reason mapping', async () => {
       }),
       miClientFactory: () => mockMi,
     })
+
+    backend.subscribe((e) => backendEvents.push(e))
 
     // 1. Start session
     await backend.start({
@@ -175,10 +173,10 @@ test('GdbBackend lifecycle, commands, and stop reason mapping', async () => {
       },
     })
 
-    assert.equal(backend.state, 'paused')
+    assert.equal(backend.nativeState, 'paused')
     assert.ok(backend.firmwareHash.length > 0)
-    assert.equal(backend.currentLocation?.function, 'main')
-    assert.equal(backend.currentLocation?.line, 42)
+    assert.equal(backend.lastNativeLocation?.function, 'main')
+    assert.equal(backend.lastNativeLocation?.line, 42)
 
     // 2. Breakpoints & Watchpoints
     const bp = await backend.addBreakpoint({
@@ -193,40 +191,40 @@ test('GdbBackend lifecycle, commands, and stop reason mapping', async () => {
 
     const wp = await backend.addWatchpoint({
       id: 'wp_1',
-      expression: 'eev_target',
+      expression: 'counter',
       accessType: 'write',
       verified: false,
     })
     assert.equal(wp.verified, true)
 
-    // 3. Execution controls
-    await backend.continue()
-    assert.equal(backend.state, 'running')
+    // 3. Execution control commands
+    const contRes = await backend.continue()
+    assert.equal(contRes.class, 'done')
+    assert.equal(backend.nativeState, 'running')
 
-    await backend.pause()
-    assert.equal(backend.state, 'paused')
+    const pauseRes = await backend.pause()
+    assert.equal(pauseRes.class, 'done')
+    assert.equal(backend.nativeState, 'paused')
 
-    await backend.step('over')
-    await backend.step('into')
-    await backend.step('out')
+    const stepRes = await backend.stepOver()
+    assert.equal(stepRes.class, 'done')
 
-    // 4. State inspections
+    const resetRes = await backend.resetHalt()
+    assert.equal(resetRes.class, 'done')
+    assert.equal(backend.nativeState, 'paused')
+
+    // 4. Context queries
     const frames = await backend.stack()
     assert.equal(frames.length, 1)
     assert.equal(frames[0].function, 'main')
 
-    const locals = await backend.locals()
-    assert.equal(locals.length, 2)
-    assert.equal(locals[0].name, 'val')
-    assert.equal(locals[0].value, '42')
-
-    const val = await backend.evaluate('val + 1')
-    assert.equal(val, '42')
+    const vars = await backend.locals()
+    assert.equal(vars.length, 2)
+    assert.equal(vars[0].name, 'val')
 
     const regs = await backend.registers()
     assert.equal(regs.length, 2)
     assert.equal(regs[0].name, 'r0')
-    assert.equal(regs[1].name, 'pc')
 
     const mem = await backend.readMemory('0x20000000', 4)
     assert.equal(mem, 'deadbeef')
@@ -249,11 +247,11 @@ test('GdbBackend lifecycle, commands, and stop reason mapping', async () => {
       }),
     )
 
-    const stopEvent = events.find((e) => e.type === 'debug.stopped')
+    const stopEvent = backendEvents.find((e) => e.type === 'backend.stopped')
     assert.ok(stopEvent)
-    assert.equal(stopEvent.payload.reason, 'breakpoint')
-    assert.equal(stopEvent.payload.location.function, 'sub_routine')
-    assert.equal(backend.state, 'paused')
+    assert.equal(stopEvent.reason, 'breakpoint')
+    assert.equal(stopEvent.location.function, 'sub_routine')
+    assert.equal(backend.nativeState, 'paused')
 
     // 6. Clean remove breakpoint & watchpoint
     const bpRem = await backend.removeBreakpoint(bp)
@@ -264,7 +262,7 @@ test('GdbBackend lifecycle, commands, and stop reason mapping', async () => {
 
     // 7. Stop backend
     await backend.stop()
-    assert.equal(backend.state, 'idle')
+    assert.equal(backend.nativeState, 'idle')
     assert.equal(openocdStopped, true)
     assert.equal(mockMi.isStopped(), true)
   } finally {

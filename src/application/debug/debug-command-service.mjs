@@ -7,6 +7,7 @@ import { finalizeAgentCommandResult } from '../commands/lossless-json.mjs'
 import { createVerifyCommandService } from '../verify/verify-command-service.mjs'
 import { defaultDebugApprovals } from './debug-approval-service.mjs'
 import { getSharedDebugRuntime } from './debug-runtime.mjs'
+import { findOwnedDebugSession } from './debug-session-scope.mjs'
 import { startDebugSession } from './debug-start-service.mjs'
 
 export const DEBUG_ACTIONS = new Set([
@@ -63,17 +64,11 @@ export async function executeDebugCommand(input, deps = {}) {
      * Finds active session strictly owned by the calling sessionId.
      */
     function findOwnedSession() {
-      if (debugSessionId) {
-        try {
-          return runtime.state({ debugSessionId, ownerSessionId: sessionId })
-        } catch {
-          return null
-        }
-      }
-      if (sessionId) {
-        return runtime.findSession((s) => s.ownerSessionId === sessionId && (!cwd || s.workspaceCwd === cwd))
-      }
-      return null
+      return findOwnedDebugSession(runtime, {
+        ownerSessionId: sessionId,
+        workspaceCwd: cwd,
+        debugSessionId,
+      })
     }
 
     try {

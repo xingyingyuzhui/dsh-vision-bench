@@ -30,6 +30,7 @@ export interface AssertionSpec {
   durationMs?: number
   sampleIntervalMs?: number
   tolerance?: number
+  maxAgeMs?: number
   description?: string
 }
 
@@ -61,6 +62,7 @@ export interface AssertionResult {
 export type VerifyStatus = 'pass' | 'fail' | 'error' | 'timeout' | 'cancelled'
 
 export interface VerifyResult {
+  verificationRunId?: string
   scenarioId: string
   scenarioName: string
   status: VerifyStatus
@@ -72,10 +74,26 @@ export interface VerifyResult {
   evidence: Array<Record<string, any>>
   summary: string
   timestamp: number
+  artifact?: {
+    path?: string
+    sha256?: string
+    sizeBytes?: number
+  }
+  artifactPath?: string
   artifactSha256?: string
+  debug?: {
+    debugSessionId?: string
+    backend?: string
+    firmwareHash?: string
+    targetIdentity?: string
+  }
+  backend?: string
   debugSessionId?: string
   firmwareHash?: string
   targetIdentity?: string
+  snapshots?: any[]
+  startedAt?: number
+  finishedAt?: number
   startAt?: number
   endAt?: number
   telemetrySamples?: Array<{ pointId?: string; expr?: string; timestamp: number; value: any }>

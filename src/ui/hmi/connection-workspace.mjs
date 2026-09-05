@@ -19,7 +19,6 @@ export function renderConnectionWorkspace(el, t, ctx) {
     devFormPanel,
     deviceCardsPanel,
     pendingPanel,
-    statusBar,
     visionCollabBar,
   } = ctx
 
@@ -41,9 +40,6 @@ export function renderConnectionWorkspace(el, t, ctx) {
   return el(
     'div',
     { className: 'dvb-page' },
-    statusBar(el, t, cwd, [
-      { key: 'io', kind: ioStatus.kind, text: t('ioRuntimeShort') + ' · ' + t(ioStatus.labelKey) },
-    ]),
     agentCopied
       ? el(
           'div',

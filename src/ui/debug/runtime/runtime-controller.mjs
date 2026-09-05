@@ -54,10 +54,14 @@ export function createRuntimeController(post, scope) {
         cursor: Math.max(0, Number(cursor) || 0),
         timeoutMs,
       }
+      const rpcTimeout = timeoutMs + 5000
       if (signal) {
-        return postWithAbort(post, '/dsh-vision-bench/debug/events/wait', body, signal)
+        return postWithAbort(post, '/dsh-vision-bench/debug/events/wait', body, signal, {
+          timeoutMs: rpcTimeout,
+          signal,
+        })
       }
-      return post('/dsh-vision-bench/debug/events/wait', body, timeoutMs + 5000)
+      return post('/dsh-vision-bench/debug/events/wait', body, rpcTimeout)
     },
 
     /**

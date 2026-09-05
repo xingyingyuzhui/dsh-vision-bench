@@ -21,10 +21,21 @@ export function shouldApplyRequest(ref, requestId, identityKey, currentIdentityK
 
 /**
  * Wrap post() so an AbortSignal can drop late responses even when fetch lacks signal support.
- * @param {(path: string, payload?: object) => Promise<unknown>} post
+ * @param {(path: string, payload?: object, options?: any) => Promise<unknown>} post
+ * @param {string} path
+ * @param {object} [payload]
+ * @param {AbortSignal} [signal]
+ * @param {any} [options]
  */
-export function postWithAbort(post, path, payload, signal) {
-  const run = post(path, payload)
+export function postWithAbort(post, path, payload, signal, options) {
+  const timeoutMs =
+    typeof options === 'number'
+      ? options
+      : options && typeof options === 'object' && options.timeoutMs
+        ? options.timeoutMs
+        : undefined
+  const postOptions = timeoutMs ? { timeoutMs, signal } : signal ? { signal } : undefined
+  const run = post(path, payload, postOptions || timeoutMs)
   if (!signal) return run
   if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'))
   return new Promise((resolve, reject) => {

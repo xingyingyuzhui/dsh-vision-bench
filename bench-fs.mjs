@@ -116,14 +116,25 @@ export const readProjectFile = (cwd, file) => {
   if (!PROJECT_READ_EXT.has('.' + ext.toLowerCase()) && !PROJECT_READ_EXT.has('.' + ext)) {
     return { ok: false, error: '只允许源码/头文件/汇编/链接脚本', code: 'EXT_NOT_ALLOWED' }
   }
-  let text
+  let fd
+  let text = ''
+  let truncated = false
   try {
-    text = readFileSync(resolved, 'utf8')
+    fd = openSync(resolved, 'r')
+    const buf = Buffer.alloc(PROJECT_READ_MAX + 1)
+    const bytesRead = readSync(fd, buf, 0, PROJECT_READ_MAX + 1, 0)
+    truncated = bytesRead > PROJECT_READ_MAX
+    const effectiveBytes = truncated ? PROJECT_READ_MAX : bytesRead
+    text = buf.subarray(0, effectiveBytes).toString('utf8')
   } catch (error) {
     return { ok: false, error: '无法读取文件: ' + ((error && error.message) || error), code: 'READ_FAILED' }
+  } finally {
+    if (fd !== undefined) {
+      try {
+        closeSync(fd)
+      } catch {}
+    }
   }
-  const truncated = Buffer.byteLength(text, 'utf8') > PROJECT_READ_MAX
-  if (truncated) text = text.slice(0, PROJECT_READ_MAX)
   const lines = text.split('\n').length
   return { ok: true, rel: relative(room.cwd, resolved), file: resolved, text, lines, truncated }
 }

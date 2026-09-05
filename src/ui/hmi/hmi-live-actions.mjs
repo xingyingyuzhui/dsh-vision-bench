@@ -65,7 +65,10 @@ export function createHmiLiveActions(ctx, core) {
     )
       .then((data) => {
         if (!data) return
-        pushFramesLog(cwd, activeConnId, data.framesLog || data.frames || [])
+        const isShared = Boolean(
+          workspaceRef.current?.modbus?.share?.enabled && workspaceRef.current?.modbus?.share?.connections,
+        )
+        pushFramesLog({ cwd, sessionId, isShared }, activeConnId, data.framesLog || data.frames || [])
         if (Array.isArray(data.values)) {
           setWorkspace((prev) => ({ ...prev, modbus: { ...prev.modbus, values: data.values } }))
           workspaceRef.current = {
@@ -150,7 +153,10 @@ export function createHmiLiveActions(ctx, core) {
     )
       .then((data) => {
         setInlineWrite((prev) => ({ ...prev, busy: false, result: data }))
-        pushFramesLog(cwd, row.connectionId, (data && (data.framesLog || data.frames)) || [])
+        const isShared = Boolean(
+          workspaceRef.current?.modbus?.share?.enabled && workspaceRef.current?.modbus?.share?.connections,
+        )
+        pushFramesLog({ cwd, sessionId, isShared }, row.connectionId, (data && (data.framesLog || data.frames)) || [])
         if (Array.isArray(data.values)) {
           setWorkspace((prev) => ({ ...prev, modbus: { ...prev.modbus, values: data.values } }))
           workspaceRef.current = {

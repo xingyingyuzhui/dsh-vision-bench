@@ -85,23 +85,67 @@ export function evaluateAssertion(spec, actualValue) {
 
     case 'modbus.point': {
       const op = spec.op || '=='
-      const pass = evaluateOperator(actualValue, op, spec.value)
+      let effectiveVal = actualValue
+      let isStale = false
+      let staleFreshness = 0
+      if (actualValue && typeof actualValue === 'object') {
+        if (actualValue.quality === 'stale') {
+          isStale = true
+          staleFreshness = actualValue.freshnessMs || 0
+        }
+        effectiveVal = actualValue.value !== undefined ? actualValue.value : actualValue.rawValue
+      }
       const desc = spec.description || `Modbus 点位 [${spec.pointId || ''}]`
+      if (isStale) {
+        return {
+          id,
+          type: spec.type,
+          pass: false,
+          actual: effectiveVal,
+          expected: spec.value,
+          op,
+          message: `${desc} 数据已过旧 (STALE: 采集延时 ${staleFreshness}ms > 允许最大延时 ${spec.maxAgeMs || 'unknown'}ms)`,
+          timestamp: now,
+        }
+      }
+      const pass = evaluateOperator(effectiveVal, op, spec.value)
       return {
         id,
         type: spec.type,
         pass,
-        actual: actualValue,
+        actual: effectiveVal,
         expected: spec.value,
         op,
         message: pass
-          ? `${desc} 断言通过 (${actualValue} ${op} ${spec.value})`
-          : `${desc} 断言失败: 实际值 ${JSON.stringify(actualValue)} 不满足 ${op} ${JSON.stringify(spec.value)}`,
+          ? `${desc} 断言通过 (${effectiveVal} ${op} ${spec.value})`
+          : `${desc} 断言失败: 实际值 ${JSON.stringify(effectiveVal)} 不满足 ${op} ${JSON.stringify(spec.value)}`,
         timestamp: now,
       }
     }
 
     case 'no.exception': {
+      if (actualValue && typeof actualValue === 'object' && actualValue.error) {
+        return {
+          id,
+          type: spec.type,
+          pass: false,
+          actual: actualValue.error,
+          expected: 'none',
+          message: actualValue.message || '缺少调试会话或证据，无法断言无异常',
+          timestamp: now,
+        }
+      }
+      if (actualValue === undefined || actualValue === null) {
+        return {
+          id,
+          type: spec.type,
+          pass: false,
+          actual: 'no-data',
+          expected: 'none',
+          message: '无调试运行态数据，无法断言无异常',
+          timestamp: now,
+        }
+      }
       let hasException = false
       if (typeof actualValue === 'boolean') {
         hasException = actualValue
@@ -123,13 +167,44 @@ export function evaluateAssertion(spec, actualValue) {
     }
 
     case 'no.alarm': {
+      if (actualValue && typeof actualValue === 'object' && actualValue.error) {
+        const desc = spec.pointId ? `点位 [${spec.pointId}]` : '工作区'
+        return {
+          id,
+          type: spec.type,
+          pass: false,
+          actual: actualValue.error,
+          expected: 0,
+          op: '==',
+          message: actualValue.message || `${desc} 缺少告警数据源，无法断言无告警`,
+          timestamp: now,
+        }
+      }
+      if (actualValue === undefined || actualValue === null) {
+        const desc = spec.pointId ? `点位 [${spec.pointId}]` : '工作区'
+        return {
+          id,
+          type: spec.type,
+          pass: false,
+          actual: 'no-data',
+          expected: 0,
+          op: '==',
+          message: `${desc} 无告警数据源，无法断言无告警`,
+          timestamp: now,
+        }
+      }
       let activeAlarms = 0
       if (typeof actualValue === 'number') {
         activeAlarms = actualValue
       } else if (Array.isArray(actualValue)) {
         activeAlarms = actualValue.length
       } else if (actualValue && typeof actualValue === 'object') {
-        activeAlarms = Array.isArray(actualValue.alarms) ? actualValue.alarms.length : 0
+        activeAlarms =
+          typeof actualValue.activeCount === 'number'
+            ? actualValue.activeCount
+            : Array.isArray(actualValue.alarms)
+              ? actualValue.alarms.length
+              : 0
       }
       const pass = activeAlarms === 0
       const desc = spec.pointId ? `点位 [${spec.pointId}]` : '工作区'
@@ -201,11 +276,13 @@ export function evaluateAssertion(spec, actualValue) {
       let minSample = Number.POSITIVE_INFINITY
       let maxSample = Number.NEGATIVE_INFINITY
       let boundsOk = true
+      let hasEnoughSamples = false
 
-      if (Array.isArray(actualValue) && actualValue.length > 0) {
+      if (Array.isArray(actualValue)) {
         const nums = actualValue.map(Number).filter(Number.isFinite)
         sampleCount = nums.length
-        if (nums.length > 0) {
+        if (sampleCount >= 2) {
+          hasEnoughSamples = true
           minSample = Math.min(...nums)
           maxSample = Math.max(...nums)
           maxDelta = maxSample - minSample
@@ -222,13 +299,24 @@ export function evaluateAssertion(spec, actualValue) {
           }
         } else {
           isStable = false
+          hasEnoughSamples = false
         }
       } else if (actualValue && typeof actualValue === 'object' && 'maxDelta' in actualValue) {
-        maxDelta = Number(actualValue.maxDelta) || 0
-        if (tolerance != null && maxDelta > tolerance) isStable = false
+        sampleCount = Number(actualValue.sampleCount) || 0
+        if (actualValue.sampleCount !== undefined && sampleCount < 2) {
+          isStable = false
+          hasEnoughSamples = false
+        } else {
+          hasEnoughSamples = true
+          maxDelta = Number(actualValue.maxDelta) || 0
+          if (tolerance != null && maxDelta > tolerance) isStable = false
+        }
+      } else {
+        isStable = false
+        hasEnoughSamples = false
       }
 
-      const pass = isStable
+      const pass = isStable && hasEnoughSamples
       const targetName = spec.expr ? `表达式 [${spec.expr}]` : `点位 [${spec.pointId || ''}]`
 
       let expectedDesc = ''
@@ -238,7 +326,9 @@ export function evaluateAssertion(spec, actualValue) {
       if (!expectedDesc) expectedDesc = '保持稳定'
 
       let msg = ''
-      if (pass) {
+      if (!hasEnoughSamples) {
+        msg = `${targetName} 采样不足 (有效采样数 ${sampleCount} < 2)，无法判定稳定性`
+      } else if (pass) {
         msg = `${targetName} 在持续期间保持稳定 (${sampleCount} 采样, 范围 [${minSample}, ${maxSample}], 波动 ${maxDelta})`
       } else if (!boundsOk) {
         msg = `${targetName} 在持续期间数值超出限定范围 [${minBound ?? '-inf'}, ${maxBound ?? '+inf'}] (实际采样范围 [${minSample}, ${maxSample}])`

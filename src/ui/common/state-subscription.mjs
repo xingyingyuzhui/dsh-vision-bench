@@ -20,6 +20,7 @@ function busEntry(post, cwd, sessionId) {
       timer: 0,
       seq: 0,
       post: null,
+      inFlight: false,
     }
     STATE_BUSES.set(key, e)
   }
@@ -28,10 +29,21 @@ function busEntry(post, cwd, sessionId) {
   return e
 }
 
+function scheduleNextPull(e) {
+  if (!STATE_BUSES.has(e.key) || e.subs.size === 0) return
+  if (e.timer) clearTimeout(e.timer)
+  e.timer = setTimeout(() => busPull(e), POLL_MS)
+}
+
 function busPull(e) {
-  const seq = ++e.seq
+  if (e.inFlight) return
   const post = e.post
-  if (typeof post !== 'function') return
+  if (typeof post !== 'function') {
+    scheduleNextPull(e)
+    return
+  }
+  e.inFlight = true
+  const seq = ++e.seq
   const payload = { cwd: e.cwd }
   if (e.sessionId) payload.sessionId = e.sessionId
   post('/dsh-vision-bench/state', payload)
@@ -50,6 +62,10 @@ function busPull(e) {
     .catch(() => {
       /* next tick retries */
     })
+    .finally(() => {
+      e.inFlight = false
+      scheduleNextPull(e)
+    })
 }
 
 export function subscribeState(post, cwd, cb, opts) {
@@ -64,8 +80,6 @@ export function subscribeState(post, cwd, cb, opts) {
   if (e.subs.size === 1) {
     e.seq++ // cancel any stale in-flight response from a previous last subscriber
     busPull(e)
-    if (e.timer) clearInterval(e.timer)
-    e.timer = setInterval(() => busPull(e), POLL_MS)
   } else if (e.data) {
     // later subscribers get the cached snapshot immediately
     try {
@@ -79,9 +93,12 @@ export function subscribeState(post, cwd, cb, opts) {
     if (!cur || cur !== e) return
     cur.subs.delete(cb)
     if (cur.subs.size === 0) {
-      clearInterval(cur.timer)
-      cur.timer = 0
+      if (cur.timer) {
+        clearTimeout(cur.timer)
+        cur.timer = 0
+      }
       cur.seq++ // in-flight responses must not deliver after final unsubscribe
+      cur.inFlight = false
       STATE_BUSES.delete(e.key)
     }
   }

@@ -18,7 +18,6 @@ export function renderConnectionOverview(el, t, ctx) {
     focusToast,
     connListPanel,
     connFormPanel,
-    statusBar,
     visionCollabBar,
   } = ctx
 
@@ -40,9 +39,6 @@ export function renderConnectionOverview(el, t, ctx) {
   return el(
     'div',
     { className: 'dvb-page' },
-    statusBar(el, t, cwd, [
-      { key: 'io', kind: ioStatus.kind, text: t('ioRuntimeShort') + ' · ' + t(ioStatus.labelKey) },
-    ]),
     agentCopied
       ? el(
           'div',

@@ -1,10 +1,18 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { stopVisionIoBroker } from './bench-io-broker.mjs'
 import { setAgentsRegistry } from './bench-notify.mjs'
-import { stopAllPolling } from './bench-polling-service.mjs'
+import { resetPollingService, stopAllPolling } from './bench-polling-service.mjs'
 import { VISION_GUIDANCE, seedVisionBenchPreset } from './bench-preset.mjs'
 import { clearSerialMonitorState } from './bench-serial-monitor.mjs'
-import { defaultDshHome, journalView, recordBenchEvent, sweepStaleTasks, touchServiceSession } from './bench-store.mjs'
+import { modbusRead } from './bench-actions.mjs'
+import {
+  defaultDshHome,
+  journalView,
+  loadWorkspace,
+  recordBenchEvent,
+  sweepStaleTasks,
+  touchServiceSession,
+} from './bench-store.mjs'
 import { cwdOf, visionBenchTool } from './bench-tool.mjs'
 import { toLosslessJson } from './src/application/commands/lossless-json.mjs'
 import {
@@ -14,7 +22,9 @@ import {
 } from './src/application/debug/debug-runtime.mjs'
 import { clearDebugApprovals } from './src/application/debug/debug-approval-service.mjs'
 import { clearFlashApprovals } from './src/application/flash/flash-approval-service.mjs'
+import { createVerifyCommandService } from './src/application/verify/verify-command-service.mjs'
 import { registerVisionHost } from './src/infrastructure/host/vision-host-client.mjs'
+import { createVerifyTelemetryAdapter } from './src/infrastructure/modbus/verify-telemetry-adapter.mjs'
 import { visionDebugTool } from './src/interfaces/agent/vision-debug-tool.mjs'
 import { createVisionCommandDispatcher, handleCommand } from './src/interfaces/http/vision-command-routes.mjs'
 import { createVisionRpcRouter } from './src/interfaces/rpc/vision-rpc-router.mjs'
@@ -178,6 +188,7 @@ export function apply(ctx, config = {}) {
   }
 
   issueBridgeCapability()
+  resetPollingService()
   void sweepStaleTasks(dshHome).catch(() => {})
   try {
     setAgentsRegistry(() => (ctx.get ? ctx.get('agents') : null))
@@ -203,8 +214,34 @@ export function apply(ctx, config = {}) {
       ).catch(() => {})
     },
   })
-  const router = createVisionRpcRouter({ getHome: () => dshHome, debugRuntime })
-  const commandDispatcher = createVisionCommandDispatcher(dshHome)
+  const telemetryReader = createVerifyTelemetryAdapter({
+    getHome: () => dshHome,
+    workspaceLoader: (cwd) => loadWorkspace(dshHome, cwd),
+    modbusReadFn: (home, cwd, body, opts) => modbusRead(home, cwd, body, opts),
+  })
+  const verifyCommandService = createVerifyCommandService({
+    debugRuntime,
+    telemetryReader,
+    workspaceLoader: (cwd) => loadWorkspace(dshHome, cwd),
+    onJournalEvent: async (ev) => {
+      if (!ev || !ev.cwd) return
+      await recordBenchEvent(
+        dshHome,
+        ev.cwd,
+        {
+          action: ev.action,
+          ok: ev.ok !== false,
+          summary: ev.summary || `验证事件: ${ev.action}`,
+        },
+        {
+          sessionId: ev.sessionId || '',
+          source: 'system',
+        },
+      ).catch(() => {})
+    },
+  })
+  const router = createVisionRpcRouter({ getHome: () => dshHome, debugRuntime, verifyCommandService })
+  const commandDispatcher = createVisionCommandDispatcher(dshHome, { debugRuntime, verifyCommandService })
   const stopHost = registerVisionHost(commandDispatcher)
 
   let stopRpc = () => Promise.resolve()
@@ -232,7 +269,9 @@ export function apply(ctx, config = {}) {
   }
 
   const rows = [
-    commandRoute('/dsh-vision-bench/command', async (req) => handleCommand(dshHome, req, readBodyAndTouchSession)),
+    commandRoute('/dsh-vision-bench/command', async (req) =>
+      handleCommand(dshHome, req, readBodyAndTouchSession, { debugRuntime, verifyCommandService }),
+    ),
   ]
   const disposers = rows.map((entry) => ctx.webServer.register(entry))
 

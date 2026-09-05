@@ -1,8 +1,8 @@
 // @ts-check
 
 import { spawn } from 'node:child_process'
-import { isAbsolute } from 'node:path'
 import { allocateLoopbackPort, isPortAvailable } from '../../network/loopback-port.mjs'
+import { buildUv4DebugArgs } from './uv4-command-line.mjs'
 
 /**
  * Manages the lifecycle of a Keil UV4 process launched for simulator debugging.
@@ -27,6 +27,8 @@ export class UV4DebugProcess {
     this.port = 0
     this.running = false
     this.exitCode = null
+    /** @type {any} */
+    this.spawnError = null
   }
 
   /**
@@ -42,22 +44,24 @@ export class UV4DebugProcess {
    * @returns {Promise<{ port: number, process: import('node:child_process').ChildProcess }>}
    */
   async launch(options) {
-    if (!options.projectPath) {
+    if (!options || !options.projectPath) {
       throw new Error('启动 UV4 仿真必须指定工程文件 (projectPath)')
     }
 
     const bin = options.uv4Bin || this.uv4Bin
     const port = await this.portAllocator(options.preferredPort || 0)
     this.port = port
+    this.spawnError = null
+    this.exitCode = null
 
-    // UV4 CLI args:
-    // -j0: quiet / hide dialogs
-    // project path
-    // socket argument: -sock:<port>
-    const args = ['-j0', options.projectPath, `-sock:${port}`]
-    if (options.target) {
-      args.push('-t', options.target)
-    }
+    // Build official UV4 arguments (-j0, -d, -s <port>, project, -t <target>)
+    const args = buildUv4DebugArgs({
+      projectPath: options.projectPath,
+      targetName: options.target,
+      socketPort: port,
+      hidden: true,
+      debug: true,
+    })
 
     const child = this.spawner(bin, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -73,19 +77,25 @@ export class UV4DebugProcess {
       this.exitCode = code
     })
 
-    child.on('error', () => {
+    child.on('error', (err) => {
       this.running = false
+      this.spawnError = err
     })
 
-    // Wait briefly or verify port availability
     const timeout = options.timeoutMs || 10000
     const start = Date.now()
     let ready = false
 
     while (Date.now() - start < timeout) {
+      if (this.spawnError) {
+        await this.stop()
+        throw new Error(`UV4 进程启动失败: ${this.spawnError.message || this.spawnError}`)
+      }
       if (!this.running && this.exitCode !== null) {
+        await this.stop()
         throw new Error(`UV4 进程异常退出 (code: ${this.exitCode})`)
       }
+
       // Check if port is bound (occupied means server is listening)
       const available = await this.portChecker(port)
       if (!available) {
@@ -95,7 +105,11 @@ export class UV4DebugProcess {
       await new Promise((r) => setTimeout(r, 100))
     }
 
-    // In mock/test environments without real UV4, ready might be simulated
+    if (!ready) {
+      await this.stop()
+      throw new Error(`UV4 UVSOCK port not ready within ${timeout}ms (port: ${port})`)
+    }
+
     return {
       port: this.port,
       process: child,
@@ -103,15 +117,23 @@ export class UV4DebugProcess {
   }
 
   /**
-   * Gracefully terminates the UV4 process.
+   * Gracefully terminates the UV4 process (wait -> SIGTERM -> SIGKILL).
    *
    * @param {number} [timeoutMs=3000]
+   * @param {{ exitClient?: { exit: () => Promise<any> } }} [options]
    * @returns {Promise<void>}
    */
-  async stop(timeoutMs = 3000) {
+  async stop(timeoutMs = 3000, options = {}) {
     if (!this.process || !this.running) {
       this.running = false
       return
+    }
+
+    // Try graceful UV_GEN_EXIT if client provided
+    if (options.exitClient && typeof options.exitClient.exit === 'function') {
+      try {
+        await options.exitClient.exit()
+      } catch {}
     }
 
     const proc = this.process
@@ -119,29 +141,41 @@ export class UV4DebugProcess {
 
     return new Promise((resolve) => {
       let resolved = false
-      const timer = setTimeout(() => {
+      const halfTimeout = Math.max(500, Math.floor(timeoutMs / 2))
+
+      const termTimer = setTimeout(() => {
         if (!resolved) {
-          resolved = true
           try {
-            proc.kill('SIGKILL')
+            proc.kill('SIGTERM')
           } catch {}
-          resolve()
+
+          const killTimer = setTimeout(() => {
+            if (!resolved) {
+              resolved = true
+              try {
+                proc.kill('SIGKILL')
+              } catch {}
+              resolve()
+            }
+          }, halfTimeout)
+
+          proc.once('exit', () => {
+            if (!resolved) {
+              resolved = true
+              clearTimeout(killTimer)
+              resolve()
+            }
+          })
         }
-      }, timeoutMs)
+      }, halfTimeout)
 
       proc.once('exit', () => {
         if (!resolved) {
           resolved = true
-          clearTimeout(timer)
+          clearTimeout(termTimer)
           resolve()
         }
       })
-
-      try {
-        proc.kill('SIGTERM')
-      } catch {
-        proc.kill()
-      }
     })
   }
 }

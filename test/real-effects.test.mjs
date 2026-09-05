@@ -977,7 +977,7 @@ test('清空显示 only resets the page view and does not post frames/clear or c
     return { ok: true }
   }
   const tmap = (k) => ({ serialPause: '暂停', serialResume: '恢复', framesClearView: '清空显示' })[k] || k
-  pushFramesLog('/tmp/p6', 'c1', [memOnly])
+  pushFramesLog({ cwd: '/tmp/p6', sessionId: 's1' }, 'c1', [memOnly])
   const Frames = createFramesPage(React, tmap, post, { useVirtualizer: () => null })
   const tree = render(
     createElement(Frames, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/p6' }), scope: { cwd: '/tmp/p6' } }),

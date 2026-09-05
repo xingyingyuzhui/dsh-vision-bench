@@ -15,12 +15,10 @@ import {
   runningOf,
   runningSource,
   sourceLabel,
-  statusBar,
   statusLabel,
   subscribeState,
   typeLabel,
   useSessionCwd,
-  visionCollabBar,
 } from './bench-shared.mjs'
 
 export function formatResult(result) {
@@ -832,11 +830,6 @@ export function createDebugView(React, t, post, openProject) {
     return el(
       'div',
       { className: 'dvb-page' },
-      statusBar(el, t, cwd, [
-        { key: 'python', health: health.python },
-        { key: 'uv4', health: health.uv4 },
-      ]),
-      visionCollabBar(el, t, { cwd, workspace, journal, pendingWrites, sessionId }),
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, error) : null,
       el(
         'div',

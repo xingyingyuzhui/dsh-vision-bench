@@ -11,7 +11,7 @@ test('createTargetKey produces strong key with probeSerial and weak with cwd fal
     probeSerial: '0700000123456789',
   })
   assert.equal(strong.identityStrength, 'strong')
-  assert.equal(strong.key, 'gdb-openocd:cmsis-dap:stm32f4x:0700000123456789')
+  assert.equal(strong.key, 'gdb-openocd:cmsis-dap:0700000123456789')
 
   const weak = createTargetKey({
     backend: 'gdb-openocd',
@@ -20,7 +20,7 @@ test('createTargetKey produces strong key with probeSerial and weak with cwd fal
     workspaceCwd: '/workspace/board',
   })
   assert.equal(weak.identityStrength, 'weak')
-  assert.equal(weak.key, 'gdb-openocd:cmsis-dap:stm32f4x:/workspace/board')
+  assert.equal(weak.key, 'gdb-openocd:cmsis-dap:GLOBAL')
 })
 
 test('TargetLeaseManager acquires, verifies and enforces exclusivity', () => {

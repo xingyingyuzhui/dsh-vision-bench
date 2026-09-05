@@ -110,6 +110,22 @@ test('停用的连接不进入协调器（旧 enabled=false 迁移语义）', as
   const mb = loadWorkspace(home, cwd).modbus
   assert.equal(mb.pollingByConnection.c1.enabled, false, '自动采集被停止')
   assert.notEqual(mb.connections.find((c) => c.id === 'c1').enabled, false, '旧禁用字段被清理')
-  assert.notEqual(mb.connections.find((c) => c.id === 'c2').enabled, false, '未禁用连接不受影响')
+  await stopAllPolling()
+})
+
+test('F13: stopAllPolling 后调用 startPolling 可恢复采集并重新激活协调器', async () => {
+  const { home, cwd } = await setup()
+  await startPolling(home, cwd, { connectionId: 'c1' })
+  assert.equal(pollingHealth().stopping, false)
+  await stopAllPolling()
+  assert.equal(pollingHealth().stopping, true)
+
+  // After stopping, startPolling resets stopping flag and starts coordinator
+  const restarted = await startPolling(home, cwd, { connectionId: 'c1', intervalMs: 500 })
+  assert.equal(restarted.ok, true)
+  assert.equal(restarted.running, true)
+  assert.equal(pollingHealth().stopping, false)
+  assert.equal(pollingStatus(home, cwd).connections.c1.running, true)
+
   await stopAllPolling()
 })

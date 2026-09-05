@@ -47,6 +47,28 @@ function normalizeOptions(options, children) {
   return result
 }
 
+function findNextEnabledIndex(options, startIdx, step) {
+  if (!options || !options.length) return -1
+  const len = options.length
+  let cur = startIdx >= 0 ? startIdx : step > 0 ? -1 : len
+  for (let i = 0; i < len; i++) {
+    cur = (cur + step + len) % len
+    if (!options[cur].disabled) return cur
+  }
+  return -1
+}
+
+function findFirstEnabledIndex(options) {
+  return options.findIndex((opt) => !opt.disabled)
+}
+
+function findLastEnabledIndex(options) {
+  for (let i = options.length - 1; i >= 0; i--) {
+    if (!options[i].disabled) return i
+  }
+  return -1
+}
+
 export function renderCustomSelect(el, props) {
   const {
     value,
@@ -64,13 +86,22 @@ export function renderCustomSelect(el, props) {
     title,
     open: controlledOpen,
     onToggle,
+    highlightIndex: controlledHighlight,
+    onHighlightIndexChange,
   } = props
 
   const options = normalizeOptions(rawOptions, children)
   const isControlled = typeof controlledOpen === 'boolean'
   const isOpen = isControlled ? controlledOpen : props.internalOpen
 
+  const selectId = props.id || 'dvb-select'
+  const listboxId = `${selectId}-listbox`
+
   const selectedOpt = options.find((opt) => String(opt.value) === String(value))
+  const selectedIndex = options.findIndex((opt) => String(opt.value) === String(value))
+  const highlightIndex =
+    controlledHighlight !== undefined ? controlledHighlight : isOpen ? (selectedIndex >= 0 ? selectedIndex : 0) : -1
+
   const displayLabel = selectedOpt
     ? selectedOpt.label
     : value !== undefined && value !== ''
@@ -88,6 +119,9 @@ export function renderCustomSelect(el, props) {
 
   const wrapperClasses = ['dvb-select', className, isOpen ? 'is-open' : ''].filter(Boolean).join(' ')
 
+  const activeOptionId =
+    isOpen && highlightIndex >= 0 && options[highlightIndex] ? `${listboxId}-opt-${highlightIndex}` : undefined
+
   return el(
     'div',
     {
@@ -99,12 +133,15 @@ export function renderCustomSelect(el, props) {
       'button',
       {
         type: 'button',
+        role: 'combobox',
         className: triggerClasses,
         style: triggerStyle || null,
         disabled: !!disabled,
         title: title || selectedOpt?.title || undefined,
         'aria-haspopup': 'listbox',
         'aria-expanded': isOpen ? 'true' : 'false',
+        'aria-controls': isOpen ? listboxId : undefined,
+        'aria-activedescendant': activeOptionId,
         onClick(e) {
           e.preventDefault()
           e.stopPropagation()
@@ -114,11 +151,58 @@ export function renderCustomSelect(el, props) {
           }
         },
         onKeyDown(e) {
-          if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
-            e.preventDefault()
-            if (!disabled && typeof onToggle === 'function') {
-              onToggle(true)
+          if (typeof props.onKeyDown === 'function') {
+            props.onKeyDown(e)
+            if (e.defaultPrevented) return
+          }
+          if (disabled) return
+          if (!isOpen) {
+            if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault()
+              if (typeof onToggle === 'function') {
+                onToggle(true)
+              }
             }
+            return
+          }
+
+          if (e.key === 'ArrowDown') {
+            e.preventDefault()
+            const next = findNextEnabledIndex(options, highlightIndex, 1)
+            if (next >= 0 && typeof onHighlightIndexChange === 'function') {
+              onHighlightIndexChange(next)
+            }
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault()
+            const prev = findNextEnabledIndex(options, highlightIndex, -1)
+            if (prev >= 0 && typeof onHighlightIndexChange === 'function') {
+              onHighlightIndexChange(prev)
+            }
+          } else if (e.key === 'Home') {
+            e.preventDefault()
+            const first = findFirstEnabledIndex(options)
+            if (first >= 0 && typeof onHighlightIndexChange === 'function') {
+              onHighlightIndexChange(first)
+            }
+          } else if (e.key === 'End') {
+            e.preventDefault()
+            const last = findLastEnabledIndex(options)
+            if (last >= 0 && typeof onHighlightIndexChange === 'function') {
+              onHighlightIndexChange(last)
+            }
+          } else if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            const chosen = highlightIndex >= 0 ? options[highlightIndex] : selectedOpt
+            if (chosen && !chosen.disabled) {
+              if (typeof onChange === 'function') onChange(chosen.value)
+              if (typeof onToggle === 'function') onToggle(false)
+            }
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            e.stopPropagation()
+            if (typeof onToggle === 'function') onToggle(false)
+          } else if (e.key === 'Tab') {
+            if (typeof onToggle === 'function') onToggle(false)
           }
         },
       },
@@ -141,29 +225,43 @@ export function renderCustomSelect(el, props) {
       ? el(
           'div',
           {
+            id: listboxId,
             className: `dvb-select-dropdown${align === 'right' ? ' is-right' : ''}`,
             style: menuStyle || null,
             role: 'listbox',
             tabIndex: -1,
+            'aria-activedescendant': activeOptionId,
             onClick(e) {
               e.stopPropagation()
             },
           },
           options.map((opt, idx) => {
             const isSelected = selectedOpt ? opt.value === selectedOpt.value : String(opt.value) === String(value)
-            const optClasses = ['dvb-select-option', isSelected ? 'is-selected' : '', opt.disabled ? 'is-disabled' : '']
+            const isHighlighted = highlightIndex === idx
+            const optClasses = [
+              'dvb-select-option',
+              isSelected ? 'is-selected' : '',
+              opt.disabled ? 'is-disabled' : '',
+              isHighlighted ? 'is-highlighted' : '',
+            ]
               .filter(Boolean)
               .join(' ')
 
             return el(
               'div',
               {
+                id: `${listboxId}-opt-${idx}`,
                 key: `${opt.value}-${idx}`,
                 className: optClasses,
                 role: 'option',
                 'aria-selected': isSelected ? 'true' : 'false',
                 'aria-disabled': opt.disabled ? 'true' : undefined,
                 title: opt.title || undefined,
+                onMouseEnter() {
+                  if (!opt.disabled && typeof onHighlightIndexChange === 'function') {
+                    onHighlightIndexChange(idx)
+                  }
+                },
                 onClick(e) {
                   e.preventDefault()
                   e.stopPropagation()
@@ -214,6 +312,7 @@ export function createCustomSelect(React) {
   const el = React.createElement
   return function CustomSelect(props) {
     const [internalOpen, setInternalOpen] = React.useState(false)
+    const [highlightIndex, setHighlightIndex] = React.useState(-1)
     const containerRef = React.useRef(null)
 
     const isOpen = typeof props.open === 'boolean' ? props.open : internalOpen
@@ -251,6 +350,9 @@ export function createCustomSelect(React) {
     }, [isOpen, props.onToggle])
 
     const handleToggle = (nextOpen) => {
+      if (!nextOpen) {
+        setHighlightIndex(-1)
+      }
       if (typeof props.onToggle === 'function') {
         props.onToggle(nextOpen)
       } else {
@@ -262,6 +364,8 @@ export function createCustomSelect(React) {
       ...props,
       internalOpen,
       containerRef,
+      highlightIndex,
+      onHighlightIndexChange: setHighlightIndex,
       onToggle: handleToggle,
     })
   }

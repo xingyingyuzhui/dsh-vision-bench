@@ -26,4 +26,9 @@ export interface ResolvedLaunchSpec {
   backend: DebugBackendKind
   targetSpec: ResolvedTargetSpec
   source: 'explicit' | 'auto-resolved' | 'keil-project'
+  projectPath?: string
+  targetName?: string
+  launchFingerprint?: string
+  launchSummary?: string
+  [key: string]: any
 }

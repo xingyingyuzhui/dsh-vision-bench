@@ -262,3 +262,23 @@ test('callVisionRpc propagates transport failures', async () => {
     /unauthenticated/,
   )
 })
+
+test('createVisionRpcPost forwards custom timeoutMs and abort signal via timeoutOrOptions', async () => {
+  let receivedSignal = null
+  const post = createVisionRpcPost({
+    rpc: {
+      async call(_ch, _ep, _body, signal) {
+        receivedSignal = signal
+        return { ok: true, value: { ok: true } }
+      },
+    },
+  })
+
+  const customAc = new AbortController()
+  await post('/dsh-vision-bench/state', {}, { timeoutMs: 30000, signal: customAc.signal })
+
+  assert.ok(receivedSignal, 'Signal must be passed to rpc.call')
+  assert.equal(receivedSignal.aborted, false)
+  customAc.abort()
+  assert.equal(receivedSignal.aborted, true, 'Custom abort signal must propagate into combined signal')
+})

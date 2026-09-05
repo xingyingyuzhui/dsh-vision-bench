@@ -117,3 +117,95 @@ test('getCustomSelect returns stable cached component instance across renders', 
   const comp2 = getCustomSelect(React)
   assert.equal(comp1, comp2, 'Same React instance returns identical CustomSelect function reference')
 })
+
+test('renderCustomSelect ARIA attributes: combobox, listbox, option, aria-controls, aria-activedescendant', () => {
+  const tree = renderCustomSelect(el, {
+    id: 'my-select',
+    value: 'tcp',
+    options: [
+      { value: 'rtu', label: 'RTU' },
+      { value: 'tcp', label: 'TCP' },
+      { value: 'udp', label: 'UDP', disabled: true },
+    ],
+    open: true,
+    highlightIndex: 1,
+  })
+
+  const trigger = tree.children[0]
+  assert.equal(trigger.props.role, 'combobox')
+  assert.equal(trigger.props['aria-controls'], 'my-select-listbox')
+  assert.equal(trigger.props['aria-activedescendant'], 'my-select-listbox-opt-1')
+
+  const listbox = tree.children[1]
+  assert.equal(listbox.props.role, 'listbox')
+  assert.equal(listbox.props.id, 'my-select-listbox')
+
+  const opt0 = listbox.children[0]
+  assert.equal(opt0.props.role, 'option')
+  assert.equal(opt0.props.id, 'my-select-listbox-opt-0')
+
+  const opt1 = listbox.children[1]
+  assert.equal(opt1.props.role, 'option')
+  assert.equal(opt1.props.id, 'my-select-listbox-opt-1')
+  assert.ok(opt1.props.className.includes('is-highlighted'))
+})
+
+test('renderCustomSelect keyboard navigation: ArrowDown/Up skips disabled, Enter selects, Escape closes', () => {
+  const calls = []
+  const highlights = []
+
+  const tree = renderCustomSelect(el, {
+    id: 'kbd-select',
+    value: 'rtu',
+    options: [
+      { value: 'rtu', label: 'RTU' },
+      { value: 'disabled-opt', label: 'Disabled', disabled: true },
+      { value: 'tcp', label: 'TCP' },
+    ],
+    open: true,
+    highlightIndex: 0,
+    onChange: (val) => calls.push({ type: 'change', val }),
+    onToggle: (open) => calls.push({ type: 'toggle', open }),
+    onHighlightIndexChange: (idx) => highlights.push(idx),
+  })
+
+  const trigger = tree.children[0]
+
+  // ArrowDown should skip disabled option (index 1) and jump to index 2 (TCP)
+  let prevented = false
+  trigger.props.onKeyDown({
+    key: 'ArrowDown',
+    preventDefault() {
+      prevented = true
+    },
+  })
+  assert.equal(prevented, true)
+  assert.equal(highlights[0], 2, 'ArrowDown skipped disabled option')
+
+  // ArrowUp from index 0 should wrap around backwards to index 2 (skipping disabled index 1)
+  highlights.length = 0
+  trigger.props.onKeyDown({
+    key: 'ArrowUp',
+    preventDefault() {},
+  })
+  assert.equal(highlights[0], 2, 'ArrowUp wrapped to last enabled option')
+
+  // Enter selects the currently highlighted option (0 = RTU)
+  trigger.props.onKeyDown({
+    key: 'Enter',
+    preventDefault() {},
+  })
+  assert.deepEqual(calls, [
+    { type: 'change', val: 'rtu' },
+    { type: 'toggle', open: false },
+  ])
+
+  // Escape closes dropdown
+  calls.length = 0
+  trigger.props.onKeyDown({
+    key: 'Escape',
+    preventDefault() {},
+    stopPropagation() {},
+  })
+  assert.deepEqual(calls, [{ type: 'toggle', open: false }])
+})

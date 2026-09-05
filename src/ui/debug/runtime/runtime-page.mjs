@@ -135,6 +135,7 @@ export function createRuntimePage(React, t, post) {
       // 1. Toolbar
       el(DebugToolbar, {
         status: debug.status,
+        pendingControl: debug.pendingControl,
         backend: sessionData?.backend || sessionData?.backendKind || 'gdb-openocd',
         target: sessionData?.targetKey || sessionData?.target || '',
         location: sessionData?.location || null,

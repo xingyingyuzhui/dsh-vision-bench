@@ -13,7 +13,7 @@ test('target lease: probe serial derives strong hardware target key', () => {
   })
 
   assert.equal(strong.identityStrength, 'strong')
-  assert.equal(strong.key, 'gdb-openocd:cmsis-dap:stm32f1x:066BFF543833484270671924')
+  assert.equal(strong.key, 'gdb-openocd:cmsis-dap:066BFF543833484270671924')
 
   const weak = createTargetKey({
     backend: 'gdb-openocd',
@@ -23,7 +23,7 @@ test('target lease: probe serial derives strong hardware target key', () => {
   })
 
   assert.equal(weak.identityStrength, 'weak')
-  assert.equal(weak.key, 'gdb-openocd:cmsis-dap:stm32f1x:/work')
+  assert.equal(weak.key, 'gdb-openocd:cmsis-dap:GLOBAL')
 })
 
 test('target lease: supports multiple simultaneous probes with distinct serials in same workspace', () => {

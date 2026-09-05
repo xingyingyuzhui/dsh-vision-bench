@@ -4,6 +4,28 @@ import { spawnManagedProcess } from '../process/debug-process.mjs'
 import { parseMILine } from './mi-parser.mjs'
 
 /**
+ * Encodes an argument for GDB/MI protocol.
+ * Rejects raw CR/LF/NUL to prevent command injection, and escapes backslashes and quotes.
+ *
+ * @param {any} arg
+ * @returns {string}
+ */
+export function encodeMiArg(arg) {
+  const str = String(arg ?? '')
+  if (/[\r\n\0]/.test(str)) {
+    throw new Error('GDB MI 参数包含非法换行符或控制字符')
+  }
+  if (str.length === 0) {
+    return '""'
+  }
+  if (/[\s"\\]/.test(str)) {
+    const escaped = str.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+    return `"${escaped}"`
+  }
+  return str
+}
+
+/**
  * GDB MI Client managing request-response correlation, timeouts,
  * stream subscriptions, and async event dispatching.
  */
@@ -171,15 +193,7 @@ export class MIClient {
     const token = this._tokenCounter++
     const timeoutMs = options.timeoutMs ?? this._defaultTimeoutMs
 
-    const formattedArgs = (args || [])
-      .map((arg) => {
-        const str = String(arg)
-        if (str.includes(' ') && !str.startsWith('"') && !str.endsWith('"')) {
-          return `"${str.replace(/"/g, '\\"')}"`
-        }
-        return str
-      })
-      .join(' ')
+    const formattedArgs = (args || []).map(encodeMiArg).join(' ')
 
     const commandLine = formattedArgs ? `${token}${cmd} ${formattedArgs}\n` : `${token}${cmd}\n`
 

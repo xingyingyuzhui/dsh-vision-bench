@@ -15,19 +15,24 @@ import { DEBUG_ERRORS, DebugError } from './errors.mjs'
  */
 export function createTargetKey(spec) {
   const backend = spec.backend || 'gdb-openocd'
+  if (backend === 'keil-simulator') {
+    return {
+      key: 'keil-simulator:GLOBAL',
+      identityStrength: 'weak',
+    }
+  }
+
   const iface = spec.interfaceName || 'unknown-iface'
-  const target = spec.target || 'unknown-target'
   const probeSerial = spec.probeSerial ? String(spec.probeSerial).trim() : ''
-  const cwd = spec.workspaceCwd || ''
 
   if (probeSerial) {
     return {
-      key: `${backend}:${iface}:${target}:${probeSerial}`,
+      key: `${backend}:${iface}:${probeSerial}`,
       identityStrength: 'strong',
     }
   }
   return {
-    key: `${backend}:${iface}:${target}:${cwd}`,
+    key: `${backend}:${iface}:GLOBAL`,
     identityStrength: 'weak',
   }
 }

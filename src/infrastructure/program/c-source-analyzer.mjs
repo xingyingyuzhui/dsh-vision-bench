@@ -6,9 +6,16 @@ import {
   resolveModelReferences,
   sanitizeCSource,
 } from './heuristic-c-source-analyzer.mjs'
-import { analyzeCSourceWithAst } from './tree-sitter-c-analyzer.mjs'
+import { analyzeCSourceWithAst, analyzeCSourceWithLezer } from './lezer-c-analyzer.mjs'
 
-export { C_KEYWORDS, analyzeCSourceHeuristic, analyzeCSourceWithAst, resolveModelReferences, sanitizeCSource }
+export {
+  C_KEYWORDS,
+  analyzeCSourceHeuristic,
+  analyzeCSourceWithAst,
+  analyzeCSourceWithLezer,
+  resolveModelReferences,
+  sanitizeCSource,
+}
 
 /**
  * Parses C source code and extracts functions, variables, call edges,

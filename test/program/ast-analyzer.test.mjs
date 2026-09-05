@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { analyzeCSourceWithAst } from '../../src/infrastructure/program/tree-sitter-c-analyzer.mjs'
+import { analyzeCSourceWithAst, analyzeCSourceWithLezer } from '../../src/infrastructure/program/lezer-c-analyzer.mjs'
 
 test('tree-sitter-c-analyzer: extracts functions, parameters, calls, and variables with confidence: ast', () => {
   const cCode = `

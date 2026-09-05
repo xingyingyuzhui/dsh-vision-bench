@@ -29,9 +29,25 @@ export function createVisionRpcPost(connection) {
     throw new Error('dsh-vision-bench: connection.rpc.call is required')
   }
   const rpcCall = connection.rpc.call
-  return function post(path, payload, timeoutMs) {
+  return function post(path, payload, timeoutOrOptions) {
     const endpoint = httpPathToRpcEndpoint(path)
-    const signal = AbortSignal.timeout(Number(timeoutMs) > 0 ? Number(timeoutMs) : 15000)
+    let timeoutMs = 15000
+    let userSignal = null
+    if (typeof timeoutOrOptions === 'number') {
+      timeoutMs = timeoutOrOptions > 0 ? timeoutOrOptions : 15000
+    } else if (timeoutOrOptions && typeof timeoutOrOptions === 'object') {
+      if (Number(/** @type {any} */ (timeoutOrOptions).timeoutMs) > 0) {
+        timeoutMs = Number(/** @type {any} */ (timeoutOrOptions).timeoutMs)
+      }
+      if (/** @type {any} */ (timeoutOrOptions).signal) {
+        userSignal = /** @type {any} */ (timeoutOrOptions).signal
+      }
+    }
+    const timeoutSignal = AbortSignal.timeout(timeoutMs)
+    const signal =
+      userSignal && typeof AbortSignal.any === 'function'
+        ? AbortSignal.any([timeoutSignal, userSignal])
+        : userSignal || timeoutSignal
     return rpcCall(VISION_RPC_CHANNEL, endpoint, payload || {}, signal).then(unwrapRpcResult)
   }
 }

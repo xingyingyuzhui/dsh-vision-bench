@@ -15,9 +15,11 @@ export function runExclusive(key, fn) {
   const id = String(key || '')
   const prev = chains.get(id) || Promise.resolve()
   const next = prev.catch(() => {}).then(() => fn())
-  const tracked = next.finally(() => {
-    if (chains.get(id) === tracked) chains.delete(id)
-  })
+  const tracked = next
+    .catch(() => {})
+    .finally(() => {
+      if (chains.get(id) === tracked) chains.delete(id)
+    })
   chains.set(id, tracked)
   return /** @type {Promise<T>} */ (next)
 }

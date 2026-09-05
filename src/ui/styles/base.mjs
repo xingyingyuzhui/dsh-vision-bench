@@ -152,7 +152,9 @@ export const BASE_CSS = [
     '] .dvb-select-option{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;box-sizing:border-box;padding:6px 10px;border-radius:6px;border:none;background:transparent;color:var(--dsw-alias-label-primary,inherit);font:inherit;font-size:12px;cursor:pointer;text-align:left;transition:background-color .12s ease}',
   'body[' +
     ATTR +
-    '] .dvb-select-option:hover:not(.is-disabled){background:var(--dsw-alias-bg-module-platform,rgba(128,128,128,.1))}',
+    '] .dvb-select-option:hover:not(.is-disabled), body[' +
+    ATTR +
+    '] .dvb-select-option.is-highlighted:not(.is-disabled){background:var(--dsw-alias-bg-module-platform,rgba(128,128,128,.1))}',
   'body[' +
     ATTR +
     '] .dvb-select-option.is-selected{background:var(--dsw-alias-bg-module-platform,rgba(128,128,128,.14));font-weight:500}',

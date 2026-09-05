@@ -1,18 +1,48 @@
-// In-memory Modbus frame ring per cwd (split from bench-shared).
-const FRAME_LOGS_BY_CWD = new Map() // cwd -> { byConn: {} }
+// In-memory Modbus frame ring per scope (split from bench-shared).
+const FRAME_LOGS_BY_SCOPE = new Map() // scopeKey -> { byConn: {} }
 const FRAME_LOG_CAP = 500
 
-function frameEntryFor(cwd) {
-  let s = FRAME_LOGS_BY_CWD.get(cwd)
+/**
+ * Format uniform scope key for frame caches.
+ * @param {any} scope { cwd, sessionId, isShared } or cwd string
+ * @param {any} [maybeSessionId]
+ * @param {boolean} [maybeIsShared]
+ * @returns {string}
+ */
+export function formatFrameScopeKey(scope, maybeSessionId, maybeIsShared) {
+  if (scope && typeof scope === 'object') {
+    const cwd = String(scope.cwd || '')
+    const isShared = scope.isShared === true
+    const sessionId = String(scope.sessionId || '').trim()
+    return isShared ? `shared:${cwd}` : `${cwd}:${sessionId || '_default'}`
+  }
+  const cwd = String(scope || '')
+  if (typeof maybeSessionId === 'boolean') {
+    return maybeSessionId ? `shared:${cwd}` : `${cwd}:_default`
+  }
+  const sessionId = String(maybeSessionId || '').trim()
+  const isShared = maybeIsShared === true
+  return isShared ? `shared:${cwd}` : `${cwd}:${sessionId || '_default'}`
+}
+
+function frameEntryFor(scopeKey) {
+  let s = FRAME_LOGS_BY_SCOPE.get(scopeKey)
   if (!s) {
     s = { byConn: {} }
-    FRAME_LOGS_BY_CWD.set(cwd, s)
+    FRAME_LOGS_BY_SCOPE.set(scopeKey, s)
   }
   return s
 }
 
-export function pushFramesLog(cwd, connId, logArray) {
+export function pushFramesLog(cwd, connId, logArray, options) {
   if (!cwd) return
+  const isObjectScope = typeof cwd === 'object'
+  const realCwd = isObjectScope ? cwd.cwd : cwd
+  if (!realCwd) return
+  const sid = isObjectScope ? cwd.sessionId : options?.sessionId
+  const isShared = isObjectScope ? cwd.isShared === true : options?.isShared === true
+  const scopeKey = formatFrameScopeKey(realCwd, sid, isShared)
+
   let cid = '_default'
   let list
   if (Array.isArray(connId) && logArray === undefined) {
@@ -29,14 +59,13 @@ export function pushFramesLog(cwd, connId, logArray) {
   } else if (Array.isArray(connId)) {
     list = connId
   } else {
-    // fallback: treat second arg as array if no third
     if (Array.isArray(connId)) {
       list = connId
     } else {
       list = []
     }
   }
-  const state = frameEntryFor(cwd)
+  const state = frameEntryFor(scopeKey)
   if (!state.byConn[cid]) state.byConn[cid] = []
   const arr = Array.isArray(list) ? list : []
   for (const entry of arr) {
@@ -79,8 +108,15 @@ export function pushFramesLog(cwd, connId, logArray) {
   }
 }
 
-export function getFramesLog(cwd, connId) {
-  const s = FRAME_LOGS_BY_CWD.get(cwd)
+export function getFramesLog(scope, connId, options) {
+  const isObjectScope = scope && typeof scope === 'object'
+  const realCwd = isObjectScope ? scope.cwd : scope
+  if (!realCwd) return []
+  const sid = isObjectScope ? scope.sessionId : options?.sessionId
+  const isShared = isObjectScope ? scope.isShared === true : options?.isShared === true
+  const scopeKey = formatFrameScopeKey(realCwd, sid, isShared)
+
+  const s = FRAME_LOGS_BY_SCOPE.get(scopeKey)
   if (!s) return []
   if (connId === undefined || connId === null || connId === '' || connId === 'all') {
     const all = []
@@ -93,8 +129,32 @@ export function getFramesLog(cwd, connId) {
   return s.byConn[connId] ? s.byConn[connId].slice() : []
 }
 
-export function clearFramesLog(cwd, connId) {
-  const s = FRAME_LOGS_BY_CWD.get(cwd)
+export function clearFramesLog(scope, connId, options) {
+  const isObjectScope = scope && typeof scope === 'object'
+  const realCwd = isObjectScope ? scope.cwd : scope
+  if (!realCwd) return
+  const sid = isObjectScope ? scope.sessionId : options?.sessionId
+  const hasExplicitSession = sid !== undefined && sid !== null && sid !== ''
+  const isShared = isObjectScope ? scope.isShared === true : options?.isShared === true
+
+  if (!hasExplicitSession && !isShared && typeof scope === 'string') {
+    const prefix = `${scope}:`
+    const sharedKey = `shared:${scope}`
+    for (const key of FRAME_LOGS_BY_SCOPE.keys()) {
+      if (key === scope || key === sharedKey || key.startsWith(prefix)) {
+        if (connId === undefined || connId === null || connId === '' || connId === 'all') {
+          FRAME_LOGS_BY_SCOPE.delete(key)
+        } else {
+          const s = FRAME_LOGS_BY_SCOPE.get(key)
+          if (s) delete s.byConn[connId]
+        }
+      }
+    }
+    return
+  }
+
+  const key = formatFrameScopeKey(realCwd, sid, isShared)
+  const s = FRAME_LOGS_BY_SCOPE.get(key)
   if (!s) return
   if (connId === undefined || connId === null || connId === '' || connId === 'all') {
     s.byConn = {}
@@ -103,11 +163,22 @@ export function clearFramesLog(cwd, connId) {
   }
 }
 
-export function framesLogCount(cwd, connId) {
-  const s = FRAME_LOGS_BY_CWD.get(cwd)
+export function framesLogCount(scope, connId, options) {
+  const isObjectScope = scope && typeof scope === 'object'
+  const realCwd = isObjectScope ? scope.cwd : scope
+  if (!realCwd) return 0
+  const sid = isObjectScope ? scope.sessionId : options?.sessionId
+  const isShared = isObjectScope ? scope.isShared === true : options?.isShared === true
+  const scopeKey = formatFrameScopeKey(realCwd, sid, isShared)
+
+  const s = FRAME_LOGS_BY_SCOPE.get(scopeKey)
   if (!s) return 0
   if (connId) return (s.byConn[connId] || []).length
   let n = 0
   for (const arr of Object.values(s.byConn)) n += arr.length
   return n
+}
+
+export function clearAllFramesLogs() {
+  FRAME_LOGS_BY_SCOPE.clear()
 }
