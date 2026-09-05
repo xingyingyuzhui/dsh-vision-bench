@@ -49,11 +49,11 @@ export function createDebugTimelinePanel(React, t) {
               const time = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : ''
               const type = String(ev.type || 'event')
               let typeColor = 'inherit'
-              if (type.includes('hit') || type.includes('exception')) {
+              if (type.includes('hit') || type.includes('exception') || type.includes('failed')) {
                 typeColor = 'var(--dsw-alias-label-danger, #c62828)'
-              } else if (type === 'running') {
+              } else if (type.includes('running')) {
                 typeColor = 'var(--dsw-alias-label-success, #2e7d32)'
-              } else if (type === 'paused' || type === 'step_complete') {
+              } else if (type.includes('paused') || type.includes('step')) {
                 typeColor = 'var(--dsw-alias-label-info, #4f8ef7)'
               }
 

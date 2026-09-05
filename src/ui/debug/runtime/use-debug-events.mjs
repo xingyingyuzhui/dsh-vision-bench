@@ -1,5 +1,6 @@
 // @ts-check
 
+import { DEBUG_EVENT_TYPES } from '../../../shared/debug-events.mjs'
 import { beginRequest, shouldApplyRequest } from '../../common/latest-request-gate.mjs'
 import { createRuntimeController } from './runtime-controller.mjs'
 
@@ -172,20 +173,24 @@ export function useDebugEvents(React, post, scope) {
               let needStateRefresh = false
               for (const ev of incoming) {
                 const type = String(ev.type || '')
-                if (type === 'running') {
+                if (type === 'running' || type === DEBUG_EVENT_TYPES.RUNNING) {
                   setStatus('running')
                 } else if (
                   type === 'paused' ||
+                  type === DEBUG_EVENT_TYPES.PAUSED ||
                   type === 'step_complete' ||
+                  type === DEBUG_EVENT_TYPES.STEP_COMPLETE ||
                   type === 'breakpoint_hit' ||
-                  type === 'watchpoint_hit'
+                  type === DEBUG_EVENT_TYPES.BREAKPOINT_HIT ||
+                  type === 'watchpoint_hit' ||
+                  type === DEBUG_EVENT_TYPES.WATCHPOINT_HIT
                 ) {
                   setStatus('paused')
                   needStateRefresh = true
-                } else if (type === 'exception') {
+                } else if (type === 'exception' || type === DEBUG_EVENT_TYPES.EXCEPTION) {
                   setStatus('failed')
                   needStateRefresh = true
-                } else if (type === 'session_stopped') {
+                } else if (type === 'session_stopped' || type === DEBUG_EVENT_TYPES.SESSION_STOPPED) {
                   setStatus('stopped')
                   setActive(false)
                   needStateRefresh = true

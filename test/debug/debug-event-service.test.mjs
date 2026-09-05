@@ -35,9 +35,9 @@ test('DebugEventService appends and lists events with monotonic cursors', () => 
   assert.equal(listed.events.length, 2)
   assert.equal(listed.closed, false)
 
-  const since1 = svc.listAfter(2)
-  assert.equal(since1.events.length, 1)
-  assert.equal(since1.events[0].cursor, 2)
+  const after1 = svc.listAfter(1)
+  assert.equal(after1.events.length, 1)
+  assert.equal(after1.events[0].cursor, 2)
 })
 
 test('DebugEventService waitAfter returns immediately if events exist', async () => {
@@ -69,7 +69,7 @@ test('DebugEventService waitAfter suspends and wakes on new event', async () => 
     workspaceCwd: '/workspace',
   })
 
-  const waitPromise = svc.waitAfter(1, { timeoutMs: 2000 })
+  const waitPromise = svc.waitAfter(0, { timeoutMs: 2000 })
 
   // Append shortly after
   setTimeout(() => {
@@ -97,7 +97,7 @@ test('DebugEventService waitAfter respects AbortSignal', async () => {
   })
 
   const ac = new AbortController()
-  const waitPromise = svc.waitAfter(1, { signal: ac.signal, timeoutMs: 5000 })
+  const waitPromise = svc.waitAfter(0, { signal: ac.signal, timeoutMs: 5000 })
   ac.abort()
 
   const res = await waitPromise
@@ -113,7 +113,7 @@ test('DebugEventService close() wakes up waiters with closed: true', async () =>
     workspaceCwd: '/workspace',
   })
 
-  const waitPromise = svc.waitAfter(1, { timeoutMs: 5000 })
+  const waitPromise = svc.waitAfter(0, { timeoutMs: 5000 })
   svc.close()
 
   const res = await waitPromise

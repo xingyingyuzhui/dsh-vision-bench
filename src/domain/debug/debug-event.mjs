@@ -1,24 +1,9 @@
 // @ts-check
 
-export const DEBUG_EVENT_TYPES = {
-  SESSION_STARTING: 'debug.session.starting',
-  SESSION_READY: 'debug.session.ready',
-  SESSION_STOPPED: 'debug.session.stopped',
-  SESSION_FAILED: 'debug.session.failed',
-  SESSION_CLOSED: 'debug.session.closed',
-  RUNNING: 'debug.running',
-  PAUSED: 'debug.paused',
-  STEP_COMPLETE: 'debug.step.complete',
-  BREAKPOINT_CREATED: 'debug.breakpoint.created',
-  BREAKPOINT_REMOVED: 'debug.breakpoint.removed',
-  BREAKPOINT_HIT: 'debug.breakpoint.hit',
-  WATCHPOINT_CREATED: 'debug.watchpoint.created',
-  WATCHPOINT_REMOVED: 'debug.watchpoint.removed',
-  WATCHPOINT_HIT: 'debug.watchpoint.hit',
-  SNAPSHOT_CREATED: 'debug.snapshot.created',
-  EXCEPTION: 'debug.exception',
-  CONSOLE: 'debug.console',
-}
+import { DEBUG_EVENT_TYPES } from '../../shared/debug-events.mjs'
+
+export { DEBUG_EVENT_TYPES }
+export { BACKEND_EVENT_TYPES, createBackendEvent } from './backend-event.mjs'
 
 /**
  * Creates a normalized DebugEvent object.
@@ -78,13 +63,34 @@ export function createDebugEventRing(capacity = 500) {
      * Gets events with cursor >= minCursor up to limit.
      * @param {number} [minCursor=0]
      * @param {number} [limit=100]
-     * @returns {{ events: import('../../types/debug.d.ts').DebugEvent[], nextCursor: number }}
+     * @returns {{ events: import('../../types/debug.d.ts').DebugEvent[], nextCursor: number, cursorExpired: boolean }}
      */
     getEventsSince(minCursor = 0, limit = 100) {
+      const oldestCursor = buffer[0]?.cursor ?? nextCursor
+      const cursorExpired = minCursor > 0 && minCursor < oldestCursor
       const events = buffer.filter((e) => e.cursor >= minCursor).slice(0, limit)
       return {
         events,
         nextCursor,
+        cursorExpired,
+      }
+    },
+
+    /**
+     * Gets events strictly after cursor (e.cursor > afterCursor).
+     * @param {number} [afterCursor=0]
+     * @param {number} [limit=100]
+     * @returns {{ events: import('../../types/debug.d.ts').DebugEvent[], nextCursor: number, cursorExpired: boolean }}
+     */
+    getEventsAfter(afterCursor = 0, limit = 100) {
+      const oldestCursor = buffer[0]?.cursor ?? nextCursor
+      const cursorExpired = afterCursor > 0 && afterCursor < oldestCursor - 1
+      const events = buffer.filter((e) => e.cursor > afterCursor).slice(0, limit)
+      const lastEvent = events[events.length - 1]
+      return {
+        events,
+        nextCursor: lastEvent ? lastEvent.cursor : Math.max(afterCursor, oldestCursor - 1),
+        cursorExpired,
       }
     },
 
@@ -100,20 +106,23 @@ export function createDebugEventRing(capacity = 500) {
      * Waits for events with cursor >= minCursor.
      * @param {number} minCursor
      * @param {{ signal?: AbortSignal, timeoutMs?: number }} [options]
-     * @returns {Promise<{ events: import('../../types/debug.d.ts').DebugEvent[], nextCursor: number }>}
+     * @returns {Promise<{ events: import('../../types/debug.d.ts').DebugEvent[], nextCursor: number, cursorExpired: boolean }>}
      */
     async waitForEvents(minCursor, options = {}) {
+      const oldestCursor = buffer[0]?.cursor ?? nextCursor
+      const cursorExpired = minCursor > 0 && minCursor < oldestCursor
       const existing = buffer.filter((e) => e.cursor >= minCursor)
-      if (existing.length > 0) {
+      if (existing.length > 0 || cursorExpired) {
         return {
           events: existing.slice(0, 100),
           nextCursor,
+          cursorExpired,
         }
       }
 
       const signal = options.signal
       if (signal?.aborted) {
-        return { events: [], nextCursor }
+        return { events: [], nextCursor, cursorExpired: false }
       }
 
       return new Promise((resolve) => {
@@ -122,19 +131,22 @@ export function createDebugEventRing(capacity = 500) {
         let timer = null
 
         const onEvent = () => {
+          const oldestCursor = buffer[0]?.cursor ?? nextCursor
+          const cursorExpired = minCursor > 0 && minCursor < oldestCursor
           const matched = buffer.filter((e) => e.cursor >= minCursor)
-          if (matched.length > 0) {
+          if (matched.length > 0 || cursorExpired) {
             cleanup()
             resolve({
               events: matched.slice(0, 100),
               nextCursor,
+              cursorExpired,
             })
           }
         }
 
         const onAbort = () => {
           cleanup()
-          resolve({ events: [], nextCursor })
+          resolve({ events: [], nextCursor, cursorExpired: false })
         }
 
         cleanup = () => {
@@ -150,7 +162,61 @@ export function createDebugEventRing(capacity = 500) {
         if (timeout > 0) {
           timer = setTimeout(() => {
             cleanup()
-            resolve({ events: [], nextCursor })
+            resolve({ events: [], nextCursor, cursorExpired: false })
+          }, timeout)
+        }
+      })
+    },
+
+    /**
+     * Waits for events with cursor > afterCursor.
+     * @param {number} afterCursor
+     * @param {{ signal?: AbortSignal, timeoutMs?: number }} [options]
+     * @returns {Promise<{ events: import('../../types/debug.d.ts').DebugEvent[], nextCursor: number, cursorExpired: boolean }>}
+     */
+    async waitForEventsAfter(afterCursor, options = {}) {
+      const immediate = this.getEventsAfter(afterCursor)
+      if (immediate.events.length > 0 || immediate.cursorExpired) {
+        return immediate
+      }
+
+      const signal = options.signal
+      if (signal?.aborted) {
+        return { events: [], nextCursor: Math.max(afterCursor, nextCursor), cursorExpired: false }
+      }
+
+      return new Promise((resolve) => {
+        let cleanup = () => {}
+        /** @type {ReturnType<typeof setTimeout> | null} */
+        let timer = null
+
+        const onEvent = () => {
+          const res = this.getEventsAfter(afterCursor)
+          if (res.events.length > 0 || res.cursorExpired) {
+            cleanup()
+            resolve(res)
+          }
+        }
+
+        const onAbort = () => {
+          cleanup()
+          resolve({ events: [], nextCursor: Math.max(afterCursor, nextCursor), cursorExpired: false })
+        }
+
+        cleanup = () => {
+          listeners.delete(onEvent)
+          if (timer) clearTimeout(timer)
+          if (signal) signal.removeEventListener('abort', onAbort)
+        }
+
+        listeners.add(onEvent)
+        if (signal) signal.addEventListener('abort', onAbort, { once: true })
+
+        const timeout = options.timeoutMs ?? 25000
+        if (timeout > 0) {
+          timer = setTimeout(() => {
+            cleanup()
+            resolve({ events: [], nextCursor: Math.max(afterCursor, nextCursor), cursorExpired: false })
           }, timeout)
         }
       })

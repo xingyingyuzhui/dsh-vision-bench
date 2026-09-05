@@ -1,0 +1,25 @@
+// @ts-check
+
+export const DEBUG_EVENT_TYPES = Object.freeze({
+  SESSION_STARTING: 'debug.session.starting',
+  SESSION_READY: 'debug.session.ready',
+  SESSION_STOPPED: 'debug.session.stopped',
+  SESSION_FAILED: 'debug.session.failed',
+  SESSION_ERROR: 'debug.session.failed',
+  SESSION_CLOSED: 'debug.session.closed',
+  RUNNING: 'debug.running',
+  TARGET_RUNNING: 'debug.running',
+  PAUSED: 'debug.paused',
+  TARGET_PAUSED: 'debug.paused',
+  STEP_COMPLETE: 'debug.step.complete',
+  BREAKPOINT_CREATED: 'debug.breakpoint.created',
+  BREAKPOINT_REMOVED: 'debug.breakpoint.removed',
+  BREAKPOINT_HIT: 'debug.breakpoint.hit',
+  WATCHPOINT_CREATED: 'debug.watchpoint.created',
+  WATCHPOINT_REMOVED: 'debug.watchpoint.removed',
+  WATCHPOINT_HIT: 'debug.watchpoint.hit',
+  SNAPSHOT_CREATED: 'debug.snapshot.created',
+  EXCEPTION: 'debug.exception',
+  CONSOLE: 'debug.console',
+  CONSOLE_OUTPUT: 'debug.console',
+})

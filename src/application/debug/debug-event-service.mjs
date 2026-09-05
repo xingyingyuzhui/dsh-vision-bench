@@ -39,22 +39,23 @@ export class DebugEventService {
   }
 
   /**
-   * Retrieves events with cursor >= minCursor up to limit.
+   * Retrieves events strictly after cursor (or since 0 if cursor === 0) up to limit.
    * @param {number} [cursor=0]
    * @param {number} [limit=100]
-   * @returns {{ events: import('../../types/debug.d.ts').DebugEvent[], nextCursor: number, closed: boolean }}
+   * @returns {{ events: import('../../types/debug.d.ts').DebugEvent[], nextCursor: number, cursorExpired: boolean, closed: boolean }}
    */
   listAfter(cursor = 0, limit = 100) {
-    const res = this.ring.getEventsSince(cursor, limit)
+    const res = cursor === 0 ? this.ring.getEventsSince(0, limit) : this.ring.getEventsAfter(cursor, limit)
     return {
       events: res.events,
       nextCursor: res.nextCursor,
+      cursorExpired: Boolean(res.cursorExpired),
       closed: this.closed,
     }
   }
 
   /**
-   * Waits for events with cursor >= minCursor via long-polling.
+   * Waits for events strictly after cursor (or since 0 if cursor === 0) via long-polling.
    * Resolves immediately if events exist, or suspends up to timeoutMs (default 20s, max 25s).
    *
    * @param {number} cursor
@@ -63,26 +64,27 @@ export class DebugEventService {
    *   timeoutMs?: number,
    *   limit?: number,
    * }} [options]
-   * @returns {Promise<{ events: import('../../types/debug.d.ts').DebugEvent[], nextCursor: number, closed: boolean }>}
+   * @returns {Promise<{ events: import('../../types/debug.d.ts').DebugEvent[], nextCursor: number, cursorExpired: boolean, closed: boolean }>}
    */
   async waitAfter(cursor, options = {}) {
     if (this.closed) {
-      return { events: [], nextCursor: cursor, closed: true }
+      return { events: [], nextCursor: cursor, cursorExpired: false, closed: true }
     }
 
     const limit = options.limit || 100
-    const immediate = this.ring.getEventsSince(cursor, limit)
-    if (immediate.events.length > 0) {
+    const immediate = cursor === 0 ? this.ring.getEventsSince(0, limit) : this.ring.getEventsAfter(cursor, limit)
+    if (immediate.events.length > 0 || immediate.cursorExpired) {
       return {
         events: immediate.events,
         nextCursor: immediate.nextCursor,
+        cursorExpired: Boolean(immediate.cursorExpired),
         closed: this.closed,
       }
     }
 
     const signal = options.signal
     if (signal?.aborted) {
-      return { events: [], nextCursor: cursor, closed: this.closed }
+      return { events: [], nextCursor: cursor, cursorExpired: false, closed: this.closed }
     }
 
     const timeoutMs = Math.min(Math.max(100, options.timeoutMs ?? 20000), 25000)
@@ -94,18 +96,30 @@ export class DebugEventService {
       let timer = null
 
       const done = (
-        /** @type {{ events: import('../../types/debug.d.ts').DebugEvent[], nextCursor: number, closed: boolean }} */ result,
+        /** @type {{ events: import('../../types/debug.d.ts').DebugEvent[], nextCursor: number, cursorExpired: boolean, closed: boolean }} */ result,
       ) => {
         if (cleanup) cleanup()
         resolve(result)
       }
 
       const onClose = () => {
-        done({ events: [], nextCursor: cursor, closed: true })
+        done({ events: [], nextCursor: cursor, cursorExpired: false, closed: true })
       }
 
       const onAbort = () => {
-        done({ events: [], nextCursor: cursor, closed: this.closed })
+        done({ events: [], nextCursor: cursor, cursorExpired: false, closed: this.closed })
+      }
+
+      const onEvent = () => {
+        const res = cursor === 0 ? this.ring.getEventsSince(0, limit) : this.ring.getEventsAfter(cursor, limit)
+        if (res.events.length > 0 || res.cursorExpired) {
+          done({
+            events: res.events,
+            nextCursor: res.nextCursor,
+            cursorExpired: Boolean(res.cursorExpired),
+            closed: this.closed,
+          })
+        }
       }
 
       this._closeWaiters.add(onClose)
@@ -113,7 +127,7 @@ export class DebugEventService {
 
       if (timeoutMs > 0) {
         timer = setTimeout(() => {
-          done({ events: [], nextCursor: cursor, closed: this.closed })
+          done({ events: [], nextCursor: cursor, cursorExpired: false, closed: this.closed })
         }, timeoutMs)
       }
 
@@ -124,17 +138,24 @@ export class DebugEventService {
       }
 
       // Delegate ring listener
-      this.ring
-        .waitForEvents(cursor, { signal, timeoutMs })
+      const waitPromise =
+        cursor === 0
+          ? this.ring.waitForEvents(0, { signal, timeoutMs })
+          : this.ring.waitForEventsAfter
+            ? this.ring.waitForEventsAfter(cursor, { signal, timeoutMs })
+            : this.ring.waitForEvents(cursor, { signal, timeoutMs })
+
+      waitPromise
         .then((res) => {
           done({
             events: res.events,
             nextCursor: res.nextCursor,
+            cursorExpired: Boolean(res.cursorExpired),
             closed: this.closed,
           })
         })
         .catch(() => {
-          done({ events: [], nextCursor: cursor, closed: this.closed })
+          done({ events: [], nextCursor: cursor, cursorExpired: false, closed: this.closed })
         })
     })
   }

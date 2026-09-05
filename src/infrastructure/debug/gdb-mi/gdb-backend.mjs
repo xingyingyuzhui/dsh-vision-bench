@@ -44,6 +44,35 @@ export class GdbBackend {
     this.isStopping = false
     this.firmwareHash = ''
     this._unsubscribeAsync = null
+    this._unsubscribeStream = null
+    /** @type {Set<(event: import('../../../types/debug-backend.d.ts').DebugBackendEvent) => void>} */
+    this.listeners = new Set()
+  }
+
+  /**
+   * Subscribes to backend events.
+   * @param {(event: import('../../../types/debug-backend.d.ts').DebugBackendEvent) => void} listener
+   * @returns {() => void}
+   */
+  subscribe(listener) {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  /**
+   * Emits a backend event to all registered listeners.
+   * @param {import('../../../types/debug-backend.d.ts').DebugBackendEvent} event
+   */
+  _emit(event) {
+    for (const listener of this.listeners) {
+      try {
+        listener(event)
+      } catch {
+        /* ignore listener error */
+      }
+    }
   }
 
   /**
@@ -111,15 +140,30 @@ export class GdbBackend {
         if (rec.class === 'stopped') {
           const reason = mapGdbStopReason(rec)
           const frame = rec.results?.frame
+          /** @type {import('../../../types/debug.d.ts').SourceLocation | undefined} */
+          let loc = undefined
           if (frame) {
-            this.currentLocation = {
+            loc = {
               file: frame.file || frame.fullname || '',
               line: Number(frame.line || 0),
               function: frame.func || '',
               address: frame.addr || '',
             }
+            this.currentLocation = loc
           }
           this.state = 'paused'
+          this._emit({
+            type: 'backend.stopped',
+            reason,
+            location: loc,
+            nativeReason: rec.results?.reason,
+            breakpointNumber: rec.results?.bkptno ? String(rec.results.bkptno) : undefined,
+            watchpointNumber:
+              rec.results?.wpt?.number || rec.results?.wpt
+                ? String(rec.results?.wpt?.number || rec.results?.wpt)
+                : undefined,
+            threadId: rec.results?.['thread-id'],
+          })
           if (this.eventRing) {
             this.eventRing.push({
               debugSessionId: this.debugSessionId,
@@ -137,6 +181,10 @@ export class GdbBackend {
           }
         } else if (rec.class === 'running') {
           this.state = 'running'
+          this._emit({
+            type: 'backend.running',
+            threadId: rec.results?.['thread-id'],
+          })
           if (this.eventRing) {
             this.eventRing.push({
               debugSessionId: this.debugSessionId,
@@ -149,6 +197,41 @@ export class GdbBackend {
           }
         }
       })
+
+      // Listen for stream records (console, target, log)
+      if (typeof this.miClient.onStream === 'function') {
+        this._unsubscribeStream = this.miClient.onStream((rec) => {
+          let stream = 'console'
+          if (rec.kind === 'target-stream') stream = 'target'
+          else if (rec.kind === 'log-stream') stream = 'log'
+          this._emit({
+            type: 'backend.console',
+            stream: /** @type {'console' | 'target' | 'log'} */ (stream),
+            text: rec.text || '',
+          })
+        })
+      }
+
+      // Monitor exit promise of client
+      if (this.miClient._transport?.exitPromise) {
+        this.miClient._transport.exitPromise.then(
+          (exitInfo) => {
+            this._emit({
+              type: 'backend.exited',
+              code: exitInfo?.code ?? undefined,
+              signal: exitInfo?.signal ?? undefined,
+              unexpected: !this.isStopping,
+            })
+          },
+          (err) => {
+            this._emit({
+              type: 'backend.error',
+              message: err instanceof Error ? err.message : String(err),
+              fatal: true,
+            })
+          },
+        )
+      }
 
       // 4. Connect GDB to OpenOCD port
       await this.miClient.command('-target-select', ['extended-remote', `127.0.0.1:${gdbPort}`])
@@ -204,6 +287,13 @@ export class GdbBackend {
     const rec = await client.command('-exec-interrupt')
     this.state = 'paused'
     return rec
+  }
+
+  /**
+   * Requests target pause (standard DebugBackend interface).
+   */
+  async requestPause() {
+    return this.pause()
   }
 
   /**
@@ -468,6 +558,15 @@ export class GdbBackend {
         /* ignore */
       }
       this._unsubscribeAsync = null
+    }
+
+    if (this._unsubscribeStream) {
+      try {
+        this._unsubscribeStream()
+      } catch {
+        /* ignore */
+      }
+      this._unsubscribeStream = null
     }
 
     // 1. Interrupt and exit GDB
