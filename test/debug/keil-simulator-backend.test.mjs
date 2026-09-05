@@ -1,3 +1,4 @@
+// @ts-check
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import test from 'node:test'
@@ -9,7 +10,8 @@ import {
   validateScriptIdentifier,
 } from '../../src/infrastructure/debug/keil/debug-script-builder.mjs'
 import { KeilSimBackend } from '../../src/infrastructure/debug/keil/keil-sim-backend.mjs'
-import { KeilUvSockClient, UVSOCK_OPCODES, UVSOCK_STATUS } from '../../src/infrastructure/debug/keil/uvsock-client.mjs'
+import { KeilUvscClient, UVSC_OPCODES, UVSC_STATUS } from '../../src/infrastructure/debug/keil/uvsc-client.mjs'
+import { UVSC_MAGIC, decodeFrames, encodeFrame } from '../../src/infrastructure/debug/keil/uvsc-framing.mjs'
 
 test('debug-script-builder: validates identifiers to prevent script injection', () => {
   assert.doesNotThrow(() => validateScriptIdentifier('sensor_val'))
@@ -17,10 +19,10 @@ test('debug-script-builder: validates identifiers to prevent script injection', 
   assert.doesNotThrow(() => validateScriptIdentifier('ADC1_DR'))
 
   assert.throws(() => validateScriptIdentifier(''), /非法的脚本标识符/)
-  assert.throws(() => validateScriptIdentifier('sensor; exec("rm -rf")', /非法的脚本标识符/))
-  assert.throws(() => validateScriptIdentifier('123abc', /非法的脚本标识符/))
-  assert.throws(() => validateScriptIdentifier('foo(bar)', /非法的脚本标识符/))
-  assert.throws(() => validateScriptIdentifier('a b c', /非法的脚本标识符/))
+  assert.throws(() => validateScriptIdentifier('sensor; exec("rm -rf")'), /非法的脚本标识符/)
+  assert.throws(() => validateScriptIdentifier('123abc'), /非法的脚本标识符/)
+  assert.throws(() => validateScriptIdentifier('foo(bar)'), /非法的脚本标识符/)
+  assert.throws(() => validateScriptIdentifier('a b c'), /非法的脚本标识符/)
 })
 
 test('debug-script-builder: generates safe Signal Function scripts', () => {
@@ -57,48 +59,46 @@ test('debug-script-builder: generates debug initialization (.ini) script', () =>
   assert.ok(ini.includes('SimulateCurrentSpike()'))
 })
 
-test('uvsock-client: packet framing and responses', async () => {
-  const client = new KeilUvSockClient({ timeoutMs: 1000 })
+test('uvsc-client: binary packet framing and responses', async () => {
+  const client = new KeilUvscClient({ timeoutMs: 1000 })
 
-  // Mock socket implementation
   const mockSocket = new EventEmitter()
+  // @ts-ignore
   mockSocket.write = (chunk) => {
-    // Read header: [seq: uint32BE, opcode: uint16BE, len: uint32BE]
-    const seq = chunk.readUInt32BE(0)
-    const opcode = chunk.readUInt16BE(4)
-    const len = chunk.readUInt32BE(6)
-    const payload = JSON.parse(chunk.subarray(10, 10 + len).toString('utf8'))
-
-    // Echo response packet with status OK
-    const responsePayload = Buffer.from(JSON.stringify({ status: UVSOCK_STATUS.OK, echo: payload }), 'utf8')
-    const respHeader = Buffer.alloc(10)
-    respHeader.writeUInt32BE(seq, 0)
-    respHeader.writeUInt16BE(opcode, 4)
-    respHeader.writeUInt32BE(responsePayload.length, 6)
-
-    const respPacket = Buffer.concat([respHeader, responsePayload])
-    // Simulate async delivery
-    setImmediate(() => mockSocket.emit('data', respPacket))
+    const { frames } = decodeFrames(chunk)
+    for (const f of frames) {
+      const respPayload = { status: UVSC_STATUS.OK, echo: JSON.parse(f.payload.toString('utf8')) }
+      const respPacket = encodeFrame({
+        msgId: f.msgId,
+        opcode: f.opcode,
+        status: UVSC_STATUS.OK,
+        payload: respPayload,
+      })
+      setImmediate(() => mockSocket.emit('data', respPacket))
+    }
     return true
   }
+  // @ts-ignore
   mockSocket.destroy = () => {}
 
   mockSocket.on('data', (d) => client._onData(d))
   client.connected = true
   client.socket = /** @type {any} */ (mockSocket)
 
-  const res = await client.sendCommand(UVSOCK_OPCODES.PING, { hello: 'keil' })
-  assert.deepEqual(res, { status: UVSOCK_STATUS.OK, echo: { hello: 'keil' } })
+  const res = await client.sendRequest(UVSC_OPCODES.UV_GEN_GET_VERSION, { hello: 'keil' })
+  assert.deepEqual(res, { status: UVSC_STATUS.OK, opcode: UVSC_OPCODES.UV_GEN_GET_VERSION, echo: { hello: 'keil' } })
 
   client.disconnect()
   assert.equal(client.connected, false)
-  await assert.rejects(() => client.sendCommand(UVSOCK_OPCODES.PING), /UVSOCK 客户端未连接/)
+  await assert.rejects(() => client.sendRequest(UVSC_OPCODES.UV_GEN_GET_VERSION), /UVSC 客户端未连接/)
 })
 
-test('uvsock-client: handles chunk splitting and unsolicited async events', async () => {
-  const client = new KeilUvSockClient({ timeoutMs: 1000 })
+test('uvsc-client: handles chunk splitting and unsolicited async events', async () => {
+  const client = new KeilUvscClient({ timeoutMs: 1000 })
   const mockSocket = new EventEmitter()
+  // @ts-ignore
   mockSocket.write = () => true
+  // @ts-ignore
   mockSocket.destroy = () => {}
 
   client.connected = true
@@ -108,99 +108,112 @@ test('uvsock-client: handles chunk splitting and unsolicited async events', asyn
   const events = []
   client.on('event', (ev) => events.push(ev))
 
-  // Unsolicited event: seq = 0
-  const eventPayload = Buffer.from(JSON.stringify({ event: 'stop', reason: 'watchpoint-hit' }), 'utf8')
-  const header = Buffer.alloc(10)
-  header.writeUInt32BE(0, 0)
-  header.writeUInt16BE(UVSOCK_OPCODES.PAUSE, 4)
-  header.writeUInt32BE(eventPayload.length, 6)
-  const fullPacket = Buffer.concat([header, eventPayload])
+  // Unsolicited async event: msgId = 0
+  const fullPacket = encodeFrame({
+    msgId: 0,
+    opcode: UVSC_OPCODES.UV_DBG_STOP_EXECUTION,
+    status: UVSC_STATUS.OK,
+    payload: { reason: 'watchpoint-hit' },
+  })
 
   // Split into two chunks to test stream framing
-  const chunk1 = fullPacket.subarray(0, 6)
-  const chunk2 = fullPacket.subarray(6)
+  const chunk1 = fullPacket.subarray(0, 8)
+  const chunk2 = fullPacket.subarray(8)
 
   client._onData(chunk1)
   assert.equal(events.length, 0)
 
   client._onData(chunk2)
   assert.equal(events.length, 1)
-  assert.equal(events[0].opcode, UVSOCK_OPCODES.PAUSE)
+  assert.equal(events[0].opcode, UVSC_OPCODES.UV_DBG_STOP_EXECUTION)
   assert.equal(events[0].payload.reason, 'watchpoint-hit')
 
   client.disconnect()
 })
 
 /**
- * Creates a mock Keil UvSock client for backend unit testing.
+ * Creates a mock Keil UVSC client for backend unit testing.
  */
-function createMockUvSockClient() {
+function createMockUvscClient() {
   const client = new EventEmitter()
   /** @type {Array<{ opcode: number, payload: any }>} */
   const sentCommands = []
+  // @ts-ignore
   client.connected = true
+  // @ts-ignore
   client.connect = async () => {
+    // @ts-ignore
     client.connected = true
   }
+  // @ts-ignore
   client.disconnect = () => {
+    // @ts-ignore
     client.connected = false
   }
-  client.sendCommand = async (opcode, payload = {}) => {
+
+  const handler = async (opcode, payload = {}) => {
     sentCommands.push({ opcode, payload })
 
     switch (opcode) {
-      case UVSOCK_OPCODES.START_DEBUG:
+      case UVSC_OPCODES.UV_PRJ_LOAD:
+      case UVSC_OPCODES.UV_PRJ_SET_TARGET:
+        return { status: UVSC_STATUS.OK }
+      case UVSC_OPCODES.UV_DBG_ENTER:
         return {
-          status: UVSOCK_STATUS.OK,
+          status: UVSC_STATUS.OK,
           location: { file: 'main.c', line: 15, function: 'main', address: '0x08000100' },
         }
-      case UVSOCK_OPCODES.PAUSE:
-      case UVSOCK_OPCODES.STEP:
+      case UVSC_OPCODES.UV_DBG_STOP_EXECUTION:
+      case UVSC_OPCODES.UV_DBG_STEP_HLL:
+      case UVSC_OPCODES.UV_DBG_STEP_INTO:
+      case UVSC_OPCODES.UV_DBG_STEP_OUT:
         return {
-          status: UVSOCK_STATUS.OK,
+          status: UVSC_STATUS.OK,
           location: { file: 'main.c', line: 20, function: 'main', address: '0x08000120' },
         }
-      case UVSOCK_OPCODES.RESET:
+      case UVSC_OPCODES.UV_DBG_RESET:
         return {
-          status: UVSOCK_STATUS.OK,
+          status: UVSC_STATUS.OK,
           location: { file: 'main.c', line: 1, function: 'Reset_Handler', address: '0x08000000' },
         }
-      case UVSOCK_OPCODES.SET_BP:
-        return { status: UVSOCK_STATUS.OK, bpId: 101 }
-      case UVSOCK_OPCODES.DEL_BP:
-        return { status: UVSOCK_STATUS.OK }
-      case UVSOCK_OPCODES.SET_WP:
-        return { status: UVSOCK_STATUS.OK, wpId: 202 }
-      case UVSOCK_OPCODES.DEL_WP:
-        return { status: UVSOCK_STATUS.OK }
-      case UVSOCK_OPCODES.EVAL:
-        return { status: UVSOCK_STATUS.OK, value: '42', type: 'int' }
-      case UVSOCK_OPCODES.READ_REGS:
+      case UVSC_OPCODES.UV_DBG_CREATE_BP:
+        return { status: UVSC_STATUS.OK, bpId: 101 }
+      case UVSC_OPCODES.UV_DBG_CHANGE_BP:
+        return { status: UVSC_STATUS.OK }
+      case UVSC_OPCODES.UV_DBG_EVAL_EXPRESSION_TO_STR:
+      case UVSC_OPCODES.UV_DBG_CALC_EXPRESSION:
+        return { status: UVSC_STATUS.OK, value: '42', type: 'int' }
+      case UVSC_OPCODES.UV_DBG_READ_REGISTERS:
         return {
-          status: UVSOCK_STATUS.OK,
+          status: UVSC_STATUS.OK,
           registers: [
             { name: 'R0', value: '0x00000000' },
             { name: 'PC', value: '0x08000120' },
           ],
         }
-      case UVSOCK_OPCODES.READ_MEM:
+      case UVSC_OPCODES.UV_DBG_MEM_READ:
         return {
-          status: UVSOCK_STATUS.OK,
+          status: UVSC_STATUS.OK,
           contents: '0102030405060708',
           bytes: [1, 2, 3, 4, 5, 6, 7, 8],
         }
-      case UVSOCK_OPCODES.EXEC_CMD:
-        return { status: UVSOCK_STATUS.OK }
+      case UVSC_OPCODES.UV_DBG_EXEC_CMD:
+        return { status: UVSC_STATUS.OK, wpId: 202 }
       default:
-        return { status: UVSOCK_STATUS.OK }
+        return { status: UVSC_STATUS.OK }
     }
   }
+
+  // @ts-ignore
+  client.sendRequest = handler
+  // @ts-ignore
+  client.sendCommand = handler
 
   return { client, sentCommands }
 }
 
-test('KeilSimBackend: lifecycle, breakpoints, watchpoints, inspect, memory', async () => {
-  const { client, sentCommands } = createMockUvSockClient()
+test('KeilSimBackend: lifecycle, capabilities, breakpoints, watchpoints, inspect, memory', async () => {
+  const { client, sentCommands } = createMockUvscClient()
   const eventRing = createDebugEventRing(100)
 
   const backend = new KeilSimBackend({
@@ -208,8 +221,21 @@ test('KeilSimBackend: lifecycle, breakpoints, watchpoints, inspect, memory', asy
     ownerSessionId: 'owner_1',
     workspaceCwd: '/workspaces/proj',
     eventRing,
-    uvsockClient: /** @type {any} */ (client),
+    uvscClient: /** @type {any} */ (client),
   })
+
+  // Verify capabilities
+  const caps = backend.capabilities()
+  assert.equal(caps.breakpoints, true)
+  assert.equal(caps.watchpoints, true)
+  assert.equal(caps.memoryRead, true)
+  assert.equal(caps.registers, true)
+  assert.equal(caps.simulatorSignals, true)
+
+  // Verify backend event subscription
+  /** @type {import('../../src/types/debug-backend.d.ts').DebugBackendEvent[]} */
+  const backendEvents = []
+  backend.subscribe((ev) => backendEvents.push(ev))
 
   // 1. Start session
   const startRes = await backend.start({
@@ -224,17 +250,20 @@ test('KeilSimBackend: lifecycle, breakpoints, watchpoints, inspect, memory', asy
   assert.equal(backend.state, 'paused')
   assert.equal(startRes.location?.file, 'main.c')
 
-  // Verify open project and start debug sent
-  assert.ok(sentCommands.some((c) => c.opcode === UVSOCK_OPCODES.OPEN_PROJECT))
-  assert.ok(sentCommands.some((c) => c.opcode === UVSOCK_OPCODES.START_DEBUG))
+  // Verify UVSC project load and enter debug sent
+  assert.ok(sentCommands.some((c) => c.opcode === UVSC_OPCODES.UV_PRJ_LOAD))
+  assert.ok(sentCommands.some((c) => c.opcode === UVSC_OPCODES.UV_DBG_ENTER))
 
   // 2. Control operations
   await backend.continue()
   assert.equal(backend.state, 'running')
-  assert.ok(sentCommands.some((c) => c.opcode === UVSOCK_OPCODES.RUN))
+  assert.ok(sentCommands.some((c) => c.opcode === UVSC_OPCODES.UV_DBG_START_EXECUTION))
+  assert.ok(backendEvents.some((e) => e.type === 'backend.running'))
 
   await backend.pause()
   assert.equal(backend.state, 'paused')
+  assert.ok(sentCommands.some((c) => c.opcode === UVSC_OPCODES.UV_DBG_STOP_EXECUTION))
+  assert.ok(backendEvents.some((e) => e.type === 'backend.stopped' && e.reason === 'manual'))
 
   await backend.step('over')
   assert.equal(backend.state, 'paused')
@@ -299,6 +328,7 @@ test('KeilSimBackend: lifecycle, breakpoints, watchpoints, inspect, memory', asy
   // 9. Stop
   await backend.stop()
   assert.equal(backend.state, 'idle')
+  assert.ok(backendEvents.some((e) => e.type === 'backend.exited'))
 
   // Events in event ring
   const events = eventRing.getEventsSince(0).events
@@ -309,17 +339,17 @@ test('KeilSimBackend: lifecycle, breakpoints, watchpoints, inspect, memory', asy
 })
 
 test('DebugRuntime integrates with KeilSimBackend via backend factory', async () => {
-  const { client } = createMockUvSockClient()
+  const { client } = createMockUvscClient()
 
   const runtime = createDebugRuntime({
     backendFactory: async (kind, ctx) => {
       if (kind === 'keil-simulator') {
         return new KeilSimBackend({
           ...ctx,
-          uvsockClient: /** @type {any} */ (client),
+          uvscClient: /** @type {any} */ (client),
         })
       }
-      throw new Error(`Unsupported: ${kind}`)
+      throw new Error('Unsupported: ' + kind)
     },
   })
 
