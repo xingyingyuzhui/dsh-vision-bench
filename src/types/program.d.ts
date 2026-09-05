@@ -1,4 +1,13 @@
-export type ConfidenceLevel = 'exact' | 'parsed' | 'inferred' | 'unresolved'
+export type ConfidenceLevel =
+  | 'exact'
+  | 'ast'
+  | 'heuristic'
+  | 'symbol-resolved'
+  | 'compile-db'
+  | 'debug-symbol'
+  | 'parsed'
+  | 'inferred'
+  | 'unresolved'
 
 export interface ProgramLocation {
   file: string

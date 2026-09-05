@@ -92,7 +92,7 @@ void PID_Step(void) {
   assert.equal(result.callEdges.length, 1)
   assert.equal(result.callEdges[0].callerId, pidStep.id)
   assert.equal(result.callEdges[0].calleeName, 'LowLoad_Cutoff')
-  assert.equal(result.callEdges[0].confidence, 'parsed')
+  assert.ok(result.callEdges[0].confidence === 'ast' || result.callEdges[0].confidence === 'heuristic')
 
   // 6. Writes (assignments)
   const writes = result.writeEdges.filter((w) => w.accessorId === lowLoad.id)

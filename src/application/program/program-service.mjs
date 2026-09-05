@@ -11,6 +11,7 @@ import { programModelToArchify } from '../../infrastructure/archify/archify-adap
 import { checkFileReadable, isInside, readSource } from '../../infrastructure/keil/keil-project-scanner.mjs'
 import { analyzeCSource, resolveModelReferences } from '../../infrastructure/program/c-source-analyzer.mjs'
 import { mapProject } from '../keil/project-service.mjs'
+import { correlateRuntimeLocation } from './runtime-correlation-service.mjs'
 
 /**
  * Creates the ProgramService application service for generating and querying
@@ -252,6 +253,10 @@ export function createProgramService(deps = {}) {
       /** @type {import('../../types/program.d.ts').ProgramModel} */ model,
       /** @type {any} */ options,
     ) => programModelToArchify(model, options),
+    correlateLocation: (
+      /** @type {import('../../types/program.d.ts').ProgramModel} */ model,
+      /** @type {{ file: string, line?: number, function?: string, maxConditions?: number }} */ query,
+    ) => correlateRuntimeLocation(model, query),
     clearCache,
   }
 }

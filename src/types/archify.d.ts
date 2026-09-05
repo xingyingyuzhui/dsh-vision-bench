@@ -1,3 +1,5 @@
+import type { ConfidenceLevel } from './program.d.ts'
+
 export interface ArchifyNode {
   id: string
   label: string
@@ -12,7 +14,7 @@ export interface ArchifyEdge {
   from: string
   to: string
   kind: 'call' | 'read' | 'write' | 'include'
-  confidence?: 'exact' | 'parsed' | 'inferred' | 'unresolved'
+  confidence?: ConfidenceLevel
   metadata?: Record<string, any>
 }
 
