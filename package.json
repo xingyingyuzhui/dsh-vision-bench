@@ -251,6 +251,7 @@
     "docs/WINDOWS_ACCEPTANCE_0.22.md",
     "docs/WINDOWS_ACCEPTANCE_0.25.md",
     "docs/WINDOWS_ACCEPTANCE_0.26.md",
+    "docs/WINDOWS_ACCEPTANCE_0.27.md",
     "CHANGELOG.md",
     "docs/architecture/ADR-003-workspace-persistence.md",
     "docs/architecture/ADR-004-agent-host-state-ownership.md",
