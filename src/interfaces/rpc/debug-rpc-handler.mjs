@@ -109,6 +109,26 @@ export function createDebugRpcHandler(deps) {
         case DEBUG_RPC_ENDPOINTS.EVENTS_WAIT: {
           const targetId = debugSessionId || runtime.findSession((s) => s.ownerSessionId === sessionId)?.debugSessionId
           if (!targetId) {
+            // When no debug session is active, throttle response to prevent tight-loop polling
+            const idleThrottleMs = Math.min(1000, Math.max(0, Number(row.timeoutMs) || 1000))
+            if (idleThrottleMs > 0) {
+              if (signal) {
+                await new Promise((resolve) => {
+                  if (signal.aborted) return resolve(undefined)
+                  const timer = setTimeout(resolve, idleThrottleMs)
+                  signal.addEventListener(
+                    'abort',
+                    () => {
+                      clearTimeout(timer)
+                      resolve(undefined)
+                    },
+                    { once: true },
+                  )
+                })
+              } else {
+                await new Promise((resolve) => setTimeout(resolve, idleThrottleMs))
+              }
+            }
             return {
               ok: true,
               events: [],

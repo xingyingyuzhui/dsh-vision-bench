@@ -909,21 +909,36 @@ export const bindSession = async (home, cwd, sessionId) => {
   }
 }
 
+const touchedSessionCache = new Map()
+
 /** Vision 自动服务当前 Session：有 sessionId 时写入工作区归属，供后台告警通知使用。 */
 export const touchServiceSession = async (home, cwd, sessionId) => {
   const id = typeof sessionId === 'string' ? sessionId.trim() : ''
   if (!id || !cwd) return { ok: false, skipped: 'no-session' }
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
+  const cacheKey = `${home}:${room.cwd}`
+  const cached = touchedSessionCache.get(cacheKey)
+  if (cached && cached.boundId === id && Date.now() - cached.touchedAt < 5000) {
+    return { ok: true, boundId: id, unchanged: true }
+  }
   const prev = loadWorkspace(home, room.cwd)
   const cur = prev && prev.session && prev.session.boundId ? prev.session.boundId : ''
-  if (cur === id) return { ok: true, boundId: id, unchanged: true }
-  return bindSession(home, room.cwd, id)
+  if (cur === id) {
+    touchedSessionCache.set(cacheKey, { boundId: id, touchedAt: Date.now() })
+    return { ok: true, boundId: id, unchanged: true }
+  }
+  const res = await bindSession(home, room.cwd, id)
+  if (res && res.ok) {
+    touchedSessionCache.set(cacheKey, { boundId: id, touchedAt: Date.now() })
+  }
+  return res
 }
 
 export const unbindSession = async (home, cwd) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
+  touchedSessionCache.delete(`${home}:${room.cwd}`)
   const saved = await saveWorkspaceAsync(home, room.cwd, { session: { boundId: '' } })
   if (!saved.ok) return saved
   return { ok: true, boundId: '' }
