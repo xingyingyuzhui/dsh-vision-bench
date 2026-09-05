@@ -53,7 +53,6 @@ export function createSettingsPage(React, t, post, options = {}) {
     const [checks, setChecks] = React.useState(null)
     const [message, setMessage] = React.useState(null)
     const [ioRuntime, setIoRuntime] = React.useState(null)
-    const [presetHealth, setPresetHealth] = React.useState(null)
     const [share, setShare] = React.useState(EMPTY_SHARE)
     const [configVersion, setConfigVersion] = React.useState(1)
     const [shareBusy, setShareBusy] = React.useState(false)
@@ -65,7 +64,6 @@ export function createSettingsPage(React, t, post, options = {}) {
       if (data && data.bindings) setBindings(data.bindings)
       if (data && data.health) setHealth(data.health)
       if (data && data.ioRuntime) setIoRuntime(data.ioRuntime)
-      if (data && data.presetHealth) setPresetHealth(data.presetHealth)
       if (data && data.globalShare) {
         setShare(normalizeShareState(data.globalShare))
       } else {
@@ -216,20 +214,6 @@ export function createSettingsPage(React, t, post, options = {}) {
     return el(
       'div',
       { className: 'dvb-page' },
-      el('div', { className: 'dvb-title' }, t('settingsTitle')),
-      el(
-        'div',
-        {
-          className: 'dvb-callout',
-          'data-preset-health': presetHealth && presetHealth.ok === false ? 'err' : 'ok',
-        },
-        el('span', null, 'ℹ️'),
-        el(
-          'span',
-          null,
-          t('presetAppliesNextSession') + (presetHealth && presetHealth.error ? ' (' + presetHealth.error + ')' : ''),
-        ),
-      ),
       settingRow(
         el('span', null, t('ioRuntime')),
         el(
