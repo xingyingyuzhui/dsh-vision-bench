@@ -2,6 +2,7 @@
 
 import { defaultDebugApprovals } from '../../application/debug/debug-approval-service.mjs'
 import { createDebugRuntime } from '../../application/debug/debug-runtime.mjs'
+import { startDebugSession } from '../../application/debug/debug-start-service.mjs'
 import { DEBUG_ERRORS, DebugError } from '../../domain/debug/errors.mjs'
 import { DEBUG_COMMAND_OPS, DEBUG_RPC_ENDPOINTS } from '../../shared/debug-contract.mjs'
 
@@ -62,18 +63,17 @@ export function createDebugRpcHandler(deps) {
           }
 
           if (op === DEBUG_COMMAND_OPS.START) {
-            const session = await runtime.start({
-              debugSessionId: debugSessionId || undefined,
-              ownerSessionId: sessionId,
-              workspaceCwd: cwd,
-              backend: row.backend,
-              targetSpec: row.targetSpec,
-            })
-            return {
-              ok: true,
-              debugSessionId: session.debugSessionId,
-              session,
-            }
+            return await startDebugSession(
+              {
+                debugSessionId: debugSessionId || undefined,
+                sessionId,
+                cwd,
+                source: 'user',
+                backend: row.backend,
+                targetSpec: row.targetSpec,
+              },
+              { debugRuntime: runtime, approvalStore },
+            )
           }
 
           if (op === 'stop') {

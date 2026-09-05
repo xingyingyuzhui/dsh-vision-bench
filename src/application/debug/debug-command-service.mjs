@@ -6,6 +6,7 @@ import { globalCommandIdempotency } from '../commands/command-idempotency-cache.
 import { finalizeAgentCommandResult } from '../commands/lossless-json.mjs'
 import { defaultDebugApprovals } from './debug-approval-service.mjs'
 import { getSharedDebugRuntime } from './debug-runtime.mjs'
+import { startDebugSession } from './debug-start-service.mjs'
 
 export const DEBUG_ACTIONS = new Set([
   'status',
@@ -55,9 +56,9 @@ export async function executeDebugCommand(input, deps = {}) {
     const debugSessionId = String(payload.debugSessionId || /** @type {any} */ (cmd).debugSessionId || '').trim()
 
     /**
-     * Finds active session for owner or cwd.
+     * Finds active session strictly owned by the calling sessionId.
      */
-    function findActiveSession() {
+    function findOwnedSession() {
       if (debugSessionId) {
         try {
           return runtime.state({ debugSessionId, ownerSessionId: sessionId })
@@ -65,10 +66,8 @@ export async function executeDebugCommand(input, deps = {}) {
           return null
         }
       }
-      if (sessionId || cwd) {
-        return runtime.findSession((s) =>
-          Boolean((sessionId && s.ownerSessionId === sessionId) || (cwd && s.workspaceCwd === cwd)),
-        )
+      if (sessionId) {
+        return runtime.findSession((s) => s.ownerSessionId === sessionId && (!cwd || s.workspaceCwd === cwd))
       }
       return null
     }
@@ -76,7 +75,7 @@ export async function executeDebugCommand(input, deps = {}) {
     try {
       switch (action) {
         case 'status': {
-          const activeSession = findActiveSession()
+          const activeSession = findOwnedSession()
           return envelope(cmd, {
             ok: true,
             action: cmd.action,
@@ -93,70 +92,32 @@ export async function executeDebugCommand(input, deps = {}) {
               error: '启动调试必须指定 sessionId',
             })
           }
-          const backendKind = /** @type {import('../../types/debug.d.ts').DebugBackendKind} */ (
-            payload.backend || 'gdb-openocd'
-          )
-          const targetSpec = /** @type {any} */ (payload.targetSpec || payload)
 
-          // Agent requests require approval unless already approved or pre-authorized
-          if (cmd.source === 'agent' && !payload.approved && !payload.approvalRequestId) {
-            const ticket = approvalStore.create({
-              cwd,
+          const startRes = await startDebugSession(
+            {
               sessionId,
+              cwd,
               source: cmd.source,
-              backend: backendKind,
-              target: targetSpec.target,
-              interfaceName: targetSpec.interfaceName,
-              artifactPath: targetSpec.artifactPath,
-              artifactSha256: targetSpec.artifactSha256,
-            })
-            return envelope(cmd, {
-              ok: false,
-              errorCode: DEBUG_ERRORS.APPROVAL_REQUIRED,
-              error: '真机调试启动需要用户批准',
-              needsApproval: true,
-              approval: ticket,
-            })
-          }
-
-          // If approvalRequestId is provided, consume it
-          if (payload.approvalRequestId) {
-            const consumeRes = approvalStore.consume(payload.approvalRequestId, { cwd, sessionId })
-            if (!consumeRes.ok) {
-              return envelope(cmd, {
-                ok: false,
-                errorCode: consumeRes.errorCode,
-                error: consumeRes.error,
-              })
-            }
-          }
-
-          const session = await runtime.start({
-            debugSessionId: debugSessionId || undefined,
-            ownerSessionId: sessionId,
-            workspaceCwd: cwd,
-            backend: backendKind,
-            targetSpec,
-          })
-
-          approvalStore.grantControlLease(session.debugSessionId, {
-            ownerSessionId: sessionId,
-            workspaceCwd: cwd,
-            artifactSha256: targetSpec.artifactSha256,
-            backend: backendKind,
-            target: targetSpec.target,
-          })
+              backend: /** @type {import('../../types/debug.d.ts').DebugBackendKind | undefined} */ (payload.backend),
+              targetSpec: payload.targetSpec || payload,
+              approved: payload.approved !== undefined ? Boolean(payload.approved) : undefined,
+              approvalRequestId: payload.approvalRequestId ? String(payload.approvalRequestId) : undefined,
+              debugSessionId,
+            },
+            {
+              debugRuntime: runtime,
+              approvalStore,
+            },
+          )
 
           return envelope(cmd, {
-            ok: true,
             action: cmd.action,
-            debugSessionId: session.debugSessionId,
-            session,
+            ...startRes,
           })
         }
 
         case 'stop': {
-          const existing = findActiveSession()
+          const existing = findOwnedSession()
           if (!existing && !debugSessionId) {
             return envelope(cmd, {
               ok: true,
@@ -178,7 +139,7 @@ export async function executeDebugCommand(input, deps = {}) {
         }
 
         default: {
-          const active = findActiveSession()
+          const active = findOwnedSession()
           const targetId = debugSessionId || active?.debugSessionId
           if (!targetId) {
             return envelope(cmd, {

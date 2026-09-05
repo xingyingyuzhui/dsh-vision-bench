@@ -111,8 +111,10 @@ export function createDebugApprovalStore(opts = {}) {
     purgeExpired()
     evictOldest()
     const createdAt = now()
+    const id = newRequestId()
     const record = {
-      requestId: newRequestId(),
+      id,
+      requestId: id,
       cwd: String(spec.cwd || ''),
       sessionId: sessionKey(spec.sessionId),
       source: spec.source === 'agent' ? /** @type {'agent'} */ ('agent') : /** @type {'user'} */ ('user'),
@@ -127,6 +129,45 @@ export function createDebugApprovalStore(opts = {}) {
     }
     items.set(record.requestId, record)
     return record
+  }
+
+  /**
+   * Approves a pending ticket.
+   * @param {string} requestId
+   * @param {{ cwd?: string, sessionId?: string }} [scope]
+   */
+  function approve(requestId, scope = {}) {
+    const id = String(requestId || '').trim()
+    const rec = items.get(id)
+    if (!rec) {
+      return { ok: false, errorCode: DEBUG_ERRORS.APPROVAL_NOT_FOUND, error: '调试批准请求不存在' }
+    }
+    if (now() > rec.expiresAt) {
+      items.delete(id)
+      return { ok: false, errorCode: DEBUG_ERRORS.APPROVAL_EXPIRED, error: '调试批准已过期' }
+    }
+    if (
+      (scope.cwd && String(scope.cwd) !== rec.cwd) ||
+      (scope.sessionId && !sessionsMatch(scope.sessionId, rec.sessionId))
+    ) {
+      return { ok: false, errorCode: DEBUG_ERRORS.APPROVAL_SCOPE_MISMATCH, error: '调试批准请求不属于当前会话' }
+    }
+    return { ok: true, record: rec }
+  }
+
+  /**
+   * Rejects a pending ticket and removes it.
+   * @param {string} requestId
+   * @param {{ cwd?: string, sessionId?: string }} [scope]
+   */
+  function reject(requestId, scope = {}) {
+    const id = String(requestId || '').trim()
+    const rec = items.get(id)
+    if (!rec) {
+      return { ok: false, errorCode: DEBUG_ERRORS.APPROVAL_NOT_FOUND, error: '调试批准请求不存在' }
+    }
+    items.delete(id)
+    return { ok: true, rejected: true }
   }
 
   /**
@@ -262,6 +303,8 @@ export function createDebugApprovalStore(opts = {}) {
   return {
     create,
     consume,
+    approve,
+    reject,
     listPending,
     getPending,
     grantControlLease,
