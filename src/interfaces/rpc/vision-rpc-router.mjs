@@ -502,7 +502,7 @@ export function createVisionRpcRouter(deps) {
         return ran
       }
       case 'modbus/poll':
-        return modbusPoll(home, body.cwd, normalizeConnAlias(/** @type {any} */ (body)))
+        return modbusPoll(home, body.cwd, { ...operationOptions, ...normalizeConnAlias(/** @type {any} */ (body)) })
       case 'polling/start': {
         const room = body && typeof body === 'object' && body.cwd ? requireWorkspaceCwd(body.cwd) : { error: 'no-cwd' }
         if (room.error) return { ok: false, error: room.error }

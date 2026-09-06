@@ -40,6 +40,14 @@ import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { findPointV3, fnOfPoint } from '../../domain/modbus/function-code.mjs'
 import { compactPointRow, isStaleValue } from '../../domain/modbus/point-value.mjs'
 import { stampPoints } from '../../domain/modbus/unit-id.mjs'
+import {
+  isScopePartitioned,
+  normalizeSessionConfigs,
+  unionScopedConnections,
+  unionScopedDevices,
+  unionScopedPoints,
+} from '../../domain/modbus/config-scope.mjs'
+import { modbusForSession } from './workspace-session-view.mjs'
 import { connReady, deviceDisabledOf, pickConnPatch, targetRequired } from '../../domain/modbus/validation.mjs'
 import {
   changedConnectionIds,
@@ -111,7 +119,37 @@ export const modbusPoll = async (home, cwd, opts) => {
   const room = /** @type {{ cwd: string, error?: string }} */ (requireWorkspaceCwd(cwd))
   if (room.error) return { ok: false, error: room.error }
   const workspace = loadWorkspace(home, room.cwd)
-  const pack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
+  const cidArg = opts && (opts.connectionId || opts.connId) ? String(opts.connectionId || opts.connId).trim() : ''
+  const sessionId = String(opts?.sessionId || '')
+  let targetSessionId = sessionId
+  const scMap = workspace.modbus?.sessionConfigs || {}
+  if (!targetSessionId && cidArg) {
+    targetSessionId =
+      Object.keys(scMap).find((sid) => scMap[sid]?.connections?.some((/** @type {any} */ c) => c && c.id === cidArg)) ||
+      ''
+  }
+  if (!targetSessionId && workspace.session?.boundId && scMap[workspace.session.boundId]) {
+    targetSessionId = workspace.session.boundId
+  }
+
+  /** @type {ModbusWorkspace} */
+  let pack
+  if (targetSessionId) {
+    pack = /** @type {ModbusWorkspace} */ (modbusForSession(workspace, targetSessionId))
+  } else if (isScopePartitioned(workspace.modbus)) {
+    const sc = normalizeSessionConfigs(scMap)
+    pack = /** @type {ModbusWorkspace} */ (
+      normalizeModbus({
+        ...workspace.modbus,
+        connections: unionScopedConnections(workspace.modbus.connections, sc),
+        devices: unionScopedDevices(workspace.modbus.devices, sc),
+        points: unionScopedPoints(workspace.modbus.points, sc),
+      })
+    )
+  } else {
+    pack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
+  }
+
   // support per-connection polling; if no points, report
   if (!pack.points.length) return { ok: false, error: '无点位，请先添加点位' }
   if (hasRunning(workspace, 'read')) {
@@ -123,7 +161,6 @@ export const modbusPoll = async (home, cwd, opts) => {
       values: pack.values,
     }
   }
-  const cidArg = opts && (opts.connectionId || opts.connId) ? String(opts.connectionId || opts.connId).trim() : ''
   const targetConns = cidArg
     ? pack.connections.filter((c) => c.id === cidArg)
     : pack.connections.filter((c) => c.enabled !== false)

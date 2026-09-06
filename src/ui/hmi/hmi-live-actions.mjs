@@ -264,7 +264,7 @@ export function createHmiLiveActions(ctx, core) {
     setLinkBusy('poll')
     setError('')
     const url = d.watchEnabled ? '/dsh-vision-bench/polling/stop' : '/dsh-vision-bench/polling/start'
-    return post(url, { cwd, connectionId: d.activeConnId }, 15000)
+    return post(url, { cwd, sessionId, connectionId: d.activeConnId }, 15000)
       .then(async (data) => {
         if (data?.ok === false) setError(formatErrorMessage(data.error) || t('fail'))
         try {
@@ -293,6 +293,7 @@ export function createHmiLiveActions(ctx, core) {
       '/dsh-vision-bench/polling/start',
       {
         cwd,
+        sessionId,
         connectionId: d.activeConnId,
         intervalMs: Number(ms) || 1000,
       },

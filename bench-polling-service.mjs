@@ -7,6 +7,7 @@ import { normalizeModbus } from './bench-devices.mjs'
 // timer and in-flight request.
 import { modbusPoll } from './bench-modbus.mjs'
 import { loadWorkspace, workspaceRepository } from './bench-store.mjs'
+import { normalizeSessionConfigs, unionScopedConnections } from './src/domain/modbus/config-scope.mjs'
 
 const coordinators = new Map() // cwd -> coordinator
 let stopping = false
@@ -54,13 +55,21 @@ const tickConnection = async (home, cwd, cid, entry) => {
 // reconcile: read the workspace and (re)schedule timers for enabled connections
 const reconcile = (home, cwd, packIn) => {
   const co = coordinatorFor(cwd)
-  const pack = packIn || normalizeModbus(loadWorkspace(home, cwd).modbus || {})
+  const ws = loadWorkspace(home, cwd)
+  const rawModbus = ws.modbus || {}
+  const sc = normalizeSessionConfigs(rawModbus.sessionConfigs)
+  const allConnections = unionScopedConnections(rawModbus.connections, sc)
+  const pack = packIn || normalizeModbus(rawModbus)
+  const connList = allConnections.length ? allConnections : pack.connections || []
   const wanted = new Map()
-  for (const c of pack.connections || []) {
+  for (const c of connList) {
     const p = (pack.pollingByConnection || {})[c.id]
+    const isSim = Boolean(c.conn?.sim || c.sim)
     // 仿真连接同样由协调器采集（sim 读由 Worker/驱动侧处理，不占串口）
-    if (p && p.enabled === true && c.conn) {
-      wanted.set(c.id, { intervalMs: Number(p.intervalMs) || 1000 })
+    // 仿真模式下若未显式停用则默认启动采集，确保开箱即出数且波形持续更新
+    const shouldPoll = isSim ? p?.enabled !== false && c.enabled !== false : p && p.enabled === true
+    if (shouldPoll && (c.conn || isSim)) {
+      wanted.set(c.id, { intervalMs: Number(p?.intervalMs) || 1000 })
     }
   }
   // stop removed / disabled connections

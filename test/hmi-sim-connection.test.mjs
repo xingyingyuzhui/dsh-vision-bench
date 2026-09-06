@@ -105,3 +105,79 @@ test('RPC connection/open and connection/close return simulated: true for sim co
 
   await rm(home, { recursive: true, force: true })
 })
+
+test('modbusPoll resolves sessionConfigs points and samples trend for simulated connection', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-sim-poll-'))
+  const cwd = join(home, 'ws')
+  const { saveWorkspace, loadWorkspace } = await import('../bench-store.mjs')
+  const { modbusPoll } = await import('../bench-modbus.mjs')
+
+  saveWorkspace(home, cwd, {
+    modbus: {
+      version: 3,
+      configVersion: 1,
+      connections: [],
+      devices: [],
+      points: [],
+      sessionConfigs: {
+        'user-session-1': {
+          connections: [
+            {
+              id: 'c1',
+              name: '仿真连接',
+              role: 'client',
+              enabled: true,
+              conn: { mode: 'rtu', port: '', sim: true },
+            },
+          ],
+          devices: [{ id: 'd1', connectionId: 'c1', name: '设备1', unitId: 1 }],
+          points: [
+            {
+              id: 'p1',
+              connectionId: 'c1',
+              deviceId: 'd1',
+              name: '温度',
+              function: 3,
+              address: 0,
+              scale: 0.1,
+              monitorEnabled: true,
+            },
+            {
+              id: 'p2',
+              connectionId: 'c1',
+              deviceId: 'd1',
+              name: '开关',
+              function: 1,
+              address: 0,
+              scale: 1,
+              monitorEnabled: true,
+            },
+          ],
+          pollingByConnection: { c1: { enabled: true, intervalMs: 1000 } },
+        },
+      },
+    },
+  })
+
+  // Poll without specifying sessionId - should find connection c1 in sessionConfigs
+  const ran = await modbusPoll(home, cwd, { connectionId: 'c1' })
+  assert.equal(ran.ok, true, 'poll succeeds on session-scoped points')
+
+  const ws = loadWorkspace(home, cwd)
+  assert.ok(Array.isArray(ws.modbus.values))
+  const p1Val = ws.modbus.values.find((v) => (v.key || v.pointId) === 'p1')
+  assert.ok(p1Val, 'p1 value generated')
+  assert.equal(typeof p1Val.raw, 'number')
+  assert.equal(typeof p1Val.value, 'number')
+
+  const p2Val = ws.modbus.values.find((v) => (v.key || v.pointId) === 'p2')
+  assert.ok(p2Val, 'p2 coil value generated')
+  assert.ok([0, 1].includes(p2Val.raw), 'coil value is 0 or 1')
+
+  // Verify trend was sampled
+  assert.ok(ws.modbus.trend, 'trend store populated')
+  assert.ok(Array.isArray(ws.modbus.trend.p1) && ws.modbus.trend.p1.length >= 1, 'p1 trend sampled')
+  assert.ok(Array.isArray(ws.modbus.trend.p2) && ws.modbus.trend.p2.length >= 1, 'p2 trend sampled')
+
+  await rm(home, { recursive: true, force: true })
+})

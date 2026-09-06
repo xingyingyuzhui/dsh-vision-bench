@@ -52,8 +52,16 @@ export const toWriteRequest = ({ cwd, connection, device, point, values, timeout
   }
 }
 
-const simRaw = (batch) =>
-  Array.from({ length: batch.count }, (_, i) => ((batch.address + i) * 10 + Math.floor(Date.now() / 1000)) & 0xffff)
+const simRaw = (batch, fc = 3) => {
+  const tick = Math.floor(Date.now() / 1000)
+  return Array.from({ length: batch.count }, (_, i) => {
+    const addr = Number(batch.address || 0) + i
+    if (fc === 1 || fc === 2) {
+      return (Math.floor(tick / 3) + addr) % 2 === 0 ? 1 : 0
+    }
+    return (addr * 10 + tick) & 0xffff
+  })
+}
 
 export function changedConnectionIds(prevModbus, nextModbus) {
   const prev = normalizeModbus(prevModbus || {})
@@ -126,9 +134,9 @@ export function createModbusTransport({ broker = getVisionIoBroker() } = {}) {
       return broker.health()
     },
     async read(request, opts = {}) {
-      if (opts.sim) {
+      if (opts.sim || request.endpoint?.sim) {
         const t0 = nowMs()
-        const data = simRaw({ address: request.address, count: request.count })
+        const data = simRaw({ address: request.address, count: request.count }, request.functionCode)
         return {
           ok: true,
           data,
@@ -146,7 +154,7 @@ export function createModbusTransport({ broker = getVisionIoBroker() } = {}) {
       return call(request, opts)
     },
     async write(request, opts = {}) {
-      if (opts.sim) {
+      if (opts.sim || request.endpoint?.sim) {
         const t0 = nowMs()
         return {
           ok: true,

@@ -183,7 +183,7 @@ export const runReadTx = async (transport, pack, connObj, device, batch, cwd, ti
     configVersion: pack.configVersion,
     source,
   })
-  const sim = !!connObj?.conn?.sim
+  const sim = Boolean(connObj?.conn?.sim || /** @type {any} */ (connObj)?.sim)
   const ran = await transport.read(req, { signal, sim })
   if (ran && ran.ok === false) {
     return {
