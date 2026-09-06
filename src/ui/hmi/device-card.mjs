@@ -6,15 +6,6 @@ import { renderNewPointRow } from './point-editor.mjs'
 import { renderPointRow } from './point-row.mjs'
 import { renderPointThead } from './point-table.mjs'
 
-function pluginVersionLabel() {
-  // Build injects `v${package.json.version}`; unbundled source falls back to vdev.
-  const injected =
-    typeof globalThis !== 'undefined' && typeof globalThis.__DVB_BUILD_VERSION__ === 'string'
-      ? globalThis.__DVB_BUILD_VERSION__
-      : ''
-  return injected || 'vdev'
-}
-
 /** Device cards panel with nested point tables. */
 export function renderDeviceCards(el, t, ctx) {
   const {
@@ -93,7 +84,6 @@ export function renderDeviceCards(el, t, ctx) {
       'div',
       { className: 'dvb-panel-head' },
       el('span', { className: 'dvb-panel-title' }, '设备 · ' + (activeConnObj ? activeConnObj.name : '')),
-      el('span', { className: 'dvb-tag', title: '插件版本；改 client 后需重启 dsh web' }, pluginVersionLabel()),
       el(
         'span',
         { className: 'dvb-tag' },

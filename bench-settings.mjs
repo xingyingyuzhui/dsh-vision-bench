@@ -18,6 +18,15 @@ export function statusKind(health) {
   return health.exists ? 'ready' : 'missing'
 }
 
+export function pluginVersionLabel() {
+  // Build injects `v${package.json.version}`; unbundled source falls back to vdev.
+  const injected =
+    typeof globalThis !== 'undefined' && typeof globalThis.__DVB_BUILD_VERSION__ === 'string'
+      ? globalThis.__DVB_BUILD_VERSION__
+      : ''
+  return injected || 'vdev'
+}
+
 function ioStatusInfo(ioRuntime, t) {
   const state = ioRuntime && ioRuntime.state
   const isUnavailable = state === 'unavailable' || state === 'unhealthy' || state === 'stopped'
@@ -223,6 +232,15 @@ export function createSettingsPage(React, t, post, options = {}) {
     return el(
       'div',
       { className: 'dvb-page' },
+      settingRow(
+        el(
+          React.Fragment,
+          null,
+          el('span', { className: 'dvb-setting-name' }, t('pluginVersion')),
+          el('span', { className: 'dvb-tag', title: '插件版本' }, pluginVersionLabel()),
+        ),
+        null,
+      ),
       (() => {
         const ioInfo = ioStatusInfo(ioRuntime, t)
         return settingRow(

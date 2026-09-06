@@ -54,11 +54,13 @@ test('package.json: version tracks package and no legacy python modbus files', a
   ]) {
     await assert.rejects(access(new URL('../' + bad, import.meta.url)), bad + ' deleted from source')
   }
-  // UI 版本 chip 由构建注入；源码使用 __DVB_BUILD_VERSION__，未注入时显示 vdev
+  // UI 版本 chip 由构建注入；源码使用 __DVB_BUILD_VERSION__，未注入时显示 vdev，位于设置-Vision
+  const settings = await readFile(new URL('../bench-settings.mjs', import.meta.url), 'utf8')
+  assert.ok(settings.includes('__DVB_BUILD_VERSION__'), 'Settings version chip is build-injected')
+  assert.ok(settings.includes("'vdev'") || settings.includes('"vdev"'), 'unbundled source falls back to vdev')
+  assert.ok(!/v0\.\d+\.\d+/.test(settings), 'source must not hardcode a semver chip')
   const hmi = await readFile(new URL('../src/ui/hmi/device-card.mjs', import.meta.url), 'utf8')
-  assert.ok(hmi.includes('__DVB_BUILD_VERSION__'), 'HMI version chip is build-injected')
-  assert.ok(hmi.includes("'vdev'") || hmi.includes('"vdev"'), 'unbundled source falls back to vdev')
-  assert.ok(!/v0\.\d+\.\d+/.test(hmi), 'source must not hardcode a semver chip')
+  assert.ok(!hmi.includes('__DVB_BUILD_VERSION__'), 'HMI device card does not show version chip')
   const build = await readFile(new URL('../scripts/build-client.mjs', import.meta.url), 'utf8')
   assert.ok(build.includes('__DVB_BUILD_VERSION__'), 'build injects package version')
   assert.ok(build.includes('pkg.version'), 'build reads package.json version')
