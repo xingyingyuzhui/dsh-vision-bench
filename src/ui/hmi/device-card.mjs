@@ -71,6 +71,7 @@ export function renderDeviceCards(el, t, ctx) {
   const activeCm = (connectionStates || []).find((x) => x.connectionId === activeConnId)
   const activeLinkSt = activeCm ? activeCm.status || 'disconnected' : 'disconnected'
   const isConnected = activeLinkSt === 'connected'
+  const isSimulated = Boolean(activeCm?.simulated || activeConnObj?.conn?.sim || activeConnObj?.sim)
   const isBusy =
     activeLinkSt === 'connecting' ||
     activeLinkSt === 'disconnecting' ||
@@ -84,6 +85,7 @@ export function renderDeviceCards(el, t, ctx) {
       'div',
       { className: 'dvb-panel-head' },
       el('span', { className: 'dvb-panel-title' }, '设备 · ' + (activeConnObj ? activeConnObj.name : '')),
+      isSimulated ? el('span', { className: 'dvb-badge', 'data-kind': 'live' }, '仿真') : null,
       el(
         'span',
         { className: 'dvb-tag' },
@@ -120,10 +122,14 @@ export function renderDeviceCards(el, t, ctx) {
               ? '断开中…'
               : '处理中…'
           : isConnected
-            ? t('connUnlink') || '断开'
+            ? isSimulated
+              ? '断开仿真'
+              : t('connUnlink') || '断开'
             : activeLinkSt === 'error'
               ? t('connRetry') || '重试连接'
-              : t('connLink') || '连接',
+              : isSimulated
+                ? '启动仿真'
+                : t('connLink') || '连接',
       ),
     ),
     activeDevices.length
@@ -143,8 +149,9 @@ export function renderDeviceCards(el, t, ctx) {
             const showOps = editingPoints || adding
             const batchOpen = !!(batch?.open && batch.deviceId === d.id)
             const cm = (connectionStates || []).find((x) => x.connectionId === d.connectionId)
+            const isDevSim = Boolean(cm?.simulated || isSimulated)
             const linkSt = cm ? cm.status || 'disconnected' : 'disconnected'
-            let devStatus = { kind: 'idle', label: '未连接' }
+            let devStatus = { kind: 'idle', label: isDevSim ? '仿真未启动' : '未连接' }
             if (linkSt === 'connected') {
               let alarm = false
               let comm = false
@@ -157,8 +164,8 @@ export function renderDeviceCards(el, t, ctx) {
               }
               if (alarm) devStatus = { kind: 'err', label: '告警' }
               else if (comm) devStatus = { kind: 'err', label: '通信异常' }
-              else if (ok) devStatus = { kind: 'live', label: '正常' }
-              else devStatus = { kind: 'live', label: '已连接' }
+              else if (ok) devStatus = { kind: 'live', label: isDevSim ? '仿真正常' : '正常' }
+              else devStatus = { kind: 'live', label: isDevSim ? '已连接 (仿真)' : '已连接' }
             } else if (linkSt === 'connecting') devStatus = { kind: 'warn', label: '连接中' }
             else if (linkSt === 'disconnecting') devStatus = { kind: 'warn', label: '断开中' }
             else if (linkSt === 'error') devStatus = { kind: 'err', label: '连接异常' }

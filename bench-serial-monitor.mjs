@@ -1,3 +1,4 @@
+import { projectModbusForSession } from './src/application/modbus/config-scope-service.mjs'
 import { normalizeModbus } from './bench-devices.mjs'
 import { createModbusTransport } from './bench-modbus-transport.mjs'
 import { loadWorkspace } from './bench-store.mjs'
@@ -9,7 +10,15 @@ export const listConnectedSerialSources = async (home, cwd, extra = {}) => {
   const live = await transport.listConnections({ cwd })
   const data = live && live.data ? live.data : live
   const rows = Array.isArray(data && data.connections) ? data.connections : data && data.connectionId ? [data] : []
-  const pack = home && cwd ? normalizeModbus(loadWorkspace(home, cwd).modbus) : { connections: [] }
+  const pack =
+    extra.pack ||
+    (home && cwd
+      ? normalizeModbus(
+          extra.sessionId
+            ? projectModbusForSession(loadWorkspace(home, cwd).modbus, extra.sessionId)
+            : loadWorkspace(home, cwd).modbus,
+        )
+      : { connections: [] })
   const byId = new Map((pack.connections || []).map((c) => [c.id, c]))
   const sources = []
   for (const row of rows) {
@@ -17,7 +26,7 @@ export const listConnectedSerialSources = async (home, cwd, extra = {}) => {
     const conn = byId.get(row.connectionId)
     const mode = (conn && conn.conn && conn.conn.mode) || row.mode || 'rtu'
     if (mode !== 'rtu') continue
-    if (conn && conn.conn && conn.conn.sim) continue
+    if (conn && conn.conn && (conn.conn.sim || conn.sim)) continue
     if (conn && conn.enabled === false) continue
     const port = row.port || (conn && conn.conn && conn.conn.port) || ''
     if (!port) continue
@@ -40,11 +49,32 @@ export const listConnectionStates = async (home, cwd, extra = {}) => {
   const live = await transport.listConnections({ cwd })
   const data = live && live.data ? live.data : live
   const rows = Array.isArray(data && data.connections) ? data.connections : data && data.connectionId ? [data] : []
-  const pack = home && cwd ? normalizeModbus(loadWorkspace(home, cwd).modbus) : { connections: [] }
+  const pack =
+    extra.pack ||
+    (home && cwd
+      ? normalizeModbus(
+          extra.sessionId
+            ? projectModbusForSession(loadWorkspace(home, cwd).modbus, extra.sessionId)
+            : loadWorkspace(home, cwd).modbus,
+        )
+      : { connections: [] })
   const liveById = new Map(rows.map((r) => [r.connectionId, r]))
   const connectionStates = []
   for (const c of pack.connections || []) {
-    if (!c || !c.conn || c.conn.sim === true) continue
+    if (!c || !c.conn) continue
+    if (c.conn.sim === true || c.sim === true) {
+      connectionStates.push({
+        connectionId: c.id,
+        mode: c.conn.mode || 'rtu',
+        endpoint: 'simulated',
+        status: c.enabled === false ? 'disconnected' : 'connected',
+        error: '',
+        connectedAt: c.enabled === false ? 0 : Date.now(),
+        connectionEpoch: 'sim',
+        simulated: true,
+      })
+      continue
+    }
     const lv = liveById.get(c.id)
     const conn = c.conn
     connectionStates.push({

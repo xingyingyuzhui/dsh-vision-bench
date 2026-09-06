@@ -76,13 +76,15 @@ test('TCP never appears in serialSources even when connected', async () => {
   await rm(home, { recursive: true, force: true })
 })
 
-test('sim connections are excluded from both states and sources', async () => {
+test('sim connections report virtual connected state and are excluded from serial sources', async () => {
   const { home, cwd } = await setup([cfg('c4', 'rtu', 'COM7', { sim: true })])
   const t = fakeTransport([{ connectionId: 'c4', state: 'connected', connectedAt: 1, port: 'COM7' }])
   const st = await listConnectionStates(home, cwd, { transport: t })
-  assert.equal(st.connectionStates.length, 0, 'sim excluded from connectionStates')
+  assert.equal(st.connectionStates.length, 1, 'sim included as virtual connection in connectionStates')
+  assert.equal(st.connectionStates[0].status, 'connected')
+  assert.equal(st.connectionStates[0].simulated, true)
   const src = await listConnectedSerialSources(home, cwd, { transport: t })
-  assert.equal(src.sources.length, 0)
+  assert.equal(src.sources.length, 0, 'sim excluded from physical serial sources')
   await rm(home, { recursive: true, force: true })
 })
 

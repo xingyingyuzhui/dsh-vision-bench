@@ -82,12 +82,14 @@ export const toEndpoint = (connection) => {
         ? 'server'
         : 'client'
   const mode = conn.mode === 'tcp' ? 'tcp' : 'rtu'
+  const sim = conn.sim === true || connection?.sim === true
   if (mode === 'tcp') {
     return {
       mode: 'tcp',
       role,
       host: String(conn.host || '').trim(),
       tcpPort: Math.min(65535, Math.max(1, Math.trunc(Number(conn.tcpPort) || 502))),
+      sim,
     }
   }
   const parityRaw = String(conn.parity || 'N')
@@ -102,6 +104,7 @@ export const toEndpoint = (connection) => {
     bytesize: [7, 8].includes(Number(conn.bytesize)) ? Number(conn.bytesize) : 8,
     parity,
     stopbits: [1, 2].includes(Number(conn.stopbits)) ? Number(conn.stopbits) : 1,
+    sim,
   }
 }
 
@@ -179,6 +182,7 @@ export const validateIoRequest = (msg) => {
   }
   if (msg.op === 'connection.open') {
     const endpoint = toEndpoint({ conn: msg.endpoint || msg })
+    if (endpoint.sim === true || msg.sim === true) return { ok: true, request: msg }
     if (endpoint.mode === 'rtu' && !endpoint.port) return { ok: false, error: ioError('PORT_NOT_FOUND', '缺少串口') }
     if (endpoint.mode === 'tcp' && !endpoint.host)
       return { ok: false, error: ioError('PORT_NOT_FOUND', '缺少 TCP 主机') }
@@ -213,8 +217,11 @@ export const validateIoRequest = (msg) => {
     }
   }
   const endpoint = toEndpoint({ conn: msg.endpoint || {} })
-  if (endpoint.mode === 'rtu' && !endpoint.port) return { ok: false, error: ioError('PORT_NOT_FOUND', '缺少串口') }
-  if (endpoint.mode === 'tcp' && !endpoint.host) return { ok: false, error: ioError('PORT_NOT_FOUND', '缺少 TCP 主机') }
+  if (endpoint.sim !== true && msg.sim !== true) {
+    if (endpoint.mode === 'rtu' && !endpoint.port) return { ok: false, error: ioError('PORT_NOT_FOUND', '缺少串口') }
+    if (endpoint.mode === 'tcp' && !endpoint.host)
+      return { ok: false, error: ioError('PORT_NOT_FOUND', '缺少 TCP 主机') }
+  }
   return { ok: true, request: msg }
 }
 

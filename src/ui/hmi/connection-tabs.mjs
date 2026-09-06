@@ -23,14 +23,16 @@ export function renderConnectionTabs(el, t, ctx) {
   function statusOfConn(connId) {
     const cm = (connectionStates || []).find((x) => x.connectionId === connId)
     const st = cm ? cm.status || 'disconnected' : 'disconnected'
-    if (st === 'connected') return { kind: 'live', text: '已连接' }
+    const isSim = Boolean(cm?.simulated || connections.find((c) => c.id === connId)?.conn?.sim)
+    if (st === 'connected') return { kind: 'live', text: isSim ? '仿真中' : '已连接' }
     if (st === 'connecting') return { kind: 'warn', text: '连接中' }
     if (st === 'disconnecting') return { kind: 'warn', text: '断开中' }
     if (st === 'error') return { kind: 'err', text: '连接异常' }
-    return { kind: 'idle', text: '未连接' }
+    return { kind: 'idle', text: isSim ? '仿真未启动' : '未连接' }
   }
   function connEndpointLabel(c) {
     const cc = c?.conn || {}
+    if (cc.sim || c?.sim) return '仿真'
     if (cc.mode === 'tcp') {
       if (c.role === 'server' || c.role === 'slave') return 'Listen :' + (cc.tcpPort || 502)
       return (cc.host || 'TCP') + ':' + (cc.tcpPort || 502)

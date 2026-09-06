@@ -194,7 +194,10 @@ async function snapshot(home, cwd, sessionId) {
     body.pendingWrites = listPendingWrites(workspaceCwd, sessionId)
     const sources = await listConnectedSerialSources(home, workspaceCwd)
     body.serialSources = sources.sources || []
-    const states = await listConnectionStates(home, workspaceCwd)
+    const states = await listConnectionStates(home, workspaceCwd, {
+      pack: body.workspace?.modbus,
+      sessionId: session,
+    })
     body.connectionStates = states.connectionStates || []
   }
   return body
@@ -517,22 +520,32 @@ export function createVisionRpcRouter(deps) {
       }
       case 'connection/open': {
         const room = requireWorkspaceCwd(body && typeof body === 'object' ? body.cwd : undefined)
-        if (room.error) return { ok: false, error: room.error }
-        const pack = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+        if (room.error || !room.cwd) return { ok: false, error: room.error || 'no-cwd' }
+        const cwd = room.cwd
+        const session = String((body && typeof body === 'object' ? body.sessionId : '') || '').trim()
+        const ws = session ? await loadWorkspaceForSession(home, cwd, session) : loadWorkspace(home, cwd)
+        const pack = normalizeModbus(session ? projectModbusForSession(ws.modbus, session) : ws.modbus)
         const conn = pack.connections.find(
           (/** @type {{ id: string }} */ c) => c.id === (body.connectionId || body.connId),
         )
         if (!conn) return { ok: false, error: '连接不存在' }
-        if (conn.conn?.sim) return { ok: true, skipped: true, simulated: true }
-        return openConnectionLink(room.cwd, { connectionId: conn.id, endpoint: toEndpoint(conn) })
+        if (conn.conn?.sim || conn.sim) return { ok: true, skipped: true, simulated: true }
+        return openConnectionLink(cwd, { connectionId: conn.id, endpoint: toEndpoint(conn) })
       }
       case 'connection/close': {
         const room = requireWorkspaceCwd(body && typeof body === 'object' ? body.cwd : undefined)
-        if (room.error) return { ok: false, error: room.error }
-        return closeConnectionLink(
-          room.cwd,
-          body && typeof body === 'object' ? body.connectionId || body.connId : undefined,
+        if (room.error || !room.cwd) return { ok: false, error: room.error || 'no-cwd' }
+        const cwd = room.cwd
+        const session = String((body && typeof body === 'object' ? body.sessionId : '') || '').trim()
+        const ws = session ? await loadWorkspaceForSession(home, cwd, session) : loadWorkspace(home, cwd)
+        const pack = normalizeModbus(session ? projectModbusForSession(ws.modbus, session) : ws.modbus)
+        const conn = pack.connections.find(
+          (/** @type {{ id: string }} */ c) => c.id === (body.connectionId || body.connId),
         )
+        if (conn && (conn.conn?.sim || conn.sim)) {
+          return { ok: true, skipped: true, simulated: true }
+        }
+        return closeConnectionLink(cwd, body && typeof body === 'object' ? body.connectionId || body.connId : undefined)
       }
       case 'serial/ports':
         return listSerialPorts()
