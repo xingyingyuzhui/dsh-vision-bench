@@ -1,11 +1,13 @@
 import { functionCodeOf, isWritableFunction } from '../../../bench-points.mjs'
 import { focusHighlightClass, shouldHighlightFocus } from '../../../bench-shared.mjs'
+import { renderCustomSelect } from '../components/custom-select.mjs'
 import { fnOptionLabel } from './hmi-ids.mjs'
 import { renderInlineWriteCell } from './inline-write.mjs'
 import { renderFlagSwitch } from './point-flags.mjs'
 
 /** One point table row (view or edit). */
 export function renderPointRow(el, t, ctx) {
+  const CustomSelect = ctx.CustomSelect
   const {
     point,
     devId,
@@ -97,18 +99,35 @@ export function renderPointRow(el, t, ctx) {
       'td',
       { className: 'dvb-col-fn' },
       editing
-        ? el(
-            'select',
-            {
-              className: 'dvb-input',
+        ? CustomSelect
+          ? el(CustomSelect, {
+              size: 'sm',
               value: String(draft && draft.function != null ? draft.function : point.function),
-              onChange: (e) => patchDraft(point.id, { function: Number(e.target.value) }),
-            },
-            el('option', { value: '1' }, fnOptionLabel(t, 1)),
-            el('option', { value: '2' }, fnOptionLabel(t, 2)),
-            el('option', { value: '3' }, fnOptionLabel(t, 3)),
-            el('option', { value: '4' }, fnOptionLabel(t, 4)),
-          )
+              options: [
+                { value: '1', label: fnOptionLabel(t, 1) },
+                { value: '2', label: fnOptionLabel(t, 2) },
+                { value: '3', label: fnOptionLabel(t, 3) },
+                { value: '4', label: fnOptionLabel(t, 4) },
+              ],
+              onChange: (val) => {
+                const next = val?.target ? val.target.value : val
+                patchDraft(point.id, { function: Number(next) })
+              },
+            })
+          : renderCustomSelect(el, {
+              size: 'sm',
+              value: String(draft && draft.function != null ? draft.function : point.function),
+              options: [
+                { value: '1', label: fnOptionLabel(t, 1) },
+                { value: '2', label: fnOptionLabel(t, 2) },
+                { value: '3', label: fnOptionLabel(t, 3) },
+                { value: '4', label: fnOptionLabel(t, 4) },
+              ],
+              onChange: (val) => {
+                const next = val?.target ? val.target.value : val
+                patchDraft(point.id, { function: Number(next) })
+              },
+            })
         : el('span', { className: 'dvb-val' }, functionCodeOf(point.function)),
     ),
     el(

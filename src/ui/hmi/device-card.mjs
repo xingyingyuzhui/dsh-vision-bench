@@ -18,6 +18,7 @@ function pluginVersionLabel() {
 /** Device cards panel with nested point tables. */
 export function renderDeviceCards(el, t, ctx) {
   const {
+    CustomSelect,
     activeConnObj,
     activeDevices,
     points,
@@ -422,7 +423,7 @@ export function renderDeviceCards(el, t, ctx) {
                   )
                 : null,
               batch?.open && batch.deviceId === d.id
-                ? renderBatchPanel(el, t, { d, field, batch, setBatch, cwd, generateBatch })
+                ? renderBatchPanel(el, t, { d, field, batch, setBatch, cwd, generateBatch, CustomSelect })
                 : null,
               csvTarget?.open && csvTarget.deviceId === d.id
                 ? renderCsvPanel(el, t, { d, csvTarget, setCsvTarget, csvText, setCsvText, importCsv })
@@ -453,10 +454,16 @@ export function renderDeviceCards(el, t, ctx) {
                           'tbody',
                           null,
                           newPointDraft && newPointDraft.deviceId === d.id
-                            ? renderNewPointRow(el, t, { newPointDraft, setNewPointDraft, cwd, saveNewPointDraft })
+                            ? renderNewPointRow(el, t, {
+                                newPointDraft,
+                                setNewPointDraft,
+                                cwd,
+                                saveNewPointDraft,
+                                CustomSelect,
+                              })
                             : null,
                           ptsToRender.map((point) =>
-                            renderPointRow(el, t, { ...pointRowCtx, point, devId: d.id, showOps }),
+                            renderPointRow(el, t, { ...pointRowCtx, point, devId: d.id, showOps, CustomSelect }),
                           ),
                           editingPoints
                             ? el(

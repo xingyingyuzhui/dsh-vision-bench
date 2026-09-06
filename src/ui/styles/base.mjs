@@ -139,6 +139,7 @@ export const BASE_CSS = [
   'body[' +
     ATTR +
     '] .dvb-select-trigger.is-open{border-color:var(--dsw-alias-label-info,#4f8ef7);outline:none;box-shadow:0 0 0 1px var(--dsw-alias-label-info,#4f8ef7)}',
+  'body[' + ATTR + '] .dvb-select-trigger.is-sm{height:24px;padding:0 6px 0 8px;font-size:11px;border-radius:4px}',
   'body[' + ATTR + '] .dvb-select-trigger:disabled{opacity:.45;cursor:not-allowed}',
   'body[' + ATTR + '] .dvb-select-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
   'body[' +

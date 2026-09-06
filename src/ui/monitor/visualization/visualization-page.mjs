@@ -31,6 +31,7 @@ import {
   visualizationComponentStatus,
 } from '../../../../bench-visualization-model.mjs'
 import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
+import { getCustomSelect } from '../../components/custom-select.mjs'
 import { createVizGrid } from '../../components/viz-grid.mjs'
 import { getEcharts } from '../../vendor/echarts-runtime.mjs'
 import { renderBarRenderer } from './renderers/bar-renderer.mjs'
@@ -51,6 +52,7 @@ export function createVisualizationPage(React, t, post, hooks) {
   void openHmi
   const el = React.createElement
   const VizGrid = createVizGrid(React)
+  const CustomSelect = getCustomSelect(React)
   return function VisualizationPage(props) {
     const cwd = sessionCwd(props)
     const sessionId = pageSessionId(props)
@@ -1040,18 +1042,14 @@ export function createVisualizationPage(React, t, post, hooks) {
               vizFieldOf(
                 el,
                 t('vizType') || '组件类型',
-                el(
-                  'select',
-                  {
-                    className: 'dvb-input',
-                    value: editor.type,
-                    onChange: (e) => {
-                      const nextType = e.target.value
-                      setEditor((prev) => ({ ...prev, type: nextType }))
-                    },
+                el(CustomSelect, {
+                  value: editor.type,
+                  options: [...COMPONENT_TYPES].map((ty) => ({ value: ty, label: vizTypeLabel(ty) })),
+                  onChange(val) {
+                    const nextType = val?.target ? val.target.value : val
+                    setEditor((prev) => ({ ...prev, type: nextType }))
                   },
-                  ...[...COMPONENT_TYPES].map((ty) => el('option', { key: ty, value: ty }, vizTypeLabel(ty))),
-                ),
+                }),
               ),
             ),
             el(

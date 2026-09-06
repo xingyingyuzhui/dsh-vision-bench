@@ -1,9 +1,26 @@
+import { renderCustomSelect } from '../components/custom-select.mjs'
 import { fnOptionLabel } from './hmi-ids.mjs'
 import { renderFlagSwitch } from './point-flags.mjs'
 
 /** New-point draft row inside a device table. */
 export function renderNewPointRow(el, t, ctx) {
-  const { newPointDraft, setNewPointDraft, cwd, saveNewPointDraft } = ctx
+  const { newPointDraft, setNewPointDraft, cwd, saveNewPointDraft, CustomSelect } = ctx
+  const fcSelectProps = {
+    size: 'sm',
+    value: String(newPointDraft.function),
+    options: [
+      { value: '1', label: fnOptionLabel(t, 1) },
+      { value: '2', label: fnOptionLabel(t, 2) },
+      { value: '3', label: fnOptionLabel(t, 3) },
+      { value: '4', label: fnOptionLabel(t, 4) },
+    ],
+    onChange: (val) => {
+      const next = val?.target ? val.target.value : val
+      setNewPointDraft((prev) => ({ ...prev, function: Number(next) }))
+    },
+  }
+  const fcSelectNode = CustomSelect ? el(CustomSelect, fcSelectProps) : renderCustomSelect(el, fcSelectProps)
+
   return el(
     'tr',
     { className: 'dvb-pt-row dvb-newpoint-row', 'data-editing': 'true' },
@@ -17,22 +34,7 @@ export function renderNewPointRow(el, t, ctx) {
         onChange: (e) => setNewPointDraft((prev) => ({ ...prev, name: e.target.value })),
       }),
     ),
-    el(
-      'td',
-      { className: 'dvb-col-fn' },
-      el(
-        'select',
-        {
-          className: 'dvb-input',
-          value: String(newPointDraft.function),
-          onChange: (e) => setNewPointDraft((prev) => ({ ...prev, function: Number(e.target.value) })),
-        },
-        el('option', { value: '1' }, fnOptionLabel(t, 1)),
-        el('option', { value: '2' }, fnOptionLabel(t, 2)),
-        el('option', { value: '3' }, fnOptionLabel(t, 3)),
-        el('option', { value: '4' }, fnOptionLabel(t, 4)),
-      ),
-    ),
+    el('td', { className: 'dvb-col-fn' }, fcSelectNode),
     el(
       'td',
       { className: 'dvb-col-addr' },

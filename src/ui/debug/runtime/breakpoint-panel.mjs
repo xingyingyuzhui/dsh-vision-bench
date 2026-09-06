@@ -1,4 +1,4 @@
-// @ts-check
+import { getCustomSelect } from '../../components/custom-select.mjs'
 
 /**
  * Breakpoints and Hardware Watchpoints panel.
@@ -9,6 +9,7 @@
  */
 export function createBreakpointPanel(React, t) {
   const el = React.createElement
+  const CustomSelect = getCustomSelect(React)
 
   return function BreakpointPanel({
     breakpoints = [],
@@ -196,17 +197,20 @@ export function createBreakpointPanel(React, t) {
                 value: wpExpr,
                 onChange: (e) => setWpExpr(e.target.value),
               }),
-              el(
-                'select',
-                {
-                  value: wpAccess,
-                  onChange: (e) => setWpAccess(e.target.value),
-                  style: { fontSize: '11px', padding: '2px 4px', borderRadius: '4px' },
+              el(CustomSelect, {
+                size: 'sm',
+                style: { width: '135px', flex: 'none' },
+                value: wpAccess,
+                options: [
+                  { value: 'write', label: '写监视 (write)' },
+                  { value: 'read', label: '读监视 (read)' },
+                  { value: 'access', label: '读写监视 (access)' },
+                ],
+                onChange(val) {
+                  const next = val?.target ? val.target.value : val
+                  setWpAccess(next)
                 },
-                el('option', { value: 'write' }, '写监视 (write)'),
-                el('option', { value: 'read' }, '读监视 (read)'),
-                el('option', { value: 'access' }, '读写监视 (access)'),
-              ),
+              }),
               el(
                 'button',
                 {

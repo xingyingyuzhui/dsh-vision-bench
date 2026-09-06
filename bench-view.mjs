@@ -20,6 +20,7 @@ import {
   typeLabel,
   useSessionCwd,
 } from './bench-shared.mjs'
+import { getCustomSelect } from './src/ui/components/custom-select.mjs'
 
 export function formatResult(result) {
   if (!result) return ''
@@ -97,6 +98,7 @@ function agentNote(cwd, workspace, result) {
 }
 
 export function createDebugView(React, t, post, openProject) {
+  const CustomSelect = getCustomSelect(React)
   return function DebugView(props) {
     const el = React.createElement
     const cwd = useSessionCwd(React, props)
@@ -728,33 +730,27 @@ export function createDebugView(React, t, post, openProject) {
         { className: 'dvb-toolbar' },
         field(
           t('flashIface'),
-          el(
-            'select',
-            {
-              className: 'dvb-input',
-              value: flash.interface,
-              disabled: flash.busy,
-              onChange(event) {
-                setFlash((prev) => ({ ...prev, interface: event.target.value }))
-              },
+          el(CustomSelect, {
+            value: flash.interface,
+            disabled: flash.busy,
+            options: FLASH_INTERFACES.map((name) => ({ value: name, label: name })),
+            onChange(val) {
+              const value = val?.target ? val.target.value : val
+              setFlash((prev) => ({ ...prev, interface: value }))
             },
-            FLASH_INTERFACES.map((name) => el('option', { key: name, value: name }, name)),
-          ),
+          }),
         ),
         field(
           t('flashTarget'),
-          el(
-            'select',
-            {
-              className: 'dvb-input',
-              value: flash.target,
-              disabled: flash.busy,
-              onChange(event) {
-                setFlash((prev) => ({ ...prev, target: event.target.value }))
-              },
+          el(CustomSelect, {
+            value: flash.target,
+            disabled: flash.busy,
+            options: FLASH_TARGETS.map((name) => ({ value: name, label: name })),
+            onChange(val) {
+              const value = val?.target ? val.target.value : val
+              setFlash((prev) => ({ ...prev, target: value }))
             },
-            FLASH_TARGETS.map((name) => el('option', { key: name, value: name }, name)),
-          ),
+          }),
         ),
       ),
       el(
@@ -880,42 +876,36 @@ export function createDebugView(React, t, post, openProject) {
             { className: 'dvb-toolbar' },
             field(
               t('target'),
-              el(
-                'select',
-                {
-                  className: 'dvb-input',
-                  value: workspace.keil.target,
-                  disabled: !workspace.keil.project || busy === 'targets',
-                  onChange(event) {
-                    const target = event.target.value
-                    setKeil({ target })
-                    persist({ ...workspace, keil: { ...workspace.keil, target } })
-                  },
-                },
-                [el('option', { key: '', value: '' }, t('pickTarget'))].concat(
-                  targets.map((item) => el('option', { key: item.name, value: item.name }, item.name)),
+              el(CustomSelect, {
+                value: workspace.keil.target,
+                disabled: !workspace.keil.project || busy === 'targets',
+                options: [{ value: '', label: t('pickTarget') }].concat(
+                  targets.map((item) => ({ value: item.name, label: item.name })),
                 ),
-              ),
+                onChange(val) {
+                  const target = val?.target ? val.target.value : val
+                  setKeil({ target })
+                  persist({ ...workspace, keil: { ...workspace.keil, target } })
+                },
+              }),
             ),
             field(
               t('artifact'),
-              el(
-                'select',
-                {
-                  className: 'dvb-input',
-                  value: workspace.keil.artifact || 'hex',
-                  disabled: !workspace.keil.project,
-                  onChange(event) {
-                    const artifact = event.target.value
-                    setKeil({ artifact })
-                    persist({ ...workspace, keil: { ...workspace.keil, artifact } })
-                  },
+              el(CustomSelect, {
+                value: workspace.keil.artifact || 'hex',
+                disabled: !workspace.keil.project,
+                options: [
+                  { value: 'hex', label: '.hex' },
+                  { value: 'bin', label: '.bin' },
+                  { value: 'axf', label: '.axf' },
+                  { value: 'elf', label: '.elf' },
+                ],
+                onChange(val) {
+                  const artifact = val?.target ? val.target.value : val
+                  setKeil({ artifact })
+                  persist({ ...workspace, keil: { ...workspace.keil, artifact } })
                 },
-                el('option', { value: 'hex' }, '.hex'),
-                el('option', { value: 'bin' }, '.bin'),
-                el('option', { value: 'axf' }, '.axf'),
-                el('option', { value: 'elf' }, '.elf'),
-              ),
+              }),
             ),
             el(
               'button',
@@ -1026,19 +1016,19 @@ export function createDebugView(React, t, post, openProject) {
                   setLogView((prev) => ({ ...prev, search: event.target.value }))
                 },
               }),
-              el(
-                'select',
-                {
-                  className: 'dvb-input',
-                  value: logView.filter,
-                  onChange: (event) => {
-                    setLogView((prev) => ({ ...prev, filter: event.target.value }))
-                  },
+              el(CustomSelect, {
+                style: { width: '96px', flex: 'none' },
+                value: logView.filter,
+                options: [
+                  { value: 'all', label: '全部' },
+                  { value: 'error', label: '仅错误' },
+                  { value: 'warning', label: '仅警告' },
+                ],
+                onChange(val) {
+                  const filter = val?.target ? val.target.value : val
+                  setLogView((prev) => ({ ...prev, filter }))
                 },
-                el('option', { value: 'all' }, '全部'),
-                el('option', { value: 'error' }, '仅错误'),
-                el('option', { value: 'warning' }, '仅警告'),
-              ),
+              }),
               el(
                 'button',
                 {

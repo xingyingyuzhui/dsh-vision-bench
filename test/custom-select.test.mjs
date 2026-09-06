@@ -209,3 +209,31 @@ test('renderCustomSelect keyboard navigation: ArrowDown/Up skips disabled, Enter
   })
   assert.deepEqual(calls, [{ type: 'toggle', open: false }])
 })
+
+test('renderCustomSelect renders native select bridge when renderNativeSelect is true', () => {
+  const calls = []
+  const tree = renderCustomSelect(el, {
+    value: 'tcp',
+    options: [
+      { value: 'rtu', label: 'RTU' },
+      { value: 'tcp', label: 'TCP' },
+    ],
+    open: false,
+    renderNativeSelect: true,
+    onChange: (val) => calls.push(val),
+  })
+
+  // Has trigger and native select
+  assert.equal(tree.children.length, 2)
+  const nativeSelect = tree.children[1]
+  assert.equal(nativeSelect.type, 'select')
+  assert.equal(nativeSelect.props.className, 'dvb-select-native')
+  assert.equal(nativeSelect.props.value, 'tcp')
+  assert.equal(nativeSelect.props['aria-hidden'], 'true')
+  assert.equal(nativeSelect.props.tabIndex, -1)
+  assert.equal(nativeSelect.children.length, 2)
+
+  // Dispatches change
+  nativeSelect.props.onChange({ target: { value: 'rtu' } })
+  assert.deepEqual(calls, ['rtu'])
+})

@@ -21,6 +21,7 @@ import {
 import { buildInputBridge, evidenceFromRef, postEvidence, readInputDraft } from '../../../../bench-shared.mjs'
 import { vendorUseVirtualizer, vendorVirtualizer } from '../../../../bench-vendor.mjs'
 import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
+import { getCustomSelect } from '../../components/custom-select.mjs'
 import { createDataTable } from '../../components/data-table.mjs'
 import { filterFrameList } from './frames-filter-model.mjs'
 
@@ -40,6 +41,7 @@ export function createFramesPage(React, t, post, hooks) {
   // tests pass the official adapter explicitly, production uses DvbVendor's.
   const useVizForPage = (hooks && typeof hooks.useVirtualizer === 'function' && hooks.useVirtualizer) || useViz
   const DataTable = createDataTable(React)
+  const CustomSelect = getCustomSelect(React)
   return function FramesPage(props) {
     const el = React.createElement
     // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
@@ -622,18 +624,16 @@ export function createFramesPage(React, t, post, hooks) {
       el(
         'div',
         { className: 'dvb-toolbar' },
-        el(
-          'select',
-          {
-            className: 'dvb-input',
-            value: selection,
-            onChange: (e) => {
-              setSelection(e.target.value)
-              setPendingNew(0)
-            },
+        el(CustomSelect, {
+          style: { minWidth: '160px', flex: '1' },
+          value: selection,
+          options: portOptions.map((o) => ({ value: o.value, label: o.label })),
+          onChange(val) {
+            const next = val?.target ? val.target.value : val
+            setSelection(next)
+            setPendingNew(0)
           },
-          portOptions.map((o) => el('option', { key: o.value, value: o.value }, o.label)),
-        ),
+        }),
         el(
           'button',
           {
@@ -656,49 +656,57 @@ export function createFramesPage(React, t, post, hooks) {
         ? el(
             'div',
             { className: 'dvb-toolbar' },
-            el(
-              'select',
-              {
-                className: 'dvb-input',
-                value: filters.deviceId,
-                onChange: (e) => setFilters((p) => ({ ...p, deviceId: e.target.value })),
+            el(CustomSelect, {
+              style: { minWidth: '120px', flex: '1' },
+              value: filters.deviceId,
+              options: [
+                { value: '', label: '全部设备' },
+                ...devices.map((d) => ({ value: d.id, label: `${d.name} · 站号 ${d.unitId}` })),
+              ],
+              onChange(val) {
+                const deviceId = val?.target ? val.target.value : val
+                setFilters((p) => ({ ...p, deviceId }))
               },
-              el('option', { value: '' }, '全部设备'),
-              devices.map((d) => el('option', { key: d.id, value: d.id }, `${d.name} · 站号 ${d.unitId}`)),
-            ),
-            el(
-              'select',
-              {
-                className: 'dvb-input',
-                value: filters.functionCode,
-                onChange: (e) => setFilters((p) => ({ ...p, functionCode: e.target.value })),
+            }),
+            el(CustomSelect, {
+              style: { minWidth: '110px', flex: '1' },
+              value: filters.functionCode,
+              options: [
+                { value: '', label: '全部功能码' },
+                ...[1, 2, 3, 4, 5, 6, 15, 16].map((fc) => ({ value: String(fc), label: `FC${fc}` })),
+              ],
+              onChange(val) {
+                const functionCode = val?.target ? val.target.value : val
+                setFilters((p) => ({ ...p, functionCode }))
               },
-              el('option', { value: '' }, '全部功能码'),
-              [1, 2, 3, 4, 5, 6, 15, 16].map((fc) => el('option', { key: String(fc), value: String(fc) }, `FC${fc}`)),
-            ),
-            el(
-              'select',
-              {
-                className: 'dvb-input',
-                value: filters.status,
-                onChange: (e) => setFilters((p) => ({ ...p, status: e.target.value })),
+            }),
+            el(CustomSelect, {
+              style: { minWidth: '95px', flex: '1' },
+              value: filters.status,
+              options: [
+                { value: '', label: '全部状态' },
+                { value: 'ok', label: '成功' },
+                { value: 'err', label: '失败' },
+              ],
+              onChange(val) {
+                const status = val?.target ? val.target.value : val
+                setFilters((p) => ({ ...p, status }))
               },
-              el('option', { value: '' }, '全部状态'),
-              el('option', { value: 'ok' }, '成功'),
-              el('option', { value: 'err' }, '失败'),
-            ),
-            el(
-              'select',
-              {
-                className: 'dvb-input',
-                value: filters.source,
-                onChange: (e) => setFilters((p) => ({ ...p, source: e.target.value })),
+            }),
+            el(CustomSelect, {
+              style: { minWidth: '95px', flex: '1' },
+              value: filters.source,
+              options: [
+                { value: '', label: '全部来源' },
+                { value: 'manual', label: '用户' },
+                { value: 'polling', label: '自动刷新' },
+                { value: 'agent', label: 'Agent' },
+              ],
+              onChange(val) {
+                const source = val?.target ? val.target.value : val
+                setFilters((p) => ({ ...p, source }))
               },
-              el('option', { value: '' }, '全部来源'),
-              el('option', { value: 'manual' }, '用户'),
-              el('option', { value: 'polling' }, '自动刷新'),
-              el('option', { value: 'agent' }, 'Agent'),
-            ),
+            }),
           )
         : null,
       serial.error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, formatErrorMessage(serial.error)) : null,

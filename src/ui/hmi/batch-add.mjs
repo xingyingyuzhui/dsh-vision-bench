@@ -1,9 +1,24 @@
+import { renderCustomSelect } from '../components/custom-select.mjs'
 import { fnOptionLabel } from './hmi-ids.mjs'
 
 /** Batch point add panel for one device. */
 export function renderBatchPanel(el, t, ctx) {
-  const { field, batch, setBatch, cwd, generateBatch } = ctx
+  const { field, batch, setBatch, cwd, generateBatch, CustomSelect } = ctx
   void ctx.d
+  const fcSelectProps = {
+    size: 'sm',
+    value: String(batch.fc),
+    options: [
+      { value: '1', label: fnOptionLabel(t, 1) },
+      { value: '3', label: fnOptionLabel(t, 3) },
+    ],
+    onChange: (val) => {
+      const next = val?.target ? val.target.value : val
+      setBatch((prev) => ({ ...prev, fc: Number(next) }))
+    },
+  }
+  const fcSelectNode = CustomSelect ? el(CustomSelect, fcSelectProps) : renderCustomSelect(el, fcSelectProps)
+
   return el(
     'div',
     { className: 'dvb-write-panel dvb-batch-panel' },
@@ -21,21 +36,7 @@ export function renderBatchPanel(el, t, ctx) {
           },
         }),
       ),
-      field(
-        t('ptFc'),
-        el(
-          'select',
-          {
-            className: 'dvb-input',
-            value: String(batch.fc),
-            onChange: (event) => {
-              setBatch((prev) => ({ ...prev, fc: Number(event.target.value) }))
-            },
-          },
-          el('option', { value: '1' }, fnOptionLabel(t, 1)),
-          el('option', { value: '3' }, fnOptionLabel(t, 3)),
-        ),
-      ),
+      field(t('ptFc'), fcSelectNode),
       field(
         t('batchStart'),
         el('input', {

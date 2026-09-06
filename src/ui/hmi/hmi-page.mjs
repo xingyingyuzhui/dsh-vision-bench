@@ -8,6 +8,7 @@ import {
   useSessionCwd,
   visionCollabBar,
 } from '../../../bench-shared.mjs'
+import { getCustomSelect } from '../components/custom-select.mjs'
 import { renderConnectionEditor } from './connection-editor.mjs'
 import { renderConnectionOverview } from './connection-overview.mjs'
 import { renderConnectionPanel } from './connection-panel.mjs'
@@ -25,6 +26,7 @@ import { usePendingWrites } from './hooks/use-pending-writes.mjs'
 import { usePoints } from './hooks/use-points.mjs'
 
 export function createHmiView(React, t, post) {
+  const CustomSelect = getCustomSelect(React)
   return function HmiView(props) {
     const el = React.createElement
     const cwd = useSessionCwd(React, props)
@@ -302,8 +304,10 @@ export function createHmiView(React, t, post) {
       flagSavingByPoint,
       persistPointFlags: actions.persistPointFlags,
       removePointRow: actions.removePointRow,
+      CustomSelect,
     }
     const deviceCardsPanel = renderDeviceSection(el, t, {
+      CustomSelect,
       activeConnObj: d.activeConnObj,
       activeDevices: d.activeDevices,
       points: d.points,

@@ -2,6 +2,7 @@
 import { formatErrorMessage, subscribeState } from '../../../../bench-shared.mjs'
 import { beginRequest, postWithAbort, shouldApplyRequest } from '../../common/latest-request-gate.mjs'
 import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
+import { getCustomSelect } from '../../components/custom-select.mjs'
 import { createSourceEditor } from '../../components/source-editor.mjs'
 import { getNav, subscribeNav } from '../../workspace/vision-navigation-store.mjs'
 import { DEBUG_SECTIONS, VIEW_DEBUG } from '../../workspace/vision-route.mjs'
@@ -67,6 +68,7 @@ function releaseAbortController(ref, ac) {
 }
 
 export function createProjectWorkspace(React, t, post) {
+  const CustomSelect = getCustomSelect(React)
   const SourceEditor = createSourceEditor(React)
   const TreePanel = createProjectTreePanel(React)
   const GraphView = createProjectGraphView(React)
@@ -478,18 +480,21 @@ export function createProjectWorkspace(React, t, post) {
           value: search,
           onChange: (event) => setSearch(event.target.value),
         }),
-        el(
-          'select',
-          {
-            className: 'dvb-input dvb-map-filter',
-            value: filter,
-            onChange: (event) => setFilter(event.target.value),
+        el(CustomSelect, {
+          style: { width: '100px', flex: 'none' },
+          selectClassName: 'dvb-map-filter',
+          value: filter,
+          options: [
+            { value: 'all', label: '全部' },
+            { value: 'missing', label: '缺失' },
+            { value: 'unread', label: '不可读' },
+            { value: 'outside', label: '工作区外' },
+          ],
+          onChange(val) {
+            const next = val?.target ? val.target.value : val
+            setFilter(next)
           },
-          el('option', { value: 'all' }, '全部'),
-          el('option', { value: 'missing' }, '缺失'),
-          el('option', { value: 'unread' }, '不可读'),
-          el('option', { value: 'outside' }, '工作区外'),
-        ),
+        }),
         el(
           'button',
           {

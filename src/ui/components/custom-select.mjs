@@ -122,6 +122,219 @@ export function renderCustomSelect(el, props) {
   const activeOptionId =
     isOpen && highlightIndex >= 0 && options[highlightIndex] ? `${listboxId}-opt-${highlightIndex}` : undefined
 
+  const triggerNode = el(
+    'button',
+    {
+      type: 'button',
+      role: 'combobox',
+      className: triggerClasses,
+      style: triggerStyle || null,
+      disabled: !!disabled,
+      title: title || selectedOpt?.title || undefined,
+      'aria-haspopup': 'listbox',
+      'aria-expanded': isOpen ? 'true' : 'false',
+      'aria-controls': isOpen ? listboxId : undefined,
+      'aria-activedescendant': activeOptionId,
+      onClick(e) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (disabled) return
+        if (typeof onToggle === 'function') {
+          onToggle(!isOpen)
+        }
+      },
+      onKeyDown(e) {
+        if (typeof props.onKeyDown === 'function') {
+          props.onKeyDown(e)
+          if (e.defaultPrevented) return
+        }
+        if (disabled) return
+        if (!isOpen) {
+          if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault()
+            if (typeof onToggle === 'function') {
+              onToggle(true)
+            }
+          }
+          return
+        }
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          const next = findNextEnabledIndex(options, highlightIndex, 1)
+          if (next >= 0 && typeof onHighlightIndexChange === 'function') {
+            onHighlightIndexChange(next)
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          const prev = findNextEnabledIndex(options, highlightIndex, -1)
+          if (prev >= 0 && typeof onHighlightIndexChange === 'function') {
+            onHighlightIndexChange(prev)
+          }
+        } else if (e.key === 'Home') {
+          e.preventDefault()
+          const first = findFirstEnabledIndex(options)
+          if (first >= 0 && typeof onHighlightIndexChange === 'function') {
+            onHighlightIndexChange(first)
+          }
+        } else if (e.key === 'End') {
+          e.preventDefault()
+          const last = findLastEnabledIndex(options)
+          if (last >= 0 && typeof onHighlightIndexChange === 'function') {
+            onHighlightIndexChange(last)
+          }
+        } else if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          const chosen = highlightIndex >= 0 ? options[highlightIndex] : selectedOpt
+          if (chosen && !chosen.disabled) {
+            if (typeof onChange === 'function') onChange(chosen.value)
+            if (typeof onToggle === 'function') onToggle(false)
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault()
+          e.stopPropagation()
+          if (typeof onToggle === 'function') onToggle(false)
+        } else if (e.key === 'Tab') {
+          if (typeof onToggle === 'function') onToggle(false)
+        }
+      },
+    },
+    el('span', { className: 'dvb-select-label' }, displayLabel),
+    el(
+      'svg',
+      {
+        className: 'dvb-select-chevron',
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: 2.2,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+      },
+      el('polyline', { points: '6 9 12 15 18 9' }),
+    ),
+  )
+
+  const dropdownNode = isOpen
+    ? el(
+        'div',
+        {
+          id: listboxId,
+          className: `dvb-select-dropdown${align === 'right' ? ' is-right' : ''}`,
+          style: menuStyle || null,
+          role: 'listbox',
+          tabIndex: -1,
+          'aria-activedescendant': activeOptionId,
+          onClick(e) {
+            e.stopPropagation()
+          },
+        },
+        options.map((opt, idx) => {
+          const isSelected = selectedOpt ? opt.value === selectedOpt.value : String(opt.value) === String(value)
+          const isHighlighted = highlightIndex === idx
+          const optClasses = [
+            'dvb-select-option',
+            isSelected ? 'is-selected' : '',
+            opt.disabled ? 'is-disabled' : '',
+            isHighlighted ? 'is-highlighted' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')
+
+          return el(
+            'div',
+            {
+              id: `${listboxId}-opt-${idx}`,
+              key: `${opt.value}-${idx}`,
+              className: optClasses,
+              role: 'option',
+              'aria-selected': isSelected ? 'true' : 'false',
+              'aria-disabled': opt.disabled ? 'true' : undefined,
+              title: opt.title || undefined,
+              onMouseEnter() {
+                if (!opt.disabled && typeof onHighlightIndexChange === 'function') {
+                  onHighlightIndexChange(idx)
+                }
+              },
+              onClick(e) {
+                e.preventDefault()
+                e.stopPropagation()
+                if (opt.disabled) return
+                if (typeof onChange === 'function') {
+                  onChange(opt.value)
+                }
+                if (typeof onToggle === 'function') {
+                  onToggle(false)
+                }
+              },
+            },
+            el('span', { className: 'dvb-select-option-text' }, opt.label),
+            isSelected
+              ? el(
+                  'svg',
+                  {
+                    className: 'dvb-select-check',
+                    viewBox: '0 0 24 24',
+                    fill: 'none',
+                    stroke: 'currentColor',
+                    strokeWidth: 2.4,
+                    strokeLinecap: 'round',
+                    strokeLinejoin: 'round',
+                  },
+                  el('polyline', { points: '20 6 9 17 4 12' }),
+                )
+              : null,
+          )
+        }),
+      )
+    : null
+
+  const nativeSelectNode = props.renderNativeSelect
+    ? el(
+        'select',
+        {
+          className: ['dvb-select-native', props.selectClassName, props.nativeClassName].filter(Boolean).join(' '),
+          tabIndex: -1,
+          'aria-hidden': 'true',
+          value: value !== undefined && value !== null ? String(value) : '',
+          disabled: !!disabled,
+          style: {
+            position: 'absolute',
+            width: '1px',
+            height: '1px',
+            padding: 0,
+            margin: -1,
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            border: 0,
+            opacity: 0,
+            pointerEvents: 'none',
+          },
+          onChange(e) {
+            const nextVal = e.target.value
+            const matched = options.find((o) => String(o.value) === String(nextVal))
+            if (typeof onChange === 'function') {
+              onChange(matched ? matched.value : nextVal)
+            }
+          },
+        },
+        options.map((opt, idx) =>
+          el(
+            'option',
+            {
+              key: `${opt.value}-${idx}`,
+              value: String(opt.value),
+              disabled: !!opt.disabled,
+            },
+            opt.label,
+          ),
+        ),
+      )
+    : null
+
+  const childrenNodes = [triggerNode, dropdownNode, nativeSelectNode].filter(Boolean)
+
   return el(
     'div',
     {
@@ -129,171 +342,7 @@ export function renderCustomSelect(el, props) {
       style: style || null,
       ref: props.containerRef,
     },
-    el(
-      'button',
-      {
-        type: 'button',
-        role: 'combobox',
-        className: triggerClasses,
-        style: triggerStyle || null,
-        disabled: !!disabled,
-        title: title || selectedOpt?.title || undefined,
-        'aria-haspopup': 'listbox',
-        'aria-expanded': isOpen ? 'true' : 'false',
-        'aria-controls': isOpen ? listboxId : undefined,
-        'aria-activedescendant': activeOptionId,
-        onClick(e) {
-          e.preventDefault()
-          e.stopPropagation()
-          if (disabled) return
-          if (typeof onToggle === 'function') {
-            onToggle(!isOpen)
-          }
-        },
-        onKeyDown(e) {
-          if (typeof props.onKeyDown === 'function') {
-            props.onKeyDown(e)
-            if (e.defaultPrevented) return
-          }
-          if (disabled) return
-          if (!isOpen) {
-            if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-              e.preventDefault()
-              if (typeof onToggle === 'function') {
-                onToggle(true)
-              }
-            }
-            return
-          }
-
-          if (e.key === 'ArrowDown') {
-            e.preventDefault()
-            const next = findNextEnabledIndex(options, highlightIndex, 1)
-            if (next >= 0 && typeof onHighlightIndexChange === 'function') {
-              onHighlightIndexChange(next)
-            }
-          } else if (e.key === 'ArrowUp') {
-            e.preventDefault()
-            const prev = findNextEnabledIndex(options, highlightIndex, -1)
-            if (prev >= 0 && typeof onHighlightIndexChange === 'function') {
-              onHighlightIndexChange(prev)
-            }
-          } else if (e.key === 'Home') {
-            e.preventDefault()
-            const first = findFirstEnabledIndex(options)
-            if (first >= 0 && typeof onHighlightIndexChange === 'function') {
-              onHighlightIndexChange(first)
-            }
-          } else if (e.key === 'End') {
-            e.preventDefault()
-            const last = findLastEnabledIndex(options)
-            if (last >= 0 && typeof onHighlightIndexChange === 'function') {
-              onHighlightIndexChange(last)
-            }
-          } else if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            const chosen = highlightIndex >= 0 ? options[highlightIndex] : selectedOpt
-            if (chosen && !chosen.disabled) {
-              if (typeof onChange === 'function') onChange(chosen.value)
-              if (typeof onToggle === 'function') onToggle(false)
-            }
-          } else if (e.key === 'Escape') {
-            e.preventDefault()
-            e.stopPropagation()
-            if (typeof onToggle === 'function') onToggle(false)
-          } else if (e.key === 'Tab') {
-            if (typeof onToggle === 'function') onToggle(false)
-          }
-        },
-      },
-      el('span', { className: 'dvb-select-label' }, displayLabel),
-      el(
-        'svg',
-        {
-          className: 'dvb-select-chevron',
-          viewBox: '0 0 24 24',
-          fill: 'none',
-          stroke: 'currentColor',
-          strokeWidth: 2.2,
-          strokeLinecap: 'round',
-          strokeLinejoin: 'round',
-        },
-        el('polyline', { points: '6 9 12 15 18 9' }),
-      ),
-    ),
-    isOpen
-      ? el(
-          'div',
-          {
-            id: listboxId,
-            className: `dvb-select-dropdown${align === 'right' ? ' is-right' : ''}`,
-            style: menuStyle || null,
-            role: 'listbox',
-            tabIndex: -1,
-            'aria-activedescendant': activeOptionId,
-            onClick(e) {
-              e.stopPropagation()
-            },
-          },
-          options.map((opt, idx) => {
-            const isSelected = selectedOpt ? opt.value === selectedOpt.value : String(opt.value) === String(value)
-            const isHighlighted = highlightIndex === idx
-            const optClasses = [
-              'dvb-select-option',
-              isSelected ? 'is-selected' : '',
-              opt.disabled ? 'is-disabled' : '',
-              isHighlighted ? 'is-highlighted' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')
-
-            return el(
-              'div',
-              {
-                id: `${listboxId}-opt-${idx}`,
-                key: `${opt.value}-${idx}`,
-                className: optClasses,
-                role: 'option',
-                'aria-selected': isSelected ? 'true' : 'false',
-                'aria-disabled': opt.disabled ? 'true' : undefined,
-                title: opt.title || undefined,
-                onMouseEnter() {
-                  if (!opt.disabled && typeof onHighlightIndexChange === 'function') {
-                    onHighlightIndexChange(idx)
-                  }
-                },
-                onClick(e) {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  if (opt.disabled) return
-                  if (typeof onChange === 'function') {
-                    onChange(opt.value)
-                  }
-                  if (typeof onToggle === 'function') {
-                    onToggle(false)
-                  }
-                },
-              },
-              el('span', { className: 'dvb-select-option-text' }, opt.label),
-              isSelected
-                ? el(
-                    'svg',
-                    {
-                      className: 'dvb-select-check',
-                      viewBox: '0 0 24 24',
-                      fill: 'none',
-                      stroke: 'currentColor',
-                      strokeWidth: 2.4,
-                      strokeLinecap: 'round',
-                      strokeLinejoin: 'round',
-                    },
-                    el('polyline', { points: '20 6 9 17 4 12' }),
-                  )
-                : null,
-            )
-          }),
-        )
-      : null,
+    ...childrenNodes,
   )
 }
 
@@ -303,10 +352,13 @@ const selectComponentCache = new WeakMap()
  * React Component factory for CustomSelect.
  */
 export function createCustomSelect(React) {
-  if (!React || typeof React.useState !== 'function') {
+  if (!React || typeof React.useState !== 'function' || typeof React.useRef !== 'function') {
     return function MockCustomSelect(props) {
-      const el = (type, p, ...children) => ({ type, props: p, children: children.flat() })
-      return renderCustomSelect(el, props)
+      const el =
+        React && typeof React.createElement === 'function'
+          ? React.createElement
+          : (type, p, ...children) => ({ type, props: p, children: children.flat() })
+      return renderCustomSelect(el, { ...props, renderNativeSelect: props.renderNativeSelect !== false })
     }
   }
   const el = React.createElement
@@ -362,6 +414,7 @@ export function createCustomSelect(React) {
 
     return renderCustomSelect(el, {
       ...props,
+      renderNativeSelect: props.renderNativeSelect !== false,
       internalOpen,
       containerRef,
       highlightIndex,
