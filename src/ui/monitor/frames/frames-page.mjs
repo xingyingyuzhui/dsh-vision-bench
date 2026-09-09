@@ -21,9 +21,11 @@ import {
 import { buildInputBridge, evidenceFromRef, postEvidence, readInputDraft } from '../../../../bench-shared.mjs'
 import { vendorUseVirtualizer, vendorVirtualizer } from '../../../../bench-vendor.mjs'
 import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
-import { getCustomSelect } from '../../components/custom-select.mjs'
 import { createDataTable } from '../../components/data-table.mjs'
+import { buildFrameColumns } from './frames-columns.mjs'
+import { createFramesDetailDrawer } from './frames-detail-drawer.mjs'
 import { filterFrameList } from './frames-filter-model.mjs'
+import { createFramesFilterToolbar } from './frames-filter-toolbar.mjs'
 
 // 串口报文侧栏：只订阅上位机已连接串口的协议/原始捕获，不打开 COM。
 export const FRAMES_TAB_ID = 'dsh-vision-bench:frames'
@@ -41,7 +43,8 @@ export function createFramesPage(React, t, post, hooks) {
   // tests pass the official adapter explicitly, production uses DvbVendor's.
   const useVizForPage = (hooks && typeof hooks.useVirtualizer === 'function' && hooks.useVirtualizer) || useViz
   const DataTable = createDataTable(React)
-  const CustomSelect = getCustomSelect(React)
+  const FramesFilterToolbar = createFramesFilterToolbar(React, t)
+  const FramesDetailDrawer = createFramesDetailDrawer(React)
   return function FramesPage(props) {
     const el = React.createElement
     // Task5/0.18.2: hook reads at render top-level, passed into the pure dispatch bridge
@@ -425,138 +428,12 @@ export function createFramesPage(React, t, post, hooks) {
           : ''
 
     const selectedGone = sel.kind === 'conn' && !serialSources.some((s) => s.connectionId === sel.connectionId)
-    const frameColumns =
-      mode === 'raw'
-        ? [
-            {
-              id: 'time',
-              header: '时间',
-              accessorFn: (f) => f.t || f.at,
-              cell: (info) =>
-                el('span', { className: 'dvb-map-meta' }, new Date(info.getValue() || Date.now()).toLocaleTimeString()),
-            },
-            { id: 'port', header: '端口', accessorFn: (f) => f.port || f.connectionId || '' },
-            {
-              id: 'dir',
-              header: '方向',
-              accessorFn: (f) => f.direction || 'tx',
-              cell: (info) => el('span', { className: 'dvb-badge' }, String(info.getValue() || 'tx').toUpperCase()),
-            },
-            {
-              id: 'bytes',
-              header: '字节',
-              accessorFn: (f) => f.bytes || f.byteLength || (f.hex || '').length / 2 || '',
-            },
-            { id: 'hex', header: '数据', minSize: 160, accessorFn: (f) => f.hex || f.request || '' },
-            {
-              id: 'ai',
-              header: '',
-              enableSorting: false,
-              size: 56,
-              accessorFn: (f) => f.frameId || f.id,
-              cell: (info) =>
-                el(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'dvb-btn dvb-btn-sm',
-                    title: hasHarnessInput(props) ? '让 Agent 分析' : '复制给 Agent',
-                    onClick(ev) {
-                      if (ev?.stopPropagation) ev.stopPropagation()
-                      sendToAgent(info.row.original)
-                    },
-                  },
-                  copied === '已加入输入框' ? '已加入' : copied === '已发送' ? '已发送' : 'AI',
-                ),
-            },
-          ]
-        : [
-            {
-              id: 'time',
-              header: '时间',
-              accessorFn: (f) => f.t || f.at,
-              cell: (info) =>
-                el('span', { className: 'dvb-map-meta' }, new Date(info.getValue() || Date.now()).toLocaleTimeString()),
-            },
-            { id: 'port', header: '端口', accessorFn: (f) => f.port || f.connectionId || '' },
-            {
-              id: 'device',
-              header: '设备',
-              accessorFn: (f) => {
-                const dev = devices.find((d) => d.id === f.deviceId)
-                return dev?.name || f.deviceName || f.deviceId || ''
-              },
-            },
-            {
-              id: 'unit',
-              header: '站号',
-              accessorFn: (f) => {
-                const dev = devices.find((d) => d.id === f.deviceId)
-                return f.unitId || dev?.unitId || '—'
-              },
-            },
-            {
-              id: 'fc',
-              header: '功能码',
-              accessorFn: (f) => f.functionCode,
-              cell: (info) => el('span', { className: 'dvb-hint' }, `FC${String(info.getValue() || '')}`),
-            },
-            {
-              id: 'dur',
-              header: '耗时',
-              accessorFn: (f) => f.durationMs,
-              cell: (info) => (info.getValue() != null ? `${info.getValue()}ms` : ''),
-            },
-            {
-              id: 'src',
-              header: '来源',
-              accessorFn: (f) => f.source,
-              cell: (info) => {
-                const src = info.getValue()
-                return src === 'agent'
-                  ? t('framesSrcAgent') || 'Agent'
-                  : src === 'polling'
-                    ? t('framesSrcPoll') || '自动刷新'
-                    : src
-                      ? t('framesSrcUser') || '用户'
-                      : ''
-              },
-            },
-            {
-              id: 'status',
-              header: '状态',
-              accessorFn: (f) => f.status,
-              cell: (info) => {
-                const status = info.getValue()
-                return el(
-                  'span',
-                  { className: 'dvb-badge', 'data-kind': status === 'ok' ? 'ready' : 'err' },
-                  status === 'ok' ? '成功' : status || '失败',
-                )
-              },
-            },
-            {
-              id: 'ai',
-              header: '',
-              enableSorting: false,
-              size: 56,
-              accessorFn: (f) => f.frameId || f.id,
-              cell: (info) =>
-                el(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'dvb-btn dvb-btn-sm',
-                    title: hasHarnessInput(props) ? '让 Agent 分析' : '复制给 Agent',
-                    onClick(ev) {
-                      if (ev?.stopPropagation) ev.stopPropagation()
-                      sendToAgent(info.row.original)
-                    },
-                  },
-                  copied === '已加入输入框' ? '已加入' : copied === '已发送' ? '已发送' : 'AI',
-                ),
-            },
-          ]
+    const frameColumns = buildFrameColumns(React, t, props, {
+      mode,
+      devices,
+      copied,
+      sendToAgent,
+    })
 
     return el(
       'div',
@@ -621,94 +498,20 @@ export function createFramesPage(React, t, post, hooks) {
             ),
           )
         : null,
-      el(
-        'div',
-        { className: 'dvb-toolbar' },
-        el(CustomSelect, {
-          style: { minWidth: '160px', flex: '1' },
-          value: selection,
-          options: portOptions.map((o) => ({ value: o.value, label: o.label })),
-          onChange(val) {
-            const next = val?.target ? val.target.value : val
-            setSelection(next)
-            setPendingNew(0)
-          },
-        }),
-        el(
-          'button',
-          {
-            type: 'button',
-            className: 'dvb-btn',
-            onClick() {
-              setShowFilters((v) => !v)
-            },
-          },
-          t('framesFilters') || '筛选',
-        ),
-        el('input', {
-          className: 'dvb-input',
-          value: search,
-          placeholder: t('serialFilter') || '搜索报文……',
-          onChange: (e) => setSearch(e.target.value),
-        }),
-      ),
-      showFilters && mode === 'proto'
-        ? el(
-            'div',
-            { className: 'dvb-toolbar' },
-            el(CustomSelect, {
-              style: { minWidth: '120px', flex: '1' },
-              value: filters.deviceId,
-              options: [
-                { value: '', label: '全部设备' },
-                ...devices.map((d) => ({ value: d.id, label: `${d.name} · 站号 ${d.unitId}` })),
-              ],
-              onChange(val) {
-                const deviceId = val?.target ? val.target.value : val
-                setFilters((p) => ({ ...p, deviceId }))
-              },
-            }),
-            el(CustomSelect, {
-              style: { minWidth: '110px', flex: '1' },
-              value: filters.functionCode,
-              options: [
-                { value: '', label: '全部功能码' },
-                ...[1, 2, 3, 4, 5, 6, 15, 16].map((fc) => ({ value: String(fc), label: `FC${fc}` })),
-              ],
-              onChange(val) {
-                const functionCode = val?.target ? val.target.value : val
-                setFilters((p) => ({ ...p, functionCode }))
-              },
-            }),
-            el(CustomSelect, {
-              style: { minWidth: '95px', flex: '1' },
-              value: filters.status,
-              options: [
-                { value: '', label: '全部状态' },
-                { value: 'ok', label: '成功' },
-                { value: 'err', label: '失败' },
-              ],
-              onChange(val) {
-                const status = val?.target ? val.target.value : val
-                setFilters((p) => ({ ...p, status }))
-              },
-            }),
-            el(CustomSelect, {
-              style: { minWidth: '95px', flex: '1' },
-              value: filters.source,
-              options: [
-                { value: '', label: '全部来源' },
-                { value: 'manual', label: '用户' },
-                { value: 'polling', label: '自动刷新' },
-                { value: 'agent', label: 'Agent' },
-              ],
-              onChange(val) {
-                const source = val?.target ? val.target.value : val
-                setFilters((p) => ({ ...p, source }))
-              },
-            }),
-          )
-        : null,
+      el(FramesFilterToolbar, {
+        mode,
+        selection,
+        setSelection,
+        setPendingNew,
+        portOptions,
+        showFilters,
+        setShowFilters,
+        search,
+        setSearch,
+        filters,
+        setFilters,
+        devices,
+      }),
       serial.error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, formatErrorMessage(serial.error)) : null,
       error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, formatErrorMessage(error)) : null,
       copied ? el('div', { className: 'dvb-hint' }, copied) : null,
@@ -757,21 +560,9 @@ export function createFramesPage(React, t, post, hooks) {
           }
         },
       }),
-      (() => {
-        const f = filtered.find((row) => String(row.frameId || row.id) === String(selectedFrameId))
-        if (!f) return null
-        const srcLabel = f.source === 'agent' ? 'Agent' : f.source === 'polling' ? '自动刷新' : '用户'
-        return el(
-          'div',
-          { className: 'dvb-panel' },
-          el('div', { className: 'dvb-hint' }, `发送：${f.request || f.hex || ''}`),
-          f.response ? el('div', { className: 'dvb-hint' }, `接收：${f.response}`) : null,
-          el('div', { className: 'dvb-hint' }, `来源：${srcLabel}`),
-          el('div', { className: 'dvb-hint' }, `事务：${f.transactionId || f.frameId || ''}`),
-          f.sessionId ? el('div', { className: 'dvb-hint' }, `sessionId：${f.sessionId}`) : null,
-          f.toolCallId ? el('div', { className: 'dvb-hint' }, `toolCallId：${f.toolCallId}`) : null,
-        )
-      })(),
+      el(FramesDetailDrawer, {
+        frame: filtered.find((row) => String(row.frameId || row.id) === String(selectedFrameId)),
+      }),
       el(
         'div',
         { className: 'dvb-hint' },

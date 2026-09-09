@@ -9,8 +9,8 @@ export function renderBatchPanel(el, t, ctx) {
     size: 'sm',
     value: String(batch.fc),
     options: [
-      { value: '1', label: fnOptionLabel(t, 1) },
-      { value: '3', label: fnOptionLabel(t, 3) },
+      { value: '1', label: fnOptionLabel(t, 1), title: '01 线圈 (可读写)' },
+      { value: '3', label: fnOptionLabel(t, 3), title: '03 保持寄存器 (可读写)' },
     ],
     onChange: (val) => {
       const next = val?.target ? val.target.value : val
@@ -30,7 +30,7 @@ export function renderBatchPanel(el, t, ctx) {
         el('input', {
           className: 'dvb-input',
           value: batch.prefix,
-          placeholder: 'HR',
+          placeholder: '03',
           onChange: (event) => {
             setBatch((prev) => ({ ...prev, prefix: event.target.value }))
           },

@@ -141,9 +141,9 @@ export const modbusPoll = async (home, cwd, opts) => {
     pack = /** @type {ModbusWorkspace} */ (
       normalizeModbus({
         ...workspace.modbus,
-        connections: unionScopedConnections(workspace.modbus.connections, sc),
-        devices: unionScopedDevices(workspace.modbus.devices, sc),
-        points: unionScopedPoints(workspace.modbus.points, sc),
+        connections: unionScopedConnections(workspace.modbus.connections, sc, workspace.modbus.share),
+        devices: unionScopedDevices(workspace.modbus.devices, sc, workspace.modbus.share),
+        points: unionScopedPoints(workspace.modbus.points, sc, workspace.modbus.share),
       })
     )
   } else {

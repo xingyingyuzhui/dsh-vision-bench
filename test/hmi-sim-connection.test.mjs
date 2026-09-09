@@ -91,6 +91,11 @@ test('RPC connection/open and connection/close return simulated: true for sim co
   })
   assert.deepEqual(openRes, { ok: true, skipped: true, simulated: true })
 
+  let st = await listConnectionStates(home, cwd, { sessionId: 'test-session' })
+  assert.equal(st.connectionStates.length, 1)
+  assert.equal(st.connectionStates[0].status, 'connected')
+  assert.equal(st.connectionStates[0].simulated, true)
+
   const closeRes = await router.dispatch('connection/close', {
     cwd,
     connectionId: 'c1',
@@ -98,9 +103,9 @@ test('RPC connection/open and connection/close return simulated: true for sim co
   })
   assert.deepEqual(closeRes, { ok: true, skipped: true, simulated: true })
 
-  const st = await listConnectionStates(home, cwd, { sessionId: 'test-session' })
+  st = await listConnectionStates(home, cwd, { sessionId: 'test-session' })
   assert.equal(st.connectionStates.length, 1)
-  assert.equal(st.connectionStates[0].status, 'connected')
+  assert.equal(st.connectionStates[0].status, 'disconnected')
   assert.equal(st.connectionStates[0].simulated, true)
 
   await rm(home, { recursive: true, force: true })

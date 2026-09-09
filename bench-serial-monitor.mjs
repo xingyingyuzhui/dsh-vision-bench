@@ -41,6 +41,21 @@ export const listConnectedSerialSources = async (home, cwd, extra = {}) => {
   return { ok: true, sources }
 }
 
+const simConnectionStates = new Map()
+
+export const setSimConnectionState = (cwd, connectionId, status) => {
+  const key = `${String(cwd || '')}:${String(connectionId || '')}`
+  simConnectionStates.set(key, {
+    status: status === 'disconnected' ? 'disconnected' : 'connected',
+    connectedAt: status === 'disconnected' ? 0 : Date.now(),
+  })
+}
+
+export const getSimConnectionState = (cwd, connectionId) => {
+  const key = `${String(cwd || '')}:${String(connectionId || '')}`
+  return simConnectionStates.get(key) || null
+}
+
 // Task4/0.19.2: ALL configured RTU/TCP connections with their real live state
 // (disconnected/connecting/connected/disconnecting/error). TCP is included here
 // but never in serialSources.
@@ -60,16 +75,29 @@ export const listConnectionStates = async (home, cwd, extra = {}) => {
       : { connections: [] })
   const liveById = new Map(rows.map((r) => [r.connectionId, r]))
   const connectionStates = []
+
   for (const c of pack.connections || []) {
     if (!c || !c.conn) continue
     if (c.conn.sim === true || c.sim === true) {
+      const simSt = getSimConnectionState(cwd, c.id)
+      const pollCfg = (pack.pollingByConnection || {})[c.id]
+      const lv = liveById.get(c.id)
+      const isSimConnected =
+        c.enabled !== false &&
+        (simSt
+          ? simSt.status === 'connected'
+          : lv && lv.state === 'connected'
+            ? true
+            : pollCfg
+              ? pollCfg.enabled !== false
+              : true)
       connectionStates.push({
         connectionId: c.id,
         mode: c.conn.mode || 'rtu',
         endpoint: 'simulated',
-        status: c.enabled === false ? 'disconnected' : 'connected',
+        status: isSimConnected ? 'connected' : 'disconnected',
         error: '',
-        connectedAt: c.enabled === false ? 0 : Date.now(),
+        connectedAt: isSimConnected ? (simSt && simSt.connectedAt) || Date.now() : 0,
         connectionEpoch: 'sim',
         simulated: true,
       })

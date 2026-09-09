@@ -1,3 +1,4 @@
+import { getPreserveNavPreference } from '../../../bench-settings.mjs'
 import { sessionCwd } from '../common/session-scope.mjs'
 import { createAlarmPage } from '../monitor/alarms/alarm-page.mjs'
 import { createFramesPage } from '../monitor/frames/frames-page.mjs'
@@ -10,6 +11,12 @@ import { renderWorkspaceTabs } from './workspace-tabs.mjs'
 function initialSection(sessionId, cwd) {
   const nav = getNav(sessionId, cwd)
   if (nav && nav.viewId === VIEW_MONITOR && isMonitorSection(nav.section)) return nav.section
+  if (getPreserveNavPreference() && typeof window !== 'undefined' && window.sessionStorage) {
+    try {
+      const saved = window.sessionStorage.getItem(`dsh-vision-bench:last-monitor-section:${sessionId || cwd || ''}`)
+      if (saved && isMonitorSection(saved)) return saved
+    } catch {}
+  }
   return MONITOR_SECTIONS.VISUALIZATION
 }
 
@@ -62,6 +69,11 @@ export function createMonitorWorkspace(React, t, post, hooks) {
         onSelect(id) {
           setSection(id)
           navigate(sessionId, cwd, { viewId: VIEW_MONITOR, section: id }, { source: 'manual' })
+          if (getPreserveNavPreference() && typeof window !== 'undefined' && window.sessionStorage) {
+            try {
+              window.sessionStorage.setItem(`dsh-vision-bench:last-monitor-section:${sessionId || cwd || ''}`, id)
+            } catch {}
+          }
         },
       }),
       el('div', { className: 'dvb-ws-body' }, el(Page, props)),

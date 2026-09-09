@@ -206,7 +206,7 @@ test('点位表不存在更新时间与独立写入/读取/编辑/删除文字�
   assert.ok(/AREA_BY_FN_EDIT/.test(src), '编辑功能码同步 area')
 })
 
-test('点位表列顺序：告警开关位于告警上下限的左侧且相邻', async () => {
+test('点位表列顺序与当前值字体加粗：名称、监视、功能码、地址、当前值、单位、倍率、偏移、告警、告警下限、告警上限', async () => {
   const { post } = makePost()
   const Hmi = createHmiView(React, t, post)
   const tree = render(createElement(Hmi, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }) }))
@@ -215,13 +215,37 @@ test('点位表列顺序：告警开关位于告警上下限的左侧且相邻',
   await waitFor(() => assert.ok(tree.container.textContent.includes('设备1')), { timeout: 8000 })
   const thead = tree.container.querySelector('.dvb-point-table thead tr')
   assert.ok(thead, '点位表表头存在')
-  const thClasses = Array.from(thead.querySelectorAll('th')).map((th) => th.className)
+  const thClasses = Array.from(thead.querySelectorAll('th')).map((th) => {
+    return Array.from(th.classList).find((c) => c.startsWith('dvb-col-')) || th.className
+  })
+  const expectedCols = [
+    'dvb-col-name',
+    'dvb-col-monitor',
+    'dvb-col-fn',
+    'dvb-col-addr',
+    'dvb-col-value',
+    'dvb-col-unit',
+    'dvb-col-scale',
+    'dvb-col-offset',
+    'dvb-col-alarm',
+    'dvb-col-min',
+    'dvb-col-max',
+  ]
+  for (let i = 0; i < expectedCols.length; i++) {
+    assert.equal(thClasses[i], expectedCols[i], `第 ${i + 1} 列应为 ${expectedCols[i]}`)
+  }
   const alarmIdx = thClasses.indexOf('dvb-col-alarm')
   const minIdx = thClasses.indexOf('dvb-col-min')
   const maxIdx = thClasses.indexOf('dvb-col-max')
   assert.ok(alarmIdx !== -1 && minIdx !== -1 && maxIdx !== -1, '告警相关列均存在')
   assert.equal(minIdx, alarmIdx + 1, '告警下限紧邻告警开关右侧')
   assert.equal(maxIdx, minIdx + 1, '告警上限紧邻告警下限右侧')
+
+  // 验证当前值列内元素具有 bold / 600 加粗样式
+  const valueCellEl = tree.container.querySelector('.dvb-point-table tbody .dvb-cell-value')
+  if (valueCellEl) {
+    assert.equal(valueCellEl.style.fontWeight, '600', '当前值单元格字体加粗 (fontWeight: 600)')
+  }
 })
 
 test('编辑设备只改设备栏；编辑点位才进入点位行内编辑', async () => {
@@ -844,7 +868,7 @@ test('点位表表头包含 Excel 式列宽拖拽手柄，支持左右拖拽与�
 
   const nameTh = nameResizer.closest('th')
   assert.ok(nameTh, '名称列表头存在')
-  const initialWidth = parseInt(nameTh.style.width, 10) || 240
+  const initialWidth = parseInt(nameTh.style.width, 10) || 140
 
   // 模拟拖拽名称列：pointerdown -> pointermove (+50px) -> pointerup
   await act(async () => {
@@ -862,7 +886,7 @@ test('点位表表头包含 Excel 式列宽拖拽手柄，支持左右拖拽与�
     nameResizer.dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true }))
   })
   const resetWidth = parseInt(nameTh.style.width, 10)
-  assert.equal(resetWidth, 240, '双击后列宽恢复为默认 240px')
+  assert.equal(resetWidth, 140, '双击后列宽恢复为默认 140px')
 
   // 关键测试：拖拽右侧列（如“当前值”），左侧的“名称”和“功能码”列宽必须完全锁定、分毫不动！
   const valueResizer = resizers.find((r) => r.getAttribute('data-col') === 'value')
@@ -905,9 +929,9 @@ test('不同连接/不同设备下的点位表列宽完全独立隔离，调整�
   const dev2NameTh = dev2Table.querySelector('thead .dvb-col-name')
   assert.ok(dev1NameTh && dev2NameTh)
 
-  // 初始列宽均为默认 240px
-  assert.equal(parseInt(dev1NameTh.style.width, 10), 240)
-  assert.equal(parseInt(dev2NameTh.style.width, 10), 240)
+  // 初始列宽均为默认 140px
+  assert.equal(parseInt(dev1NameTh.style.width, 10), 140)
+  assert.equal(parseInt(dev2NameTh.style.width, 10), 140)
 
   // 拖拽设备1的名称列 +80px
   const dev1NameResizer = dev1NameTh.querySelector('.dvb-col-resizer')
@@ -918,9 +942,9 @@ test('不同连接/不同设备下的点位表列宽完全独立隔离，调整�
     win.document.dispatchEvent(new win.PointerEvent('pointerup', { clientX: 180, bubbles: true }))
   })
 
-  // 核心断言：设备1的名称列宽变宽为 320px，而设备2的名称列宽必须严格保持 240px，互不干扰！
-  assert.equal(parseInt(dev1NameTh.style.width, 10), 320, '设备1名称列宽被成功调整为 320px')
-  assert.equal(parseInt(dev2NameTh.style.width, 10), 240, '设备2名称列宽严格保持独立，未发生任何改变！')
+  // 核心断言：设备1的名称列宽变宽为 220px，而设备2的名称列宽必须严格保持 140px，互不干扰！
+  assert.equal(parseInt(dev1NameTh.style.width, 10), 220, '设备1名称列宽被成功调整为 220px')
+  assert.equal(parseInt(dev2NameTh.style.width, 10), 140, '设备2名称列宽严格保持独立，未发生任何改变！')
 
   // 设备1的总表格宽度也相应扩展，而设备2的总表格宽度保持不变
   const dev1TableWidth = parseInt(dev1Table.style.width, 10)

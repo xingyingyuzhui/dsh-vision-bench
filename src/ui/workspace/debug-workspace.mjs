@@ -1,3 +1,4 @@
+import { getPreserveNavPreference } from '../../../bench-settings.mjs'
 import { createDebugView } from '../../../bench-view.mjs'
 import { sessionCwd } from '../common/session-scope.mjs'
 import { createMapView } from '../debug/project/project-page.mjs'
@@ -9,6 +10,12 @@ import { renderWorkspaceTabs } from './workspace-tabs.mjs'
 function initialSection(sessionId, cwd) {
   const nav = getNav(sessionId, cwd)
   if (nav && nav.viewId === VIEW_DEBUG && isDebugSection(nav.section)) return nav.section
+  if (getPreserveNavPreference() && typeof window !== 'undefined' && window.sessionStorage) {
+    try {
+      const saved = window.sessionStorage.getItem(`dsh-vision-bench:last-debug-section:${sessionId || cwd || ''}`)
+      if (saved && isDebugSection(saved)) return saved
+    } catch {}
+  }
   return DEBUG_SECTIONS.WORKBENCH
 }
 
@@ -54,6 +61,11 @@ export function createDebugWorkspace(React, t, post) {
         onSelect(id) {
           setSection(id)
           navigate(sessionId, cwd, { viewId: VIEW_DEBUG, section: id }, { source: 'manual' })
+          if (getPreserveNavPreference() && typeof window !== 'undefined' && window.sessionStorage) {
+            try {
+              window.sessionStorage.setItem(`dsh-vision-bench:last-debug-section:${sessionId || cwd || ''}`, id)
+            } catch {}
+          }
         },
       }),
       el(

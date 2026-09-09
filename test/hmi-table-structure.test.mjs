@@ -12,10 +12,11 @@ const hmi = readdirSync(hmiDir)
   .join('\n')
 
 test('连接表表头为四列：名称|角色|端点/状态|操作', async () => {
-  assert.match(hmi, /el\('th',\s*null,\s*'名称'\)/)
-  assert.match(hmi, /el\('th',\s*null,\s*t\('role'\)\s*\|\|\s*'角色'\)/)
-  assert.match(hmi, /el\('th',\s*null,\s*'端点\/状态'\)/)
-  assert.match(hmi, /el\('th',\s*null,\s*'操作'\)/)
+  assert.match(hmi, /renderConnectionThead/)
+  assert.match(hmi, /renderTh\('name',\s*'名称'\)/)
+  assert.match(hmi, /renderTh\('role',\s*t\('role'\)\s*\|\|\s*'角色'\)/)
+  assert.match(hmi, /renderTh\('endpoint',\s*'端点\/状态'\)/)
+  assert.match(hmi, /renderTh\('actions',\s*'操作'\)/)
 })
 
 test('设备工具栏顺序：常态为 编辑点位→导入→导出→AI（已移除单次读取）；编辑态为 添加点位→批量添加→保存→取消', async () => {

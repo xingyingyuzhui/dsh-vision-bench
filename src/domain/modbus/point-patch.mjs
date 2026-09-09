@@ -1,7 +1,10 @@
 // @ts-check
+import { AREA_BY_FN, FN_BY_AREA, VALID_AREAS } from './point-model.mjs'
+
 const PATCHABLE = new Set([
   'name',
   'function',
+  'area',
   'address',
   'scale',
   'offset',
@@ -40,6 +43,16 @@ export function applyPointPatch(existingPoint, patch) {
     if (Object.prototype.hasOwnProperty.call(src, key) && src[key] !== undefined) {
       next[key] = src[key]
     }
+  }
+  if (src.function !== undefined) {
+    const fn = Math.trunc(Number(src.function))
+    if ([1, 2, 3, 4].includes(fn)) {
+      next.function = fn
+      next.area = AREA_BY_FN[fn]
+    }
+  } else if (src.area !== undefined && VALID_AREAS.has(src.area)) {
+    next.area = src.area
+    next.function = FN_BY_AREA[src.area]
   }
   if (src.monitorEnabled !== undefined) {
     next.monitorEnabled = src.monitorEnabled === true

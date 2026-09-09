@@ -257,3 +257,112 @@ test('Task11/0.20.1: 组件类型-功能码约束（line/bar 仅数值型，valu
   assert.equal(sBad.ok, false)
   assert.equal(sBad.errorCode, 'VIZ_POINT_TYPE_UNSUPPORTED')
 })
+
+test('X/Y 轴设置规范化与校验 (yMin/yMax 范围)', async () => {
+  const allPts = pts([{ id: 'hr', function: 3, monitorEnabled: true }])
+  // 正常传入 yMin, yMax
+  const c1 = normalizeVisualizationComponent({
+    type: 'line',
+    pointIds: ['hr'],
+    settings: { yMin: '10.5', yMax: 50, windowMs: 60000 },
+  })
+  assert.equal(c1.settings.yMin, 10.5)
+  assert.equal(c1.settings.yMax, 50)
+  assert.equal(c1.settings.windowMs, 60000)
+  const v1 = validateVisualizationComponent(c1, allPts)
+  assert.equal(v1.ok, true)
+
+  // yMin >= yMax 校验失败
+  const c2 = normalizeVisualizationComponent({
+    type: 'line',
+    pointIds: ['hr'],
+    settings: { yMin: 100, yMax: 50 },
+  })
+  const v2 = validateVisualizationComponent(c2, allPts)
+  assert.equal(v2.ok, false)
+  assert.match(v2.error, /Y轴最小值必须小于最大值/)
+
+  // 留空/无效字符规范化为不设
+  const c3 = normalizeVisualizationComponent({
+    type: 'line',
+    pointIds: ['hr'],
+    settings: { yMin: '', yMax: null, yInterval: '0' },
+  })
+  assert.equal(c3.settings.yMin, undefined)
+  assert.equal(c3.settings.yMax, undefined)
+  assert.equal(c3.settings.yInterval, undefined)
+
+  // 正常传入 yInterval
+  const c4 = normalizeVisualizationComponent({
+    type: 'line',
+    pointIds: ['hr'],
+    settings: { yMin: 0, yMax: 100, yInterval: '10' },
+  })
+  assert.equal(c4.settings.yInterval, 10)
+  const v4 = validateVisualizationComponent(c4, allPts)
+  assert.equal(v4.ok, true)
+
+  // yInterval <= 0 校验失败
+  const c5 = {
+    type: 'line',
+    pointIds: ['hr'],
+    settings: { yInterval: -5 },
+  }
+  const v5 = validateVisualizationComponent(c5, allPts)
+  assert.equal(v5.ok, false)
+  assert.match(v5.error, /Y轴刻度必须为大于0的数字/)
+
+  // 扩展选项：yUnit, showGrid, smooth, showLegend
+  const c6 = normalizeVisualizationComponent({
+    type: 'line',
+    pointIds: ['hr'],
+    settings: { yUnit: ' ℃ ', showGrid: false, smooth: false, showLegend: false },
+  })
+  assert.equal(c6.settings.yUnit, '℃')
+  assert.equal(c6.settings.showGrid, false)
+  assert.equal(c6.settings.smooth, false)
+  assert.equal(c6.settings.showLegend, false)
+
+  // X/Y 轴高级刻度、次刻度、颜色与文字标记配置规范化
+  const c7 = normalizeVisualizationComponent({
+    type: 'line',
+    pointIds: ['hr'],
+    settings: {
+      xSplitNumber: '8',
+      xTickLength: 6,
+      xMinorTick: true,
+      xMinorSplit: 4,
+      xMinorLength: 3,
+      xAxisColor: '#4f8ef7',
+      xShowGrid: true,
+      xGridColor: 'rgba(255,0,0,0.2)',
+      xShowLabel: true,
+      xLabelSize: 12,
+      xScaleType: 'count',
+      ySplitNumber: 5,
+      yTickLength: 5,
+      yMinorTick: false,
+      yAxisColor: '#333333',
+      yShowLabel: true,
+      yLabelSize: 10,
+    },
+  })
+  assert.equal(c7.settings.xSplitNumber, 8)
+  assert.equal(c7.settings.xTickLength, 6)
+  assert.equal(c7.settings.xMinorTick, true)
+  assert.equal(c7.settings.xMinorSplit, 4)
+  assert.equal(c7.settings.xMinorLength, 3)
+  assert.equal(c7.settings.xAxisColor, '#4f8ef7')
+  assert.equal(c7.settings.xShowGrid, true)
+  assert.equal(c7.settings.xGridColor, 'rgba(255,0,0,0.2)')
+  assert.equal(c7.settings.xShowLabel, true)
+  assert.equal(c7.settings.xLabelSize, 12)
+  assert.equal(c7.settings.xScaleType, 'count')
+  assert.equal(c7.settings.ySplitNumber, 5)
+  assert.equal(c7.settings.yTickLength, 5)
+  assert.equal(c7.settings.yMinorTick, false)
+  assert.equal(c7.settings.yAxisColor, '#333333')
+  assert.equal(c7.settings.yShowLabel, true)
+  assert.equal(c7.settings.yLabelSize, 10)
+})
+

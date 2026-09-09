@@ -33,6 +33,7 @@ import {
   listConnectedSerialSources,
   listConnectionStates,
   openConnectionLink,
+  setSimConnectionState,
 } from '../../../bench-serial-monitor.mjs'
 import { listSerialPorts } from '../../../bench-serial.mjs'
 import {
@@ -529,7 +530,11 @@ export function createVisionRpcRouter(deps) {
           (/** @type {{ id: string }} */ c) => c.id === (body.connectionId || body.connId),
         )
         if (!conn) return { ok: false, error: '连接不存在' }
-        if (conn.conn?.sim || conn.sim) return { ok: true, skipped: true, simulated: true }
+        if (conn.conn?.sim || conn.sim) {
+          setSimConnectionState(cwd, conn.id, 'connected')
+          await startPolling(home, cwd, { connectionId: conn.id })
+          return { ok: true, skipped: true, simulated: true }
+        }
         return openConnectionLink(cwd, { connectionId: conn.id, endpoint: toEndpoint(conn) })
       }
       case 'connection/close': {
@@ -543,6 +548,8 @@ export function createVisionRpcRouter(deps) {
           (/** @type {{ id: string }} */ c) => c.id === (body.connectionId || body.connId),
         )
         if (conn && (conn.conn?.sim || conn.sim)) {
+          setSimConnectionState(cwd, conn.id, 'disconnected')
+          await stopPolling(home, cwd, { connectionId: conn.id })
           return { ok: true, skipped: true, simulated: true }
         }
         return closeConnectionLink(cwd, body && typeof body === 'object' ? body.connectionId || body.connId : undefined)

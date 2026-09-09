@@ -57,9 +57,27 @@ const simRaw = (batch, fc = 3) => {
   return Array.from({ length: batch.count }, (_, i) => {
     const addr = Number(batch.address || 0) + i
     if (fc === 1 || fc === 2) {
-      return (Math.floor(tick / 3) + addr) % 2 === 0 ? 1 : 0
+      return (Math.floor(tick / 4) + addr) % 2 === 0 ? 1 : 0
     }
-    return (addr * 10 + tick) & 0xffff
+    if (addr === 0) {
+      // Temperature ~ 25.0 C (with scale 0.1 -> raw ~ 250)
+      return Math.round(250 + 15 * Math.sin(tick * 0.1 + addr))
+    }
+    if (addr === 1) {
+      // Pressure ~ 0.50 MPa (with scale 0.01 -> raw ~ 50)
+      return Math.round(50 + 8 * Math.sin(tick * 0.12 + addr))
+    }
+    if (addr === 2) {
+      // Liquid level ~ 60 % (with scale 1 -> raw ~ 60)
+      return Math.round(60 + 12 * Math.sin(tick * 0.08 + addr))
+    }
+    if (addr === 3) {
+      // Valve opening ~ 50 % (with scale 1 -> raw ~ 50)
+      return Math.round(50 + 15 * Math.sin(tick * 0.15 + addr))
+    }
+    const base = ((addr * 43 + 120) % 500) + 50
+    const delta = Math.round((base * 0.06 + 5) * Math.sin(tick * 0.1 + addr))
+    return Math.max(0, Math.min(65535, base + delta))
   })
 }
 

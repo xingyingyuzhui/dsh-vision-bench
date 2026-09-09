@@ -517,3 +517,63 @@ test('未来 schema 进入只读模式：可查看、不可改、不发写请求
   assert.equal(base.state().visualization.schemaVersion, 9)
   tree.unmount()
 })
+
+test('画布编辑模式切换：点击「编辑画布」解锁网格，点击「完成编辑」立即提交并恢复锁定', async () => {
+  const mbWithComp = {
+    ...MB,
+    visualization: {
+      schemaVersion: 2,
+      components: [
+        {
+          id: 'c1',
+          name: '温度曲线',
+          type: 'line',
+          pointIds: ['p1'],
+          layout: { x: 0, y: 0, w: 6, h: 4 },
+        },
+      ],
+    },
+  }
+  const { post } = makePost(mbWithComp)
+  const Viz = createVisualizationPage(React, t, post, {})
+  const tree = render(
+    createElement(Viz, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
+  )
+  await waitFor(() => assert.ok(tree.container.textContent.includes('温度曲线')), { timeout: 6000 })
+
+  const grid = tree.container.querySelector('.dvb-viz-grid')
+  assert.ok(grid, '网格存在')
+  assert.equal(grid.getAttribute('data-editing'), 'false', '初始为浏览模式（锁定）')
+
+  const editCanvasBtn = Array.from(tree.container.querySelectorAll('button')).find((b) =>
+    b.textContent.includes('编辑画布'),
+  )
+  assert.ok(editCanvasBtn, '存在编辑画布按钮')
+  assert.equal(editCanvasBtn.textContent.trim(), '编辑画布', '无铅笔图标')
+
+  // 点击「编辑画布」
+  await act(async () => {
+    editCanvasBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+
+  await waitFor(() => assert.equal(grid.getAttribute('data-editing'), 'true'), { timeout: 4000 })
+  assert.ok(tree.container.textContent.includes('画布编辑中'), '显示编辑中标识')
+
+  const finishBtn = Array.from(tree.container.querySelectorAll('button')).find((b) =>
+    b.textContent.includes('完成编辑'),
+  )
+  assert.ok(finishBtn, '切换为完成编辑按钮')
+  assert.equal(finishBtn.textContent.trim(), '完成编辑', '无钩图标')
+
+  // 点击「完成编辑」
+  await act(async () => {
+    finishBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+
+  await waitFor(() => assert.equal(grid.getAttribute('data-editing'), 'false'), { timeout: 4000 })
+  assert.ok(tree.container.textContent.includes('编辑画布'), '按钮恢复为编辑画布')
+  assert.equal(tree.container.textContent.includes('画布布局已保存'), false, '不显示画布布局已保存提示')
+
+  tree.unmount()
+})
+

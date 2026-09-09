@@ -54,7 +54,7 @@ export function renderLineRenderer(el, spec) {
               if (node && ensureChart) ensureChart(node, comp)
             },
             className: 'dvb-viz-uplot dvb-viz-chart',
-            style: { width: '100%', height: '100%', minHeight: '150px' },
+            style: { width: '100%', height: '100%', minHeight: '120px', flex: 1 },
           })
         : el('div', { className: 'dvb-hint' }, t('vizWaitingSamples') || '暂无历史样本，等待采集…'),
   )

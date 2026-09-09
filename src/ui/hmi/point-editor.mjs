@@ -1,22 +1,24 @@
 import { renderCustomSelect } from '../components/custom-select.mjs'
-import { fnOptionLabel } from './hmi-ids.mjs'
+import { AREA_BY_FN_EDIT, fnOptionLabel } from './hmi-ids.mjs'
 import { renderFlagSwitch } from './point-flags.mjs'
 
 /** New-point draft row inside a device table. */
 export function renderNewPointRow(el, t, ctx) {
   const { newPointDraft, setNewPointDraft, cwd, saveNewPointDraft, CustomSelect } = ctx
   const fcSelectProps = {
+    id: 'dvb-fc-new',
     size: 'sm',
     value: String(newPointDraft.function),
     options: [
-      { value: '1', label: fnOptionLabel(t, 1) },
-      { value: '2', label: fnOptionLabel(t, 2) },
-      { value: '3', label: fnOptionLabel(t, 3) },
-      { value: '4', label: fnOptionLabel(t, 4) },
+      { value: '1', label: fnOptionLabel(t, 1), title: '01 线圈 (可读写)' },
+      { value: '2', label: fnOptionLabel(t, 2), title: '02 离散输入 (只读)' },
+      { value: '3', label: fnOptionLabel(t, 3), title: '03 保持寄存器 (可读写)' },
+      { value: '4', label: fnOptionLabel(t, 4), title: '04 输入寄存器 (只读)' },
     ],
     onChange: (val) => {
       const next = val?.target ? val.target.value : val
-      setNewPointDraft((prev) => ({ ...prev, function: Number(next) }))
+      const fn = Number(next)
+      setNewPointDraft((prev) => ({ ...prev, function: fn, area: AREA_BY_FN_EDIT[fn] }))
     },
   }
   const fcSelectNode = CustomSelect ? el(CustomSelect, fcSelectProps) : renderCustomSelect(el, fcSelectProps)
@@ -32,6 +34,15 @@ export function renderNewPointRow(el, t, ctx) {
         placeholder: t('ptNamePh'),
         value: newPointDraft.name,
         onChange: (e) => setNewPointDraft((prev) => ({ ...prev, name: e.target.value })),
+      }),
+    ),
+    el(
+      'td',
+      { className: 'dvb-col-monitor' },
+      renderFlagSwitch(el, t, {
+        checked: newPointDraft.monitorEnabled === true,
+        title: '开启后成为可视化数据源',
+        onToggle: (next) => setNewPointDraft((prev) => ({ ...prev, monitorEnabled: next })),
       }),
     ),
     el('td', { className: 'dvb-col-fn' }, fcSelectNode),
@@ -50,11 +61,11 @@ export function renderNewPointRow(el, t, ctx) {
     el('td', { className: 'dvb-col-value' }, '—'),
     el(
       'td',
-      { className: 'dvb-col-monitor' },
-      renderFlagSwitch(el, t, {
-        checked: newPointDraft.monitorEnabled === true,
-        title: '开启后成为可视化数据源',
-        onToggle: (next) => setNewPointDraft((prev) => ({ ...prev, monitorEnabled: next })),
+      { className: 'dvb-col-unit' },
+      el('input', {
+        className: 'dvb-input',
+        value: newPointDraft.unit,
+        onChange: (e) => setNewPointDraft((prev) => ({ ...prev, unit: e.target.value })),
       }),
     ),
     el(
@@ -77,15 +88,6 @@ export function renderNewPointRow(el, t, ctx) {
         step: 'any',
         value: newPointDraft.offset,
         onChange: (e) => setNewPointDraft((prev) => ({ ...prev, offset: Number(e.target.value) })),
-      }),
-    ),
-    el(
-      'td',
-      { className: 'dvb-col-unit' },
-      el('input', {
-        className: 'dvb-input',
-        value: newPointDraft.unit,
-        onChange: (e) => setNewPointDraft((prev) => ({ ...prev, unit: e.target.value })),
       }),
     ),
     el(

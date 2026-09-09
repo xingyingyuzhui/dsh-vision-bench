@@ -1,3 +1,5 @@
+import { renderCancelButton, renderSaveButton } from '../components/save-cancel-buttons.mjs'
+
 /** Add/edit device form panel. */
 export function renderDeviceForm(el, t, ctx) {
   const { field, devForm, setDevForm, activeConnId, activeConnObj, cwd, saveDeviceForm } = ctx
@@ -15,17 +17,13 @@ export function renderDeviceForm(el, t, ctx) {
           ' · ' +
           (activeConnObj ? activeConnObj.name : ''),
       ),
-      el(
-        'button',
-        {
-          type: 'button',
-          className: 'dvb-btn',
-          onClick() {
-            setDevForm((p) => ({ ...p, open: false }))
-          },
+      renderCancelButton(el, t, {
+        size: 'sm',
+        text: t('csvCancel') || '取消',
+        onClick() {
+          setDevForm((p) => ({ ...p, open: false }))
         },
-        t('csvCancel'),
-      ),
+      }),
     ),
     el(
       'div',
@@ -54,11 +52,12 @@ export function renderDeviceForm(el, t, ctx) {
           },
         }),
       ),
-      el(
-        'button',
-        { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick: saveDeviceForm },
-        t('savePoint') || '保存',
-      ),
+      renderSaveButton(el, t, {
+        size: 'sm',
+        disabled: !cwd,
+        onClick: saveDeviceForm,
+        text: '保存',
+      }),
     ),
   )
 }

@@ -1,12 +1,12 @@
 export const DEFAULT_POINT_COL_WIDTHS = {
-  name: 240,
-  fn: 70,
-  addr: 75,
-  value: 100,
+  name: 140,
   monitor: 70,
+  fn: 70,
+  addr: 55,
+  value: 100,
+  unit: 75,
   scale: 80,
   offset: 70,
-  unit: 75,
   alarm: 70,
   min: 85,
   max: 85,
@@ -15,13 +15,13 @@ export const DEFAULT_POINT_COL_WIDTHS = {
 
 export const MIN_POINT_COL_WIDTHS = {
   name: 100,
-  fn: 48,
-  addr: 48,
-  value: 60,
   monitor: 50,
+  fn: 48,
+  addr: 40,
+  value: 60,
+  unit: 50,
   scale: 50,
   offset: 50,
-  unit: 50,
   alarm: 50,
   min: 55,
   max: 55,
@@ -61,12 +61,18 @@ export function loadAllPointColWidths() {
         const parsed = JSON.parse(saved)
         if (parsed && typeof parsed === 'object') {
           if (typeof parsed.name === 'number' || typeof parsed.value === 'number') {
-            return { default: sanitizePointColWidths(parsed) }
+            const sanitized = sanitizePointColWidths(parsed)
+            if (sanitized.name === 240) sanitized.name = DEFAULT_POINT_COL_WIDTHS.name
+            if (sanitized.addr === 75) sanitized.addr = DEFAULT_POINT_COL_WIDTHS.addr
+            return { default: sanitized }
           }
           const map = {}
           for (const [k, v] of Object.entries(parsed)) {
             if (v && typeof v === 'object') {
-              map[k] = sanitizePointColWidths(v)
+              const sanitized = sanitizePointColWidths(v)
+              if (sanitized.name === 240) sanitized.name = DEFAULT_POINT_COL_WIDTHS.name
+              if (sanitized.addr === 75) sanitized.addr = DEFAULT_POINT_COL_WIDTHS.addr
+              map[k] = sanitized
             }
           }
           return map

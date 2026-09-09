@@ -221,6 +221,9 @@ const vizClampInt = (v, fallback, min, max) => {
   return i
 }
 
+const vizNum = (v, min) =>
+  v != null && v !== '' && Number.isFinite(Number(v)) && (min === undefined || Number(v) > min) ? Number(v) : undefined
+
 export const normalizeVisualizationComponent = (input, index = 0) => {
   const raw = input && typeof input === 'object' ? input : {}
   const type = COMPONENT_TYPES.has(raw.type) ? raw.type : 'line'
@@ -230,6 +233,11 @@ export const normalizeVisualizationComponent = (input, index = 0) => {
       .trim()
       .slice(0, MAX_COMPONENT_NAME) || '未命名组件'
   const settings = raw.settings && typeof raw.settings === 'object' ? raw.settings : {}
+  const cleanSettings = {}
+  for (const [k, v] of Object.entries(settings)) {
+    if (v === '' || v == null || ['yMin', 'yMax', 'yInterval', 'yUnit'].includes(k)) continue
+    cleanSettings[k] = /Number|Length|Split|Size$/.test(k) && Number.isFinite(Number(v)) ? Number(v) : v
+  }
   const windowMs = vizClampInt(settings.windowMs, 300000, 10000, 3600000)
   return {
     id,
@@ -238,8 +246,16 @@ export const normalizeVisualizationComponent = (input, index = 0) => {
     pointIds: vizIds(raw.pointIds),
     order: vizClampInt(raw.order, 0, 0, 1024),
     settings: {
+      ...cleanSettings,
       windowMs,
       confirmWrite: settings.confirmWrite !== false,
+      ...(vizNum(settings.yMin) != null ? { yMin: vizNum(settings.yMin) } : {}),
+      ...(vizNum(settings.yMax) != null ? { yMax: vizNum(settings.yMax) } : {}),
+      ...(vizNum(settings.yInterval, 0) != null ? { yInterval: vizNum(settings.yInterval, 0) } : {}),
+      ...(settings.yUnit ? { yUnit: String(settings.yUnit).trim().slice(0, 16) } : {}),
+      ...(settings.showGrid !== undefined ? { showGrid: settings.showGrid !== false } : {}),
+      ...(settings.smooth !== undefined ? { smooth: settings.smooth !== false } : {}),
+      ...(settings.showLegend !== undefined ? { showLegend: settings.showLegend !== false } : {}),
     },
     layout: normalizeComponentLayout(raw.layout, index, type),
   }
@@ -285,6 +301,21 @@ export const validateVisualizationComponent = (component, points) => {
     }
   }
   if (notMonitored.length) return { ok: false, error: '以下点位未开启监视: ' + notMonitored.join(', ') }
+  if (
+    c.settings &&
+    c.settings.yMin != null &&
+    c.settings.yMax != null &&
+    Number(c.settings.yMin) >= Number(c.settings.yMax)
+  ) {
+    return { ok: false, error: 'Y轴最小值必须小于最大值' }
+  }
+  if (
+    c.settings &&
+    c.settings.yInterval != null &&
+    (Number(c.settings.yInterval) <= 0 || !Number.isFinite(Number(c.settings.yInterval)))
+  ) {
+    return { ok: false, error: 'Y轴刻度必须为大于0的数字' }
+  }
   return { ok: true }
 }
 
@@ -320,6 +351,8 @@ export const monitoredPointOptions = (pack) => {
       name: p.name || String(p.id),
       connectionId: p.connectionId,
       deviceId: p.deviceId,
+      deviceName: (dev && dev.name) || p.deviceId || '',
+      connectionName: (conn && conn.name) || p.connectionId || '',
       path:
         ((conn && conn.name) || p.connectionId) +
         ' / ' +

@@ -24,7 +24,7 @@ export function createHmiLiveActions(ctx, core) {
 
   async function refreshConnectionState() {
     if (!cwd) return
-    const data = await post('/dsh-vision-bench/state', { cwd })
+    const data = await post('/dsh-vision-bench/state', { cwd, sessionId })
     if (Array.isArray(data?.connectionStates)) setConnectionStates(data.connectionStates)
     if (data?.workspace?.modbus) {
       setWorkspace((prev) => {
@@ -244,18 +244,41 @@ export function createHmiLiveActions(ctx, core) {
       .finally(() => setLinkBusy(''))
   }
 
-  function toggleSim() {
+  async function toggleSim() {
     const pack = normalizePack()
     const connectionId = pack.activeConnectionId
     if (!connectionId) return
-    persist({
-      connections: (pack.connections || []).map((connection) =>
-        connection.id === connectionId
-          ? { ...connection, conn: { ...(connection.conn || {}), sim: !derived().sim, slave: undefined } }
-          : connection,
-      ),
-      version: 3,
-    })
+    const nextSim = !derived().sim
+    setLinkBusy(connectionId)
+    try {
+      await persist({
+        connections: (pack.connections || []).map((connection) =>
+          connection.id === connectionId
+            ? { ...connection, conn: { ...(connection.conn || {}), sim: nextSim, slave: undefined } }
+            : connection,
+        ),
+        pollingByConnection: {
+          ...(pack.pollingByConnection || {}),
+          [connectionId]: {
+            ...(pack.pollingByConnection?.[connectionId] || {}),
+            enabled: nextSim,
+          },
+        },
+        version: 3,
+      })
+      if (nextSim) {
+        await post('/dsh-vision-bench/connection/open', { cwd, sessionId, connectionId }, 15000).catch(() => {})
+        await post('/dsh-vision-bench/polling/start', { cwd, sessionId, connectionId, intervalMs: 1000 }, 15000).catch(() => {})
+      } else {
+        await post('/dsh-vision-bench/polling/stop', { cwd, sessionId, connectionId }, 15000).catch(() => {})
+        await post('/dsh-vision-bench/connection/close', { cwd, sessionId, connectionId }, 15000).catch(() => {})
+      }
+      await refreshConnectionState()
+    } catch (err) {
+      setError(String(err?.message || t('fail')))
+    } finally {
+      setLinkBusy('')
+    }
   }
 
   function toggleCollection() {

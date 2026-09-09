@@ -1,3 +1,5 @@
+import { renderSaveCancelGroup } from '../components/save-cancel-buttons.mjs'
+
 /** CSV import panel scoped to one device. */
 export function renderCsvPanel(el, t, ctx) {
   const { d, csvTarget, setCsvTarget, csvText, setCsvText, importCsv } = ctx
@@ -50,25 +52,16 @@ export function renderCsvPanel(el, t, ctx) {
         setCsvText(event.target.value)
       },
     }),
-    el(
-      'div',
-      { className: 'dvb-actions' },
-      el(
-        'button',
-        { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !csvText.trim(), onClick: importCsv },
-        t('csvApply'),
-      ),
-      el(
-        'button',
-        {
-          type: 'button',
-          className: 'dvb-btn',
-          onClick() {
-            setCsvTarget((p) => ({ ...p, open: false }))
-          },
-        },
-        t('csvCancel'),
-      ),
-    ),
+    renderSaveCancelGroup(el, t, {
+      onCancel() {
+        setCsvTarget((p) => ({ ...p, open: false }))
+      },
+      onSave: importCsv,
+      saveText: t('csvApply') || '确认导入',
+      cancelText: t('csvCancel') || '取消',
+      saveDisabled: !csvText.trim(),
+      size: 'sm',
+      gap: 8,
+    }),
   )
 }

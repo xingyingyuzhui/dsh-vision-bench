@@ -5,7 +5,7 @@ export function renderBarRenderer(el, { latest, comp, ensureChart }) {
         if (node) ensureChart(node, comp, latest)
       },
       className: 'dvb-viz-chart dvb-viz-bar-chart',
-      style: { width: '100%', height: '100%', minHeight: '140px' },
+      style: { width: '100%', height: '100%', minHeight: '120px', flex: 1 },
     })
   }
   const nums = latest.map((l) => (l.ok && l.value != null && Number.isFinite(Number(l.value)) ? Number(l.value) : null))

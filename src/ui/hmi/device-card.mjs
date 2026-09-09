@@ -5,6 +5,7 @@ import { renderCsvPanel } from './csv-transfer.mjs'
 import { renderNewPointRow } from './point-editor.mjs'
 import { renderPointRow } from './point-row.mjs'
 import { renderPointThead } from './point-table.mjs'
+import { renderCancelButton, renderSaveButton } from '../components/save-cancel-buttons.mjs'
 
 /** Device cards panel with nested point tables. */
 export function renderDeviceCards(el, t, ctx) {
@@ -80,10 +81,10 @@ export function renderDeviceCards(el, t, ctx) {
 
   return el(
     'div',
-    { className: 'dvb-panel' },
+    { className: 'dvb-dev-section' },
     el(
       'div',
-      { className: 'dvb-panel-head' },
+      { className: 'dvb-panel-head dvb-dev-section-head' },
       el('span', { className: 'dvb-panel-title' }, '设备 · ' + (activeConnObj ? activeConnObj.name : '')),
       isSimulated ? el('span', { className: 'dvb-badge', 'data-kind': 'live' }, '仿真') : null,
       el(
@@ -199,29 +200,21 @@ export function renderDeviceCards(el, t, ctx) {
                       value: deviceDraft?.unitId || d.unitId,
                       onChange: (e) => setDeviceDraft((prev) => ({ ...prev, unitId: Number(e.target.value) })),
                     }),
-                    el(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'dvb-btn dvb-btn-sm dvb-btn-primary',
-                        disabled: !!busy,
-                        onClick() {
-                          saveDeviceEdit(d)
-                        },
+                    renderCancelButton(el, t, {
+                      size: 'sm',
+                      onClick() {
+                        cancelDeviceEdit()
                       },
-                      t('devSave') || '保存',
-                    ),
-                    el(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'dvb-btn dvb-btn-sm',
-                        onClick() {
-                          cancelDeviceEdit()
-                        },
+                      text: t('csvCancel') || '取消',
+                    }),
+                    renderSaveButton(el, t, {
+                      size: 'sm',
+                      disabled: !!busy,
+                      onClick() {
+                        saveDeviceEdit(d)
                       },
-                      t('csvCancel') || '取消',
-                    ),
+                      text: t('devSave') || '保存',
+                    }),
                     el(
                       'button',
                       {
@@ -300,29 +293,21 @@ export function renderDeviceCards(el, t, ctx) {
                         },
                         batchOpen ? '收起批量' : t('batchAdd') || '批量添加',
                       ),
-                      el(
-                        'button',
-                        {
-                          type: 'button',
-                          className: 'dvb-btn dvb-btn-sm dvb-btn-primary',
-                          disabled: !!busy,
-                          onClick() {
-                            savePointsEdit(d)
-                          },
+                      renderCancelButton(el, t, {
+                        size: 'sm',
+                        onClick() {
+                          cancelPointsEdit()
                         },
-                        t('ptSave') || '保存',
-                      ),
-                      el(
-                        'button',
-                        {
-                          type: 'button',
-                          className: 'dvb-btn dvb-btn-sm',
-                          onClick() {
-                            cancelPointsEdit()
-                          },
+                        text: t('csvCancel') || '取消',
+                      }),
+                      renderSaveButton(el, t, {
+                        size: 'sm',
+                        disabled: !!busy,
+                        onClick() {
+                          savePointsEdit(d)
                         },
-                        t('csvCancel') || '取消',
-                      ),
+                        text: t('ptSave') || '保存',
+                      }),
                     )
                   : el(
                       'div',

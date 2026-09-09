@@ -20,8 +20,14 @@ export function createVizGrid(React) {
     const syncingRef = React.useRef(false)
     const readOnlyRef = React.useRef(props.readOnly === true)
     readOnlyRef.current = props.readOnly === true
+    const isEditable =
+      props.editing !== undefined ? props.editing === true && props.readOnly !== true : props.readOnly !== true
+    const isEditableRef = React.useRef(isEditable)
+    isEditableRef.current = isEditable
     const items = Array.isArray(props.items) ? props.items : []
     const signature = layoutSignature(items)
+    const maxRow = items.reduce((m, it) => Math.max(m, (it.y || 0) + (it.h || 4)), 0)
+    const editMinRow = isEditable ? Math.max(maxRow + 8, 16) : 0
 
     useLayout(() => {
       const GridStack = getGridStack()
@@ -32,19 +38,20 @@ export function createVizGrid(React) {
           column: Number(props.columns) > 0 ? Number(props.columns) : 12,
           cellHeight: 72,
           margin: 8,
-          float: false,
+          float: true,
+          minRow: editMinRow,
           animate: false,
-          handle: '.dvb-viz-drag',
+          handle: '.dvb-viz-head-main, .dvb-viz-drag',
           disableOneColumnMode: false,
-          staticGrid: props.readOnly === true,
-          disableDrag: props.readOnly === true,
-          disableResize: props.readOnly === true,
+          staticGrid: !isEditable,
+          disableDrag: !isEditable,
+          disableResize: !isEditable,
         },
         host,
       )
       gridRef.current = grid
       const onChange = (_ev, changed) => {
-        if (readOnlyRef.current) return
+        if (readOnlyRef.current || !isEditableRef.current) return
         if (syncingRef.current) return
         if (typeof onLayoutRef.current !== 'function' || !changed || !changed.length) return
         onLayoutRef.current(
@@ -68,6 +75,16 @@ export function createVizGrid(React) {
         gridRef.current = null
       }
     }, [props.columns, props.readOnly])
+
+    useLayout(() => {
+      const grid = gridRef.current
+      if (!grid) return
+      if (typeof grid.setStatic === 'function') grid.setStatic(!isEditable)
+      if (typeof grid.enableMove === 'function') grid.enableMove(isEditable)
+      if (typeof grid.enableResize === 'function') grid.enableResize(isEditable)
+      if (grid.opts) grid.opts.minRow = editMinRow
+      grid._updateContainerHeight?.()
+    }, [isEditable, editMinRow])
 
     useLayout(() => {
       const grid = gridRef.current
@@ -104,6 +121,7 @@ export function createVizGrid(React) {
         className: GridStack ? 'grid-stack dvb-viz-grid' : 'dvb-viz-grid dvb-viz-grid-fallback',
         ref: hostRef,
         'data-readonly': props.readOnly ? 'true' : 'false',
+        'data-editing': isEditable ? 'true' : 'false',
         'aria-readonly': props.readOnly ? 'true' : undefined,
       },
       props.children,

@@ -1,4 +1,6 @@
 import { NS } from './bench-i18n.mjs'
+import { renderToggleSwitch } from './src/ui/components/toggle-switch.mjs'
+import { renderSaveButton } from './src/ui/components/save-cancel-buttons.mjs'
 
 const FIELDS = [
   { key: 'uv4', label: 'uv4', ph: 'uv4Ph' },
@@ -12,6 +14,24 @@ const SHARE_BOXES = [
 ]
 
 const EMPTY_SHARE = { enabled: false, connections: false, points: false, visualization: false }
+
+export const PRESERVE_NAV_STORAGE_KEY = 'dsh-vision-bench:preserve-nav:enabled'
+
+export function getPreserveNavPreference() {
+  if (typeof window === 'undefined' || !window.localStorage) return false
+  try {
+    return window.localStorage.getItem(PRESERVE_NAV_STORAGE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+export function setPreserveNavPreference(enabled) {
+  if (typeof window === 'undefined' || !window.localStorage) return
+  try {
+    window.localStorage.setItem(PRESERVE_NAV_STORAGE_KEY, enabled ? 'true' : 'false')
+  } catch {}
+}
 
 export function statusKind(health) {
   if (!health || !health.bound) return 'unbound'
@@ -74,6 +94,7 @@ export function createSettingsPage(React, t, post, options = {}) {
     const [share, setShare] = React.useState(EMPTY_SHARE)
     const [configVersion, setConfigVersion] = React.useState(1)
     const [shareBusy, setShareBusy] = React.useState(false)
+    const [preserveNav, setPreserveNav] = React.useState(() => getPreserveNavPreference())
 
     const scope = getScope() || {}
     const cwd = String(scope.cwd || '')
@@ -163,61 +184,7 @@ export function createSettingsPage(React, t, post, options = {}) {
     }
 
     function renderSwitch(checked, disabled, onChange, id) {
-      const isOn = checked === true
-      return el(
-        'button',
-        {
-          id,
-          type: 'button',
-          role: 'switch',
-          'aria-checked': isOn ? 'true' : 'false',
-          disabled: disabled === true,
-          className: 'dvb-setting-switch',
-          'data-checked': isOn ? 'true' : 'false',
-          style: {
-            width: '36px',
-            height: '20px',
-            flex: 'none',
-            margin: 0,
-            border: 0,
-            padding: '2px',
-            borderRadius: '999px',
-            backgroundColor: isOn ? '#0f1115' : '#e5e5e5',
-            cursor: disabled ? 'default' : 'pointer',
-            position: 'relative',
-            boxSizing: 'border-box',
-            display: 'inline-flex',
-            alignItems: 'center',
-            opacity: disabled ? 0.45 : 1,
-            transition: 'background-color .16s ease, opacity .16s ease',
-            outline: 'none',
-          },
-          onClick(e) {
-            e.preventDefault()
-            if (!disabled && onChange) onChange(!isOn)
-          },
-          onKeyDown(e) {
-            if ((e.key === ' ' || e.key === 'Enter') && !disabled && onChange) {
-              e.preventDefault()
-              onChange(!isOn)
-            }
-          },
-        },
-        el('span', {
-          className: 'dvb-setting-switch-thumb',
-          style: {
-            display: 'block',
-            width: '16px',
-            height: '16px',
-            borderRadius: '50%',
-            backgroundColor: '#ffffff',
-            boxShadow: '0 1px 3px rgba(0,0,0,.2)',
-            transform: isOn ? 'translateX(16px)' : 'translateX(0)',
-            transition: 'transform .16s ease',
-            pointerEvents: 'none',
-          },
-        }),
-      )
+      return renderToggleSwitch(el, { checked, disabled, onChange, id })
     }
 
     function settingRow(labelNode, controlNode, isSub = false) {
@@ -301,11 +268,10 @@ export function createSettingsPage(React, t, post, options = {}) {
           { type: 'button', className: 'dvb-btn-pill', disabled: checking, onClick: runCheck },
           checking ? t('selfchecking') : t('selfcheck'),
         ),
-        el(
-          'button',
-          { type: 'button', className: 'dvb-btn-pill dvb-btn-pill-primary', disabled: busy, onClick: save },
-          busy ? t('saving') : t('save'),
-        ),
+        renderSaveButton(el, t, {
+          saving: busy,
+          onClick: save,
+        }),
       ),
       el('div', { className: 'dvb-title', style: { marginTop: '16px' } }, t('shareTitle')),
       el('div', { className: 'dvb-hint', style: { marginBottom: '6px' } }, t('shareHint')),
@@ -342,6 +308,20 @@ export function createSettingsPage(React, t, post, options = {}) {
             ),
             true,
           ),
+        ),
+      ),
+      el('div', { className: 'dvb-title', style: { marginTop: '16px' } }, t('navBehaviorTitle')),
+      el('div', { className: 'dvb-hint', style: { marginBottom: '6px' } }, t('preserveLastViewHint')),
+      settingRow(
+        el('span', { style: { fontWeight: 500 } }, t('preserveLastView')),
+        renderSwitch(
+          preserveNav,
+          false,
+          (on) => {
+            setPreserveNav(on)
+            setPreserveNavPreference(on)
+          },
+          'preserve-last-view',
         ),
       ),
       message ? el('div', { className: 'dvb-msg', 'data-kind': message.kind }, message.text) : null,

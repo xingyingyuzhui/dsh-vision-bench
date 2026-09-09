@@ -1,5 +1,6 @@
 import { connLabel } from '../../../bench-devices.mjs'
 import { renderModalDialog, shouldHighlightFocus } from '../../../bench-shared.mjs'
+import { renderConnectionThead } from './connection-thead.mjs'
 
 /** Connection list / collection toolbar panel. */
 export function renderConnectionPanel(el, t, ctx) {
@@ -29,17 +30,22 @@ export function renderConnectionPanel(el, t, ctx) {
     pendingDeleteId,
     setPendingDeleteId,
     requestDeleteConnection,
+    connColWidths,
+    onStartConnResize,
+    resetConnColWidth,
+    totalConnTableWidth,
   } = ctx
   const deletingConn = pendingDeleteId ? connections.find((c) => c.id === pendingDeleteId) : null
   return el(
     'div',
     {
       className:
-        'dvb-panel' + (shouldHighlightFocus(focusState) && focusState.request.connectionId ? ' dvb-has-focus' : ''),
+        'dvb-conn-section' +
+        (shouldHighlightFocus(focusState) && focusState.request.connectionId ? ' dvb-has-focus' : ''),
     },
     el(
       'div',
-      { className: 'dvb-panel-head' },
+      { className: 'dvb-panel-head dvb-conn-section-head' },
       el('span', { className: 'dvb-panel-title' }, t('connBar') || '连接'),
       el('span', { className: 'dvb-tag' }, connections.length + ' 个连接'),
       el(
@@ -70,19 +76,19 @@ export function renderConnectionPanel(el, t, ctx) {
           { className: 'dvb-table-wrap' },
           el(
             'table',
-            { className: 'dvb-table', style: { tableLayout: 'fixed', width: '100%' } },
-            el(
-              'thead',
-              null,
-              el(
-                'tr',
-                null,
-                el('th', null, '名称'),
-                el('th', null, t('role') || '角色'),
-                el('th', null, '端点/状态'),
-                el('th', null, '操作'),
-              ),
-            ),
+            {
+              className: 'dvb-table dvb-conn-table',
+              style: {
+                tableLayout: 'fixed',
+                width: totalConnTableWidth ? `${totalConnTableWidth()}px` : '100%',
+                minWidth: '100%',
+              },
+            },
+            renderConnectionThead(el, t, {
+              connColWidths,
+              onStartResize: onStartConnResize,
+              resetColWidth: resetConnColWidth,
+            }),
             el(
               'tbody',
               null,
@@ -103,7 +109,7 @@ export function renderConnectionPanel(el, t, ctx) {
                   },
                   el(
                     'td',
-                    null,
+                    { className: 'dvb-col-name' },
                     el(
                       'button',
                       {
@@ -117,10 +123,17 @@ export function renderConnectionPanel(el, t, ctx) {
                       c.name,
                     ),
                   ),
-                  el('td', null, el('span', { className: 'dvb-hint', title: roleLabel }, roleLabel)),
                   el(
                     'td',
-                    { title: occupiedPort ? '已被 ' + occupiedPort + ' 占用' : '' },
+                    { className: 'dvb-col-role' },
+                    el('span', { className: 'dvb-hint', title: roleLabel }, roleLabel),
+                  ),
+                  el(
+                    'td',
+                    {
+                      className: 'dvb-col-endpoint',
+                      title: occupiedPort ? '已被 ' + occupiedPort + ' 占用' : '',
+                    },
                     el(
                       'span',
                       null,
@@ -147,10 +160,10 @@ export function renderConnectionPanel(el, t, ctx) {
                   ),
                   el(
                     'td',
-                    null,
+                    { className: 'dvb-col-actions' },
                     el(
                       'div',
-                      { className: 'dvb-actions' },
+                      { className: 'dvb-actions dvb-conn-actions' },
                       el(
                         'button',
                         {
@@ -206,7 +219,7 @@ export function renderConnectionPanel(el, t, ctx) {
                         'button',
                         {
                           type: 'button',
-                          className: 'dvb-btn dvb-btn-sm',
+                          className: 'dvb-btn dvb-btn-sm dvb-ai-btn',
                           title: '复制结构化引用（稳定 ID+配置版本）并让 Agent 分析',
                           'aria-label': '让 Agent 分析连接 ' + c.name,
                           onClick() {

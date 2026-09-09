@@ -1,8 +1,47 @@
+import { getPreserveNavPreference } from '../../../../bench-settings.mjs'
 import { usePointColWidths } from './use-point-col-widths.mjs'
 
-export function usePoints(React) {
+const LAST_POINTS_DEV_KEY = 'dsh-vision-bench:last-editing-points-dev'
+
+export function getLastEditingPointsDeviceId(cwd = '', hmiTab = '') {
+  if (!getPreserveNavPreference()) return ''
+  if (typeof window === 'undefined' || !window.sessionStorage) return ''
+  try {
+    return window.sessionStorage.getItem(`${LAST_POINTS_DEV_KEY}:${cwd}:${hmiTab}`) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function setLastEditingPointsDeviceId(cwd = '', hmiTab = '', devId = '') {
+  if (typeof window === 'undefined' || !window.sessionStorage) return
+  try {
+    const key = `${LAST_POINTS_DEV_KEY}:${cwd}:${hmiTab}`
+    if (devId) {
+      window.sessionStorage.setItem(key, devId)
+    } else {
+      window.sessionStorage.removeItem(key)
+    }
+  } catch {}
+}
+
+export function usePoints(React, cwd = '', hmiTab = '') {
   const [editingDeviceId, setEditingDeviceId] = React.useState('')
-  const [editingPointsDeviceId, setEditingPointsDeviceId] = React.useState('')
+  const [editingPointsDeviceId, setEditingPointsDeviceIdState] = React.useState(() =>
+    getLastEditingPointsDeviceId(cwd, hmiTab),
+  )
+  React.useEffect(() => {
+    setEditingPointsDeviceIdState(getLastEditingPointsDeviceId(cwd, hmiTab))
+  }, [cwd, hmiTab])
+  const setEditingPointsDeviceId = (nextDev) => {
+    setEditingPointsDeviceIdState((prev) => {
+      const val = typeof nextDev === 'function' ? nextDev(prev) : nextDev
+      if (getPreserveNavPreference()) {
+        setLastEditingPointsDeviceId(cwd, hmiTab, val)
+      }
+      return val
+    })
+  }
   const [deviceDraft, setDeviceDraft] = React.useState(null)
   const [pointDraftsById, setPointDraftsById] = React.useState({})
   const [newPointDraft, setNewPointDraft] = React.useState(null)

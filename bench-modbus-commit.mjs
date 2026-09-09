@@ -44,9 +44,10 @@ const commit = (home, cwd, input, kind) =>
   workspaceRepository(home).mutateRuntime(cwd, (ws) => {
     const pack = normalizeModbus(ws.modbus)
     const sessionConfigs = normalizeSessionConfigs(pack.sessionConfigs)
-    const points = unionScopedPoints(pack.points, sessionConfigs)
-    const connections = unionScopedConnections(pack.connections, sessionConfigs)
-    const devices = unionScopedDevices(pack.devices, sessionConfigs)
+    const share = pack.share
+    const points = unionScopedPoints(pack.points, sessionConfigs, share)
+    const connections = unionScopedConnections(pack.connections, sessionConfigs, share)
+    const devices = unionScopedDevices(pack.devices, sessionConfigs, share)
     const cid = String((input && input.connectionId) || '')
     const did = String((input && input.deviceId) || '')
     const connOk = !cid || connections.some((c) => c.id === cid)

@@ -5,6 +5,7 @@ import { hmiGenId } from './hmi-ids.mjs'
 export function createHmiConnectionActions(ctx, core) {
   const {
     cwd,
+    sessionId,
     post,
     setError,
     setFrameFilter,
@@ -278,21 +279,26 @@ export function createHmiConnectionActions(ctx, core) {
     )
     const isServer = connForm.role === 'server' || connForm.role === 'slave'
     const intervalMs = Math.max(200, Number(connForm.intervalMs) || 1000)
+    const isSim = !!connForm.conn.sim
     const existingPoll = pack.pollingByConnection?.[connForm.id] || {}
     const pollingByConnection = {
       ...(pack.pollingByConnection || {}),
       [connForm.id]: {
         ...existingPoll,
-        enabled: isServer ? false : existingPoll.enabled,
+        enabled: isServer ? false : isSim ? true : existingPoll.enabled,
         intervalMs,
       },
     }
     setConnForm((previous) => ({ ...previous, open: false }))
     persist({ connections, pollingByConnection, version: 3 })
     if (isServer && existingPoll.enabled && post && cwd) {
-      post('/dsh-vision-bench/polling/stop', { cwd, connectionId: connForm.id }, 15000).catch(() => {})
+      post('/dsh-vision-bench/polling/stop', { cwd, sessionId, connectionId: connForm.id }, 15000).catch(() => {})
+      post('/dsh-vision-bench/connection/close', { cwd, sessionId, connectionId: connForm.id }, 15000).catch(() => {})
+    } else if (isSim && post && cwd) {
+      post('/dsh-vision-bench/connection/open', { cwd, sessionId, connectionId: connForm.id }, 15000).catch(() => {})
+      post('/dsh-vision-bench/polling/start', { cwd, sessionId, connectionId: connForm.id, intervalMs }, 15000).catch(() => {})
     } else if (!isServer && existingPoll.enabled && post && cwd) {
-      post('/dsh-vision-bench/polling/start', { cwd, connectionId: connForm.id, intervalMs }, 15000).catch(() => {})
+      post('/dsh-vision-bench/polling/start', { cwd, sessionId, connectionId: connForm.id, intervalMs }, 15000).catch(() => {})
     }
   }
 

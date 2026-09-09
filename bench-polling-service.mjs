@@ -6,6 +6,7 @@ import { normalizeModbus } from './bench-devices.mjs'
 // data even when no sidebar page is open. The plugin unload path stops every
 // timer and in-flight request.
 import { modbusPoll } from './bench-modbus.mjs'
+import { getSimConnectionState, setSimConnectionState } from './bench-serial-monitor.mjs'
 import { loadWorkspace, workspaceRepository } from './bench-store.mjs'
 import { normalizeSessionConfigs, unionScopedConnections } from './src/domain/modbus/config-scope.mjs'
 
@@ -58,7 +59,7 @@ const reconcile = (home, cwd, packIn) => {
   const ws = loadWorkspace(home, cwd)
   const rawModbus = ws.modbus || {}
   const sc = normalizeSessionConfigs(rawModbus.sessionConfigs)
-  const allConnections = unionScopedConnections(rawModbus.connections, sc)
+  const allConnections = unionScopedConnections(rawModbus.connections, sc, rawModbus.share)
   const pack = packIn || normalizeModbus(rawModbus)
   const connList = allConnections.length ? allConnections : pack.connections || []
   const wanted = new Map()
@@ -67,7 +68,7 @@ const reconcile = (home, cwd, packIn) => {
     const isSim = Boolean(c.conn?.sim || c.sim)
     // 仿真连接同样由协调器采集（sim 读由 Worker/驱动侧处理，不占串口）
     // 仿真模式下若未显式停用则默认启动采集，确保开箱即出数且波形持续更新
-    const shouldPoll = isSim ? p?.enabled !== false && c.enabled !== false : p && p.enabled === true
+    const shouldPoll = isSim ? p?.enabled !== false && c.enabled !== false : c.enabled !== false && p && p.enabled === true
     if (shouldPoll && (c.conn || isSim)) {
       wanted.set(c.id, { intervalMs: Number(p?.intervalMs) || 1000 })
     }
@@ -123,19 +124,23 @@ export const resetPollingService = () => {
 
 export const startPolling = async (home, cwd, opts = {}) => {
   stopping = false
-  const saved = await persistEnable(home, cwd, opts.connectionId || opts.connId, true, opts.intervalMs)
+  const cid = opts.connectionId || opts.connId
+  if (cid) setSimConnectionState(cwd, cid, 'connected')
+  const saved = await persistEnable(home, cwd, cid, true, opts.intervalMs)
   if (!saved.ok) return saved
   reconcile(home, cwd)
   return { ...saved, action: 'polling/start', running: true }
 }
 
 export const stopPolling = async (home, cwd, opts = {}) => {
-  const saved = await persistEnable(home, cwd, opts.connectionId || opts.connId, false)
+  const cid = opts.connectionId || opts.connId
+  if (cid) setSimConnectionState(cwd, cid, 'disconnected')
+  const saved = await persistEnable(home, cwd, cid, false)
   if (!saved.ok) return saved
   const co = coordinators.get(String(cwd))
   if (co) {
     if (saved.connectionId) clearConnectionTimer(co, saved.connectionId)
-    else for (const cid of [...co.timers.keys()]) clearConnectionTimer(co, cid)
+    else for (const id of [...co.timers.keys()]) clearConnectionTimer(co, id)
   }
   return { ...saved, action: 'polling/stop', running: false }
 }
@@ -168,7 +173,21 @@ export const pollingStatus = (home, cwd) => {
 // ensure timers for whatever the workspace currently marks enabled (called on /state)
 export const ensurePolling = (home, cwd) => {
   if (stopping) return
-  const pack = normalizeModbus(loadWorkspace(home, cwd).modbus || {})
+  const ws = loadWorkspace(home, cwd)
+  const rawModbus = ws.modbus || {}
+  const sc = normalizeSessionConfigs(rawModbus.sessionConfigs)
+  const allConnections = unionScopedConnections(rawModbus.connections, sc, rawModbus.share)
+  const pack = normalizeModbus(rawModbus)
+  for (const c of allConnections) {
+    if (c.conn?.sim || c.sim) {
+      const p = (pack.pollingByConnection || {})[c.id]
+      if (c.enabled !== false && (p ? p.enabled === true : true)) {
+        setSimConnectionState(cwd, c.id, 'connected')
+      } else if (p && p.enabled === false) {
+        setSimConnectionState(cwd, c.id, 'disconnected')
+      }
+    }
+  }
   reconcile(home, cwd, pack)
 }
 

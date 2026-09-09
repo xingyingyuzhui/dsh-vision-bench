@@ -115,22 +115,41 @@ export function renderInlineWriteCell(el, t, ctx) {
           : null,
     )
   }
+  if (!writable) {
+    return el(
+      'span',
+      {
+        className: 'dvb-val dvb-cell-value dvb-cell-readonly',
+        title: '只读点位，不可写入',
+        style: {
+          display: 'inline-block',
+          cursor: 'default',
+          font: 'inherit',
+          fontWeight: 600,
+          color: 'var(--dsw-alias-label-primary, inherit)',
+        },
+      },
+      String(shown),
+    )
+  }
   return el(
     'button',
     {
       type: 'button',
-      className: 'dvb-val dvb-cell-value' + (writable ? ' dvb-cell-writable' : ' dvb-cell-readonly'),
-      disabled: !writable || !!busy || writeRunning,
-      title: writable ? '点击写入当前值' : '只读点位，不可写入',
+      className: 'dvb-val dvb-cell-value dvb-cell-writable',
+      disabled: !!busy || writeRunning,
+      title: '点击写入当前值',
       style: {
         padding: 0,
         border: 'none',
         background: 'none',
-        cursor: writable ? 'pointer' : 'default',
+        cursor: 'pointer',
         font: 'inherit',
+        fontWeight: 600,
+        color: 'var(--dsw-alias-label-primary, inherit)',
       },
       onClick() {
-        if (writable) openWriteCell(point)
+        openWriteCell(point)
       },
     },
     String(shown),

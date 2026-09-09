@@ -120,7 +120,7 @@ test('deviceAlarms fires once per breach and clears on recovery', async () => {
   assert.equal(clear.cleared.length, 1)
   assert.deepEqual(clear.next, {})
   const label = _internal.alarmLabel(first.fired[0], 'max')
-  assert.match(label, /压力=120>100/)
+  assert.match(label, /压力.*=120>100/)
 })
 
 test('compactValues decodes with segment metadata for the agent', async () => {

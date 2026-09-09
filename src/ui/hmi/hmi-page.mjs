@@ -73,6 +73,23 @@ export function createHmiView(React, t, post) {
       flagInflight,
     } = useHmiState(React, post, cwd, sessionId)
     const {
+      connForm,
+      setConnForm,
+      hmiTab,
+      setHmiTab,
+      moreOpen,
+      setMoreOpen,
+      pendingDeleteId,
+      setPendingDeleteId,
+      linkBusy,
+      setLinkBusy,
+      lastDeviceByConn,
+      connColWidths,
+      onStartConnResize,
+      resetConnColWidth,
+      totalConnTableWidth,
+    } = useConnections(React, cwd)
+    const {
       editingDeviceId,
       setEditingDeviceId,
       editingPointsDeviceId,
@@ -105,20 +122,7 @@ export function createHmiView(React, t, post) {
       onStartResize,
       resetColWidth,
       totalTableWidth,
-    } = usePoints(React)
-    const {
-      connForm,
-      setConnForm,
-      hmiTab,
-      setHmiTab,
-      moreOpen,
-      setMoreOpen,
-      pendingDeleteId,
-      setPendingDeleteId,
-      linkBusy,
-      setLinkBusy,
-      lastDeviceByConn,
-    } = useConnections(React)
+    } = usePoints(React, cwd, hmiTab)
     const { focusState, setFocusUi, agentCopied, setAgentCopied, tempWatchNote, setTempWatchNote } = useAgentFocus(
       React,
       cwd,
@@ -233,6 +237,11 @@ export function createHmiView(React, t, post) {
     ])
 
     const d = actions.derived()
+    React.useEffect(() => {
+      if (hmiTab !== 'all' && d.connections.length > 0 && !d.connections.some((c) => c.id === hmiTab)) {
+        setHmiTab('all')
+      }
+    }, [hmiTab, d.connections, setHmiTab])
     const focusToast = renderFocusToast(el, t, {
       focusState,
       returnToPrevFocus: actions.returnToPrevFocus,
@@ -264,6 +273,10 @@ export function createHmiView(React, t, post) {
       pendingDeleteId,
       setPendingDeleteId,
       requestDeleteConnection: actions.requestDeleteConnection,
+      connColWidths,
+      onStartConnResize,
+      resetConnColWidth,
+      totalConnTableWidth,
     })
     const connFormPanel = renderConnectionEditor(el, t, {
       connForm,

@@ -246,3 +246,45 @@ test('removing a point clears runtime but keeps degraded visualization', async (
     assert.equal(ws.modbus.visualization.components[0].id, 'viz_a')
   })
 })
+
+test('updating point function code persists and synchronizes area without reverting on reload', async () => {
+  await withWs(async (home, cwd) => {
+    const before = loadWorkspace(home, cwd)
+    assert.equal(before.modbus.points[0].function, 3)
+    assert.equal(before.modbus.points[0].area, 'holdingRegister')
+
+    // Update function from 3 (holdingRegister) to 4 (inputRegister)
+    const cv = before.modbus.configVersion
+    const ran = await mutateConfig({
+      home,
+      cwd,
+      expectedConfigVersion: cv,
+      operation: 'points.update',
+      target: { connectionId: 'c1', deviceId: 'd1', pointId: 'p1' },
+      value: { points: [{ id: 'p1', function: 4 }] },
+    })
+    assert.equal(ran.ok, true, ran.error)
+
+    // Verify reloaded from disk
+    const after = loadWorkspace(home, cwd)
+    assert.equal(after.modbus.points[0].function, 4, 'function code must be 4')
+    assert.equal(after.modbus.points[0].area, 'inputRegister', 'area must be synchronized to inputRegister')
+
+    // Update function from 4 to 1 (coil)
+    const cv2 = after.modbus.configVersion
+    const ran2 = await mutateConfig({
+      home,
+      cwd,
+      expectedConfigVersion: cv2,
+      operation: 'points.update',
+      target: { connectionId: 'c1', deviceId: 'd1', pointId: 'p1' },
+      value: { points: [{ id: 'p1', function: 1 }] },
+    })
+    assert.equal(ran2.ok, true, ran2.error)
+
+    const after2 = loadWorkspace(home, cwd)
+    assert.equal(after2.modbus.points[0].function, 1, 'function code must be 1')
+    assert.equal(after2.modbus.points[0].area, 'coil', 'area must be synchronized to coil')
+  })
+})
+

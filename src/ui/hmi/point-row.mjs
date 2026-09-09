@@ -1,7 +1,7 @@
 import { functionCodeOf, isWritableFunction } from '../../../bench-points.mjs'
 import { focusHighlightClass, shouldHighlightFocus } from '../../../bench-shared.mjs'
 import { renderCustomSelect } from '../components/custom-select.mjs'
-import { fnOptionLabel } from './hmi-ids.mjs'
+import { AREA_BY_FN_EDIT, fnOptionLabel } from './hmi-ids.mjs'
 import { renderInlineWriteCell } from './inline-write.mjs'
 import { renderFlagSwitch } from './point-flags.mjs'
 
@@ -57,7 +57,7 @@ export function renderPointRow(el, t, ctx) {
     },
     el(
       'td',
-      null,
+      { className: 'dvb-col-name' },
       editing
         ? el('input', {
             className: 'dvb-input',
@@ -97,60 +97,6 @@ export function renderPointRow(el, t, ctx) {
     ),
     el(
       'td',
-      { className: 'dvb-col-fn' },
-      editing
-        ? CustomSelect
-          ? el(CustomSelect, {
-              size: 'sm',
-              value: String(draft && draft.function != null ? draft.function : point.function),
-              options: [
-                { value: '1', label: fnOptionLabel(t, 1) },
-                { value: '2', label: fnOptionLabel(t, 2) },
-                { value: '3', label: fnOptionLabel(t, 3) },
-                { value: '4', label: fnOptionLabel(t, 4) },
-              ],
-              onChange: (val) => {
-                const next = val?.target ? val.target.value : val
-                patchDraft(point.id, { function: Number(next) })
-              },
-            })
-          : renderCustomSelect(el, {
-              size: 'sm',
-              value: String(draft && draft.function != null ? draft.function : point.function),
-              options: [
-                { value: '1', label: fnOptionLabel(t, 1) },
-                { value: '2', label: fnOptionLabel(t, 2) },
-                { value: '3', label: fnOptionLabel(t, 3) },
-                { value: '4', label: fnOptionLabel(t, 4) },
-              ],
-              onChange: (val) => {
-                const next = val?.target ? val.target.value : val
-                patchDraft(point.id, { function: Number(next) })
-              },
-            })
-        : el('span', { className: 'dvb-val' }, functionCodeOf(point.function)),
-    ),
-    el(
-      'td',
-      null,
-      editing
-        ? el('input', {
-            className: 'dvb-input dvb-input-mono',
-            type: 'number',
-            min: 0,
-            max: 65535,
-            value: draft ? draft.address : point.address,
-            onChange: (e) => patchDraft(point.id, { address: Number(e.target.value) }),
-          })
-        : el('span', { className: 'dvb-val' }, String(point.address)),
-    ),
-    el(
-      'td',
-      { className: 'dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' },
-      point.isNew ? '—' : valueCell,
-    ),
-    el(
-      'td',
       { className: 'dvb-col-monitor' },
       renderFlagSwitch(el, t, {
         checked: point.isNew
@@ -177,7 +123,76 @@ export function renderPointRow(el, t, ctx) {
     ),
     el(
       'td',
-      null,
+      { className: 'dvb-col-fn' },
+      editing
+        ? CustomSelect
+          ? el(CustomSelect, {
+              id: `dvb-fc-${point.id}`,
+              size: 'sm',
+              value: String(draft && draft.function != null ? draft.function : point.function),
+              options: [
+                { value: '1', label: fnOptionLabel(t, 1), title: '01 线圈 (可读写)' },
+                { value: '2', label: fnOptionLabel(t, 2), title: '02 离散输入 (只读)' },
+                { value: '3', label: fnOptionLabel(t, 3), title: '03 保持寄存器 (可读写)' },
+                { value: '4', label: fnOptionLabel(t, 4), title: '04 输入寄存器 (只读)' },
+              ],
+              onChange: (val) => {
+                const next = val?.target ? val.target.value : val
+                const fn = Number(next)
+                patchDraft(point.id, { function: fn, area: AREA_BY_FN_EDIT[fn] })
+              },
+            })
+          : renderCustomSelect(el, {
+              id: `dvb-fc-${point.id}`,
+              size: 'sm',
+              value: String(draft && draft.function != null ? draft.function : point.function),
+              options: [
+                { value: '1', label: fnOptionLabel(t, 1), title: '01 线圈 (可读写)' },
+                { value: '2', label: fnOptionLabel(t, 2), title: '02 离散输入 (只读)' },
+                { value: '3', label: fnOptionLabel(t, 3), title: '03 保持寄存器 (可读写)' },
+                { value: '4', label: fnOptionLabel(t, 4), title: '04 输入寄存器 (只读)' },
+              ],
+              onChange: (val) => {
+                const next = val?.target ? val.target.value : val
+                const fn = Number(next)
+                patchDraft(point.id, { function: fn, area: AREA_BY_FN_EDIT[fn] })
+              },
+            })
+        : el('span', { className: 'dvb-val' }, functionCodeOf(point.function)),
+    ),
+    el(
+      'td',
+      { className: 'dvb-col-addr' },
+      editing
+        ? el('input', {
+            className: 'dvb-input dvb-input-mono',
+            type: 'number',
+            min: 0,
+            max: 65535,
+            value: draft ? draft.address : point.address,
+            onChange: (e) => patchDraft(point.id, { address: Number(e.target.value) }),
+          })
+        : el('span', { className: 'dvb-val' }, String(point.address)),
+    ),
+    el(
+      'td',
+      { className: 'dvb-col-value dvb-val', 'data-ok': rec ? (rec.ok ? 'true' : 'false') : '' },
+      point.isNew ? '—' : valueCell,
+    ),
+    el(
+      'td',
+      { className: 'dvb-col-unit' },
+      editing
+        ? el('input', {
+            className: 'dvb-input',
+            value: draft ? draft.unit : point.unit,
+            onChange: (e) => patchDraft(point.id, { unit: e.target.value }),
+          })
+        : el('span', null, point.unit || '—'),
+    ),
+    el(
+      'td',
+      { className: 'dvb-col-scale' },
       editing
         ? el('input', {
             className: 'dvb-input dvb-input-mono',
@@ -190,7 +205,7 @@ export function renderPointRow(el, t, ctx) {
     ),
     el(
       'td',
-      null,
+      { className: 'dvb-col-offset' },
       editing
         ? el('input', {
             className: 'dvb-input dvb-input-mono',
@@ -200,17 +215,6 @@ export function renderPointRow(el, t, ctx) {
             onChange: (e) => patchDraft(point.id, { offset: Number(e.target.value) }),
           })
         : el('span', { className: 'dvb-val' }, point.offset ? (point.offset > 0 ? '+' : '') + point.offset : '—'),
-    ),
-    el(
-      'td',
-      null,
-      editing
-        ? el('input', {
-            className: 'dvb-input',
-            value: draft ? draft.unit : point.unit,
-            onChange: (e) => patchDraft(point.id, { unit: e.target.value }),
-          })
-        : el('span', null, point.unit || '—'),
     ),
     el(
       'td',
@@ -240,7 +244,7 @@ export function renderPointRow(el, t, ctx) {
     ),
     el(
       'td',
-      null,
+      { className: 'dvb-col-min' },
       editing
         ? el('input', {
             className: 'dvb-input dvb-input-mono',
@@ -254,7 +258,7 @@ export function renderPointRow(el, t, ctx) {
     ),
     el(
       'td',
-      null,
+      { className: 'dvb-col-max' },
       editing
         ? el('input', {
             className: 'dvb-input dvb-input-mono',

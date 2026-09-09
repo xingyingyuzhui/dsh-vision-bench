@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { COPY } from '../bench-i18n.mjs'
 import { formatResult } from '../bench-view.mjs'
 
-const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'bench-view.mjs'), 'utf8')
+const src = `${readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'bench-view.mjs'), 'utf8')}\n${readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src/ui/debug/debug-view.mjs'), 'utf8')}`
 const runtime = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'bench-runtime.mjs'), 'utf8')
 
 test('formatResult keeps compile errors, phase and log path', async () => {

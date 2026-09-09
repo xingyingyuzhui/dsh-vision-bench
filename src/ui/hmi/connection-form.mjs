@@ -1,4 +1,5 @@
 import { getCustomSelect } from '../components/custom-select.mjs'
+import { renderSaveCancelGroup } from '../components/save-cancel-buttons.mjs'
 import { POLL_INTERVALS } from './hmi-ids.mjs'
 
 /** Connection edit form panel. */
@@ -357,25 +358,15 @@ export function renderConnectionForm(el, t, ctx) {
         ),
       ),
     ),
-    el(
-      'div',
-      { className: 'dvb-actions' },
-      el(
-        'button',
-        { type: 'button', className: 'dvb-btn dvb-btn-primary', disabled: !cwd, onClick: saveConnEdit },
-        t('connSave') || t('save') || '保存配置',
-      ),
-      el(
-        'button',
-        {
-          type: 'button',
-          className: 'dvb-btn',
-          onClick() {
-            setConnForm((prev) => ({ ...prev, open: false }))
-          },
-        },
-        t('csvCancel'),
-      ),
-    ),
+    renderSaveCancelGroup(el, t, {
+      onSave: saveConnEdit,
+      onCancel() {
+        setConnForm((prev) => ({ ...prev, open: false }))
+      },
+      saveText: t('connSave') || '保存',
+      cancelText: t('csvCancel') || '取消',
+      saveDisabled: !cwd,
+      reverseDomOrder: true,
+    }),
   )
 }

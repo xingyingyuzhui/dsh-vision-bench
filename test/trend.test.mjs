@@ -190,11 +190,18 @@ test('Task3: trend buffers are isolated per cwd (same pointId, different values)
 })
 
 test('Task5/6 guards: no hard-coded configVersion collapse and no window.uPlot reliance', async () => {
-  // TaskP2/0.20.0: 曲线已迁移为「可视化」组件页（bench-visualization-view.mjs）
-  const live = readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), '..', 'src/ui/monitor/visualization/visualization-page.mjs'),
-    'utf8',
+  // TaskP2/0.20.0: 曲线已迁移为「可视化」组件页与 useVizCharts hook
+  const chartHook = join(
+    dirname(fileURLToPath(import.meta.url)),
+    '..',
+    'src/ui/monitor/visualization/hooks/use-viz-charts.mjs',
   )
+  const vizPage = join(
+    dirname(fileURLToPath(import.meta.url)),
+    '..',
+    'src/ui/monitor/visualization/visualization-page.mjs',
+  )
+  const live = `${readFileSync(chartHook, 'utf8')}\n${readFileSync(vizPage, 'utf8')}`
   assert.doesNotMatch(live, /window\.uPlot|globalThis\.uPlot/, 'must not rely on host uPlot globals')
   assert.match(live, /vendorUPlot\(\)/, 'should consume bundled uPlot constructor lazily')
   assert.match(live, /destroy/, 'should destroy uPlot on teardown')
@@ -265,3 +272,31 @@ test('Task2/0.20.1: 同时间戳合并去重；窗口过滤；零样本点保留
   assert.equal(narrow.data[0].length, 1, '窗口外样本被过滤')
   assert.equal(narrow.data[1][0], 2)
 })
+
+test('echartsSeriesFromTrend filters interleaving nulls and enables symbols', async () => {
+  const { echartsSeriesFromTrend } = await import('../src/ui/monitor/visualization/viz-helpers.mjs')
+  const payload = {
+    data: [
+      [100, 101, 102, 103], // times (seconds)
+      [10, null, 12, null], // series 1
+      [null, 25, null, 28], // series 2
+    ],
+    meta: [{ label: '点位1' }, { label: '点位2' }],
+  }
+  const series = echartsSeriesFromTrend(payload)
+  assert.equal(series.length, 2)
+  assert.equal(series[0].name, '点位1')
+  assert.equal(series[0].showSymbol, true)
+  assert.equal(series[0].connectNulls, true)
+  // 点位1 只保留有效点 [ [100000, 10], [102000, 12] ]
+  assert.deepEqual(series[0].data, [
+    [100000, 10],
+    [102000, 12],
+  ])
+  // 点位2 只保留有效点 [ [101000, 25], [103000, 28] ]
+  assert.deepEqual(series[1].data, [
+    [101000, 25],
+    [103000, 28],
+  ])
+})
+

@@ -19,5 +19,7 @@ export function decodeValue(point, raw) {
   if (!Number.isFinite(n)) return raw
   const scale = Number(point?.scale)
   const offset = Number(point?.offset)
-  return n * (Number.isFinite(scale) ? scale : 1) + (Number.isFinite(offset) ? offset : 0)
+  const val = n * (Number.isFinite(scale) ? scale : 1) + (Number.isFinite(offset) ? offset : 0)
+  if (!Number.isFinite(val)) return raw
+  return Math.round(val * 1e8) / 1e8
 }

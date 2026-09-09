@@ -168,9 +168,10 @@ export function normalizeSessionConfigs(input) {
  * @param {unknown} topLevel
  * @param {unknown} sessionConfigs
  * @param {'connections' | 'devices' | 'points'} field
+ * @param {unknown} [share]
  * @returns {any[]}
  */
-function unionScopedField(topLevel, sessionConfigs, field) {
+function unionScopedField(topLevel, sessionConfigs, field, share) {
   /** @type {any[]} */
   const out = []
   const seen = new Set()
@@ -184,10 +185,18 @@ function unionScopedField(topLevel, sessionConfigs, field) {
       out.push(row)
     }
   }
-  push(topLevel)
+  const isShared = Boolean(
+    share && typeof share === 'object' && /** @type {any} */ (share).enabled && /** @type {any} */ (share)[field],
+  )
+  if (isShared) {
+    push(topLevel)
+  }
   const map = sessionConfigs && typeof sessionConfigs === 'object' ? Object.values(sessionConfigs) : []
   for (const cfg of map) {
     push(cfg && typeof cfg === 'object' ? /** @type {any} */ (cfg)[field] : null)
+  }
+  if (!isShared) {
+    push(topLevel)
   }
   return out
 }
@@ -198,20 +207,21 @@ function unionScopedField(topLevel, sessionConfigs, field) {
  * lives in a private layer rather than at top-level.
  * @param {unknown} topLevelPoints
  * @param {unknown} sessionConfigs
+ * @param {unknown} [share]
  * @returns {any[]}
  */
-export function unionScopedPoints(topLevelPoints, sessionConfigs) {
-  return unionScopedField(topLevelPoints, sessionConfigs, 'points')
+export function unionScopedPoints(topLevelPoints, sessionConfigs, share) {
+  return unionScopedField(topLevelPoints, sessionConfigs, 'points', share)
 }
 
-/** @param {unknown} topLevel @param {unknown} sessionConfigs @returns {any[]} */
-export function unionScopedConnections(topLevel, sessionConfigs) {
-  return unionScopedField(topLevel, sessionConfigs, 'connections')
+/** @param {unknown} topLevel @param {unknown} sessionConfigs @param {unknown} [share] @returns {any[]} */
+export function unionScopedConnections(topLevel, sessionConfigs, share) {
+  return unionScopedField(topLevel, sessionConfigs, 'connections', share)
 }
 
-/** @param {unknown} topLevel @param {unknown} sessionConfigs @returns {any[]} */
-export function unionScopedDevices(topLevel, sessionConfigs) {
-  return unionScopedField(topLevel, sessionConfigs, 'devices')
+/** @param {unknown} topLevel @param {unknown} sessionConfigs @param {unknown} [share] @returns {any[]} */
+export function unionScopedDevices(topLevel, sessionConfigs, share) {
+  return unionScopedField(topLevel, sessionConfigs, 'devices', share)
 }
 
 /**
