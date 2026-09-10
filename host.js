@@ -245,7 +245,11 @@ export function apply(ctx, config = {}) {
   const stopHost = registerVisionHost(commandDispatcher)
 
   let stopRpc = () => Promise.resolve()
-  const stopRpcRegistration = ctx.connection.rpc.handle(VISION_RPC_CHANNEL, async (endpoint, payload, signal) => {
+  // Pass the plugin context explicitly so RPC routes retain its webServer injection.
+  const registerRpc = typeof ctx.connection.register === 'function'
+    ? (channel, handler) => ctx.connection.register(ctx, channel, handler)
+    : (channel, handler) => ctx.connection.rpc.handle(channel, handler)
+  const stopRpcRegistration = registerRpc(VISION_RPC_CHANNEL, async (endpoint, payload, signal) => {
     try {
       const value = await router.dispatch(endpoint, payload, signal)
       return { ok: true, value }
