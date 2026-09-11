@@ -106,6 +106,7 @@
     "src/shared/debug-contract.mjs",
     "src/shared/debug-events.mjs",
     "src/shared/path-normalize.mjs",
+    "src/shared/approval-scope.mjs",
     "src/interfaces/rpc/vision-rpc-router.mjs",
     "src/interfaces/rpc/debug-rpc-handler.mjs",
     "src/interfaces/agent/vision-debug-tool.mjs",

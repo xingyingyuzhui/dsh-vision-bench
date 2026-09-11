@@ -1,6 +1,7 @@
 // @ts-check
 import { randomBytes } from 'node:crypto'
 import { FLASH_ERROR_CODES } from '../../domain/flash/errors.mjs'
+import { checkFlashApprovalScope } from '../../shared/approval-scope.mjs'
 
 const DEFAULT_TTL_MS = 5 * 60 * 1000
 export const MAX_FLASH_APPROVALS = 256
@@ -13,15 +14,6 @@ function newRequestId() {
 function sessionKey(value) {
   if (value == null) return ''
   return String(value)
-}
-
-/** @param {unknown} left @param {unknown} right */
-function sessionsMatch(left, right) {
-  const a = sessionKey(left)
-  const b = sessionKey(right)
-  if (!a && !b) return true
-  if (!a || !b) return false
-  return a === b
 }
 
 /**
@@ -118,11 +110,12 @@ export function createFlashApprovalStore(opts = {}) {
         error: '烧录批准已过期，请重新确认',
       }
     }
-    if (String(scope?.cwd || '') !== record.cwd || !sessionsMatch(scope?.sessionId, record.sessionId)) {
+    const scopeVerdict = checkFlashApprovalScope(scope, record)
+    if (!scopeVerdict.ok) {
       return {
         ok: false,
         errorCode: FLASH_ERROR_CODES.FLASH_APPROVAL_SCOPE_MISMATCH,
-        error: '烧录批准请求不属于当前会话',
+        error: scopeVerdict.reason,
       }
     }
     items.delete(id)

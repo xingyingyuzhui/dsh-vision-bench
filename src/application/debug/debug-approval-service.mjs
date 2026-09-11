@@ -2,6 +2,8 @@
 
 import { randomBytes } from 'node:crypto'
 import { DEBUG_ERRORS } from '../../domain/debug/errors.mjs'
+import { checkDebugApprovalScope } from '../../shared/approval-scope.mjs'
+import { sameCwd } from '../../shared/path-normalize.mjs'
 
 const DEFAULT_TTL_MS = 5 * 60 * 1000
 export const MAX_DEBUG_APPROVALS = 256
@@ -169,11 +171,9 @@ export function createDebugApprovalStore(opts = {}) {
       items.delete(id)
       return { ok: false, errorCode: DEBUG_ERRORS.APPROVAL_EXPIRED, error: '调试批准已过期' }
     }
-    if (
-      (scope.cwd && String(scope.cwd) !== rec.cwd) ||
-      (scope.sessionId && !sessionsMatch(scope.sessionId, rec.sessionId))
-    ) {
-      return { ok: false, errorCode: DEBUG_ERRORS.APPROVAL_SCOPE_MISMATCH, error: '调试批准请求不属于当前会话' }
+    const scopeVerdict = checkDebugApprovalScope(scope, rec)
+    if (!scopeVerdict.ok) {
+      return { ok: false, errorCode: DEBUG_ERRORS.APPROVAL_SCOPE_MISMATCH, error: scopeVerdict.reason }
     }
     if (rec.status === 'consumed') {
       return { ok: false, errorCode: DEBUG_ERRORS.APPROVAL_NOT_FOUND, error: '调试批准已使用' }
@@ -233,14 +233,12 @@ export function createDebugApprovalStore(opts = {}) {
         error: '调试批准已过期，请重新确认',
       }
     }
-    if (
-      (scope.cwd && String(scope.cwd) !== record.cwd) ||
-      (scope.sessionId && !sessionsMatch(scope.sessionId, record.sessionId))
-    ) {
+    const consumeVerdict = checkDebugApprovalScope(scope, record)
+    if (!consumeVerdict.ok) {
       return {
         ok: false,
         errorCode: DEBUG_ERRORS.APPROVAL_SCOPE_MISMATCH,
-        error: '调试批准请求不属于当前会话',
+        error: consumeVerdict.reason,
       }
     }
 
@@ -268,7 +266,7 @@ export function createDebugApprovalStore(opts = {}) {
     const out = []
     for (const record of items.values()) {
       if (scope.sessionId && !sessionsMatch(scope.sessionId, record.sessionId)) continue
-      if (scope.cwd && String(scope.cwd) !== record.cwd) continue
+      if (scope.cwd && !sameCwd(scope.cwd, record.cwd)) continue
       out.push({ ...record })
     }
     return out
