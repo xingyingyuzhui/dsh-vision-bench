@@ -90,7 +90,24 @@ export interface DebugSessionView {
   watchpoints?: DebugWatchpoint[]
   snapshots?: DebugSnapshot[]
   stopReason?: string
+  /**
+   * Present when the session failed to start. Retained on the runtime tombstone
+   * so the failure stays explainable after `start()` rejected.
+   */
+  failure?: DebugSessionFailure | null
+  /**
+   * Last non-fatal backend error (e.g. `monitor reset halt` unsupported by the
+   * probe). The session is still usable, but the target may not be reset.
+   */
+  lastNonFatalError?: string
   targetKey: string
   createdAt: number
   updatedAt: number
+}
+
+export interface DebugSessionFailure {
+  message: string
+  errorCode: string
+  stack?: string
+  at: number
 }

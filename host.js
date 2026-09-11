@@ -177,6 +177,7 @@ export function apply(ctx) {
   }
 
   const debugRuntime = getSharedDebugRuntime({
+    home: dshHome,
     onJournalEvent: async (ev) => {
       if (!ev || !ev.cwd) return
       await recordBenchEvent(

@@ -5,6 +5,8 @@ import { DEBUG_ERRORS, DebugError } from '../../domain/debug/errors.mjs'
 import { TargetLeaseManager } from '../../domain/debug/target-lease.mjs'
 import { executeDebugCommand } from './debug-command-executor.mjs'
 import { reduceBackendEvent } from './debug-event-reducer.mjs'
+import { withDebugEventPersistence } from './debug-event-sink.mjs'
+import { sameCwd } from '../../shared/path-normalize.mjs'
 
 /**
  * Creates the host authoritative DebugRuntime service shell.
@@ -14,6 +16,7 @@ import { reduceBackendEvent } from './debug-event-reducer.mjs'
  *   leaseManager?: TargetLeaseManager,
  *   backendFactory?: (backendKind: import('../../types/debug.d.ts').DebugBackendKind, ctx: any) => Promise<any>,
  *   onJournalEvent?: ((event: any) => Promise<void>) | null,
+ *   home?: string,
  * }} [deps]
  */
 export function createDebugRuntime(deps = {}) {
@@ -32,6 +35,7 @@ export function createDebugRuntime(deps = {}) {
       throw new DebugError(DEBUG_ERRORS.BACKEND_UNAVAILABLE, `调试后端暂不可用: ${kind}`)
     })
   const onJournalEvent = deps.onJournalEvent || null
+  const home = String(deps.home || '').trim()
 
   /** @type {Map<string, {
    *   debugSessionId: string,
@@ -61,12 +65,32 @@ export function createDebugRuntime(deps = {}) {
   const ownerWaiters = new Set()
 
   /**
+   * Tombstones for sessions whose startup failed.
+   *
+   * A failed `start()` used to delete the session outright, which made the
+   * failure completely invisible: `status` reported `active: false` and nothing
+   * anywhere recorded *why*. We retain the record (with its `failure` field) for
+   * a short window so diagnostics can answer "what went wrong".
+   *
+   * @type {Map<string, any>}
+   */
+  const failedSessions = new Map()
+  const FAILED_SESSION_TTL_MS = 5 * 60 * 1000
+
+  function purgeFailedSessions() {
+    const cutoff = Date.now() - FAILED_SESSION_TTL_MS
+    for (const [id, record] of failedSessions) {
+      if ((record?.updatedAt || 0) < cutoff) failedSessions.delete(id)
+    }
+  }
+
+  /**
    * @param {any} session
    */
   function notifyOwnerWaiters(session) {
     for (const waiter of [...ownerWaiters]) {
       if (!waiter.ownerSessionId || waiter.ownerSessionId !== session.ownerSessionId) continue
-      if (!waiter.workspaceCwd || waiter.workspaceCwd !== session.workspaceCwd) continue
+      if (!waiter.workspaceCwd || !sameCwd(waiter.workspaceCwd, session.workspaceCwd)) continue
       ownerWaiters.delete(waiter)
       waiter.resolve(session)
     }
@@ -112,6 +136,8 @@ export function createDebugRuntime(deps = {}) {
       targetKey: session.targetKey,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
+      ...(session.failure ? { failure: session.failure } : {}),
+      ...(session.lastNonFatalError ? { lastNonFatalError: session.lastNonFatalError } : {}),
     }
   }
 
@@ -150,7 +176,7 @@ export function createDebugRuntime(deps = {}) {
         workspaceCwd,
       })
 
-      const eventRing = createDebugEventRing(500)
+      const eventRing = withDebugEventPersistence(createDebugEventRing(500), { home })
       const state = transition('idle', 'starting')
 
       eventRing.push({
@@ -213,7 +239,19 @@ export function createDebugRuntime(deps = {}) {
         if (sessionRecord.state === 'starting') {
           sessionRecord.state = transition(sessionRecord.state, 'ready')
         }
+        if (sessionRecord.state === 'failed') {
+          // The backend reported failure through its event stream but returned
+          // normally. Surface it as an error instead of letting the caller
+          // believe the session came up.
+          throw new DebugError(
+            DEBUG_ERRORS.BACKEND_UNAVAILABLE,
+            sessionRecord.failure?.message || '调试后端启动后立即失败',
+          )
+        }
         sessionRecord.updatedAt = Date.now()
+        if (backend && typeof backend.lastNonFatalError === 'string' && backend.lastNonFatalError) {
+          sessionRecord.lastNonFatalError = backend.lastNonFatalError
+        }
 
         eventRing.push({
           debugSessionId,
@@ -239,13 +277,22 @@ export function createDebugRuntime(deps = {}) {
       } catch (err) {
         sessionRecord.state = 'failed'
         sessionRecord.updatedAt = Date.now()
+        sessionRecord.failure = {
+          message: err instanceof Error ? err.message : String(err),
+          errorCode: /** @type {any} */ (err)?.errorCode || /** @type {any} */ (err)?.code || DEBUG_ERRORS.BACKEND_UNAVAILABLE,
+          stack: err instanceof Error ? err.stack : undefined,
+          at: Date.now(),
+        }
         eventRing.push({
           debugSessionId,
           ownerSessionId,
           workspaceCwd,
           backend: backendKind,
           type: DEBUG_EVENT_TYPES.SESSION_FAILED,
-          payload: { error: err instanceof Error ? err.message : String(err) },
+          payload: {
+            error: sessionRecord.failure.message,
+            errorCode: sessionRecord.failure.errorCode,
+          },
         })
         if (sessionRecord.unsubscribeBackend) {
           try {
@@ -259,6 +306,12 @@ export function createDebugRuntime(deps = {}) {
           } catch {}
         }
         leaseManager.releaseLease(debugSessionId, ownerSessionId)
+        // Retain a tombstone instead of dropping the record, so the failure is
+        // still explainable after the fact. `sessions` stays clean so the
+        // session never looks "active".
+        sessionRecord.backend = null
+        purgeFailedSessions()
+        failedSessions.set(debugSessionId, sessionRecord)
         sessions.delete(debugSessionId)
         throw err
       }
@@ -367,6 +420,38 @@ export function createDebugRuntime(deps = {}) {
     },
 
     /**
+     * Returns the tombstone of a session whose startup failed, if still within
+     * the retention window. Used purely for diagnostics: a failed `start()` no
+     * longer leaves the caller with nothing to inspect.
+     *
+     * @param {{ debugSessionId: string, ownerSessionId?: string }} scope
+     * @returns {import('../../types/debug.d.ts').DebugSessionView | null}
+     */
+    getFailedSession(scope) {
+      purgeFailedSessions()
+      const id = String(scope?.debugSessionId || '').trim()
+      if (!id) return null
+      const record = failedSessions.get(id)
+      if (!record) return null
+      const owner = String(scope?.ownerSessionId || '').trim()
+      if (owner && record.ownerSessionId !== owner) return null
+      return toView(record)
+    },
+
+    /**
+     * Lists recent failed-session tombstones for a workspace.
+     * @param {{ workspaceCwd?: string }} [scope]
+     * @returns {import('../../types/debug.d.ts').DebugSessionView[]}
+     */
+    listFailedSessions(scope = {}) {
+      purgeFailedSessions()
+      const cwd = String(scope?.workspaceCwd || '').trim()
+      return Array.from(failedSessions.values())
+        .filter((record) => !cwd || sameCwd(record.workspaceCwd, cwd))
+        .map(toView)
+    },
+
+    /**
      * Finds an active session owned by ownerSessionId with optional debugSessionId and workspaceCwd.
      * @param {{ ownerSessionId: string, workspaceCwd?: string, debugSessionId?: string }} scope
      * @returns {import('../../types/debug.d.ts').DebugSessionView | null}
@@ -376,14 +461,15 @@ export function createDebugRuntime(deps = {}) {
       if (scope.debugSessionId) {
         const session = sessions.get(scope.debugSessionId)
         if (!session || session.ownerSessionId !== scope.ownerSessionId) return null
-        if (scope.workspaceCwd && session.workspaceCwd !== scope.workspaceCwd) return null
+        if (session.state === 'failed') return null
+        if (scope.workspaceCwd && !sameCwd(session.workspaceCwd, scope.workspaceCwd)) return null
         return toView(session)
       }
       for (const session of sessions.values()) {
-        if (session.ownerSessionId === scope.ownerSessionId) {
-          if (!scope.workspaceCwd || session.workspaceCwd === scope.workspaceCwd) {
-            return toView(session)
-          }
+        if (session.ownerSessionId !== scope.ownerSessionId) continue
+        if (session.state === 'failed') continue
+        if (!scope.workspaceCwd || sameCwd(session.workspaceCwd, scope.workspaceCwd)) {
+          return toView(session)
         }
       }
       return null
@@ -396,6 +482,7 @@ export function createDebugRuntime(deps = {}) {
      */
     findSession(predicate) {
       for (const session of sessions.values()) {
+        if (session.state === 'failed') continue
         const view = toView(session)
         if (predicate(view)) {
           return view
@@ -409,7 +496,9 @@ export function createDebugRuntime(deps = {}) {
      * @returns {import('../../types/debug.d.ts').DebugSessionView[]}
      */
     listSessions() {
-      return Array.from(sessions.values()).map(toView)
+      return Array.from(sessions.values())
+        .filter((session) => session.state !== 'failed')
+        .map(toView)
     },
 
     /**
@@ -457,7 +546,7 @@ export function createDebugRuntime(deps = {}) {
       if (!ownerSessionId || !workspaceCwd) return null
       for (const session of sessions.values()) {
         if (session.ownerSessionId !== ownerSessionId) continue
-        if (session.workspaceCwd !== workspaceCwd) continue
+        if (!sameCwd(session.workspaceCwd, workspaceCwd)) continue
         return session
       }
       const signal = options.signal
@@ -530,6 +619,7 @@ export function createDebugRuntime(deps = {}) {
         }
       }
       sessions.clear()
+      failedSessions.clear()
       leaseManager.clearAll()
     },
   }
