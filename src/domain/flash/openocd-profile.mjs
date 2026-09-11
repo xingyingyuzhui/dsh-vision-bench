@@ -1,7 +1,64 @@
 // @ts-check
 import { FLASH_ERROR_CODES } from './errors.mjs'
 
-export const FLASH_INTERFACES = ['cmsis-dap', 'stlink', 'jlink', 'ftdi', 'dap']
+/**
+ * OpenOCD `interface/<name>.cfg` whitelist.
+ *
+ * Every entry must correspond to a real `<name>.cfg` in the OpenOCD repository,
+ * otherwise the generated `-f interface/<name>.cfg` makes OpenOCD abort with
+ * `Can't find interface/<name>.cfg` before it ever touches the target.
+ *
+ * Verified against BOTH v0.11.0 and v0.12.0 (`tcl/interface/`):
+ *
+ *   ✅ cmsis-dap.cfg  stlink.cfg  stlink-dap.cfg  stlink-v2.cfg  stlink-v2-1.cfg
+ *      jlink.cfg  kitprog.cfg  ft232r.cfg  raspberrypi-native.cfg
+ *
+ * Removed because they never existed as files:
+ *   ❌ ftdi — upstream has a **directory** `interface/ftdi/`, not `ftdi.cfg`
+ *   ❌ dap  — no such file in either release
+ *
+ * Also deliberately NOT added:
+ *   ❌ stlink-hla — only exists on master; absent from v0.11.0 and v0.12.0
+ *
+ * ## ST-Link driver choice
+ *
+ * `stlink.cfg` uses the legacy HLA layer (`adapter driver hla`) and upstream
+ * recommends ST-LINK/V2 firmware >= V2.J21.S4 when using it.
+ *
+ * `stlink-dap.cfg` uses the modern direct driver (`adapter driver st-link`,
+ * "dapdirect") and supports ST-LINK/V1, V2, V2-1 and V3 — but its own header
+ * notes that ST-LINK/V1 and pre-V2J24 V2 units do **not** support dapdirect.
+ *
+ * Both are offered so a probe whose firmware dislikes one driver can use the
+ * other; neither is a substitute for upgrading OpenOCD itself.
+ */
+export const FLASH_INTERFACES = [
+  'cmsis-dap',
+  'stlink',
+  'stlink-dap',
+  'stlink-v2',
+  'stlink-v2-1',
+  'jlink',
+  'kitprog',
+  'ft232r',
+  'raspberrypi-native',
+]
+
+/**
+ * Interfaces removed from the whitelist, mapped to a working replacement.
+ *
+ * A profile saved by an older version may still name one of these. Falling back
+ * to a real interface keeps the workspace usable, where returning
+ * `FLASH_INTERFACE_INVALID` would strand it on a value the user cannot even see
+ * anymore.
+ *
+ * @type {Record<string, string>}
+ */
+export const LEGACY_INTERFACE_ALIASES = {
+  dap: 'cmsis-dap',
+  ftdi: 'ft232r',
+}
+
 export const FLASH_TARGETS = [
   'stm32f1x',
   'stm32f2x',
@@ -46,10 +103,13 @@ function isSafeCfgToken(name) {
  */
 export function validateOpenOcdInterface(name) {
   const raw = tokenOf(name)
-  if (!isSafeCfgToken(raw) || !FLASH_INTERFACES.includes(raw)) {
+  // Map a legacy token (e.g. `dap`, `ftdi`) onto a real interface before
+  // validating, so profiles saved by older versions keep working.
+  const resolved = LEGACY_INTERFACE_ALIASES[raw] || raw
+  if (!isSafeCfgToken(resolved) || !FLASH_INTERFACES.includes(resolved)) {
     return { ok: false, errorCode: FLASH_ERROR_CODES.FLASH_INTERFACE_INVALID, error: 'OpenOCD interface 不在白名单内' }
   }
-  return { ok: true, value: raw }
+  return { ok: true, value: resolved }
 }
 
 /**
@@ -91,17 +151,22 @@ export function resolveOpenOcdProfile(request = {}, stored = {}) {
     const checked = validateOpenOcdTarget(stored.target)
     if (!checked.ok) return checked
   }
+  // Resolve through the validators so a legacy alias (e.g. `dap` -> `cmsis-dap`)
+  // yields the real interface name rather than the token the user saved.
+  // Note: a stored value that is invalid for any *other* reason still fails
+  // closed — the workspace profile is attacker-writable data, and silently
+  // substituting a default would mean flashing an unintended chip.
   return {
     ok: true,
     interfaceName: present(reqIface)
-      ? tokenOf(reqIface)
+      ? /** @type {{ ok: true, value: string }} */ (validateOpenOcdInterface(reqIface)).value
       : present(stored.interface)
-        ? tokenOf(stored.interface)
+        ? /** @type {{ ok: true, value: string }} */ (validateOpenOcdInterface(stored.interface)).value
         : DEFAULT_OPENOCD_INTERFACE,
     target: present(reqTarget)
-      ? tokenOf(reqTarget)
+      ? /** @type {{ ok: true, value: string }} */ (validateOpenOcdTarget(reqTarget)).value
       : present(stored.target)
-        ? tokenOf(stored.target)
+        ? /** @type {{ ok: true, value: string }} */ (validateOpenOcdTarget(stored.target)).value
         : DEFAULT_OPENOCD_TARGET,
   }
 }
