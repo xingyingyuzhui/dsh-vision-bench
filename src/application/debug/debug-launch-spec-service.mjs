@@ -1,7 +1,7 @@
 // @ts-check
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { isAbsolute, join } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
 import { loadBindings as defaultLoadBindings, loadWorkspace as defaultLoadWorkspace } from '../../../bench-store.mjs'
 import { createDebugLaunchSpec } from '../../domain/debug/debug-launch-spec.mjs'
 import { DEBUG_ERRORS, DebugError } from '../../domain/debug/errors.mjs'
@@ -14,43 +14,101 @@ import { allocateLoopbackPort } from '../../infrastructure/network/loopback-port
 
 /**
  * Common artifact candidate folders to search in embedded projects.
+ *
+ * Keil MDK writes to `Objects/` **next to the .uvprojx**, not next to the
+ * workspace root, so `findFirmwareArtifacts` searches the project directory
+ * first and falls back to the workspace root.
  */
-const COMMON_ARTIFACT_DIRS = ['build', 'Objects', 'out', 'bin', 'Debug', 'debug', 'cmake-build-debug', '.']
+const COMMON_ARTIFACT_DIRS = [
+  'build',
+  'Objects',
+  'Objects/Release',
+  'Objects/Debug',
+  'out',
+  'bin',
+  'Debug',
+  'debug',
+  'Release',
+  'release',
+  'cmake-build-debug',
+  'cmake-build-release',
+  'MDK-ARM',
+  'mdk-arm',
+  '.',
+]
+
+/** Firmware artifact extensions we recognise (Keil `.axf`, GCC/IAR `.elf`). */
+const ARTIFACT_EXTENSIONS = ['.axf', '.elf']
 
 /**
  * Searches for firmware artifact (.axf or .elf) within workspace cwd.
  * @param {string} cwd
  * @returns {string[]} List of absolute paths to candidate firmware files
  */
-export function findFirmwareArtifacts(cwd) {
-  if (!cwd || !existsSync(cwd)) return []
-
+/**
+ * Collects firmware artifacts directly inside one root directory.
+ *
+ * @param {string} root
+ * @returns {string[]}
+ */
+function collectArtifactsUnder(root) {
+  if (!root || !existsSync(root)) return []
   /** @type {string[]} */
-  const candidates = []
-
+  const out = []
   for (const relDir of COMMON_ARTIFACT_DIRS) {
-    const dir = join(cwd, relDir)
+    const dir = relDir === '.' ? root : join(root, relDir)
     if (!existsSync(dir)) continue
 
     try {
       const entries = readdirSync(dir)
       for (const entry of entries) {
         const lower = entry.toLowerCase()
-        if (lower.endsWith('.axf') || lower.endsWith('.elf')) {
-          const full = join(dir, entry)
-          try {
-            const st = statSync(full)
-            if (st.isFile()) {
-              candidates.push(full)
-            }
-          } catch {
-            /* ignore inaccessible */
+        if (!ARTIFACT_EXTENSIONS.some((ext) => lower.endsWith(ext))) continue
+        const full = join(dir, entry)
+        try {
+          const st = statSync(full)
+          if (st.isFile()) {
+            out.push(full)
           }
+        } catch {
+          /* ignore inaccessible */
         }
       }
     } catch {
       /* ignore read errors */
     }
+  }
+  return out
+}
+
+/**
+ * Searches for firmware artifact (.axf / .elf) within a workspace.
+ *
+ * Search roots, in order:
+ *   1. the directory holding the Keil project file (.uvprojx), when known —
+ *      Keil resolves `Objects/` relative to the project, so a project nested in
+ *      `MDK-ARM/` is invisible to a workspace-root-only scan;
+ *   2. the workspace cwd, as a fallback for CMake/Make projects.
+ *
+ * @param {string} cwd
+ * @param {{ projectPath?: string }} [options]
+ * @returns {string[]} List of absolute paths to candidate firmware files
+ */
+export function findFirmwareArtifacts(cwd, options = {}) {
+  if (!cwd || !existsSync(cwd)) return []
+
+  /** @type {string[]} */
+  const roots = []
+  const projectPath = String(options.projectPath || '').trim()
+  if (projectPath) {
+    roots.push(dirname(projectPath))
+  }
+  roots.push(cwd)
+
+  /** @type {string[]} */
+  const candidates = []
+  for (const root of roots) {
+    candidates.push(...collectArtifactsUnder(root))
   }
 
   // Deduplicate
@@ -153,18 +211,29 @@ export async function resolveDebugLaunchSpec(request, deps = {}) {
   const profileResolver = deps.resolveOpenOcdProfile || resolveOpenOcdProfile
 
   let ws = null
+  let wsError = ''
   try {
     ws = loadWorkspace(home, cwd)
-  } catch {
+  } catch (err) {
     ws = null
+    wsError = err instanceof Error ? err.message : String(err)
   }
 
   /** @type {Record<string, any>} */
   let bindings = {}
+  let bindingsError = ''
   try {
     bindings = loadBindings(home) || {}
-  } catch {
+  } catch (err) {
     bindings = {}
+    bindingsError = err instanceof Error ? err.message : String(err)
+  }
+
+  // A missing home is the single most likely reason bindings come back empty.
+  // Without this note the failure is indistinguishable from "user configured
+  // nothing", which is exactly how the binding feature stayed broken unnoticed.
+  if (!home) {
+    bindingsError = bindingsError || '未提供 home，无法读取 Vision 绑定配置'
   }
 
   // 1. Current workspace project & target
@@ -175,6 +244,8 @@ export async function resolveDebugLaunchSpec(request, deps = {}) {
   let artifactSha256 = targetSpec.artifactSha256 ? String(targetSpec.artifactSha256).trim() : ''
   let source = 'auto-resolved'
   let resolutionMethod = 'auto'
+  /** @type {string[]} */
+  let artifactCandidates = []
 
   // 2. Check last successful BuildResult if artifact not explicitly given
   if (!artifactPath) {
@@ -232,8 +303,11 @@ export async function resolveDebugLaunchSpec(request, deps = {}) {
     source = 'explicit'
     resolutionMethod = 'synthetic'
   } else {
-    // 7. Fallback: Auto-detect artifact from workspace via mtime scan
-    const found = artifactFinder(cwd)
+    // 7. Fallback: Auto-detect artifact from workspace via mtime scan.
+    //    Search the Keil project directory first — `Objects/` lives next to the
+    //    .uvprojx, which is not necessarily the workspace root.
+    const found = artifactFinder(cwd, { projectPath })
+    artifactCandidates = found
     if (found.length === 0) {
       if (targetSpec.target && targetSpec.allowMissingArtifact) {
         artifactSha256 = `mock_sha256_${targetSpec.target}`
@@ -355,5 +429,16 @@ export async function resolveDebugLaunchSpec(request, deps = {}) {
       cwd,
     },
     spec,
+    /**
+     * Why workspace / bindings came back empty. Surfaced so a misconfigured
+     * `home` or a corrupt bindings.json is distinguishable from "user has not
+     * configured anything".
+     */
+    diagnostics: {
+      home: home || '',
+      wsError,
+      bindingsError,
+      artifactCandidates: Array.from(artifactCandidates),
+    },
   }
 }
