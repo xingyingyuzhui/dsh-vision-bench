@@ -30,7 +30,7 @@ export const runSelfCheck = async (home, cwd, opts = {}) => {
     bindings.openocd || '外部 OpenOCD 可执行文件，由插件通过 Node 进程封装调用',
   )
   push('bind-gdb', health.gdb.bound && health.gdb.exists, bindings.gdb || '外部 arm-none-eabi-gdb 可执行文件')
-  const presetHealth = inspectPresetHealth(home)
+  const presetHealth = await inspectPresetHealth(home)
   push(
     'vision-preset',
     presetHealth.ok,

@@ -229,6 +229,8 @@ export const modbusPoll = async (home, cwd, opts) => {
             connOk = false
             break
           }
+          // Budget only skips remaining batches. Passing it into I/O would abort
+          // the in-flight read and close the COM (runModbusOp abort → client.close).
           const ran = await runReadTx(
             transport,
             pack,
@@ -237,7 +239,7 @@ export const modbusPoll = async (home, cwd, opts) => {
             batch,
             room.cwd,
             4000,
-            signal,
+            outer,
             'polling',
           )
           if (ran.cancelled || aborted(signal)) {

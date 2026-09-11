@@ -70,6 +70,18 @@ test('ring overwrite reports dropped instead of silent skip', async () => {
   assert.ok(late.items.length === 500)
 })
 
+test('push keeps global seq so all-ports feed can page across connections', () => {
+  const ring = createFrameRing()
+  const a = ring.push({ direction: 'tx', hex: 'AA', byteLength: 1, seq: 11 })
+  const b = ring.push({ direction: 'rx', hex: 'BB', byteLength: 1, seq: 12 })
+  assert.equal(a.seq, 11)
+  assert.equal(b.seq, 12)
+  assert.equal(a.id, 1)
+  assert.equal(b.id, 2)
+  const noSeq = ring.push({ direction: 'tx', hex: 'CC', byteLength: 1 })
+  assert.equal(noSeq.seq, undefined)
+})
+
 test('cursor never exceeds the last returned record (empty page keeps cursor)', async () => {
   const ring = createFrameRing()
   push(ring, 10)

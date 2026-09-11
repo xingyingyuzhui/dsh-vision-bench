@@ -114,7 +114,8 @@ test('client and host inject connection for authenticated RPC', () => {
   const clientEntry = readFileSync(join(root, 'src/ui/client/client-entry.mjs'), 'utf8')
   const hostSrc = readFileSync(join(root, 'host.js'), 'utf8')
   assert.match(clientEntry, /inject = \['slots', 'locale', 'connection'\]/)
-  assert.match(hostSrc, /inject = \['connection', 'webServer', 'tools', 'agentPresets', 'systemPrompt'\]/)
+  assert.match(hostSrc, /inject = \['connection', 'webServer'\]/)
+  assert.doesNotMatch(hostSrc, /inject = \['connection', 'webServer', 'tools', 'agentPresets', 'systemPrompt'\]/)
   assert.match(hostSrc, /connection\.rpc\.handle/)
 })
 

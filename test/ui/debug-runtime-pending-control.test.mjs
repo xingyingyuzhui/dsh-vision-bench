@@ -88,6 +88,64 @@ test('PR-4: DebugToolbar renders transient state labels for pendingControl', () 
   assert.equal(idleChip.children[0], '空闲')
 })
 
+test('pause events re-evaluate watches added after subscribe', async () => {
+  const React = createMockReact()
+  /** @type {Array<() => any>} */
+  const effects = []
+  React.useEffect = (fn) => {
+    effects.push(fn)
+  }
+  /** @type {(value: any) => void} */
+  let settleWait
+  const waitGate = new Promise((resolve) => {
+    settleWait = resolve
+  })
+  let waitCalls = 0
+  const mockPost = async (path, body) => {
+    if (String(path).includes('/debug/state')) {
+      return { ok: true, session: { state: 'running', variables: [] } }
+    }
+    if (String(path).includes('/debug/events/wait')) {
+      waitCalls += 1
+      if (waitCalls === 1) return waitGate
+      return new Promise(() => {})
+    }
+    if (body?.op === 'evaluate') {
+      return { ok: true, result: body.expression === 'counter' ? '42' : '' }
+    }
+    return { ok: true }
+  }
+  const hook = useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-1' })
+  const stop = effects[0]?.()
+  await new Promise((r) => setImmediate(r))
+  hook.actions.addWatch('counter')
+  await new Promise((r) => setTimeout(r, 20))
+  React.reset()
+  const afterAdd = useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-1' })
+  assert.equal(afterAdd.watchValues[0]?.value, '42')
+  settleWait({
+    ok: true,
+    events: [{ type: DEBUG_EVENT_TYPES.PAUSED }],
+    nextCursor: 1,
+  })
+  await new Promise((r) => setTimeout(r, 30))
+  React.reset()
+  const afterPause = useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-1' })
+  assert.equal(afterPause.watchValues.length, 1)
+  assert.equal(afterPause.watchValues[0].value, '42')
+  if (typeof stop === 'function') stop()
+})
+
+test('useDebugEvents queries state once then waits; idle wake does not tight-loop', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../../src/ui/debug/runtime/use-debug-events.mjs', import.meta.url), 'utf8')
+  assert.match(src, /getState\(\)/)
+  assert.match(src, /waitEvents/)
+  assert.match(src, /waitRes\.woke/)
+  assert.match(src, /if \(!sessionId \|\| !cwd\)/)
+  assert.doesNotMatch(src, /\[active, identityKey/)
+})
+
 test('PR-4: useDebugEvents: pause and step set pendingControl without optimistic paused state', async () => {
   const React = createMockReact()
   let lastCommand = null

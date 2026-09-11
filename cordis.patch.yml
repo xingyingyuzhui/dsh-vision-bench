@@ -1,4 +1,4 @@
-# dsh bundle layer: Vision (host UI + seed Vision模式 preset).
+# dsh bundle layer: Vision host UI. Agent tools are mounted by the Vision模式 preset.
 - insert:
     - id: dsh-vision-bench
       name: dsh-vision-bench

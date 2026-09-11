@@ -27,6 +27,9 @@ test('package.json: version tracks package and no legacy python modbus files', a
     'openocd-profile.mjs packaged',
   )
   for (const want of [
+    'bench-guidance.mjs',
+    'src/infrastructure/store/dsh-home.mjs',
+    'src/infrastructure/harness/preset-validate.mjs',
     'src/application/flash/flash-approval-service.mjs',
     'src/application/flash/openocd-health-service.mjs',
     'src/infrastructure/files/firmware-snapshot.mjs',

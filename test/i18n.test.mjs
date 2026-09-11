@@ -20,6 +20,8 @@ test('translate falls back and interpolates', async () => {
   assert.doesNotMatch(translate('zh', 'pickerEmpty'), /uvmpw/)
   assert.equal(translate('zh', 'browse'), '选择工程')
   assert.equal(translate('zh', 'tabHmi'), '上位机')
+  assert.equal(translate('zh', 'connBar'), '全部连接')
+  assert.equal(translate('en', 'connBar'), 'All connections')
   assert.equal(translate('zh', 'tabMonitor'), '监控')
   assert.equal(translate('zh', 'sectionWorkbench'), '工作台')
   assert.equal(translate('zh', 'agentBuilding'), 'Agent 正在编译')

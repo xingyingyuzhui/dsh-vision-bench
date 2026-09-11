@@ -166,7 +166,7 @@ test('挂载无错误；默认不展开已监视点位列表（空状态只提�
   const tree = render(
     createElement(Viz, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
   )
-  await waitFor(() => assert.ok(tree.container.textContent.includes('可视化')), { timeout: 6000 })
+  await waitFor(() => assert.ok(tree.container.textContent.includes('新建组件')), { timeout: 6000 })
   const text = tree.container.textContent
   assert.ok(!text.includes('温度 /'), '未展开监视点位列表')
   assert.ok(!tree.container.querySelector('.dvb-viz-picker-list'), '空状态不展开点位选择器')
@@ -261,6 +261,8 @@ test('编辑图标恢复组件草稿；类型与关联点位回显', async () =>
   assert.ok(nameInput, '组件名称回显')
   const typeSel = Array.from(tree.container.querySelectorAll('select')).find((s) => s.value === 'value')
   assert.ok(typeSel, '组件类型回显 value')
+  assert.ok(tree.container.textContent.includes('显示'), '数值卡配置含显示页签')
+  assert.ok(tree.container.textContent.includes('实时预览'), '数值卡配置含预览')
   tree.unmount()
 })
 
@@ -505,12 +507,10 @@ test('未来 schema 进入只读模式：可查看、不可改、不发写请求
   await act(async () => {
     agentBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
   })
-  const onBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '开')
-  const offBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '关')
-  assert.ok(onBtn && onBtn.disabled, '开关开 disabled')
-  assert.ok(offBtn && offBtn.disabled, '开关关 disabled')
+  const switchBtn = tree.container.querySelector('.dvb-viz-switch-card [role=switch]')
+  assert.ok(switchBtn && switchBtn.disabled, '控制开关 disabled')
   await act(async () => {
-    onBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    switchBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
   })
   assert.equal(base.saved.length, 0, '不产生 visualization command')
   assert.equal(writes.length, 0, '不产生设备写入')
@@ -575,5 +575,26 @@ test('画布编辑模式切换：点击「编辑画布」解锁网格，点击�
   assert.equal(tree.container.textContent.includes('画布布局已保存'), false, '不显示画布布局已保存提示')
 
   tree.unmount()
+})
+
+test('组件编辑：页签下只保留一条分隔线（去掉首个分组标题的顶边）', async () => {
+  const { VISUALIZATION_CSS } = await import('../src/ui/styles/visualization.mjs')
+  const css = VISUALIZATION_CSS.join('')
+  assert.match(css, /\.dvb-viz-tabs-bar\{[^}]*border-bottom:1px solid var\(--dvb-bdr\)/)
+  assert.match(css, /\.dvb-viz-group-title\{[^}]*border-top:1px solid var\(--dvb-bdr\)/)
+  assert.match(css, /\.dvb-viz-group-title:first-child\{border-top:0\}/)
+})
+
+test('组件编辑弹窗锁在视口内，不把整页撑出滚动', async () => {
+  const { VISUALIZATION_CSS } = await import('../src/ui/styles/visualization.mjs')
+  const css = VISUALIZATION_CSS.join('')
+  assert.match(css, /\.dvb-viz-modal-mask\{[^}]*overflow:hidden/)
+  assert.match(css, /\.dvb-viz-modal\{[^}]*height:calc\(100vh - 32px\)/)
+  assert.match(css, /\.dvb-viz-modal\{[^}]*max-height:calc\(100vh - 32px\)/)
+  assert.match(css, /\.dvb-viz-modal\{[^}]*min-height:0/)
+  assert.match(css, /\.dvb-viz-drawer-body\{[^}]*overflow:auto/)
+  assert.doesNotMatch(css, /dvb-viz-picker-list\)\{border:1px/)
+  assert.match(css, /body:has\(\.dvb-viz-modal-mask\)\{overflow:hidden\}/)
+  assert.match(css, /\.dvb-viz-drawer-body\{[^}]*overscroll-behavior:contain/)
 })
 

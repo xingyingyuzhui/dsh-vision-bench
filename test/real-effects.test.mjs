@@ -403,7 +403,7 @@ test('Task8: pause freezes content (ids/text identical), resume shows live frame
     )
     await waitFor(
       () => {
-        const pauseBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '暂停')
+        const pauseBtn = tree.container.querySelector('[data-action="pause"]')
         assert.ok(pauseBtn, 'pause button rendered via real effects')
         assert.ok(tree.container.querySelectorAll('.dvb-live-row').length > 0, 'fallback rows rendered')
       },
@@ -422,9 +422,7 @@ test('Task8: pause freezes content (ids/text identical), resume shows live frame
     )
     // PAUSE
     await act(async () => {
-      Array.from(tree.container.querySelectorAll('button'))
-        .find((b) => b.textContent === '暂停')
-        .dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+      tree.container.querySelector('[data-action="pause"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
       await new Promise((r) => setTimeout(r, 60))
     })
     const pausedIds = Array.from(tree.container.querySelectorAll('.dvb-live-row')).map((el) =>
@@ -441,20 +439,20 @@ test('Task8: pause freezes content (ids/text identical), resume shows live frame
     const stillPausedText = tree.container.querySelector('.dvb-frames-virtual').textContent
     assert.deepEqual(stillPausedIds, pausedIds, 'paused content ids are frozen')
     assert.equal(stillPausedText, pausedText, 'paused content text is frozen')
-    // while paused the banner advertises the paused+new state
-    assert.ok(
-      tree.container.textContent.includes('已暂停'),
-      'paused banner shown: ["' + tree.container.textContent.slice(0, 200) + '"]',
-    )
-    // RESUME clears the snapshot and the paused banner
+    // while paused the switch reflects paused state
+    const pauseBtn = tree.container.querySelector('[data-action="pause"]')
+    assert.equal(pauseBtn?.getAttribute('aria-checked'), 'false', 'paused switch is off')
+    assert.equal(pauseBtn?.getAttribute('title'), '恢复', 'paused switch title is resume')
+    // RESUME clears the frozen snapshot
     await act(async () => {
-      const resumeBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '恢复')
-      if (resumeBtn) resumeBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+      if (pauseBtn) pauseBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
       await new Promise((r) => setTimeout(r, 120))
     })
     await waitFor(
       () => {
-        assert.ok(!tree.container.textContent.includes('已暂停'), 'resume clears the paused banner')
+        const resumeBtn = tree.container.querySelector('[data-action="pause"]')
+        assert.equal(resumeBtn?.getAttribute('aria-checked'), 'true', 'resume switch is on')
+        assert.equal(resumeBtn?.getAttribute('title'), '暂停', 'resume switch title is pause')
       },
       { timeout: 4000 },
     )
@@ -884,6 +882,96 @@ test('raw feed identity stays on the selected connection; COM4 does not mix in',
   globalThis.DvbVendor = savedVendor
 })
 
+test('raw all-ports feed pages by lastId, never by wall-clock lastAt', async () => {
+  const savedVendor = globalThis.DvbVendor
+  globalThis.DvbVendor = null
+  const feedBodies = []
+  const now = Date.now()
+  const post = async (path, body) => {
+    if (path === '/dsh-vision-bench/state') {
+      return {
+        ok: true,
+        workspace: {
+          modbus: {
+            version: 3,
+            connections: [
+              { id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3' } },
+              { id: 'c2', name: 'C2', conn: { mode: 'rtu', port: 'COM4' } },
+            ],
+            devices: [],
+            points: [],
+            framesByConnection: {},
+            configVersion: 1,
+          },
+        },
+        health: {},
+        serialSources: [
+          { connectionId: 'c1', port: 'COM3', state: 'connected', name: 'C1' },
+          { connectionId: 'c2', port: 'COM4', state: 'connected', name: 'C2' },
+        ],
+      }
+    }
+    if (path === '/dsh-vision-bench/serial/feed') {
+      feedBodies.push({ ...(body || {}) })
+      const since = Number(body && body.since) || 0
+      const all = [
+        { id: 1, seq: 1, epoch: 'e', connectionId: 'c1', port: 'COM3', at: now, hex: '01', direction: 'tx' },
+        { id: 2, seq: 2, epoch: 'e', connectionId: 'c2', port: 'COM4', at: now, hex: '02', direction: 'rx' },
+      ]
+      const lines = all.filter((l) => l.seq > since)
+      return {
+        ok: true,
+        open: true,
+        error: '',
+        lastId: lines.length ? lines[lines.length - 1].seq : since,
+        lines,
+      }
+    }
+    return { ok: true }
+  }
+  const tmap = (k) => ({ framesRaw: '原始数据', serialPause: '暂停' })[k] || k
+  const Frames = createFramesPage(React, tmap, post, { useVirtualizer: () => null })
+  const tree = render(
+    createElement(Frames, {
+      ...alpha3PageProps({ sessionId: 's1', path: '/tmp/p-raw-cursor' }),
+      scope: { cwd: '/tmp/p-raw-cursor' },
+    }),
+  )
+  await waitFor(
+    () => {
+      assert.ok(
+        Array.from(tree.container.querySelectorAll('button')).some((b) => b.textContent === '原始数据'),
+        'raw button',
+      )
+    },
+    { timeout: 6000 },
+  )
+  await act(async () => {
+    Array.from(tree.container.querySelectorAll('button'))
+      .find((b) => b.textContent === '原始数据')
+      .dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 40))
+  })
+  await waitFor(
+    () => {
+      assert.ok(feedBodies.length >= 1, 'raw mode pulls immediately')
+    },
+    { timeout: 4000 },
+  )
+  assert.equal(feedBodies[0].connectionId, '')
+  assert.ok(Number(feedBodies[0].since) < 1000, 'first since is a seq cursor, not Date.now()')
+  await waitFor(
+    () => {
+      assert.ok(feedBodies.length >= 2, 'second pull arrived')
+      const since = Number(feedBodies[1].since)
+      assert.ok(since >= 1 && since <= 2, 'later since follows lastId/seq, got ' + since)
+    },
+    { timeout: 4000 },
+  )
+  tree.unmount()
+  globalThis.DvbVendor = savedVendor
+})
+
 test('empty live sources show no HMI CTA; closing the tab does not unlink', async () => {
   const savedVendor = globalThis.DvbVendor
   globalThis.DvbVendor = null
@@ -990,12 +1078,14 @@ test('清空显示 only resets the page view and does not post frames/clear or c
     { timeout: 8000 },
   )
   await act(async () => {
-    Array.from(tree.container.querySelectorAll('button'))
-      .find((b) => b.textContent === '暂停')
-      .dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    tree.container.querySelector('[data-action="pause"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
     await new Promise((r) => setTimeout(r, 60))
   })
-  assert.ok(tree.container.textContent.includes('已暂停'), 'paused before clear')
+  assert.equal(
+    tree.container.querySelector('[data-action="pause"]')?.getAttribute('aria-checked'),
+    'false',
+    'paused before clear',
+  )
   await act(async () => {
     Array.from(tree.container.querySelectorAll('button'))
       .find((b) => b.textContent === '清空显示')
@@ -1005,7 +1095,11 @@ test('清空显示 only resets the page view and does not post frames/clear or c
   await waitFor(
     () => {
       assert.equal(tree.container.querySelectorAll('.dvb-live-row').length, 0, 'cleared view')
-      assert.ok(!tree.container.textContent.includes('已暂停'), 'pause banner cleared after clear')
+      assert.equal(
+        tree.container.querySelector('[data-action="pause"]')?.getAttribute('aria-checked'),
+        'true',
+        'pause banner cleared after clear',
+      )
     },
     { timeout: 6000 },
   )
@@ -1076,12 +1170,10 @@ test('Task7: switching connection while paused exits pause and shows only the ne
   )
   // pause on c1
   await act(async () => {
-    Array.from(tree.container.querySelectorAll('button'))
-      .find((b) => b.textContent === '暂停')
-      .dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    tree.container.querySelector('[data-action="pause"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
     await new Promise((r) => setTimeout(r, 60))
   })
-  assert.ok(tree.container.textContent.includes('已暂停'))
+  assert.equal(tree.container.querySelector('[data-action="pause"]')?.getAttribute('aria-checked'), 'false')
   // switch to c2 while paused → auto-exit pause, only c2 frameIds, no c1 residue
   await act(async () => {
     const sel = Array.from(tree.container.querySelectorAll('select'))[0]
@@ -1098,7 +1190,11 @@ test('Task7: switching connection while paused exits pause and shows only the ne
         ids.length === 4 && ids.every((id) => id.startsWith('c2-')),
         'only c2 frames after switch: ' + ids.slice(0, 5),
       )
-      assert.ok(!tree.container.textContent.includes('已暂停'), 'pause exited on connection switch')
+      assert.equal(
+        tree.container.querySelector('[data-action="pause"]')?.getAttribute('aria-checked'),
+        'true',
+        'pause exited on connection switch',
+      )
       assert.ok(!ids.some((id) => id.startsWith('c1-')), 'no c1 residue')
     },
     { timeout: 6000 },

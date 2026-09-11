@@ -136,3 +136,47 @@ test('fallback without table-core still uses getRowId', () => {
     ['a1', 'a2'],
   )
 })
+
+test('DataTable renders resizers and handles when onStartResize is provided', () => {
+  const { React, rerender } = makeReact()
+  const DataTable = createDataTable(React)
+  let resizedCol = null
+  let resetCol = null
+
+  const tree = rerender(() =>
+    DataTable({
+      data: [{ id: '1', colA: 'A', colB: 'B' }],
+      columns: [
+        { id: 'colA', header: 'Col A', accessorKey: 'colA' },
+        { id: 'colB', header: 'Col B', accessorKey: 'colB', enableResizing: false },
+      ],
+      getRowId: (row) => String(row.id),
+      totalWidth: 500,
+      onStartResize: (key) => { resizedCol = key },
+      resetColWidth: (key) => { resetCol = key },
+    }),
+  )
+
+  const resizers = []
+  walk(tree, (n) => {
+    if (n.props && n.props.className === 'dvb-col-resizer') resizers.push(n)
+  })
+
+  assert.equal(resizers.length, 1)
+  assert.equal(resizers[0].props['data-col'], 'colA')
+
+  resizers[0].props.onPointerDown({ clientX: 100, preventDefault() {}, stopPropagation() {} })
+  assert.equal(resizedCol, 'colA')
+
+  resizers[0].props.onDoubleClick()
+  assert.equal(resetCol, 'colA')
+
+  // Check minWidth on head and row
+  let headNode = null
+  walk(tree, (n) => {
+    if (n.props && n.props.className === 'dvb-data-table-head') headNode = n
+  })
+  assert.ok(headNode)
+  assert.equal(headNode.props.style.minWidth, '500px')
+})
+

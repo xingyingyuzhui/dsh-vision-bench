@@ -110,3 +110,34 @@ test('Debug RPC Handler routes state, commands, and events over Connection RPC',
   assert.equal(postState.ok, true)
   assert.equal(postState.active, false)
 })
+
+test('debug events/wait without session identity does not return another session', async () => {
+  const runtime = createDebugRuntime({
+    backendFactory: async () => ({
+      start: async () => {},
+      stop: async () => {},
+    }),
+  })
+  const handler = createDebugRpcHandler({ debugRuntime: runtime })
+  const started = await handler('debug/command', {
+    cwd: '/workspace/other',
+    sessionId: 'owner-other',
+    op: 'start',
+    targetSpec: { target: 'stm32f4x' },
+  })
+  assert.equal(started.ok, true)
+  const t0 = Date.now()
+  for (let i = 0; i < 100; i++) {
+    const waitRes = await handler('debug/events/wait', { cwd: '/workspace/other', sessionId: '', timeoutMs: 20000 })
+    assert.equal(waitRes.ok, true)
+    assert.equal(waitRes.woke, false)
+    assert.equal(waitRes.debugSessionId, undefined)
+    assert.equal(waitRes.identityRequired, true)
+  }
+  assert.ok(Date.now() - t0 < 1000)
+  await handler('debug/command', {
+    debugSessionId: started.debugSessionId,
+    sessionId: 'owner-other',
+    op: 'stop',
+  })
+})

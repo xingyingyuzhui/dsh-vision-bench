@@ -30,7 +30,8 @@ test('client inject uses connection for authenticated RPC, not Typert remote', (
 
 test('host inject registers Connection RPC and keeps only the Agent command bridge', () => {
   const host = readFileSync(join(root, 'host.js'), 'utf8')
-  assert.match(host, /inject = \['connection', 'webServer', 'tools', 'agentPresets', 'systemPrompt'\]/)
+  assert.match(host, /inject = \['connection', 'webServer'\]/)
+  assert.doesNotMatch(host, /inject = \['connection', 'webServer', 'tools', 'agentPresets', 'systemPrompt'\]/)
   assert.match(host, /connection\.rpc\.handle/)
   assert.doesNotMatch(host, /dsh-api-remotes/)
   assert.doesNotMatch(host, /TypertRemoteService/)

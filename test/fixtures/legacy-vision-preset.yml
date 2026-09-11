@@ -1,0 +1,15 @@
+# The `standard` agent preset: the full coding agent, mounted once per process.
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: >-
+      You are a coding agent powered by the {{model}} model. Your working
+      directory is {{cwd}}.
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: vision-bench-tools
+  name: dsh-vision-bench
+  config:
+    role: agent

@@ -1,4 +1,5 @@
 import { connLabel } from '../../../bench-devices.mjs'
+import { connTabLabel } from './connection-label.mjs'
 
 /** Connection tab bar (all / per-conn / overflow / add). */
 export function renderConnectionTabs(el, t, ctx) {
@@ -29,18 +30,6 @@ export function renderConnectionTabs(el, t, ctx) {
     if (st === 'disconnecting') return { kind: 'warn', text: '断开中' }
     if (st === 'error') return { kind: 'err', text: '连接异常' }
     return { kind: 'idle', text: isSim ? '仿真未启动' : '未连接' }
-  }
-  function connEndpointLabel(c) {
-    const cc = c?.conn || {}
-    if (cc.sim || c?.sim) return '仿真'
-    if (cc.mode === 'tcp') {
-      if (c.role === 'server' || c.role === 'slave') return 'Listen :' + (cc.tcpPort || 502)
-      return (cc.host || 'TCP') + ':' + (cc.tcpPort || 502)
-    }
-    return cc.port || '—'
-  }
-  function connTabLabel(c) {
-    return c.name + ' · ' + connEndpointLabel(c)
   }
   function badgeForConn(connId) {
     const pts = (pack.points || []).filter((p) => (p.connectionId || p.connId) === connId)

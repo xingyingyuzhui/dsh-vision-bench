@@ -94,7 +94,7 @@ export function createVizCard(React, t) {
       }
 
       if (comp.type === 'value') {
-        return renderValueRenderer(el, { latest })
+        return renderValueRenderer(el, { latest, settings: comp.settings, name: comp.name })
       }
 
       if (comp.type === 'switch') {
@@ -109,6 +109,8 @@ export function createVizCard(React, t) {
         return renderSwitchRenderer(el, {
           item,
           pt,
+          settings: comp.settings,
+          name: comp.name,
           on: item.value === 1 || item.value === true,
           busy,
           confirmHint,

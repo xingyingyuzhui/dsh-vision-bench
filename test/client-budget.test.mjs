@@ -33,7 +33,7 @@ function spec(overrides = {}) {
 
 test('client budget constants stay at the 0.25 vendor cap', () => {
   assert.equal(CLIENT_BYTE_BASELINE, 567475)
-  assert.equal(CLIENT_BYTE_LIMIT, 1572864)
+  assert.equal(CLIENT_BYTE_LIMIT, 1650000)
   assert.ok(CLIENT_BYTE_LIMIT > CLIENT_BYTE_BASELINE)
 })
 

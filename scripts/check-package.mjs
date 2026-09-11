@@ -10,7 +10,7 @@ function fail(msg) {
   process.exit(1)
 }
 
-const required = ['host.js', 'client.js', 'README.md', 'LICENSE']
+const required = ['host.js', 'tools.js', 'client.js', 'README.md', 'LICENSE']
 for (const f of required) {
   if (!existsSync(join(root, f))) fail(`missing ${f}`)
 }

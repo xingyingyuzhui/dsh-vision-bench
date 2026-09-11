@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.28.0
+
+Requires DSH `0.1.5-rc.1`. Repair release: native DSH contract, upgrade migration, no long-term framework patches.
+
+- Preset overlay migrates `text → prefix` and the tool row to `dsh-vision-bench/agent`, validates with official `dsh-persona` Config, and copies shipped `standard` on first install.
+- Settings preset health uses the same schema/tool-row contract, not YAML parse alone.
+- Host stays `connection` + `webServer`. Agent is `./agent` (`dsh-vision-bench-tools`) with required `tools` + `systemPrompt`.
+- Default bundle no longer inserts `standing-guard` / `scan-guard`. Those remain an optional sibling `dsh-vision-harness` with an explicit DSH version pin, not a production dependency.
+- Debug page still does one state query; event wait parks for Agent-started sessions instead of 1 Hz polling.
+- Debug wait/wake require owner session id and workspace cwd. Watch values survive pause/step. Host dispose waits for the same RPC unregister promise. Preset health uses official `dsh-persona` Config.
+
+## 0.27.2
+
+Requires DSH `0.1.5-rc.1`. Preset compatibility and standing-mount isolation.
+
+- Migrate Vision persona `config.text` → `config.prefix` and rewrite the managed tool row to `dsh-vision-bench/agent` (no leftover `role`). Overlay validates with the official `dsh-persona` Config before write.
+- First install copies the shipped `standard` preset when `agentPresets.copy` is unavailable, then overlays and validates. Failures are not swallowed as success.
+- Failed standing mounts are cached by composition digest: deterministic schema errors remount once per generation; transient errors back off; explicit retry and file changes remount.
+- Host RPC registration that resolves after dispose still runs the disposer. Shared debug runtime dispose is identity-checked. Agent guidance is a required `systemPrompt` effect and no longer imports the YAML migrator.
+- Debug page keeps one state query, parks on `waitEvents` while idle, and wakes when Agent starts a session. Scan flush snapshots the plugin tree once per dirty batch.
+
 ## 0.27.0
 
 Requires DSH 0.1.2-alpha.3. Install from an `npm pack` tarball.

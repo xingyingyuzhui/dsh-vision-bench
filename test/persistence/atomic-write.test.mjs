@@ -25,6 +25,16 @@ test('atomic-write: writes JSON that can be re-read', async () => {
   await rm(dir, { recursive: true, force: true })
 })
 
+test('runtime persist can write compact JSON without fsync', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dvb-atom-rt-'))
+  const file = join(dir, 'runtime.json')
+  writeJsonAtomicSync(file, { values: [1, 2], nested: { a: true } }, { pretty: false, fsync: false })
+  const raw = (await import('node:fs')).readFileSync(file, 'utf8')
+  assert.equal(raw.includes('\n  '), false)
+  assert.deepEqual(readJsonSync(file), { values: [1, 2], nested: { a: true } })
+  await rm(dir, { recursive: true, force: true })
+})
+
 test('concurrent-update: exclusive queue serializes mutators', async () => {
   const order = []
   const p1 = runExclusive('k', async () => {

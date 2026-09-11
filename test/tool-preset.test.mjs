@@ -19,10 +19,11 @@ import {
   parseCompositionDocument,
   seedVisionBenchPreset,
 } from '../bench-preset.mjs'
+import { AGENT_PLUGIN_SPEC } from '../bench-preset.mjs'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
 import { runVisionBench, visionBenchTool } from '../bench-tool.mjs'
-import { apply } from '../host.js'
 import { projectModbusForSession } from '../src/application/modbus/config-scope-service.mjs'
+import { apply as applyAgent } from '../tools.js'
 
 function sessionPack(home, cwd, sessionId) {
   return projectModbusForSession(loadWorkspace(home, cwd).modbus, sessionId)
@@ -54,25 +55,33 @@ const personaComposition = (text) =>
 
 test('agent role registers vision_bench and skips HTTP routes', async () => {
   const tools = []
-  apply(
-    {
-      tools: {
-        register(def) {
-          tools.push(def)
-          return () => {}
-        },
+  const sections = []
+  applyAgent({
+    tools: {
+      register(def) {
+        tools.push(def)
+        return () => {}
       },
-      agentPresets: {},
-      webServer: {
-        register() {
-          throw new Error('host routes must not mount on agent plane')
-        },
-      },
-      effect() {},
     },
-    { role: 'agent' },
-  )
+    systemPrompt: {
+      section(def) {
+        sections.push(def)
+        return () => {}
+      },
+    },
+    agentPresets: {},
+    webServer: {
+      register() {
+        throw new Error('host routes must not mount on agent plane')
+      },
+    },
+    effect(factory) {
+      factory()
+    },
+  })
   assert.equal(tools.length, 2)
+  assert.equal(sections.length, 1)
+  assert.equal(sections[0].name, 'vision-bench:guidance')
   const benchTool = tools.find((t) => t.name === 'vision_bench')
   const debugTool = tools.find((t) => t.name === 'vision_debug')
   assert.ok(benchTool)
@@ -82,6 +91,37 @@ test('agent role registers vision_bench and skips HTTP routes', async () => {
   assert.ok(benchTool.parameters.required.includes('action'))
   assert.equal(debugTool.parameters.type, 'object')
   assert.ok(debugTool.parameters.properties.action.enum.includes('breakpoint'))
+})
+
+test('agent loader uses a distinct name and injects tools plus systemPrompt', async () => {
+  const { name, inject } = await import('../tools.js')
+  assert.equal(name, 'dsh-vision-bench-tools')
+  assert.deepEqual(inject, ['tools', 'systemPrompt'])
+  const src = await (await import('node:fs/promises')).readFile(new URL('../tools.js', import.meta.url), 'utf8')
+  assert.doesNotMatch(src, /bench-preset\.mjs/)
+  assert.match(src, /bench-guidance\.mjs/)
+  assert.match(src, /dsh-home\.mjs/)
+})
+
+test('ensurePresetOverlay renames legacy host-named agent row to /agent', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dvb-preset-rename-'))
+  try {
+    await writeFile(
+      join(dir, 'agent.cordis.yml'),
+      ['- id: vision-bench-tools', '  name: dsh-vision-bench', '  config:', '    role: agent', ''].join('\n'),
+    )
+    await writeFile(
+      join(dir, '.dsh-vision-bench'),
+      JSON.stringify({ owner: 'dsh-vision-bench', presetSchemaVersion: 2, pluginRowId: 'vision-bench-tools' }),
+    )
+    const out = ensurePresetOverlay(dir)
+    assert.equal(out.ok, true, out.error)
+    const text = await readFile(join(dir, 'agent.cordis.yml'), 'utf8')
+    assert.match(text, /name: dsh-vision-bench\/agent/)
+    assert.doesNotMatch(text, /name: dsh-vision-bench\n/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })
 
 test('ensurePresetOverlay appends the agent-plane row and persona', async () => {
@@ -102,15 +142,22 @@ test('ensurePresetOverlay appends the agent-plane row and persona', async () => 
     assert.equal(out.ok, true)
     const text = await (await import('node:fs/promises')).readFile(join(dir, 'agent.cordis.yml'), 'utf8')
     assert.match(text, /id: vision-bench-tools/)
-    assert.match(text, /role: agent/)
+    assert.match(text, /name: dsh-vision-bench\/agent/)
+    assert.doesNotMatch(text, /role: agent/)
+    assert.equal(AGENT_PLUGIN_SPEC, 'dsh-vision-bench/agent')
     // persona should remain standard (not Vision) – check via yaml parse to handle folded style
     const yaml = await import('yaml')
     const doc = yaml.parseDocument(text)
+    let personaPrefix = null
     let personaText = null
     for (const item of doc.contents.items) {
-      if (item.get('id') === 'persona') personaText = item.getIn(['config', 'text'])
+      if (item.get('id') === 'persona') {
+        personaPrefix = item.getIn(['config', 'prefix'])
+        personaText = item.getIn(['config', 'text'])
+      }
     }
-    assert.equal(personaText, PRESET_PERSONA)
+    assert.equal(personaPrefix, PRESET_PERSONA)
+    assert.equal(personaText, undefined)
     // Vision guidance is now via host prompt section, not hard-coded persona
     assert.equal(text.includes('Vision 台架'), false)
     // ownership file should be JSON with Vision模式 metadata
@@ -119,7 +166,7 @@ test('ensurePresetOverlay appends the agent-plane row and persona', async () => 
     const marker = await (await import('node:fs/promises')).readFile(join(dir, '.dsh-vision-bench'), 'utf8')
     const ownership = JSON.parse(marker)
     assert.equal(ownership.owner, 'dsh-vision-bench')
-    assert.equal(ownership.presetSchemaVersion, 2)
+    assert.equal(ownership.presetSchemaVersion, 3)
     assert.equal(ownership.pluginRowId, 'vision-bench-tools')
     assert.match(presetText, /Vision 调试与上位机接口/)
     assert.equal(presetText.includes('Vision 台架接口'), false)
@@ -258,7 +305,7 @@ test('inspectPresetHealth reports generation and new-session apply rule', async 
       await writeFile(join(presetDir, name), await readFile(join(dir, name), 'utf8'))
     }
     await seedVisionBenchPreset(null, home)
-    const health = inspectPresetHealth(home)
+    const health = await inspectPresetHealth(home)
     assert.equal(health.ok, true)
     assert.equal(health.appliesOnNewSession, true)
     assert.match(health.nextStep, /新建 Session/)
@@ -267,6 +314,73 @@ test('inspectPresetHealth reports generation and new-session apply rule', async 
     assert.equal(again.unchanged, true)
   } finally {
     await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('inspectPresetHealth rejects yaml that parses but fails official persona schema', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-preset-schema-'))
+  const dir = join(home, '.agent-presets', 'vision-bench')
+  try {
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      join(dir, 'agent.cordis.yml'),
+      [
+        '- id: persona',
+        "  name: '@deepseek-ai/dsh-persona'",
+        '  config:',
+        '    text: You are a coding agent',
+        '',
+      ].join('\n'),
+    )
+    await writeFile(
+      join(dir, '.dsh-vision-bench'),
+      JSON.stringify({
+        owner: 'dsh-vision-bench',
+        presetSchemaVersion: 3,
+        pluginRowId: 'vision-bench-tools',
+        lastManagedAt: '2026-01-01T00:00:00.000Z',
+      }),
+    )
+    const health = await inspectPresetHealth(home)
+    assert.equal(health.ok, false)
+    assert.match(health.error, /prefix missing required value/)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('inspectPresetHealth uses official Config and rejects wrong complete type', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dvb-preset-complete-'))
+  const dir = join(home, '.agent-presets', 'vision-bench')
+  try {
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      join(dir, 'agent.cordis.yml'),
+      [
+        '- id: persona',
+        "  name: '@deepseek-ai/dsh-persona'",
+        '  config:',
+        '    prefix: You are a coding agent',
+        '    complete: wrong-type',
+        '- id: vision-bench-tools',
+        '  name: dsh-vision-bench/agent',
+        '',
+      ].join('\n'),
+    )
+    await writeFile(
+      join(dir, '.dsh-vision-bench'),
+      JSON.stringify({
+        owner: 'dsh-vision-bench',
+        presetSchemaVersion: 3,
+        pluginRowId: 'vision-bench-tools',
+        lastManagedAt: '2026-01-01T00:00:00.000Z',
+      }),
+    )
+    const health = await inspectPresetHealth(home)
+    assert.equal(health.ok, false)
+    assert.match(health.error, /complete|invalid|expected|type/i)
+  } finally {
+    await rm(home, { recursive: true, force: true })
   }
 })
 
@@ -286,7 +400,7 @@ test('inspectPresetHealth surfaces a broken agent.cordis.yml', async () => {
         lastManagedAt: '2026-01-01T00:00:00.000Z',
       }),
     )
-    const health = inspectPresetHealth(home)
+    const health = await inspectPresetHealth(home)
     assert.equal(health.ok, false)
     assert.ok(health.error)
     assert.equal(health.appliesOnNewSession, true)
@@ -710,11 +824,16 @@ test('user-modified persona is never lost (needsReview keeps it; rollback restor
     assert.ok(after.includes('vision-bench-tools'))
     const yaml = await import('yaml')
     const doc = yaml.parseDocument(after)
+    let personaPrefix = null
     let personaText = null
     for (const item of doc.contents.items) {
-      if (item.get('id') === 'persona') personaText = item.getIn(['config', 'text'])
+      if (item.get('id') === 'persona') {
+        personaPrefix = item.getIn(['config', 'prefix'])
+        personaText = item.getIn(['config', 'text'])
+      }
     }
-    assert.equal(personaText, userPersona, 'user persona must survive the overlay unchanged')
+    assert.equal(personaPrefix, userPersona, 'user persona must survive the overlay as prefix')
+    assert.equal(personaText, undefined, 'legacy text field must be removed after prefix migration')
     bak = ok.backupDir || null
   } finally {
     await rm(dir, { recursive: true, force: true })

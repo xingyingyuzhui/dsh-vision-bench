@@ -6,6 +6,17 @@ const ENOENT_RE = /ENOENT|cannot find|not found|no such file/i
 const IN_USE_RE = /EADDRINUSE|access denied|busy|in use|EACCES|EBUSY/i
 const DISCONNECT_RE = /ECONNRESET|EPIPE|disconnected|socket hang up/i
 
+const TRANSACTION_ERROR_CODES = new Set([
+  'MODBUS_TIMEOUT',
+  'MODBUS_CRC_ERROR',
+  'MODBUS_EXCEPTION',
+  'INVALID_RESPONSE',
+  'UNIT_ID_INVALID',
+])
+
+/** Protocol/transaction failures must not tear down a held COM. */
+export const isTransactionError = (error) => TRANSACTION_ERROR_CODES.has(String((error && error.code) || ''))
+
 export const mapDriverError = (error) => {
   if (!error) return ioError('INVALID_RESPONSE', '未知错误')
   if (

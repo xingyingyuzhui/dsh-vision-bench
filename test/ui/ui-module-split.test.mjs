@@ -11,7 +11,7 @@ import {
   languageForPath,
 } from '../../src/ui/debug/project/project-tree-model.mjs'
 import { alarmListForView } from '../../src/ui/monitor/alarms/alarm-filter-model.mjs'
-import { filterFrameList } from '../../src/ui/monitor/frames/frames-filter-model.mjs'
+import { filterFrameList, filtersForMode } from '../../src/ui/monitor/frames/frames-filter-model.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -126,6 +126,19 @@ test('pure models filter alarms, frames, and project files without React', () =>
   ]
   assert.equal(filterFrameList(frames, { deviceId: 'd1' }, '').length, 1)
   assert.equal(filterFrameList(frames, {}, 'coil').length, 1)
+  assert.equal(filterFrameList([{ ...frames[0], hex: '01 03 00', direction: 'tx' }], { direction: 'tx' }, '01 03').length, 1)
+  assert.equal(filterFrameList([{ ...frames[0], hex: '010300', direction: 'rx' }], { direction: 'tx' }, '').length, 0)
+  const protoFlt = { deviceId: 'd1', functionCode: '3', status: 'ok', source: 'polling', direction: 'tx' }
+  assert.deepEqual(filtersForMode('raw', protoFlt), {
+    deviceId: '',
+    functionCode: '',
+    status: '',
+    source: '',
+    direction: 'tx',
+  })
+  const rawRow = { deviceId: '', functionCode: 0, status: 'ok', source: 'polling', direction: 'tx', hex: '0103' }
+  assert.equal(filterFrameList([rawRow], protoFlt, '').length, 0, 'stale proto device filter would hide raw')
+  assert.equal(filterFrameList([rawRow], filtersForMode('raw', protoFlt), '').length, 1)
   const file = {
     name: 'main.c',
     rel: 'src/main.c',

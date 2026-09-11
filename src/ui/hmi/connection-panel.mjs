@@ -46,7 +46,7 @@ export function renderConnectionPanel(el, t, ctx) {
     el(
       'div',
       { className: 'dvb-panel-head dvb-conn-section-head' },
-      el('span', { className: 'dvb-panel-title' }, t('connBar') || '连接'),
+      el('span', { className: 'dvb-panel-title' }, t('connBar') || '全部连接'),
       el('span', { className: 'dvb-tag' }, connections.length + ' 个连接'),
       el(
         'button',

@@ -45,47 +45,12 @@ export function tcpOccupierAmong(connections, host, tcpPort, excludeId) {
   return hit ? hit.name : null
 }
 
-/** Transient Agent focus toast. */
+/** Transient Agent focus toast (.dvb-focus-toast disabled per user request: do not display bottom-right popup). */
 export function renderFocusToast(el, t, ctx) {
+  void el
   void t
-  const { focusState, returnToPrevFocus, setFocusUi } = ctx
-  if (!(focusState?.request && !focusState.badgeOnly)) return null
-  return el(
-    'div',
-    { className: 'dvb-focus-toast', role: 'status' },
-    el(
-      'span',
-      null,
-      'Agent 已定位到 ' +
-        [
-          focusState.request.connectionId,
-          focusState.request.deviceId,
-          focusState.request.pointId || focusState.request.frameId,
-        ]
-          .filter(Boolean)
-          .join(' / '),
-    ),
-    focusState.prev
-      ? el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: returnToPrevFocus }, '返回原位置')
-      : null,
-    el(
-      'button',
-      {
-        type: 'button',
-        className: 'dvb-btn dvb-btn-sm',
-        onClick() {
-          setFocusUi({
-            request: null,
-            prev: focusState?.request,
-            tempWatchIds: [],
-            badgeOnly: false,
-            evidence: [],
-          })
-        },
-      },
-      '×',
-    ),
-  )
+  void ctx
+  return null
 }
 
 /** Pending agent write approvals. */

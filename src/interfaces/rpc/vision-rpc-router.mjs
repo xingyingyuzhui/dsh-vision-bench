@@ -163,9 +163,20 @@ function sessionWorkspaceView(workspace, sessionId) {
  * @param {string | undefined} cwd
  * @param {string} [sessionId] pending writes are only exposed to their owning session
  */
+const migratedCwds = new Set()
+let presetHealthAt = 0
+let presetHealthCached = null
+let presetHealthHome = ''
+
 async function snapshot(home, cwd, sessionId) {
   const bindings = loadBindings(home)
   const globalShare = loadGlobalShare(home)
+  const now = Date.now()
+  if (!presetHealthCached || presetHealthHome !== home || now - presetHealthAt > 30000) {
+    presetHealthCached = await inspectPresetHealth(home)
+    presetHealthAt = now
+    presetHealthHome = home
+  }
   /** @type {Record<string, any>} */
   const body = {
     ok: true,
@@ -173,15 +184,18 @@ async function snapshot(home, cwd, sessionId) {
     globalShare,
     health: probeBindings(bindings),
     ioRuntime: getVisionIoBroker().snapshot(),
-    presetHealth: inspectPresetHealth(home),
+    presetHealth: presetHealthCached,
   }
   const room = cwd ? requireWorkspaceCwd(cwd) : { error: 'no-cwd' }
   const workspaceCwd = workspaceCwdOf(room)
   if (workspaceCwd) {
-    try {
-      await migrateLegacyDisabled(home, workspaceCwd)
-    } catch {
-      /* migration best-effort */
+    if (!migratedCwds.has(workspaceCwd)) {
+      try {
+        await migrateLegacyDisabled(home, workspaceCwd)
+      } catch {
+        /* migration best-effort */
+      }
+      migratedCwds.add(workspaceCwd)
     }
     try {
       ensurePolling(home, workspaceCwd)

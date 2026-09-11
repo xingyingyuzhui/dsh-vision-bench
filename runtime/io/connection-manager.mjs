@@ -1,6 +1,7 @@
 import { endpointFingerprint, ioError, normalizeCom } from '../../bench-io-contract.mjs'
 import { createFrameRing } from './frame-ring.mjs'
 import { closeModbusClient, openModbusClient, runModbusOp } from './modbus-driver.mjs'
+import { isTransactionError } from './error-map.mjs'
 import { attachRtuCapture } from './rtu-capture-adapter.mjs'
 
 export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = {}) {
@@ -254,6 +255,10 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
         return { ...ran, transactionId }
       } catch (error) {
         if (error && typeof error === 'object') error.transactionId = error.transactionId || transactionId
+        if (isTransactionError(error)) {
+          slot.lastActivityAt = now()
+          throw error
+        }
         if (slot.held) {
           slot.liveState = 'error'
           slot.liveError = String((error && error.message) || error)

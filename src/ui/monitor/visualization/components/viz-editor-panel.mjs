@@ -3,6 +3,8 @@
 
 import { getCustomSelect } from '../../../components/custom-select.mjs'
 import { renderPreviewChart } from '../hooks/use-viz-charts.mjs'
+import { renderSwitchWidget } from '../renderers/switch-renderer.mjs'
+import { renderValueWidget } from '../renderers/value-renderer.mjs'
 import { pointCompatible } from '../viz-helpers.mjs'
 import { createVizPointPicker } from './viz-point-picker.mjs'
 
@@ -32,6 +34,7 @@ export function createVizEditorPanel(React, t) {
     onCancel,
   }) {
     const [activeTab, setActiveTab] = React.useState('style')
+    const [previewState, setPreviewState] = React.useState('on')
     const previewRef = React.useRef(null)
 
     React.useEffect(() => {
@@ -43,6 +46,12 @@ export function createVizEditorPanel(React, t) {
     React.useEffect(() => {
       renderPreviewChart(previewRef.current, editor)
     }, [editor?.type, editor?.settings])
+
+    React.useEffect(() => {
+      const ty = editor?.type
+      setActiveTab(ty === 'line' || ty === 'bar' ? 'style' : 'display')
+      setPreviewState('on')
+    }, [editor?.type])
 
     if (!editor) return null
 
@@ -106,6 +115,146 @@ export function createVizEditorPanel(React, t) {
     const isLine = editor.type === 'line'
     const isBar = editor.type === 'bar'
     const isChart = isLine || isBar
+    const isValue = editor.type === 'value'
+    const isSwitch = editor.type === 'switch'
+
+    const configShell = (tabs, form, preview) => [
+      el(
+        'div',
+        { key: 'top_bar', className: 'dvb-viz-tabs-bar' },
+        el(
+          'div',
+          { className: 'dvb-viz-filter-pills' },
+          tabs.map(([k, lbl]) => pill(activeTab === k, () => setActiveTab(k), lbl, k)),
+        ),
+      ),
+      el(
+        'div',
+        { key: 'split', className: 'dvb-viz-config-split' },
+        el('div', { className: 'dvb-viz-config-form' }, el('div', { className: 'dvb-viz-config-grid' }, form)),
+        el('div', { className: 'dvb-viz-preview-panel' }, preview),
+      ),
+    ]
+
+    const renderValueTab = () =>
+      activeTab === 'format'
+        ? [
+            sec('占位与前后缀'),
+            rowInp('无数据占位', 'emptyText', '—', '', 2),
+            rowInp('前缀', 'valuePrefix', '', '', 2),
+            rowInp('后缀', 'valueSuffix', '', '', 2),
+          ]
+        : activeTab === 'status'
+          ? [
+              sec('状态规则'),
+              rowSwitch('showStatus', '显示状态', true, 4),
+              rowNum('告警下限', 'statusLo', '低于则告警'),
+              rowNum('告警上限', 'statusHi', '高于则告警'),
+              el('div', { key: 'h', className: 'dvb-hint dvb-viz-span-4' }, '不填则仅按点位通讯是否正常判断。'),
+            ]
+          : [
+              sec('基础内容'),
+              rowSwitch('showTitle', '显示标题'),
+              rowInp('单位', 'yUnit', '℃, rpm'),
+              rowSel('小数位数', 'valueDecimals', DEC_OPTS),
+              sec('数值样式'),
+              rowSel('数值字号', 'valueSize', P('32:32 px,40:40 px,48:48 px,56:56 px')),
+              rowColor('数值颜色', 'valueColor', '#172033'),
+              rowPills('内容对齐', 'valueAlign', P('left:左对齐,center:居中'), 'left', 2),
+              rowPills('单位位置', 'unitPos', P('right:数值右侧,below:数值下方'), 'right', 2),
+              sec('辅助信息'),
+              rowSwitch('showStatus', '显示状态'),
+              rowSwitch('showUpdatedAt', '显示更新时间'),
+              sec('卡片外观'),
+              rowColor('背景颜色', 'cardBg', '#FFFFFF'),
+              rowSwitch('cardBorder', '边框', true),
+              rowSel('圆角', 'cardRadius', P('8:8 px,12:12 px,16:16 px')),
+            ]
+
+    const renderSwitchTab = () =>
+      activeTab === 'behavior'
+        ? [
+            sec('控制行为'),
+            rowSwitch('confirmWrite', '写入前二次确认', true, 4),
+            el('div', { key: 'h', className: 'dvb-hint dvb-viz-span-4' }, 'Agent 或界面写线圈前弹出确认卡。'),
+          ]
+        : activeTab === 'feedback'
+          ? [
+              sec('状态反馈'),
+              rowSwitch('showFeedback', '显示反馈状态', true, 4),
+              rowSwitch('showUpdatedAt', '显示更新时间', true, 4),
+              rowInp('提示文案', 'hintText', '实际状态以设备反馈为准。', '', 4),
+              el('div', { key: 'h', className: 'dvb-hint dvb-viz-span-4' }, '执行中：等待设备回读。离线：开关禁用，保留上次状态。'),
+            ]
+          : [
+              sec('基础内容'),
+              rowSwitch('showTitle', '显示标题', true, 4),
+              sec('控件样式'),
+              rowPills('展示形式', 'switchStyle', P('toggle:滑动开关,buttons:双按钮'), 'toggle', 4),
+              rowPills('控件尺寸', 'switchSize', P('sm:小,md:中,lg:大'), 'md', 4),
+              sec('状态文案'),
+              rowInp('开启文案', 'onLabel', '已开启'),
+              rowInp('关闭文案', 'offLabel', '已关闭'),
+              sec('状态颜色'),
+              rowColor('开启颜色', 'onColor', '#4D85FF'),
+              rowColor('关闭颜色', 'offColor', '#B8C0CC'),
+              sec('卡片外观'),
+              rowColor('背景颜色', 'cardBg', '#FFFFFF'),
+              rowSwitch('cardBorder', '边框', true),
+              rowSel('圆角', 'cardRadius', P('8:8 px,12:12 px,16:16 px')),
+            ]
+
+    const valuePreview = () => [
+      el('div', { key: 'ph', className: 'dvb-viz-preview-head' },
+        el('span', { className: 'dvb-viz-preview-title' }, '实时预览'),
+        el('span', { className: 'dvb-badge' }, '示例数据'),
+      ),
+      el('div', { key: 'live' }, renderValueWidget(el, {
+        settings: s,
+        name: editor.name || '设备温度',
+        value: 26.8,
+        ok: true,
+        unit: '℃',
+        at: Date.now(),
+      })),
+      el('div', { key: 'f', className: 'dvb-viz-preview-foot' }, '当前预览使用示例数值，不读取现场点位。'),
+      el('div', { key: 'eh', className: 'dvb-viz-preview-title' }, '无数据状态'),
+      el('div', { key: 'empty' }, renderValueWidget(el, {
+        settings: s,
+        name: editor.name || '设备温度',
+        empty: true,
+        ok: false,
+      })),
+    ]
+
+    const switchPreview = () => {
+      const st = previewState
+      return [
+        el('div', { key: 'ph', className: 'dvb-viz-preview-head' },
+          el('span', { className: 'dvb-viz-preview-title' }, '实时预览'),
+          el('span', { className: 'dvb-badge' }, '模拟状态'),
+        ),
+        el(
+          'div',
+          { key: 'states', className: 'dvb-viz-filter-pills' },
+          [['on', '已开启'], ['off', '已关闭'], ['busy', '执行中'], ['offline', '离线']].map(([k, lbl]) =>
+            pill(st === k, () => setPreviewState(k), lbl, k),
+          ),
+        ),
+        el('div', { key: 'sw' }, renderSwitchWidget(el, {
+          settings: s,
+          name: editor.name || '风机开关',
+          on: st === 'on' || st === 'busy',
+          busy: st === 'busy',
+          offline: st === 'offline',
+          at: Date.now(),
+          onToggle() {
+            setPreviewState((p) => (p === 'on' ? 'off' : 'on'))
+          },
+        })),
+        el('div', { key: 'f', className: 'dvb-viz-preview-foot' }, '预览仅模拟外观，不向设备发送指令。'),
+      ]
+    }
 
     const renderStyleTab = () =>
       isLine
@@ -246,17 +395,19 @@ export function createVizEditorPanel(React, t) {
           ),
         ]
       }
-      if (editor.type === 'value') {
-        return [
-          rowInp('显示单位', 'yUnit', 'rpm, ℃', '', 4),
-          el('div', { key: 'h', className: 'dvb-hint' }, '单点实时监控'),
-        ]
+      if (isValue) {
+        return configShell(
+          [['display', '显示'], ['format', '数值格式'], ['status', '状态规则']],
+          renderValueTab(),
+          valuePreview(),
+        )
       }
-      if (editor.type === 'switch') {
-        return [
-          rowSwitch('confirmWrite', '写入前二次确认', false, 4),
-          el('div', { key: 'h', className: 'dvb-hint' }, 'Modbus 01 控制'),
-        ]
+      if (isSwitch) {
+        return configShell(
+          [['display', '外观'], ['behavior', '控制行为'], ['feedback', '状态反馈']],
+          renderSwitchTab(),
+          switchPreview(),
+        )
       }
       return null
     }
@@ -304,7 +455,7 @@ export function createVizEditorPanel(React, t) {
           // 2. 类型与配置
           el(
             'div',
-            { className: 'dvb-viz-form-section' },
+            { className: 'dvb-viz-form-section dvb-viz-type-section' },
             el('label', { className: 'dvb-viz-form-label' }, '组件类型与配置'),
             el(
               'div',

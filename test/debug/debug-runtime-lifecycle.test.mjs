@@ -165,6 +165,51 @@ test('DebugRuntime isolates foreign sessions and rejects unauthorized control', 
   await runtime.stop({ debugSessionId: 'sess-b', ownerSessionId: 'owner-bob' })
 })
 
+test('waitForOwnerSession resolves when Agent starts a debug session', async () => {
+  const runtime = createDebugRuntime({
+    backendFactory: async (_kind, ctx) => new FakeDebugBackend(ctx),
+  })
+  const pending = runtime.waitForOwnerSession(
+    { ownerSessionId: 'owner-agent', workspaceCwd: '/workspace/project' },
+    { timeoutMs: 1000 },
+  )
+  const view = await runtime.start({
+    debugSessionId: 'sess-agent',
+    ownerSessionId: 'owner-agent',
+    workspaceCwd: '/workspace/project',
+    backend: 'fake',
+    targetSpec: { interfaceName: 'cmsis-dap', target: 'stm32f4x' },
+  })
+  const woken = await pending
+  assert.equal(woken.debugSessionId, view.debugSessionId)
+  await runtime.stop({ debugSessionId: 'sess-agent', ownerSessionId: 'owner-agent' })
+})
+
+test('waitForOwnerSession never matches another session when identity is empty', async () => {
+  const runtime = createDebugRuntime({
+    backendFactory: async (_kind, ctx) => new FakeDebugBackend(ctx),
+  })
+  await runtime.start({
+    debugSessionId: 'sess-other',
+    ownerSessionId: 'owner-other',
+    workspaceCwd: '/workspace/other',
+    backend: 'fake',
+    targetSpec: { interfaceName: 'cmsis-dap', target: 'stm32f4x' },
+  })
+  const started = Date.now()
+  for (let i = 0; i < 100; i++) {
+    const hit = await runtime.waitForOwnerSession({ ownerSessionId: '', workspaceCwd: '/workspace/other' }, { timeoutMs: 100 })
+    assert.equal(hit, null)
+  }
+  assert.ok(Date.now() - started < 1000, 'empty identity must not scan-and-return immediately as a foreign session')
+  const foreign = await runtime.waitForOwnerSession(
+    { ownerSessionId: 'owner-missing', workspaceCwd: '/workspace/other' },
+    { timeoutMs: 100 },
+  )
+  assert.equal(foreign, null)
+  await runtime.stop({ debugSessionId: 'sess-other', ownerSessionId: 'owner-other' })
+})
+
 test('DebugRuntime cleans up lease on failed backend start', async () => {
   const runtime = createDebugRuntime({
     backendFactory: async () => {

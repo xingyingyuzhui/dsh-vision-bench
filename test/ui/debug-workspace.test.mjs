@@ -126,7 +126,8 @@ test('workspace tab bar supports keyboard navigation (ArrowRight, ArrowLeft, Hom
 test('WORKSPACE_CSS aligns layout and tab bar with HMI standards', async () => {
   const { WORKSPACE_CSS } = await import('../../src/ui/styles/workspace.mjs')
   const css = WORKSPACE_CSS.join('\n')
-  assert.match(css, /\.dvb-workspace\{[^}]*padding:16px calc\(var\(--dsh-composer-side-clearance, 16px\) \+ 16px\) 8px/)
+  assert.match(css, /\.dvb-workspace\{[^}]*padding:8px calc\(var\(--dsh-composer-side-clearance, 16px\) \+ 16px\) 8px/)
   assert.match(css, /\.dvb-ws-tabs\{[^}]*border-bottom:1px solid var\(--dsw-alias-border-l2/)
-  assert.match(css, /\.dvb-ws-body>\.dvb-page\{padding:0\}/)
+  assert.match(css, /body\[data-dsh-vision-bench\] \.dvb-ws-body>\.dvb-page\{padding:0/)
+  assert.match(css, /body\[data-dsh-vision-bench\] \.dvb-ws-body>\.dvb-live/)
 })

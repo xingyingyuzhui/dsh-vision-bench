@@ -231,7 +231,9 @@ export function saveV4Workspace(dir, workspace) {
 export function saveV4Runtime(dir, workspace) {
   mkdirSync(dir, { recursive: true })
   const { runtime } = splitWorkspaceParts(workspace)
-  writeJsonAtomicSync(join(dir, 'runtime.json'), runtime)
+  // Polling writes this file every cycle. Compact + no fsync: last-second
+  // samples are recoverable, waking the disk on every tick is not.
+  writeJsonAtomicSync(join(dir, 'runtime.json'), runtime, { pretty: false, fsync: false })
 }
 
 /** @param {any} dir */

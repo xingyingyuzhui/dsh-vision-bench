@@ -123,6 +123,16 @@ export function createDebugRpcHandler(deps) {
         }
 
         case DEBUG_RPC_ENDPOINTS.EVENTS_WAIT: {
+          if (!sessionId) {
+            return {
+              ok: true,
+              events: [],
+              nextCursor: Number(row.cursor) || 0,
+              closed: false,
+              woke: false,
+              identityRequired: true,
+            }
+          }
           const session = findOwnedDebugSession(runtime, {
             ownerSessionId: sessionId,
             workspaceCwd: cwd,
@@ -130,31 +140,40 @@ export function createDebugRpcHandler(deps) {
           })
           const targetId = session?.debugSessionId
           if (!targetId) {
-            // When no debug session is active, throttle response to prevent tight-loop polling
-            const idleThrottleMs = Math.min(1000, Math.max(0, Number(row.timeoutMs) || 1000))
-            if (idleThrottleMs > 0) {
-              if (signal) {
-                await new Promise((resolve) => {
-                  if (signal.aborted) return resolve(undefined)
-                  const timer = setTimeout(resolve, idleThrottleMs)
-                  signal.addEventListener(
-                    'abort',
-                    () => {
-                      clearTimeout(timer)
-                      resolve(undefined)
-                    },
-                    { once: true },
+            if (!cwd) {
+              return {
+                ok: true,
+                events: [],
+                nextCursor: Number(row.cursor) || 0,
+                closed: false,
+                woke: false,
+                identityRequired: true,
+              }
+            }
+            const timeoutMs = Math.min(Math.max(100, Number(row.timeoutMs) || 20000), 25000)
+            const woken =
+              typeof runtime.waitForOwnerSession === 'function'
+                ? await runtime.waitForOwnerSession(
+                    { ownerSessionId: sessionId, workspaceCwd: cwd },
+                    { signal, timeoutMs },
                   )
-                })
-              } else {
-                await new Promise((resolve) => setTimeout(resolve, idleThrottleMs))
+                : null
+            if (!woken) {
+              return {
+                ok: true,
+                events: [],
+                nextCursor: Number(row.cursor) || 0,
+                closed: false,
+                woke: false,
               }
             }
             return {
               ok: true,
               events: [],
               nextCursor: Number(row.cursor) || 0,
-              closed: true,
+              closed: false,
+              woke: true,
+              debugSessionId: woken.debugSessionId,
             }
           }
 

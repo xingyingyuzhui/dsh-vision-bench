@@ -2,7 +2,7 @@ import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { stopVisionIoBroker } from './bench-io-broker.mjs'
 import { setAgentsRegistry } from './bench-notify.mjs'
 import { resetPollingService, stopAllPolling } from './bench-polling-service.mjs'
-import { VISION_GUIDANCE, seedVisionBenchPreset } from './bench-preset.mjs'
+
 import { clearSerialMonitorState } from './bench-serial-monitor.mjs'
 import { modbusRead } from './bench-actions.mjs'
 import {
@@ -13,7 +13,7 @@ import {
   sweepStaleTasks,
   touchServiceSession,
 } from './bench-store.mjs'
-import { cwdOf, visionBenchTool } from './bench-tool.mjs'
+import { cwdOf } from './bench-tool.mjs'
 import { toLosslessJson } from './src/application/commands/lossless-json.mjs'
 import {
   createDebugRuntime,
@@ -25,13 +25,15 @@ import { clearFlashApprovals } from './src/application/flash/flash-approval-serv
 import { createVerifyCommandService } from './src/application/verify/verify-command-service.mjs'
 import { registerVisionHost } from './src/infrastructure/host/vision-host-client.mjs'
 import { createVerifyTelemetryAdapter } from './src/infrastructure/modbus/verify-telemetry-adapter.mjs'
-import { visionDebugTool } from './src/interfaces/agent/vision-debug-tool.mjs'
 import { createVisionCommandDispatcher, handleCommand } from './src/interfaces/http/vision-command-routes.mjs'
 import { createVisionRpcRouter } from './src/interfaces/rpc/vision-rpc-router.mjs'
 import { VISION_RPC_CHANNEL } from './src/shared/vision-rpc-contract.mjs'
 
 export const name = 'dsh-vision-bench'
-export const inject = ['connection', 'webServer', 'tools', 'agentPresets', 'systemPrompt']
+// Host fiber only: connection + webServer. Agent tools live in tools.js
+// under a different loader name so session preset mount does not dirty this
+// package's 1.5MB client bundle.
+export const inject = ['connection', 'webServer']
 
 const BODY_CAP = 65536
 const LOOPBACK_ORIGIN = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/
@@ -158,30 +160,8 @@ const commandRoute = (path, fn) => ({
   },
 })
 
-export function apply(ctx, config = {}) {
+export function apply(ctx) {
   dshHome = defaultDshHome()
-  const role = config.role === 'agent' ? 'agent' : 'host'
-  if (role === 'agent') {
-    const stopBenchTool = ctx.tools.register(visionBenchTool(dshHome))
-    const stopDebugTool = ctx.tools.register(visionDebugTool(dshHome))
-    let stopGuidance = () => {}
-    try {
-      if (ctx.systemPrompt && typeof ctx.systemPrompt.section === 'function') {
-        stopGuidance =
-          ctx.systemPrompt.section({
-            name: 'vision-bench:guidance',
-            order: 20,
-            text: () => VISION_GUIDANCE,
-          }) || (() => {})
-      }
-    } catch {}
-    ctx.effect(() => () => {
-      if (typeof stopBenchTool === 'function') stopBenchTool()
-      if (typeof stopDebugTool === 'function') stopDebugTool()
-      if (typeof stopGuidance === 'function') stopGuidance()
-    })
-    return
-  }
 
   if (!ctx.connection?.rpc?.handle || typeof ctx.connection.rpc.handle !== 'function') {
     throw new Error('dsh-vision-bench: Host requires ctx.connection.rpc.handle')
@@ -244,11 +224,14 @@ export function apply(ctx, config = {}) {
   const commandDispatcher = createVisionCommandDispatcher(dshHome, { debugRuntime, verifyCommandService })
   const stopHost = registerVisionHost(commandDispatcher)
 
-  let stopRpc = () => Promise.resolve()
+  const hostEpoch = { id: randomUUID(), disposed: false }
+
   // Pass the plugin context explicitly so RPC routes retain its webServer injection.
-  const registerRpc = typeof ctx.connection.register === 'function'
-    ? (channel, handler) => ctx.connection.register(ctx, channel, handler)
-    : (channel, handler) => ctx.connection.rpc.handle(channel, handler)
+  const registerRpc =
+    typeof ctx.connection.register === 'function'
+      ? (channel, handler) => ctx.connection.register(ctx, channel, handler)
+      : (channel, handler) => ctx.connection.rpc.handle(channel, handler)
+
   const stopRpcRegistration = registerRpc(VISION_RPC_CHANNEL, async (endpoint, payload, signal) => {
     try {
       const value = await router.dispatch(endpoint, payload, signal)
@@ -264,13 +247,25 @@ export function apply(ctx, config = {}) {
       }
     }
   })
-  if (typeof stopRpcRegistration === 'function') {
-    stopRpc = stopRpcRegistration
-  } else if (stopRpcRegistration && typeof stopRpcRegistration.then === 'function') {
-    stopRpcRegistration.then((dispose) => {
-      if (typeof dispose === 'function') stopRpc = dispose
-    })
+  const rpcRegistration = Promise.resolve(
+    typeof stopRpcRegistration === 'function'
+      ? stopRpcRegistration
+      : stopRpcRegistration && typeof stopRpcRegistration.then === 'function'
+        ? stopRpcRegistration
+        : () => Promise.resolve(),
+  )
+  let rpcStopPromise = null
+  const safeStopRpc = () => {
+    if (!rpcStopPromise) {
+      rpcStopPromise = rpcRegistration
+        .then((dispose) => (typeof dispose === 'function' ? dispose() : undefined))
+        .catch(() => {})
+    }
+    return rpcStopPromise
   }
+  rpcRegistration.then(() => {
+    if (hostEpoch.disposed) safeStopRpc()
+  })
 
   const rows = [
     commandRoute('/dsh-vision-bench/command', async (req) =>
@@ -279,28 +274,41 @@ export function apply(ctx, config = {}) {
   ]
   const disposers = rows.map((entry) => ctx.webServer.register(entry))
 
-  void seedVisionBenchPreset(ctx.agentPresets, dshHome)
-    .then((out) => {
-      if (out && out.ok === false) {
-        console.warn('[dsh-vision-bench] Vision预设未更新:', out.error || 'overlay failed')
-      }
-    })
-    .catch((error) => {
-      console.warn('[dsh-vision-bench] Vision预设未更新:', error && error.message ? error.message : error)
-    })
+  let routesDisposed = false
+  const safeStopRoutes = () => {
+    if (routesDisposed) return
+    routesDisposed = true
+    for (const dispose of disposers) {
+      try {
+        if (typeof dispose === 'function') dispose()
+      } catch (_) {}
+    }
+  }
 
+  let isHostDisposed = false
   ctx.effect(() => () => {
-    for (const dispose of disposers) dispose()
-    void stopRpc()
-    stopHost()
+    if (isHostDisposed) return
+    isHostDisposed = true
+    hostEpoch.disposed = true
+    safeStopRoutes()
+    const rpcStop = safeStopRpc()
+    try {
+      stopHost()
+    } catch (_) {}
     clearBridgeCapability()
     clearSerialMonitorState()
     stopAllPolling()
     clearFlashApprovals()
     clearDebugApprovals()
-    void stopVisionIoBroker('plugin-dispose')
-    void debugRuntime.shutdown('plugin-dispose').catch(() => {})
-    setSharedDebugRuntime(null)
+    const brokerStop = stopVisionIoBroker('plugin-dispose')
+    const runtimeStop =
+      getSharedDebugRuntime() === debugRuntime
+        ? debugRuntime.shutdown('plugin-dispose').catch(() => {})
+        : Promise.resolve()
+    if (getSharedDebugRuntime() === debugRuntime) {
+      setSharedDebugRuntime(null)
+    }
+    return Promise.allSettled([rpcStop, brokerStop, runtimeStop])
   })
 }
 
@@ -311,6 +319,7 @@ export const _internal = {
   getDshHome() {
     return dshHome
   },
+
   guard,
   issueBridgeCapability,
   clearBridgeCapability,

@@ -1,4 +1,23 @@
-import { hasHarnessInput } from '../../../../bench-shared.mjs'
+import {
+  formatFrameClock,
+  formatHexDisplay,
+  formatPortName,
+  frameByteCount,
+  frameDirection,
+  framePayloadHex,
+  hexToUtf8Preview,
+} from './frames-format.mjs'
+
+function dirPill(el, dir) {
+  const rx = dir === 'rx'
+  return el('span', { className: 'dvb-frames-dir', 'data-dir': rx ? 'rx' : 'tx' }, rx ? 'RX 接收' : 'TX 发送')
+}
+
+function dataCell(el, frame, encoding) {
+  const hex = framePayloadHex(frame)
+  const text = encoding === 'text' ? hexToUtf8Preview(hex) : formatHexDisplay(hex) || frame.request || ''
+  return el('span', { className: 'dvb-frames-data' }, text || '—')
+}
 
 /**
  * @param {any} React
@@ -7,88 +26,70 @@ import { hasHarnessInput } from '../../../../bench-shared.mjs'
  * @param {{
  *   mode: 'proto' | 'raw',
  *   devices: any[],
- *   copied: string,
- *   sendToAgent: (frame: any) => void
+ *   connections?: any[],
+ *   encoding: 'hex' | 'text',
+ *   colWidths?: Record<string, number>,
  * }} opts
  */
 export function buildFrameColumns(React, t, props, opts) {
   const el = React.createElement
-  const { mode, devices, copied, sendToAgent } = opts
+  const { mode, devices, connections = [], encoding, colWidths = {} } = opts
+  void props
+  void t
 
-  if (mode === 'raw') {
-    return [
-      {
-        id: 'time',
-        header: '时间',
-        accessorFn: (f) => f.t || f.at,
-        cell: (info) =>
-          el('span', { className: 'dvb-map-meta' }, new Date(info.getValue() || Date.now()).toLocaleTimeString()),
-      },
-      { id: 'port', header: '端口', accessorFn: (f) => f.port || f.connectionId || '' },
-      {
-        id: 'dir',
-        header: '方向',
-        accessorFn: (f) => f.direction || 'tx',
-        cell: (info) => el('span', { className: 'dvb-badge' }, String(info.getValue() || 'tx').toUpperCase()),
-      },
-      {
-        id: 'bytes',
-        header: '字节',
-        accessorFn: (f) => f.bytes || f.byteLength || (f.hex || '').length / 2 || '',
-      },
-      { id: 'hex', header: '数据', minSize: 160, accessorFn: (f) => f.hex || f.request || '' },
-      {
-        id: 'ai',
-        header: '',
-        enableSorting: false,
-        size: 56,
-        accessorFn: (f) => f.frameId || f.id,
-        cell: (info) =>
-          el(
-            'button',
-            {
-              type: 'button',
-              className: 'dvb-btn dvb-btn-sm',
-              title: hasHarnessInput(props) ? '让 Agent 分析' : '复制给 Agent',
-              onClick(ev) {
-                if (ev?.stopPropagation) ev.stopPropagation()
-                sendToAgent(info.row.original)
-              },
-            },
-            copied === '已加入输入框' ? '已加入' : copied === '已发送' ? '已发送' : 'AI',
-          ),
-      },
-    ]
+  const timeCol = {
+    id: 'time',
+    header: '时间',
+    size: colWidths.time || 76,
+    accessorFn: (f) => f.t || f.at,
+    cell: (info) => el('span', { className: 'dvb-map-meta' }, formatFrameClock(info.getValue())),
+  }
+  const portCol = {
+    id: 'port',
+    header: '端口',
+    size: colWidths.port || 72,
+    accessorFn: (f) => formatPortName(f, connections),
+  }
+  const dirCol = {
+    id: 'dir',
+    header: '方向',
+    size: colWidths.dir || 88,
+    accessorFn: (f) => frameDirection(f),
+    cell: (info) => dirPill(el, info.getValue()),
+  }
+  const bytesCol = {
+    id: 'bytes',
+    header: '字节数',
+    size: colWidths.bytes || 64,
+    accessorFn: (f) => frameByteCount(f),
+  }
+  const dataCol = {
+    id: 'hex',
+    header: '数据',
+    minSize: colWidths.hex || 180,
+    accessorFn: (f) => framePayloadHex(f),
+    cell: (info) => dataCell(el, info.row.original, encoding),
   }
 
+  if (mode === 'raw') return [timeCol, portCol, dirCol, bytesCol, dataCol]
+
   return [
-    {
-      id: 'time',
-      header: '时间',
-      accessorFn: (f) => f.t || f.at,
-      cell: (info) =>
-        el('span', { className: 'dvb-map-meta' }, new Date(info.getValue() || Date.now()).toLocaleTimeString()),
-    },
-    { id: 'port', header: '端口', accessorFn: (f) => f.port || f.connectionId || '' },
+    timeCol,
+    portCol,
+    dirCol,
     {
       id: 'device',
       header: '设备',
+      size: colWidths.device || 88,
       accessorFn: (f) => {
         const dev = devices.find((d) => d.id === f.deviceId)
         return dev?.name || f.deviceName || f.deviceId || ''
       },
     },
     {
-      id: 'unit',
-      header: '站号',
-      accessorFn: (f) => {
-        const dev = devices.find((d) => d.id === f.deviceId)
-        return f.unitId || dev?.unitId || '—'
-      },
-    },
-    {
       id: 'fc',
       header: '功能码',
+      size: colWidths.fc || 64,
       accessorFn: (f) => f.functionCode,
       cell: (info) => {
         const val = info.getValue()
@@ -98,29 +99,9 @@ export function buildFrameColumns(React, t, props, opts) {
       },
     },
     {
-      id: 'dur',
-      header: '耗时',
-      accessorFn: (f) => f.durationMs,
-      cell: (info) => (info.getValue() != null ? `${info.getValue()}ms` : ''),
-    },
-    {
-      id: 'src',
-      header: '来源',
-      accessorFn: (f) => f.source,
-      cell: (info) => {
-        const src = info.getValue()
-        return src === 'agent'
-          ? t('framesSrcAgent') || 'Agent'
-          : src === 'polling'
-            ? t('framesSrcPoll') || '自动刷新'
-            : src
-              ? t('framesSrcUser') || '用户'
-              : ''
-      },
-    },
-    {
       id: 'status',
       header: '状态',
+      size: colWidths.status || 64,
       accessorFn: (f) => f.status,
       cell: (info) => {
         const status = info.getValue()
@@ -131,26 +112,6 @@ export function buildFrameColumns(React, t, props, opts) {
         )
       },
     },
-    {
-      id: 'ai',
-      header: '',
-      enableSorting: false,
-      size: 56,
-      accessorFn: (f) => f.frameId || f.id,
-      cell: (info) =>
-        el(
-          'button',
-          {
-            type: 'button',
-            className: 'dvb-btn dvb-btn-sm',
-            title: hasHarnessInput(props) ? '让 Agent 分析' : '复制给 Agent',
-            onClick(ev) {
-              if (ev?.stopPropagation) ev.stopPropagation()
-              sendToAgent(info.row.original)
-            },
-          },
-          copied === '已加入输入框' ? '已加入' : copied === '已发送' ? '已发送' : 'AI',
-        ),
-    },
+    dataCol,
   ]
 }

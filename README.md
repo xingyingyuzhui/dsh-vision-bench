@@ -1,6 +1,6 @@
 # dsh-vision-bench · Vision 模式
 
-Requires DSH 0.1.2-alpha.3. Install from an `npm pack` tarball, not a `link:` checkout.
+Requires DSH 0.1.5-rc.1. Install from an `npm pack` tarball, not a `link:` checkout. Supported contract is pinned in `src/infrastructure/harness/dsh-contract.mjs`.
 
 日常开发用的会话工作台。跟 Claw 无关。
 
@@ -14,7 +14,9 @@ Requires DSH 0.1.2-alpha.3. Install from an `npm pack` tarball, not a `link:` ch
 
 ## Vision模式
 
-插件启动时若还没有 `vision-bench` 预设，会把官方 **标准模式** 复制到 `$DSH_HOME/.agent-presets/vision-bench/`，并加上 agent 平面的本插件行。预设内容只在 composition 真正变化时写入。**新建 Session 后生效**；已打开的 Session 保持原来的 generation，不会热更新工具或 system prompt。
+宿主插件 `dsh-vision-bench` 只挂 `connection` / `webServer`。Agent 工具是另一条 loader：`dsh-vision-bench/agent`（`export name` 为 `dsh-vision-bench-tools`），由 **Vision模式** 预设插入，不和宿主同名。
+
+预设是安装物，不在宿主 `apply()` 里 seed。首次安装或升级后执行 `node scripts/seed-preset.mjs`（或设置页重建），写入 `$DSH_HOME/.agent-presets/vision-bench/`。**新建 Session 后生效**。
 
 `vision_bench` 只出现在这个预设里，避免每个 Agent 都多带一套工具。
 
@@ -63,10 +65,11 @@ Requires DSH 0.1.2-alpha.3. Install from an `npm pack` tarball, not a `link:` ch
 dsh plugin --profile web add github:xingyingyuzhui/dsh-vision-bench
 ```
 
-本机开发：
+本机开发请先 `npm pack` 再 add 那个 `.tgz`，不要 `link:` 源码树（会把 `node_modules/`、`coverage/` 整棵链进 profile）。
 
 ```sh
-dsh plugin --profile web add link:/abs/path/to/dsh-vision-bench
+npm pack
+dsh plugin --profile web add ./dsh-vision-bench-*.tgz
 ```
 
 装完重启 `dsh web`。打开 **调试** / **上位机** / **监控**，或 **设置 → Vision**。新会话选 **Vision模式**。

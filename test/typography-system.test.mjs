@@ -62,9 +62,13 @@ test('按钮与 Tab 全量交互系统：hover 高亮与 active 按压反馈覆�
   // 危险操作 hover 红底高亮
   assert.match(baseCss, /\.dvb-btn-danger-hover:hover\{[^}]*background:rgba\(229,57,53,\.08\)!important/)
 
-  // Tab 具有 hover 高亮与 active 按压反馈
-  assert.match(hmiCss, /\.dvb-tab:hover\{border-color:var\(--dsw-alias-brand-primary/)
+  // Tab 具有 hover 高亮与 active 按压反馈（浅灰边，不用 brand-primary 近黑色）
+  assert.match(hmiCss, /\.dvb-tab:hover:not\(\.is-on\):not\(\.is-warn\)\{background:var\(--dsw-alias-bg-module-platform,#f1f3f5\);border-color:var\(--dsw-alias-border-l2,#d8dadc\)\}/)
   assert.match(hmiCss, /\.dvb-tab:active\{transform:scale\(0\.97\)\}/)
+
+  // 选中不加粗：字重固定，避免切换二级页签时整条宽度跳动
+  assert.match(hmiCss, /\.dvb-tab\{[^}]*font-weight:500/)
+  assert.doesNotMatch(hmiCss, /\.dvb-tab\.is-on\{[^}]*font-weight/)
 })
 
 test('点位表与数据表格全量适配 13px 基础字号', () => {

@@ -12,6 +12,7 @@ import { saveWorkspace } from '../bench-store.mjs'
 import { renderConnectionForm } from '../src/ui/hmi/connection-form.mjs'
 import { renderConnectionOverview } from '../src/ui/hmi/connection-overview.mjs'
 import { renderConnectionPanel } from '../src/ui/hmi/connection-panel.mjs'
+import { connTabLabel } from '../src/ui/hmi/connection-label.mjs'
 import { renderConnectionTabs } from '../src/ui/hmi/connection-tabs.mjs'
 import { renderConnectionWorkspace } from '../src/ui/hmi/connection-workspace.mjs'
 import { renderDeviceCards } from '../src/ui/hmi/device-card.mjs'
@@ -409,7 +410,7 @@ test('renderConnectionTabs renders permanent physical connection status dot with
 
 test('renderConnectionPanel renders clean connection name without trailing black dot', () => {
   const el = (type, props, ...children) => ({ type, props, children: children.flat().filter(Boolean) })
-  const t = (k) => k
+  const t = (k) => ({ connBar: '全部连接' })[k] || k
   const ctx = {
     focusState: {},
     connections: [{ id: 'c1', name: 'PLC-1', conn: { mode: 'tcp', host: '192.168.1.10', tcpPort: 502 } }],
@@ -438,6 +439,9 @@ test('renderConnectionPanel renders clean connection name without trailing black
     requestDeleteConnection: () => {},
   }
   const tree = renderConnectionPanel(el, t, ctx)
+  const title = tree.children?.find((n) => n?.props?.className?.includes('dvb-conn-section-head'))
+    ?.children?.find((n) => n?.props?.className === 'dvb-panel-title')
+  assert.equal(title?.children?.[0], '全部连接')
   const rows = []
   function walk(node) {
     if (!node) return
@@ -489,6 +493,14 @@ test('renderConnectionPanel toolbar does not have collection buttons or interval
   assert.ok(!buttons.some((b) => b.type === 'select'))
 })
 
+test('connTabLabel 与二级页签一致：连接名 · COM号', () => {
+  assert.equal(connTabLabel({ name: 'test1', conn: { mode: 'rtu', port: 'COM3' } }), 'test1 · COM3')
+  assert.equal(connTabLabel({ name: '连接3', conn: { mode: 'rtu', port: 'COM1' } }), '连接3 · COM1')
+  assert.equal(connTabLabel({ name: '网口', role: 'client', conn: { mode: 'tcp', host: '192.168.1.8', tcpPort: 502 } }), '网口 · 192.168.1.8:502')
+  assert.equal(connTabLabel({ name: '仿真口', conn: { sim: true } }), '仿真口 · 仿真')
+  assert.equal(connTabLabel(null), '')
+})
+
 test('renderDeviceCards has 连接/断开 button next to 添加设备 in panel-head, and no single 读取 button in toolbar', () => {
   const el = (type, props, ...children) => ({ type, props, children: children.flat().filter(Boolean) })
   const t = (k) =>
@@ -505,7 +517,7 @@ test('renderDeviceCards has 连接/断开 button next to 添加设备 in panel-h
   const ctx = {
     cwd: '/mock',
     activeConnId: 'c1',
-    activeConnObj: { id: 'c1', name: 'COM3' },
+    activeConnObj: { id: 'c1', name: 'test1', conn: { mode: 'rtu', port: 'COM3' } },
     canDevice: true,
     openAddDevice: () => calls.push('openAddDevice'),
     linkConnection: (id) => calls.push(`link:${id}`),
@@ -533,6 +545,9 @@ test('renderDeviceCards has 连接/断开 button next to 添加设备 in panel-h
 
   // 1. In disconnected state: button shows "连接"
   const treeDisconnected = renderDeviceCards(el, t, ctx)
+  const title = treeDisconnected.children?.find((n) => n?.props?.className?.includes('dvb-dev-section-head'))
+    ?.children?.find((n) => n?.props?.className === 'dvb-panel-title')
+  assert.equal(title?.children?.[0], 'test1 · COM3', '设备区标题与二级页签同为 连接名 · COM号')
   const headButtons = []
   function walkHead(node) {
     if (!node) return

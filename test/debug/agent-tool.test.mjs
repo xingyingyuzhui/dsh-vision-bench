@@ -3,7 +3,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { ACTIONS as BENCH_ACTIONS, visionBenchTool } from '../../bench-tool.mjs'
-import { apply } from '../../host.js'
 import { registerVisionHost, unregisterVisionHost } from '../../src/infrastructure/host/vision-host-client.mjs'
 import {
   DEBUG_TOOL_ACTIONS,
@@ -11,6 +10,7 @@ import {
   sessionIdOf,
   visionDebugTool,
 } from '../../src/interfaces/agent/vision-debug-tool.mjs'
+import { apply } from '../../tools.js'
 
 test('agent-tool: vision_debug schema matches specification', () => {
   const tool = visionDebugTool('/tmp/dsh-home')
@@ -136,21 +136,21 @@ test('agent-tool: host registers both tools when role is agent', async () => {
         return () => {}
       },
     },
+    effects: [],
     effect(factory) {
-      this.teardown = factory()
+      this.effects.push(factory())
     },
   }
 
-  apply(mockCtx, { role: 'agent' })
+  apply(mockCtx)
 
   assert.equal(registeredTools.length, 2)
   const toolNames = registeredTools.map((t) => t.name).sort()
   assert.deepEqual(toolNames, ['vision_bench', 'vision_debug'])
   assert.equal(guidanceRegistered, true)
 
-  // Teardown cleans up both
-  if (typeof mockCtx.teardown === 'function') {
-    mockCtx.teardown()
+  for (const stop of mockCtx.effects) {
+    if (typeof stop === 'function') stop()
   }
   assert.equal(registeredTools.length, 0)
 })

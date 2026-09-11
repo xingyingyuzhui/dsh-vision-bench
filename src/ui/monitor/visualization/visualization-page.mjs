@@ -116,10 +116,8 @@ export function createVisualizationPage(React, t, post, hooks) {
       }
     }, [cwd, post, sessionId])
 
-    React.useEffect(() => {
-      const timer = setInterval(() => setTick((n) => n + 1), 1000)
-      return () => clearInterval(timer)
-    }, [])
+    // Charts refresh from subscribeState. Do not tick the whole GridStack/ECharts
+    // tree at 1 Hz — that keeps the renderer and GPU awake even with no new samples.
 
     const pack = (() => {
       try {
@@ -369,22 +367,12 @@ export function createVisualizationPage(React, t, post, hooks) {
       { className: 'dvb-live dvb-viz' },
       el(
         'div',
-        { className: 'dvb-live-head dvb-viz-page-head' },
-        el(
-          'div',
-          { className: 'dvb-viz-page-title-block' },
-          el('span', { className: 'dvb-live-title' }, t('liveChart') || '可视化'),
-          el(
-            'div',
-            { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-            el('span', { className: 'dvb-map-meta' }, `${components.length} 个组件`),
-            canvasEditing ? el('span', { className: 'dvb-viz-edit-badge' }, '画布编辑中') : null,
-          ),
-        ),
+        { className: 'dvb-live-head dvb-viz-page-head', style: { padding: 0, margin: 0 } },
+        canvasEditing ? el('span', { className: 'dvb-pill dvb-pill-warn dvb-viz-edit-badge' }, '画布编辑中') : null,
         !editor
           ? el(
               'div',
-              { className: 'dvb-viz-page-actions' },
+              { className: 'dvb-viz-page-actions', style: { marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' } },
               components.length > 0 && !vizReadOnly
                 ? el(
                     'button',

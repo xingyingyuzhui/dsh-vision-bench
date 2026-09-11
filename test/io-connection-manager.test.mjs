@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createConnectionManager } from '../runtime/io/connection-manager.mjs'
 import { createFrameRing } from '../runtime/io/frame-ring.mjs'
+import { isTransactionError } from '../runtime/io/error-map.mjs'
 import { attachRtuCapture } from '../runtime/io/rtu-capture-adapter.mjs'
 
 function FakeModbusRTU() {
@@ -174,6 +175,39 @@ test('queued write aborted before run never calls writeRegister', async () => {
   await first
   await assert.rejects(() => second)
   assert.deepEqual(wrote, [])
+  await mgr.stop()
+})
+
+test('transaction errors are classified separately from port failures', () => {
+  assert.equal(isTransactionError({ code: 'MODBUS_TIMEOUT' }), true)
+  assert.equal(isTransactionError({ code: 'MODBUS_CRC_ERROR' }), true)
+  assert.equal(isTransactionError({ code: 'MODBUS_EXCEPTION' }), true)
+  assert.equal(isTransactionError({ code: 'PORT_DISCONNECTED' }), false)
+  assert.equal(isTransactionError({ code: 'PORT_IN_USE' }), false)
+})
+
+test('CRC / timeout keep the held COM and capture ring attached', async () => {
+  function Boom() {
+    FakeModbusRTU.call(this)
+  }
+  Boom.prototype = Object.create(FakeModbusRTU.prototype)
+  Boom.prototype.connectRTUBuffered = FakeModbusRTU.prototype.connectRTUBuffered
+  Boom.prototype.close = FakeModbusRTU.prototype.close
+  Boom.prototype.setID = FakeModbusRTU.prototype.setID
+  Boom.prototype.setTimeout = FakeModbusRTU.prototype.setTimeout
+  Boom.prototype.readHoldingRegisters = async function () {
+    const err = new Error('crc')
+    err.modbusRequest = new Uint8Array([1, 3, 0, 0, 0, 1])
+    throw err
+  }
+  const mgr = createConnectionManager({ ModbusRTU: Boom })
+  const ep = { mode: 'rtu', port: 'COM3', baudrate: 9600, bytesize: 8, parity: 'N', stopbits: 1 }
+  await mgr.openConnection(req(), ep)
+  assert.equal(mgr.status('/ws', 'c1').state, 'connected')
+  await assert.rejects(() => mgr.modbus(req(), ep))
+  assert.equal(mgr.portOwners.has('COM3'), true, 'transaction error must not release COM')
+  assert.equal(mgr.status('/ws', 'c1').state, 'connected', 'timeout/CRC is not a disconnect')
+  assert.ok(mgr.connections.get('/ws\0c1').client, 'client stays open for the next poll')
   await mgr.stop()
 })
 

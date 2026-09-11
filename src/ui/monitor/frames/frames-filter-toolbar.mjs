@@ -1,5 +1,7 @@
 import { getCustomSelect } from '../../components/custom-select.mjs'
 
+const SEL = { width: '140px', minWidth: '140px', flex: 'none' }
+
 /**
  * @param {any} React
  * @param {(key: string) => string} t
@@ -15,55 +17,20 @@ export function createFramesFilterToolbar(React, t) {
       setSelection,
       setPendingNew,
       portOptions,
-      showFilters,
-      setShowFilters,
       search,
       setSearch,
       filters,
       setFilters,
       devices,
+      onReset,
     } = props
 
-    return el(
-      React.Fragment,
-      null,
-      el(
-        'div',
-        { className: 'dvb-toolbar' },
-        el(CustomSelect, {
-          style: { minWidth: '160px', flex: '1' },
-          value: selection,
-          options: (portOptions || []).map((o) => ({ value: o.value, label: o.label })),
-          onChange(val) {
-            const next = val?.target ? val.target.value : val
-            setSelection(next)
-            setPendingNew(0)
-          },
-        }),
-        el(
-          'button',
-          {
-            type: 'button',
-            className: 'dvb-btn',
-            onClick() {
-              setShowFilters((v) => !v)
-            },
-          },
-          t('framesFilters') || '筛选',
-        ),
-        el('input', {
-          className: 'dvb-input',
-          value: search,
-          placeholder: t('serialFilter') || '搜索报文……',
-          onChange: (e) => setSearch(e.target.value),
-        }),
-      ),
-      showFilters && mode === 'proto'
-        ? el(
-            'div',
-            { className: 'dvb-toolbar' },
+    const protoFilters =
+      mode === 'proto'
+        ? [
             el(CustomSelect, {
-              style: { minWidth: '120px', flex: '1' },
+              key: 'device',
+              style: SEL,
               value: filters.deviceId,
               options: [
                 { value: '', label: '全部设备' },
@@ -75,7 +42,8 @@ export function createFramesFilterToolbar(React, t) {
               },
             }),
             el(CustomSelect, {
-              style: { minWidth: '110px', flex: '1' },
+              key: 'fc',
+              style: SEL,
               value: filters.functionCode,
               options: [
                 { value: '', label: '全部功能码' },
@@ -90,7 +58,8 @@ export function createFramesFilterToolbar(React, t) {
               },
             }),
             el(CustomSelect, {
-              style: { minWidth: '95px', flex: '1' },
+              key: 'status',
+              style: SEL,
               value: filters.status,
               options: [
                 { value: '', label: '全部状态' },
@@ -103,7 +72,8 @@ export function createFramesFilterToolbar(React, t) {
               },
             }),
             el(CustomSelect, {
-              style: { minWidth: '95px', flex: '1' },
+              key: 'source',
+              style: SEL,
               value: filters.source,
               options: [
                 { value: '', label: '全部来源' },
@@ -116,8 +86,52 @@ export function createFramesFilterToolbar(React, t) {
                 setFilters((p) => ({ ...p, source }))
               },
             }),
-          )
-        : null,
+          ]
+        : []
+
+    return el(
+      'div',
+      { className: 'dvb-frames-filter-row' },
+      el(CustomSelect, {
+        style: SEL,
+        value: selection,
+        options: (portOptions || []).map((o) => ({ value: o.value, label: o.label })),
+        onChange(val) {
+          const next = val?.target ? val.target.value : val
+          setSelection(next)
+          setPendingNew(0)
+        },
+      }),
+      el(CustomSelect, {
+        style: SEL,
+        value: filters.direction || '',
+        options: [
+          { value: '', label: '全部方向' },
+          { value: 'tx', label: 'TX 发送' },
+          { value: 'rx', label: 'RX 接收' },
+        ],
+        onChange(val) {
+          const direction = val?.target ? val.target.value : val
+          setFilters((p) => ({ ...p, direction }))
+        },
+      }),
+      ...protoFilters,
+      el('input', {
+        className: 'dvb-input dvb-frames-search',
+        style: { width: '180px', flex: 'none' },
+        value: search,
+        placeholder: t('serialFilter') || '过滤关键字',
+        onChange: (e) => setSearch(e.target.value),
+      }),
+      el(
+        'button',
+        {
+          type: 'button',
+          className: 'dvb-btn',
+          onClick: onReset,
+        },
+        '重置',
+      ),
     )
   }
 }

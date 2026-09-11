@@ -19,6 +19,7 @@ export function createFrameRing() {
       return epoch
     },
     push(rec) {
+      const seq = Number(rec.seq)
       const item = {
         id: nextId++,
         epoch,
@@ -31,6 +32,7 @@ export function createFrameRing() {
         port: rec.port || '',
         transactionId: rec.transactionId || '',
         source: rec.source || 'system',
+        ...(Number.isFinite(seq) && seq > 0 ? { seq: Math.trunc(seq) } : {}),
       }
       buffer.push(item)
       if (buffer.length > RING) buffer.splice(0, buffer.length - RING)

@@ -66,9 +66,9 @@ const reconcile = (home, cwd, packIn) => {
   for (const c of connList) {
     const p = (pack.pollingByConnection || {})[c.id]
     const isSim = Boolean(c.conn?.sim || c.sim)
-    // 仿真连接同样由协调器采集（sim 读由 Worker/驱动侧处理，不占串口）
-    // 仿真模式下若未显式停用则默认启动采集，确保开箱即出数且波形持续更新
-    const shouldPoll = isSim ? p?.enabled !== false && c.enabled !== false : c.enabled !== false && p && p.enabled === true
+    // Sim and RTU both require an explicit 开始采集. Auto-starting sim
+    // polling used to fsync runtime.json every second with no UI action.
+    const shouldPoll = c.enabled !== false && p && p.enabled === true
     if (shouldPoll && (c.conn || isSim)) {
       wanted.set(c.id, { intervalMs: Number(p?.intervalMs) || 1000 })
     }
@@ -181,9 +181,9 @@ export const ensurePolling = (home, cwd) => {
   for (const c of allConnections) {
     if (c.conn?.sim || c.sim) {
       const p = (pack.pollingByConnection || {})[c.id]
-      if (c.enabled !== false && (p ? p.enabled === true : true)) {
+      if (c.enabled !== false && p && p.enabled === true) {
         setSimConnectionState(cwd, c.id, 'connected')
-      } else if (p && p.enabled === false) {
+      } else {
         setSimConnectionState(cwd, c.id, 'disconnected')
       }
     }

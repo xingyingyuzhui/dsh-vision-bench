@@ -155,6 +155,8 @@ export function createDataTable(React) {
     const absRows = virtualize
     const selectedId = props.selectedId == null ? '' : String(props.selectedId)
     const template = gridTemplate(columns)
+    const headRef = React.useRef(null)
+    const minTableWidth = props.totalWidth ? `${props.totalWidth}px` : props.minWidth || undefined
     const head = table.getHeaderGroups().map((group) =>
       el(
         'div',
@@ -162,20 +164,39 @@ export function createDataTable(React) {
           key: group.id,
           className: 'dvb-data-table-head',
           role: 'row',
-          style: { gridTemplateColumns: template },
+          style: {
+            gridTemplateColumns: template,
+            ...(minTableWidth ? { minWidth: minTableWidth, width: 'max-content' } : {}),
+          },
         },
         group.headers.map((header) => {
+          const colDef = header.column.columnDef
           const canSort = header.column.getCanSort?.()
           const sorted = header.column.getIsSorted ? header.column.getIsSorted() : false
-          const label = renderDef(
-            header.column.columnDef.header,
-            header.getContext ? header.getContext() : {},
-            header.id,
-          )
+          const label = renderDef(colDef.header, header.getContext ? header.getContext() : {}, header.id)
           const mark = sorted === 'asc' ? ' ▲' : sorted === 'desc' ? ' ▼' : ''
+          const thLabel = el('span', { className: 'dvb-th-label' }, label, mark)
+          const colKey = colDef.id || colDef.accessorKey || header.id
+          const canResize = typeof props.onStartResize === 'function' && colDef.enableResizing !== false
+          const resizer = canResize
+            ? el('span', {
+                className: 'dvb-col-resizer',
+                'data-col': colKey,
+                title: '左右拖拽调整列宽，双击恢复默认',
+                onPointerDown: (e) => props.onStartResize(colKey, e),
+                onDoubleClick:
+                  typeof props.resetColWidth === 'function' ? () => props.resetColWidth(colKey) : undefined,
+              })
+            : null
+
           return el(
             'div',
-            { key: header.id, className: 'dvb-data-th', role: 'columnheader' },
+            {
+              key: header.id,
+              className: 'dvb-data-th',
+              role: 'columnheader',
+              'data-col': colKey,
+            },
             canSort
               ? el(
                   'button',
@@ -184,10 +205,10 @@ export function createDataTable(React) {
                     className: 'dvb-data-th-sort',
                     onClick: header.column.getToggleSortingHandler?.(),
                   },
-                  label,
-                  mark,
+                  thLabel,
                 )
-              : label,
+              : thLabel,
+            resizer,
           )
         }),
       ),
@@ -215,9 +236,14 @@ export function createDataTable(React) {
             transform: `translateY(${item.start}px)`,
             height: `${item.size || estimateSize}px`,
             gridTemplateColumns: template,
+            ...(minTableWidth ? { minWidth: minTableWidth } : {}),
             ...(extraStyle || {}),
           }
-        : { gridTemplateColumns: template, ...(extraStyle || {}) }
+        : {
+            gridTemplateColumns: template,
+            ...(minTableWidth ? { minWidth: minTableWidth } : {}),
+            ...(extraStyle || {}),
+          }
       return el(
         'div',
         {
@@ -250,10 +276,19 @@ export function createDataTable(React) {
     const wrapStyle = virtualize
       ? { height: typeof height === 'number' ? `${height}px` : height, overflowY: 'auto', position: 'relative' }
       : { position: 'relative' }
+    const headWrapped = el(
+      'div',
+      {
+        ref: headRef,
+        className: 'dvb-data-table-head-wrap',
+        style: { overflow: 'hidden', width: '100%' },
+      },
+      head,
+    )
     return el(
       'div',
       { className: `dvb-data-table ${props.className || ''}`.trim(), role: 'table' },
-      head,
+      headWrapped,
       el(
         'div',
         {
@@ -261,7 +296,12 @@ export function createDataTable(React) {
           style: wrapStyle,
           ref: scrollRef,
           tabIndex: 0,
-          onScroll: props.onScroll,
+          onScroll(ev) {
+            if (headRef.current) {
+              headRef.current.scrollLeft = ev.currentTarget.scrollLeft
+            }
+            if (typeof props.onScroll === 'function') props.onScroll(ev)
+          },
           onKeyDown(ev) {
             if (ev.key === 'ArrowDown') {
               ev.preventDefault()
@@ -277,8 +317,26 @@ export function createDataTable(React) {
           },
         },
         absRows
-          ? el('div', { style: { height: `${totalHeight}px`, position: 'relative', width: '100%' } }, bodyRows)
-          : el('div', { className: 'dvb-data-table-body' }, bodyRows),
+          ? el(
+              'div',
+              {
+                style: {
+                  height: `${totalHeight}px`,
+                  position: 'relative',
+                  width: '100%',
+                  ...(minTableWidth ? { minWidth: minTableWidth } : {}),
+                },
+              },
+              bodyRows,
+            )
+          : el(
+              'div',
+              {
+                className: 'dvb-data-table-body',
+                style: minTableWidth ? { minWidth: minTableWidth, width: 'max-content' } : undefined,
+              },
+              bodyRows,
+            ),
       ),
     )
   }

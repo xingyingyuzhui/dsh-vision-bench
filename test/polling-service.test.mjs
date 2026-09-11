@@ -83,6 +83,16 @@ test('未启用/仿真连接不计入协调器；每个工作区只有一个协�
   assert.equal(pollingHealth().stopping, true, '卸载标记停止')
 })
 
+test('ensurePolling does not auto-start sim collection without 开始采集', async () => {
+  const { home, cwd } = await setup()
+  const { ensurePolling } = await import('../bench-polling-service.mjs')
+  ensurePolling(home, cwd)
+  const st = pollingStatus(home, cwd)
+  assert.equal(st.connections.c1.running, false)
+  assert.equal(st.connections.c2.running, false)
+  await stopAllPolling()
+})
+
 test('stopAllPolling 后任何 ensurePolling 不再启动新计时器', async () => {
   const { home, cwd } = await setup()
   await startPolling(home, cwd, { connectionId: 'c1' })

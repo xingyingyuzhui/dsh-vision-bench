@@ -3,6 +3,23 @@ export const POLL_MS = 2000
 
 const STATE_BUSES = new Map() // sessionId\0cwd -> { key, cwd, sessionId, data, subs, timer, seq, post }
 
+const pageHidden = () => typeof document !== 'undefined' && document.hidden === true
+
+let visHooked = false
+function ensureVisibilityHook() {
+  if (visHooked || typeof document === 'undefined' || typeof document.addEventListener !== 'function') return
+  visHooked = true
+  document.addEventListener('visibilitychange', () => {
+    for (const e of STATE_BUSES.values()) {
+      if (!e.subs.size) continue
+      if (document.hidden) {
+        clearTimeout(e.timer)
+        e.timer = 0
+      } else busPull(e)
+    }
+  })
+}
+
 export function stateBusKey(sessionId, cwd) {
   return `${String(sessionId || '')}\0${String(cwd || '')}`
 }
@@ -32,6 +49,10 @@ function busEntry(post, cwd, sessionId) {
 function scheduleNextPull(e) {
   if (!STATE_BUSES.has(e.key) || e.subs.size === 0) return
   if (e.timer) clearTimeout(e.timer)
+  if (pageHidden()) {
+    e.timer = 0
+    return
+  }
   e.timer = setTimeout(() => busPull(e), POLL_MS)
 }
 
@@ -78,6 +99,7 @@ export function subscribeState(post, cwd, cb, opts) {
   // register BEFORE the first pull so an extremely fast response can't miss us
   e.subs.add(cb)
   if (e.subs.size === 1) {
+    ensureVisibilityHook()
     e.seq++ // cancel any stale in-flight response from a previous last subscriber
     busPull(e)
   } else if (e.data) {

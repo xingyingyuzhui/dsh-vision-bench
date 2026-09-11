@@ -90,7 +90,34 @@ function withCapability(headers = csrf) {
 
 test('host named exports', async () => {
   assert.equal(name, 'dsh-vision-bench')
-  assert.deepEqual(inject, ['connection', 'webServer', 'tools', 'agentPresets', 'systemPrompt'])
+  assert.deepEqual(inject, ['connection', 'webServer'])
+  const pkg = JSON.parse(
+    await (await import('node:fs/promises')).readFile(new URL('../package.json', import.meta.url), 'utf8'),
+  )
+  assert.equal(pkg.exports['./agent'], './tools.js')
+  assert.equal(pkg.exports['./standing-guard'], undefined)
+  assert.equal(pkg.exports['./scan-guard'], undefined)
+})
+
+test('host apply does not inject agentPresets or bind tools', async () => {
+  const connection = createMockConnection()
+  const injected = []
+  let toolRegs = 0
+  const { ctx } = createHostCtx(connection)
+  ctx.tools = {
+    register() {
+      toolRegs += 1
+      return () => {}
+    },
+  }
+  ctx.inject = (deps) => {
+    injected.push(deps)
+  }
+  apply(ctx)
+  apply(ctx)
+  assert.deepEqual(injected, [])
+  assert.equal(toolRegs, 0)
+  if (ctx._stop) ctx._stop()
 })
 
 test('state returns idle ioRuntime without starting a Worker', async () => {
@@ -141,13 +168,93 @@ test('apply registers only agent command bridge and disposes RPC', async () => {
   assert.deepEqual(disposed, ['/dsh-vision-bench/command'])
   assert.ok(connection.hasHandler)
   const hostSrc = await (await import('node:fs/promises')).readFile(new URL('../host.js', import.meta.url), 'utf8')
-  assert.match(hostSrc, /Vision预设未更新/)
+  assert.doesNotMatch(hostSrc, /schedulePresetSeed\(/)
+  assert.doesNotMatch(hostSrc, /seedVisionBenchPreset/)
+  assert.doesNotMatch(hostSrc, /bindAgentSurface/)
+  assert.doesNotMatch(hostSrc, /role === 'agent'/)
   assert.match(hostSrc, /clearFlashApprovals\(\)/)
+  assert.doesNotMatch(hostSrc, /ctx\.on\('internal\/plugin'/)
+  assert.doesNotMatch(hostSrc, /plugin-lifecycle\.jsonl/)
   assert.doesNotMatch(hostSrc, /roster copy is best-effort/)
   assert.doesNotMatch(hostSrc, /const browser = origin/)
   assert.doesNotMatch(hostSrc, /route\('\/dsh-vision-bench\/state'/)
-  ctx._stop()
+  await ctx._stop()
   assert.equal(connection.disposed, true)
+})
+
+test('late RPC disposer still runs after the host fiber has disposed', async () => {
+  let disposeCalls = 0
+  let resolveReg
+  const registration = new Promise((resolve) => {
+    resolveReg = resolve
+  })
+  const ctx = {
+    connection: {
+      rpc: { handle() {} },
+      register(_ctx, _channel, _handler) {
+        return registration
+      },
+    },
+    webServer: {
+      register() {
+        return () => {}
+      },
+    },
+    effect(factory) {
+      ctx._stop = factory()
+    },
+  }
+  apply(ctx)
+  const stopping = ctx._stop()
+  resolveReg(() => {
+    disposeCalls += 1
+  })
+  await stopping
+  assert.ok(disposeCalls >= 1, 'late disposer must still run')
+})
+
+test('host dispose waits until the late RPC disposer finishes', async () => {
+  let resolveReg
+  const registration = new Promise((resolve) => {
+    resolveReg = resolve
+  })
+  let disposeFinished = false
+  const ctx = {
+    connection: {
+      rpc: { handle() {} },
+      register() {
+        return registration
+      },
+    },
+    webServer: {
+      register() {
+        return () => {}
+      },
+    },
+    effect(factory) {
+      ctx._stop = factory()
+    },
+  }
+  apply(ctx)
+  const stopping = Promise.resolve(ctx._stop())
+  let stopDone = false
+  stopping.then(() => {
+    stopDone = true
+  })
+  await new Promise((r) => setImmediate(r))
+  assert.equal(stopDone, false)
+  resolveReg(
+    () =>
+      new Promise((resolve) => {
+        setTimeout(() => {
+          disposeFinished = true
+          resolve()
+        }, 30)
+      }),
+  )
+  await stopping
+  assert.equal(disposeFinished, true)
+  assert.equal(stopDone, true)
 })
 
 test('plugin dispose 清空刷写审批仓库', async () => {

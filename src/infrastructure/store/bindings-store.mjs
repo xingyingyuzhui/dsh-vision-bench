@@ -1,13 +1,13 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { writeJsonAtomicSync } from '../persistence/atomic-json.mjs'
+import { defaultDshHome } from './dsh-home.mjs'
+
+export { defaultDshHome }
 
 export const BINDING_KEYS = ['python', 'uv4', 'openocd', 'gdb']
 
 export const emptyBindings = () => ({ python: '', uv4: '', openocd: '', gdb: '' })
-
-export const defaultDshHome = (env = process.env, home = homedir()) => env.DSH_HOME || join(home, '.dsh')
 
 export const storeDir = (home) => join(home, 'vision-bench')
 

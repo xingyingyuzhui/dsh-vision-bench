@@ -9,9 +9,9 @@ import writeFileAtomic from 'write-file-atomic'
  * @param {any} text
  * @returns {any}
  */
-export function writeTextAtomicSync(filePath, text) {
+export function writeTextAtomicSync(filePath, text, { fsync = true } = {}) {
   mkdirSync(dirname(filePath), { recursive: true })
-  writeFileAtomic.sync(filePath, text, { encoding: 'utf8', fsync: true })
+  writeFileAtomic.sync(filePath, text, { encoding: 'utf8', fsync: fsync !== false })
 }
 
 /**
@@ -20,9 +20,9 @@ export function writeTextAtomicSync(filePath, text) {
  * @param {any} arg
  * @returns {any}
  */
-export function writeJsonAtomicSync(filePath, value, { pretty = true } = {}) {
+export function writeJsonAtomicSync(filePath, value, { pretty = true, fsync = true } = {}) {
   const text = pretty ? `${JSON.stringify(value, null, 2)}\n` : JSON.stringify(value)
-  writeTextAtomicSync(filePath, text)
+  writeTextAtomicSync(filePath, text, { fsync })
 }
 
 /**

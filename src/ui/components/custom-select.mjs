@@ -369,6 +369,33 @@ export function createCustomSelect(React) {
 
     const isOpen = typeof props.open === 'boolean' ? props.open : internalOpen
 
+    const useLayout = typeof React.useLayoutEffect === 'function' ? React.useLayoutEffect : (React.useEffect || (() => {}))
+    useLayout(() => {
+      if (!isOpen || !containerRef.current) return undefined
+      const menu = containerRef.current.querySelector('.dvb-select-dropdown')
+      const trigger = containerRef.current.querySelector('.dvb-select-trigger')
+      if (!menu || !trigger) return undefined
+      const place = () => {
+        const r = trigger.getBoundingClientRect()
+        const maxH = 220
+        const spaceBelow = window.innerHeight - r.bottom
+        const h = Math.min(menu.scrollHeight || maxH, maxH)
+        const top = spaceBelow < h + 8 && r.top > h ? r.top - h - 4 : r.bottom + 4
+        menu.style.position = 'fixed'
+        menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - r.width - 8))}px`
+        menu.style.top = `${Math.max(8, top)}px`
+        menu.style.minWidth = `${r.width}px`
+        menu.style.zIndex = '4000'
+      }
+      place()
+      window.addEventListener('resize', place)
+      window.addEventListener('scroll', place, true)
+      return () => {
+        window.removeEventListener('resize', place)
+        window.removeEventListener('scroll', place, true)
+      }
+    }, [isOpen])
+
     React.useEffect(() => {
       if (!isOpen) return undefined
 

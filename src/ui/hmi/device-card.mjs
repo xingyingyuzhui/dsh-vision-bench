@@ -6,6 +6,7 @@ import { renderNewPointRow } from './point-editor.mjs'
 import { renderPointRow } from './point-row.mjs'
 import { renderPointThead } from './point-table.mjs'
 import { renderCancelButton, renderSaveButton } from '../components/save-cancel-buttons.mjs'
+import { connTabLabel } from './connection-label.mjs'
 
 /** Device cards panel with nested point tables. */
 export function renderDeviceCards(el, t, ctx) {
@@ -85,7 +86,7 @@ export function renderDeviceCards(el, t, ctx) {
     el(
       'div',
       { className: 'dvb-panel-head dvb-dev-section-head' },
-      el('span', { className: 'dvb-panel-title' }, '设备 · ' + (activeConnObj ? activeConnObj.name : '')),
+      el('span', { className: 'dvb-panel-title' }, connTabLabel(activeConnObj)),
       isSimulated ? el('span', { className: 'dvb-badge', 'data-kind': 'live' }, '仿真') : null,
       el(
         'span',

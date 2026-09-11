@@ -52,6 +52,8 @@ export function useDebugEvents(React, post, scope) {
   const cursorRef = React.useRef(0)
   const frameSeqRef = React.useRef(0)
   const watchSeqRef = React.useRef(0)
+  const watchesRef = React.useRef(watches)
+  watchesRef.current = watches
 
   const controller = React.useMemo(() => {
     return createRuntimeController(post, { cwd, sessionId })
@@ -132,47 +134,43 @@ export function useDebugEvents(React, post, scope) {
           setVariables((prev) => ({ ...prev, locals: res.variables }))
         }
         if (seq !== frameSeqRef.current || !mountedRef.current) return
-        await evaluateWatches(watches, frameLevel)
+        await evaluateWatches(watchesRef.current, frameLevel)
       } catch (err) {
         if (seq !== frameSeqRef.current || !mountedRef.current) return
         setError(err instanceof Error ? err.message : String(err))
       }
     },
-    [controller, watches, evaluateWatches],
+    [controller, evaluateWatches],
   )
 
-  // Main polling loop
+  // Snapshot on mount. Long-poll only after a debug session is active.
   React.useEffect(() => {
     mountedRef.current = true
     const currentIdentity = identityKey
     const reqId = beginRequest(reqRef)
-
-    // Abort previous polling if any
     if (abortRef.current) {
       abortRef.current.abort()
       abortRef.current = null
     }
-
     const ac = new AbortController()
     abortRef.current = ac
-
-    // Initial state fetch
     setLoading(true)
     setError(null)
     cursorRef.current = 0
-
     let stopped = false
 
     async function pollLoop() {
+      if (!sessionId || !cwd) {
+        setLoading(false)
+        return
+      }
       try {
         const stateRes = await controller.getState()
         if (!shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) || stopped) {
           return
         }
         setLoading(false)
-        if (stateRes?.ok) {
-          applyState(stateRes)
-        }
+        if (stateRes?.ok) applyState(stateRes)
       } catch (err) {
         if (!shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) || stopped) {
           return
@@ -181,7 +179,6 @@ export function useDebugEvents(React, post, scope) {
         setError(err instanceof Error ? err.message : String(err))
       }
 
-      // Event wait loop
       while (!stopped && !ac.signal.aborted && mountedRef.current) {
         try {
           const waitRes = await controller.waitEvents(cursorRef.current, ac.signal)
@@ -189,9 +186,20 @@ export function useDebugEvents(React, post, scope) {
             break
           }
           if (waitRes?.ok) {
+            if (waitRes.identityRequired) {
+              break
+            }
+            if (waitRes.woke) {
+              const fresh = await controller.getState()
+              if (shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) && fresh?.ok) {
+                applyState(fresh)
+              }
+              continue
+            }
             if (waitRes.closed) {
-              // No active debug session or session closed; idle poll at 1000ms
-              await new Promise((r) => setTimeout(r, 1000))
+              applyState({ ok: true, session: null, pendingApprovals: [] })
+              cursorRef.current = 0
+              continue
             }
             if (waitRes.nextCursor != null) {
               cursorRef.current = waitRes.nextCursor
@@ -235,7 +243,7 @@ export function useDebugEvents(React, post, scope) {
                 if (shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) && fresh?.ok) {
                   applyState(fresh)
                   refreshRegisters()
-                  evaluateWatches(watches, 0)
+                  evaluateWatches(watchesRef.current, 0)
                 }
               }
             }
@@ -262,7 +270,7 @@ export function useDebugEvents(React, post, scope) {
         abortRef.current = null
       }
     }
-  }, [identityKey, controller, applyState, refreshRegisters, evaluateWatches, watches])
+  }, [identityKey, controller, applyState])
 
   // Controller Actions
   const startDebug = React.useCallback(
@@ -452,8 +460,9 @@ export function useDebugEvents(React, post, scope) {
   const addWatch = React.useCallback(
     (expr) => {
       const trimmed = String(expr || '').trim()
-      if (!trimmed || watches.includes(trimmed)) return
-      const next = [...watches, trimmed]
+      if (!trimmed || watchesRef.current.includes(trimmed)) return
+      const next = [...watchesRef.current, trimmed]
+      watchesRef.current = next
       setWatches(next)
       evaluateWatches(next, selectedFrame)
     },
@@ -462,7 +471,8 @@ export function useDebugEvents(React, post, scope) {
 
   const removeWatch = React.useCallback(
     (expr) => {
-      const next = watches.filter((w) => w !== expr)
+      const next = watchesRef.current.filter((w) => w !== expr)
+      watchesRef.current = next
       setWatches(next)
       evaluateWatches(next, selectedFrame)
     },
@@ -509,14 +519,14 @@ export function useDebugEvents(React, post, scope) {
       if (fresh?.ok) {
         applyState(fresh)
         refreshRegisters()
-        evaluateWatches(watches, selectedFrame)
+        evaluateWatches(watchesRef.current, selectedFrame)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
-  }, [controller, applyState, refreshRegisters, evaluateWatches, watches, selectedFrame])
+  }, [controller, applyState, refreshRegisters, evaluateWatches, selectedFrame])
 
   return {
     active,

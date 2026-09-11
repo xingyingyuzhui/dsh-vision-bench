@@ -68,11 +68,24 @@ test('two concurrent connections: all-feed is seq-ordered, per-conn feeds stay i
   sa.capture.push({ direction: 'rx', hex: 'CC', byteLength: 1, connectionId: 'c1', port: 'COM3', seq: 3 })
   const all = mgr.feedCapture('/ws', '', 0, 50)
   assert.deepEqual(
+    all.items.map((i) => i.seq),
+    [1, 2, 3],
+    'all-feed ordered by preserved global seq',
+  )
+  assert.deepEqual(
     all.items.map((i) => i.port),
     ['COM3', 'COM4', 'COM3'],
     'all-feed ordered by seq, ties broken stably',
   )
   assert.equal(all.hasMore, false)
+  const page1 = mgr.feedCapture('/ws', '', 0, 1)
+  assert.equal(page1.items[0].seq, 1)
+  const page2 = mgr.feedCapture('/ws', '', page1.cursor, 50)
+  assert.deepEqual(
+    page2.items.map((i) => i.seq),
+    [2, 3],
+    'cursor follows global seq so COM4 local id=1 is not skipped',
+  )
   const only3 = mgr.feedCapture('/ws', 'c1', 0, 50)
   assert.equal(only3.items.length, 2)
   assert.ok(only3.items.every((i) => i.connectionId === 'c1'))

@@ -57,6 +57,20 @@ export function createDebugRuntime(deps = {}) {
    *   updatedAt: number,
    * }>} */
   const sessions = new Map()
+  /** @type {Set<{ ownerSessionId: string, workspaceCwd: string, resolve: (session: any) => void }>} */
+  const ownerWaiters = new Set()
+
+  /**
+   * @param {any} session
+   */
+  function notifyOwnerWaiters(session) {
+    for (const waiter of [...ownerWaiters]) {
+      if (!waiter.ownerSessionId || waiter.ownerSessionId !== session.ownerSessionId) continue
+      if (!waiter.workspaceCwd || waiter.workspaceCwd !== session.workspaceCwd) continue
+      ownerWaiters.delete(waiter)
+      waiter.resolve(session)
+    }
+  }
 
   /**
    * Helper to verify session ownership.
@@ -174,6 +188,7 @@ export function createDebugRuntime(deps = {}) {
       }
 
       sessions.set(debugSessionId, sessionRecord)
+      notifyOwnerWaiters(sessionRecord)
 
       try {
         const backend = await backendFactory(backendKind, {
@@ -430,11 +445,65 @@ export function createDebugRuntime(deps = {}) {
     },
 
     /**
+     * Park until an owned debug session exists. Used so the Debug page can
+     * discover Agent-started sessions without idle polling.
+     *
+     * @param {{ ownerSessionId?: string, workspaceCwd?: string }} scope
+     * @param {{ signal?: AbortSignal, timeoutMs?: number }} [options]
+     */
+    async waitForOwnerSession(scope, options = {}) {
+      const ownerSessionId = String(scope.ownerSessionId || '').trim()
+      const workspaceCwd = String(scope.workspaceCwd || '').trim()
+      if (!ownerSessionId || !workspaceCwd) return null
+      for (const session of sessions.values()) {
+        if (session.ownerSessionId !== ownerSessionId) continue
+        if (session.workspaceCwd !== workspaceCwd) continue
+        return session
+      }
+      const signal = options.signal
+      if (signal?.aborted) return null
+      const timeoutMs = Math.min(Math.max(100, options.timeoutMs ?? 20000), 25000)
+      return await new Promise((resolve) => {
+        /** @type {{ ownerSessionId: string, workspaceCwd: string, resolve: (session: any) => void }} */
+        const waiter = {
+          ownerSessionId,
+          workspaceCwd,
+          resolve: (session) => {
+            cleanup()
+            resolve(session)
+          },
+        }
+        const cleanup = () => {
+          ownerWaiters.delete(waiter)
+          if (timer) clearTimeout(timer)
+          if (signal) signal.removeEventListener('abort', onAbort)
+        }
+        const onAbort = () => {
+          cleanup()
+          resolve(null)
+        }
+        const timer = setTimeout(() => {
+          cleanup()
+          resolve(null)
+        }, timeoutMs)
+        ownerWaiters.add(waiter)
+        if (signal) {
+          if (signal.aborted) onAbort()
+          else signal.addEventListener('abort', onAbort, { once: true })
+        }
+      })
+    },
+
+    /**
      * Shuts down all active debug sessions and releases all leases.
      *
      * @param {string} [reason]
      */
     async shutdown(reason = 'runtime_shutdown') {
+      for (const waiter of [...ownerWaiters]) {
+        ownerWaiters.delete(waiter)
+        waiter.resolve(null)
+      }
       for (const session of sessions.values()) {
         try {
           if (session.unsubscribeBackend) {

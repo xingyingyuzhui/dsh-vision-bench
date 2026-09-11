@@ -1,6 +1,17 @@
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import * as yaml from 'yaml'
+import { LEGACY_VISION_PERSONAS, PRESET_PERSONA, STANDARD_PERSONA, VISION_GUIDANCE } from './bench-guidance.mjs'
+import {
+  loadOfficialPersonaConfig,
+  localPersonaConfigReplica,
+  resolveShippedStandardDir,
+} from './src/infrastructure/harness/dsh-contract.mjs'
+import {
+  validateCompositionPersona,
+  validateManagedVisionComposition,
+  yamlNodeToPlain,
+} from './src/infrastructure/harness/preset-validate.mjs'
 
 // Every fs access goes through the same require cache as the test harness, so
 // failures can be injected by patching node:fs (see test/tool-preset.test.mjs).
@@ -65,17 +76,59 @@ export function getLastPresetSeed() {
   return lastPresetSeed
 }
 
-export function inspectPresetHealth(home) {
+/** @type {((value: unknown) => unknown) | null | undefined} */
+let officialHealthConfig
+/** @type {string} */
+let officialHealthConfigError = ''
+
+export async function resolveOfficialHealthConfig() {
+  if (officialHealthConfig) return { config: officialHealthConfig }
+  if (officialHealthConfig === null) {
+    return { error: officialHealthConfigError || '未完成契约验证：无法加载官方 dsh-persona Config' }
+  }
+  try {
+    officialHealthConfig = await loadOfficialPersonaConfig()
+    officialHealthConfigError = ''
+    return { config: officialHealthConfig }
+  } catch (error) {
+    officialHealthConfig = null
+    officialHealthConfigError = `未完成契约验证：${error instanceof Error ? error.message : String(error)}`
+    return { error: officialHealthConfigError }
+  }
+}
+
+export async function inspectPresetHealth(home, options = {}) {
   const seed = getLastPresetSeed()
   const dir = userPresetDir(home)
   const composition = join(dir, 'agent.cordis.yml')
   const ownership = _existsSync(dir) ? checkOwnership(dir) : { exists: false }
   const generation = ownership.payload && ownership.payload.lastManagedAt ? String(ownership.payload.lastManagedAt) : ''
+  const fail = (error) => ({
+    ok: false,
+    id: PRESET_ID,
+    title: PRESET_TITLE,
+    generation,
+    error,
+    nextStep: seed.rebuildHelp || REBUILD_INSTRUCTIONS,
+    appliesOnNewSession: true,
+    unchanged: seed.unchanged === true,
+  })
+  let personaConfig = options.personaConfig
+  if (!personaConfig) {
+    const resolved = await resolveOfficialHealthConfig()
+    if (resolved.error || !resolved.config) return fail(resolved.error || '未完成契约验证：无法加载官方 dsh-persona Config')
+    personaConfig = resolved.config
+  }
   let parseError = ''
   if (_existsSync(composition)) {
     try {
       const parsed = parseCompositionDocument(_readFileSync(composition, 'utf8'))
-      if (parsed.errors && parsed.errors.length) parseError = String(parsed.errors[0].message || parsed.errors[0])
+      if (parsed.errors && parsed.errors.length) {
+        parseError = String(parsed.errors[0].message || parsed.errors[0])
+      } else {
+        const contract = validateManagedVisionComposition(parsed.contents, personaConfig)
+        if (!contract.ok) parseError = contract.error
+      }
     } catch (error) {
       parseError = String((error && error.message) || error)
     }
@@ -83,15 +136,14 @@ export function inspectPresetHealth(home) {
     parseError = 'Vision预设尚未安装'
   }
   const error = seed.ok === false ? seed.error || 'Vision预设未更新' : parseError || ownership.error || ''
+  if (error) return fail(error)
   return {
-    ok: !error,
+    ok: true,
     id: PRESET_ID,
     title: PRESET_TITLE,
     generation,
-    error,
-    nextStep: error
-      ? seed.rebuildHelp || REBUILD_INSTRUCTIONS
-      : '新建 Session 后生效。已打开的 Session 保持原 generation，不会热更新。',
+    error: '',
+    nextStep: '新建 Session 后生效。已打开的 Session 保持原 generation，不会热更新。',
     appliesOnNewSession: true,
     unchanged: seed.unchanged === true,
   }
@@ -101,48 +153,12 @@ export const PRESET_ID = 'vision-bench'
 export const PRESET_TITLE = 'Vision模式'
 const MARKER = '.dsh-vision-bench'
 const AFFECTED_FILES = ['agent.cordis.yml', 'preset.yml', MARKER]
+const HOST_PLUGIN_NAME = 'dsh-vision-bench'
 
-export const STANDARD_PERSONA =
-  'You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.'
+export { LEGACY_VISION_PERSONAS, PRESET_PERSONA, STANDARD_PERSONA, VISION_GUIDANCE }
 
-export const PRESET_PERSONA = STANDARD_PERSONA
-
-export const VISION_GUIDANCE = [
-  'Vision bench guidance (vision-bench:guidance):',
-  '- Local bench is real or simulated; verify project/connection/device/point/value/frame/task via vision_bench tools with minimal queries.',
-  '- Reference stable IDs (connectionId/deviceId/pointId) not UI focus; status→map only when needed.',
-  '- HMI and Debug share live state; Agent actions must appear in tasks/timeline and page echoes.',
-  '- Background reads must not steal focus; only explicit focus requests switch tabs.',
-  '- Agent 可以直接修改连接、设备、点位和可视化配置。',
-  '- 点位批量：points op=add 一次传入 points[]（可数十个），只消耗一个 configVersion。禁止对每个点单独 add。address 是协议地址，FC03 的 0 对应 40001，不要把 40001 当作 address。',
-  '- 配置修改必须携带当前 configVersion，Host 校验后原子保存并记录操作。',
-  '- Vision 配置结果通知不是新任务。看到「Vision 已生效」或 plugin notice 时不要再执行一遍增删改。',
-  '- 真实设备写入和烧录仍需要用户批准。',
-  '- Writes/downloads/resets require approval with endpoint fingerprint and config version.',
-  '- Diagnostics cite build log, point quality, frames (transactionId), trend intervals or operation results.',
-  '- Do not stream high-frequency values or bulk frames into system prompt.',
-  '- Modbus TCP/RTU and raw serial use the bundled Node runtime; they do not require Python.',
-  '- WRITE_OUTCOME_UNKNOWN means the write may have executed; do not retry. Read the address first and wait for the user to re-approve.',
-  '- TCP frames are protocol-normalized, not raw MBAP.',
-  '- Use an existing HMI serial connection. If it is disconnected, call connect first. Never open a second serial port just to view frames; TX/RX from user, polling and Agent I/O already appear on the frames page.',
-  '- Points have two independent switches: monitorEnabled (visualization data source; enable it then associate the point in a visualization component) and alarmEnabled (threshold alarms). Never conflate them.',
-  '- Visualization components are read via action=visualization (list/get) and mutated via add/update/remove/layout. layout requires expectedConfigVersion and items[{id,x,y,w,h}]. Old propose* ops return OP_REMOVED.',
-  '- Switch component writes are high-impact: they still require user confirmation and readback, exactly like point writes.',
-  '- Firmware runtime diagnosis uses vision_debug, not raw GDB/OpenOCD commands.',
-  '- For unexplained value changes, prefer watchpoint → run → inspect snapshot.',
-  '- Never start a second hardware debug session when target lease is busy.',
-  '- Debug snapshots are evidence; cite snapshot ids in diagnosis.',
-].join('\n')
-
-const LEGACY_VISION_PERSONAS = [
-  'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场工程、编译产物和 Modbus 连接以 vision_bench 工具为准：先 action=status，再 ls/select/build/read。不要猜测用户选了哪个工程。',
-  'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. ' +
-    '现场工程、编译产物、进行中任务和时间线以 vision_bench 工具为准：先 action=status，再 map 看当前 Target 的文件树，然后 ls/select/build/read。不要猜测用户选了哪个工程或有哪些源文件。' +
-    'write 是高影响操作：只按用户明确给出的地址和值写线圈或保持寄存器，写入后核对回读结果；用户没有明确要求时不要写点。',
-  'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. ' +
-    '现场工程、编译产物、进行中任务和时间线以 vision_bench 工具为准：先 action=status，再 map 看当前 Target 的文件树，然后 ls/select/build/read。不要猜测用户选了哪个工程或有哪些源文件。',
-  'You are a Vision 台架 agent powered by the {{model}} model. Your working directory is {{cwd}}. 现场工程、编译产物和 Modbus 连接以 vision_bench 工具为准：先 action=status，再 map 看当前 Target 的文件树，然后 ls/select/build/read。不要猜测用户选了哪个工程或有哪些源文件。',
-]
+/** Preset composition `name` — a package subpath, not the host plugin id. */
+export const AGENT_PLUGIN_SPEC = 'dsh-vision-bench/agent'
 
 export const PRESET_METADATA = [
   'name: ' + PRESET_TITLE,
@@ -152,7 +168,7 @@ export const PRESET_METADATA = [
 
 const OWNERSHIP_TEMPLATE = {
   owner: 'dsh-vision-bench',
-  presetSchemaVersion: 2,
+  presetSchemaVersion: 3,
   basePresetId: 'standard',
   pluginRowId: 'vision-bench-tools',
 }
@@ -255,7 +271,43 @@ function restoreAll(backupDir, dir, existedBefore) {
   }
 }
 
-export const ensurePresetOverlay = (dir) => {
+function yamlString(value) {
+  return typeof value === 'string' ? value : undefined
+}
+
+function isVisionToolRow(id, name) {
+  return id === 'vision-bench-tools' || name === HOST_PLUGIN_NAME || name === AGENT_PLUGIN_SPEC
+}
+
+function ensureYamlMap(doc, parent, key) {
+  let node = typeof parent.get === 'function' ? parent.get(key) : undefined
+  if (!node || typeof node.set !== 'function') {
+    parent.set(key, doc.createNode({}))
+    node = parent.get(key)
+  }
+  return node
+}
+
+function copyDirRecursive(src, dest) {
+  _mkdirSync(dest, { recursive: true })
+  const fs = _require('node:fs')
+  const names = fs.readdirSync(src, { withFileTypes: true })
+  for (const ent of names) {
+    const from = join(src, ent.name)
+    const to = join(dest, ent.name)
+    if (ent.isDirectory()) copyDirRecursive(from, to)
+    else if (!_existsSync(to)) _copySync(from, to)
+  }
+}
+
+function isAlreadyExistsError(error) {
+  const code = error && typeof error === 'object' ? error.code : ''
+  const msg = String((error && error.message) || error || '')
+  return code === 'agent-preset/invalid' && /already exists/.test(msg)
+}
+
+export const ensurePresetOverlay = (dir, options = {}) => {
+  const personaConfig = options.personaConfig || localPersonaConfigReplica
   const file = join(dir, 'agent.cordis.yml')
   if (!_existsSync(file)) return { ok: false, error: 'missing composition' }
   const raw = _readFileSync(file, 'utf8')
@@ -284,75 +336,81 @@ export const ensurePresetOverlay = (dir) => {
     return { ok: false, error: ownership.error, dir, rebuildHelp: REBUILD_INSTRUCTIONS }
   }
 
-  // Locate tool row via YAML Document API (id: vision-bench-tools)
-  let hadRow = false
   let personaNode = null
-  let personaText = null
+  const toolRows = []
   for (const item of seq.items) {
     if (!item || typeof item.get !== 'function') continue
     const id = item.get('id')
-    if (id === 'vision-bench-tools') hadRow = true
-    if (id === 'persona') {
-      personaNode = item
-      try {
-        const t = item.getIn(['config', 'text'])
-        if (typeof t === 'string') personaText = t
-        else {
-          const cfg = item.get('config')
-          if (cfg && typeof cfg.get === 'function') {
-            const v = cfg.get('text')
-            if (typeof v === 'string') personaText = v
-          }
-        }
-      } catch {}
-    }
+    const name = item.get('name')
+    if (id === 'persona' || (typeof name === 'string' && name.includes('dsh-persona'))) personaNode = item
+    if (isVisionToolRow(id, name)) toolRows.push(item)
   }
 
   let needsReview = false
   let personaRestored = false
-  if (personaNode && typeof personaText === 'string') {
-    const cur = personaText.trim()
-    const isStandard = cur === STANDARD_PERSONA.trim()
-    const isLegacy = LEGACY_VISION_PERSONAS.some((p) => p.trim() === cur)
-    const looksVision = cur.includes('Vision 台架') || cur.includes('Vision 台架 agent')
-    if (!isStandard && isLegacy) {
-      // Known legacy: restore to standard, Vision rules now via plugin guidance
-      try {
-        const cfg = personaNode.get('config')
-        if (cfg && typeof cfg.set === 'function') {
-          cfg.set('text', STANDARD_PERSONA)
-        } else if (personaNode.setIn) {
-          personaNode.setIn(['config', 'text'], STANDARD_PERSONA)
-        }
-        personaRestored = true
-      } catch (e) {
-        return {
-          ok: false,
-          error: ' persona 迁移失败：' + String((e && e.message) || e),
-          needsReview: true,
-          dir,
-          rebuildHelp: REBUILD_INSTRUCTIONS,
-        }
+  let personaConflict = false
+  if (personaNode && typeof personaNode.get === 'function') {
+    try {
+      const cfg = ensureYamlMap(doc, personaNode, 'config')
+      const prefix = yamlString(cfg.get('prefix'))
+      const text = yamlString(cfg.get('text'))
+      if (prefix && text && prefix.trim() !== text.trim()) {
+        personaConflict = true
+        needsReview = true
+      } else if (prefix && text && typeof cfg.delete === 'function') {
+        cfg.delete('text')
+      } else if (!prefix && typeof text === 'string') {
+        const cur = text.trim()
+        const isStandard = cur === STANDARD_PERSONA.trim()
+        const isLegacy = LEGACY_VISION_PERSONAS.some((p) => p.trim() === cur)
+        const looksVision = cur.includes('Vision 台架') || cur.includes('Vision 台架 agent')
+        const next = isLegacy ? STANDARD_PERSONA : text
+        cfg.set('prefix', next)
+        if (typeof cfg.delete === 'function') cfg.delete('text')
+        if (isLegacy) personaRestored = true
+        else if (!isStandard) needsReview = true
+        if (looksVision && !isLegacy && !isStandard) needsReview = true
       }
-    } else if (!isStandard && !isLegacy && looksVision) {
-      needsReview = true
-    } else if (!isStandard && !isLegacy) {
-      // Completely unknown persona: user-modified
-      needsReview = true
+    } catch (e) {
+      return {
+        ok: false,
+        error: ' persona 迁移失败：' + String((e && e.message) || e),
+        needsReview: true,
+        dir,
+        rebuildHelp: REBUILD_INSTRUCTIONS,
+      }
     }
   }
 
-  // Ensure tool row idempotently
   let addedRow = false
-  if (!hadRow) {
-    const toolObj = {
-      id: 'vision-bench-tools',
-      name: 'dsh-vision-bench',
-      config: { role: 'agent' },
+  const keep = toolRows[0]
+  if (keep && typeof keep.set === 'function') {
+    keep.set('id', 'vision-bench-tools')
+    keep.set('name', AGENT_PLUGIN_SPEC)
+    const cfg = keep.get('config')
+    if (cfg && typeof cfg.delete === 'function') {
+      cfg.delete('role')
+      const plain = yamlNodeToPlain(cfg)
+      if (Object.keys(plain).length === 0 && typeof keep.delete === 'function') keep.delete('config')
     }
-    const node = doc.createNode(toolObj)
-    seq.items.push(node)
+  } else {
+    seq.items.push(doc.createNode({ id: 'vision-bench-tools', name: AGENT_PLUGIN_SPEC }))
     addedRow = true
+  }
+  for (let i = toolRows.length - 1; i >= 1; i--) {
+    const extra = toolRows[i]
+    const idx = seq.items.indexOf(extra)
+    if (idx >= 0) seq.items.splice(idx, 1)
+  }
+
+  const personaCheck = validateCompositionPersona(seq, personaConfig)
+  if (!personaCheck.ok) {
+    return {
+      ok: false,
+      error: personaCheck.error,
+      dir,
+      rebuildHelp: REBUILD_INSTRUCTIONS,
+    }
   }
 
   // Desired contents for all three files, computed up-front and compared with
@@ -386,10 +444,11 @@ export const ensurePresetOverlay = (dir) => {
     if (needsReview) {
       return {
         ok: false,
-        error: '预设需要人工检查',
+        error: personaConflict ? 'persona 同时存在冲突的 prefix 与 text，已保留 prefix' : '预设需要人工检查',
         needsReview: true,
         dir,
         personaNeedsReview: true,
+        personaConflict,
         unchanged: true,
         rebuildHelp: REBUILD_INSTRUCTIONS,
       }
@@ -454,11 +513,12 @@ export const ensurePresetOverlay = (dir) => {
   if (needsReview) {
     return {
       ok: false,
-      error: '预设需要人工检查',
+      error: personaConflict ? 'persona 同时存在冲突的 prefix 与 text，已保留 prefix' : '预设需要人工检查',
       needsReview: true,
       dir,
       addedRow,
       personaNeedsReview: true,
+      personaConflict,
       backupDir,
       rebuildHelp: REBUILD_INSTRUCTIONS,
     }
@@ -468,8 +528,40 @@ export const ensurePresetOverlay = (dir) => {
 
 export const userPresetDir = (home) => join(home, '.agent-presets', PRESET_ID)
 
-export async function seedVisionBenchPreset(agentPresets, home) {
-  const dir = userPresetDir(home)
+const inFlightSeeds = new Map()
+
+async function copyStandardSource(agentPresets, dir, options) {
+  if (agentPresets && typeof agentPresets.copy === 'function') {
+    try {
+      await agentPresets.copy('standard', PRESET_ID, PRESET_TITLE)
+      return { ok: true, via: 'agentPresets.copy' }
+    } catch (error) {
+      if (!isAlreadyExistsError(error)) {
+        return {
+          ok: false,
+          error: '从 standard 复制失败：' + String((error && error.message) || error),
+        }
+      }
+    }
+  }
+  let standardDir
+  try {
+    standardDir = resolveShippedStandardDir(options.standardDir, options.dshPaths)
+  } catch (error) {
+    return { ok: false, error: String((error && error.message) || error) }
+  }
+  if (!_existsSync(standardDir)) {
+    return { ok: false, error: '找不到 DSH standard 预设: ' + standardDir }
+  }
+  try {
+    copyDirRecursive(standardDir, dir)
+    return { ok: true, via: 'shipped-standard', standardDir }
+  } catch (error) {
+    return { ok: false, error: '复制 shipped standard 失败：' + String((error && error.message) || error) }
+  }
+}
+
+async function _seedVisionBenchPresetInternal(agentPresets, home, dir, options) {
   const composition = join(dir, 'agent.cordis.yml')
   const marker = join(dir, MARKER)
   const finish = (result) => {
@@ -487,11 +579,14 @@ export async function seedVisionBenchPreset(agentPresets, home) {
       return finish({ ok: false, error: ownership.error, dir, rebuildHelp: REBUILD_INSTRUCTIONS })
     }
   }
-  if (!hasComposition && agentPresets && typeof agentPresets.copy === 'function') {
-    try {
-      await agentPresets.copy('standard', PRESET_ID, PRESET_TITLE)
-    } catch {
-      /* already exists, unknown source, or no writable root */
+  if (!hasComposition) {
+    const copied = await copyStandardSource(agentPresets, dir, options)
+    if (!copied.ok) {
+      return finish({
+        ok: false,
+        error: copied.error || '未能创建Vision预设（需要可从 standard 复制）',
+        rebuildHelp: REBUILD_INSTRUCTIONS,
+      })
     }
   }
   if (!_existsSync(composition)) {
@@ -501,7 +596,35 @@ export async function seedVisionBenchPreset(agentPresets, home) {
       rebuildHelp: REBUILD_INSTRUCTIONS,
     })
   }
-  return finish(ensurePresetOverlay(dir))
+  let personaConfig = options.personaConfig
+  if (!personaConfig) {
+    try {
+      personaConfig = await loadOfficialPersonaConfig(options.dshPaths)
+    } catch (error) {
+      return finish({
+        ok: false,
+        error: String((error && error.message) || error),
+        rebuildHelp: REBUILD_INSTRUCTIONS,
+      })
+    }
+  }
+  return finish(ensurePresetOverlay(dir, { personaConfig }))
+}
+
+export async function seedVisionBenchPreset(agentPresets, home, options = {}) {
+  const dir = userPresetDir(home)
+  if (inFlightSeeds.has(dir)) {
+    return inFlightSeeds.get(dir)
+  }
+  const promise = (async () => {
+    try {
+      return await _seedVisionBenchPresetInternal(agentPresets, home, dir, options)
+    } finally {
+      inFlightSeeds.delete(dir)
+    }
+  })()
+  inFlightSeeds.set(dir, promise)
+  return promise
 }
 
 export const _internal = {
@@ -516,4 +639,6 @@ export const _internal = {
   checkOwnership,
   templateFieldsMatch,
   writeAtomic,
+  copyDirRecursive,
+  isVisionToolRow,
 }
