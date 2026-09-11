@@ -20,7 +20,17 @@ function createTranscriptMockMiClient() {
   let stopped = false
 
   return {
+    /**
+     * Every command this mock received, including its arguments.
+     *
+     * Recording `args` is the point: the previous version of this mock asserted
+     * only on `cmd`, which made the `-interpreter-exec` double-quoting bug
+     * (B1) completely invisible to the suite.
+     * @type {Array<{ cmd: string, args: Array<string | number> }>}
+     */
+    calls: [],
     async command(cmd, args = []) {
+      this.calls.push({ cmd, args: [...args] })
       if (cmd === '-target-select') {
         return new MIRecord({ token: 1, kind: 'result', class: 'done' })
       }
@@ -132,6 +142,20 @@ test('GdbBackend transcript processing into DebugRuntime events', async () => {
     })
 
     assert.equal(view.state, 'ready')
+
+    // Regression guard for B1: the CLI command handed to `-interpreter-exec`
+    // must be bare text. A pre-quoted argument gets escaped a second time by
+    // `encodeMiArg`, so GDB sees `"monitor` as the command name and fails.
+    const interpreterCalls = mockMi.calls.filter((c) => c.cmd === '-interpreter-exec')
+    assert.ok(interpreterCalls.length > 0, '启动流程应发出 -interpreter-exec')
+    for (const call of interpreterCalls) {
+      assert.equal(call.args[0], 'console')
+      const cli = String(call.args[1] ?? '')
+      assert.ok(cli.trim().length > 0, '-interpreter-exec 需要非空 CLI 命令')
+      assert.ok(!/^["']/.test(cli.trim()), `CLI 命令不得预加引号: ${cli}`)
+      assert.ok(!cli.includes('\\"'), `CLI 命令不得含二次转义: ${cli}`)
+      assert.equal(cli, 'monitor reset halt')
+    }
 
     // Feed transcript: target starts running
     mockMi.emitRecord(

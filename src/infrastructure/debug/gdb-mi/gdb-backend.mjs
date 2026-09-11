@@ -48,6 +48,13 @@ export class GdbBackend {
      */
     this.nativeState = 'idle'
     this.isStopping = false
+    /**
+     * Last non-fatal error encountered during startup (e.g. the probe does not
+     * implement `monitor reset halt`). The session is still usable, but the
+     * target may not have been reset — callers surface this to the user.
+     * @type {string}
+     */
+    this.lastNonFatalError = ''
     this.firmwareHash = ''
     this.exitEmitted = false
     this._unsubscribeAsync = null
@@ -227,11 +234,24 @@ export class GdbBackend {
         )
       }
 
-      // 4. Connect GDB to OpenOCD port
+      // 4. Connect GDB to OpenOCD port — fatal: without a connection there is
+      //    no debug session to speak of.
       await this.miClient.command('-target-select', ['extended-remote', `127.0.0.1:${gdbPort}`])
 
-      // 5. Reset target and halt
-      await this.miClient.command('-interpreter-exec', ['console', '"monitor reset halt"'])
+      // 5. Reset target and halt — non-fatal.
+      //    `monitor` is an OpenOCD extension; some probe/firmware combinations do
+      //    not support it. A failure here must degrade to an MI-native interrupt
+      //    rather than taking the whole session down with it.
+      try {
+        await this.interpreterExec('monitor reset halt')
+      } catch (err) {
+        this.lastNonFatalError = err instanceof Error ? err.message : String(err)
+        try {
+          await this.miClient.command('-exec-interrupt')
+        } catch {
+          /* target may already be halted */
+        }
+      }
 
       // 6. Inspect initial frame
       try {
@@ -328,11 +348,39 @@ export class GdbBackend {
   }
 
   /**
+   * Executes a GDB console (CLI) command through `-interpreter-exec`.
+   *
+   * MI syntax is `-interpreter-exec CONSOLE-COMMAND`, where CONSOLE-COMMAND is
+   * **one** C string argument. `encodeMiArg()` owns the quoting, so callers pass
+   * the bare CLI text and must NOT pre-quote it.
+   *
+   * Pre-quoting is silently destructive: `'"monitor reset halt"'` gets escaped a
+   * second time into the wire form
+   *   `-interpreter-exec console "\"monitor reset halt\""`
+   * so GDB decodes the console command as `"monitor reset halt"` — quotes
+   * included — splits it on whitespace, and reports
+   *   `Undefined command: ""monitor".  Try "help".`
+   * which then tears down the whole session.
+   *
+   * @param {string} cliCommand bare CLI text, e.g. `monitor reset halt`
+   */
+  async interpreterExec(cliCommand) {
+    const client = this._getClient()
+    const raw = String(cliCommand ?? '')
+    if (raw.trim().length === 0) {
+      throw new Error('interpreterExec 需要非空的 CLI 命令')
+    }
+    if (/^["'].*["']$/.test(raw.trim())) {
+      throw new Error(`interpreterExec 收到已预加引号的参数，请传入裸 CLI 文本: ${raw}`)
+    }
+    return client.command('-interpreter-exec', ['console', raw])
+  }
+
+  /**
    * Halts and resets CPU via OpenOCD monitor command.
    */
   async resetHalt() {
-    const client = this._getClient()
-    const rec = await client.command('-interpreter-exec', ['console', '"monitor reset halt"'])
+    const rec = await this.interpreterExec('monitor reset halt')
     this.nativeState = 'paused'
     return rec
   }
