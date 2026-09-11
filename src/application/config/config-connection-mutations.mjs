@@ -1,9 +1,26 @@
 // @ts-check
 import { validateConnections } from '../../../bench-devices.mjs'
 import { explicitId } from '../../domain/config/config-operation.mjs'
+import { isSynthesizedConnection, normalizeConnections } from '../../domain/modbus/connection-model.mjs'
 import { resolveHierarchy } from '../../domain/modbus/target-resolver.mjs'
 import { pickConnPatch } from '../../domain/modbus/validation.mjs'
 import { idsOfPoints, scrubPointRuntime } from './config-point-mutations.mjs'
+
+/**
+ * Explains that an id exists only as the placeholder `normalizeConnections`
+ * invents for an empty topology, so the user understands why an id they can see
+ * in `status` cannot be mutated.
+ *
+ * @param {string} id
+ * @returns {{ ok: false, errorCode: string, error: string }}
+ */
+function synthesizedConnectionError(id) {
+  return {
+    ok: false,
+    errorCode: 'CONNECTION_NOT_FOUND',
+    error: `连接 ${id} 是空拓扑的默认占位，尚未真正创建，无法修改或删除`,
+  }
+}
 
 /**
  * @typedef {(home: string, cwd: string, opts?: object) => Promise<{ connectionStates?: object[] }> | { connectionStates?: object[] }} ListConnectionStates
@@ -51,7 +68,17 @@ export async function applyConnection(home, cwd, workspace, op, target, value, l
   if (op === 'remove') {
     if (!id) return { ok: false, errorCode: 'TARGET_REQUIRED', error: 'remove 必须携带 connectionId' }
     const hit = pack.connections.find((/** @type {any} */ c) => c.id === id)
-    if (!hit) return { ok: false, errorCode: 'CONNECTION_NOT_FOUND', error: `连接不存在: ${id}` }
+    if (hit && isSynthesizedConnection(hit)) return synthesizedConnectionError(id)
+    if (!hit) {
+      // The id may still be visible in `status` because the read path synthesises
+      // a `c1` placeholder for an empty topology. Say so, instead of the bare
+      // "连接不存在: c1" which reads like a bug to the user.
+      const placeholder = normalizeConnections(pack.connections).find(
+        (/** @type {any} */ c) => c.id === id && isSynthesizedConnection(c),
+      )
+      if (placeholder) return synthesizedConnectionError(id)
+      return { ok: false, errorCode: 'CONNECTION_NOT_FOUND', error: `连接不存在: ${id}` }
+    }
     const removedPoints = pack.points.filter((/** @type {any} */ p) => p.connectionId === id)
     pack.connections = pack.connections.filter((/** @type {any} */ c) => c.id !== id)
     pack.devices = pack.devices.filter((/** @type {any} */ d) => d.connectionId !== id)
@@ -92,7 +119,14 @@ export async function applyConnection(home, cwd, workspace, op, target, value, l
   if (op === 'update') {
     if (!id) return { ok: false, errorCode: 'TARGET_REQUIRED', error: 'update 必须携带 connectionId' }
     const hit = pack.connections.find((/** @type {any} */ c) => c.id === id)
-    if (!hit) return { ok: false, error: `连接不存在: ${id}` }
+    if (hit && isSynthesizedConnection(hit)) return synthesizedConnectionError(id)
+    if (!hit) {
+      const placeholder = normalizeConnections(pack.connections).find(
+        (/** @type {any} */ c) => c.id === id && isSynthesizedConnection(c),
+      )
+      if (placeholder) return synthesizedConnectionError(id)
+      return { ok: false, errorCode: 'CONNECTION_NOT_FOUND', error: `连接不存在: ${id}` }
+    }
     const patch = pickConnPatch(value.conn || value)
     if (Object.keys(patch).length) {
       const states = await listStates(home, cwd)

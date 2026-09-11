@@ -57,8 +57,19 @@ export const emptyConnection = () => ({
   conn: emptyConn(),
 })
 
-/** @param {any} [input] */
-export const normalizeConnection = (input) => {
+/**
+ * Marks a connection that `normalizeConnections` invented to keep an empty
+ * topology renderable. It exists only in the normalised read view and was never
+ * persisted, so mutations must refuse to operate on it — otherwise a user who
+ * sees `c1` in `status` and tries to delete it gets a bare "连接不存在: c1".
+ */
+export const SYNTHESIZED_CONNECTION_FLAG = '__synthesized'
+
+/**
+ * @param {any} [input]
+ * @param {{ synthesized?: boolean }} [meta]
+ */
+export const normalizeConnection = (input, meta = {}) => {
   const raw = input && typeof input === 'object' ? input : {}
   const base = emptyConnection()
   const id = devText(raw.id, '') || genId('c')
@@ -71,18 +82,32 @@ export const normalizeConnection = (input) => {
         ? 'server'
         : 'client'
   // accept legacy master/slave as role
-  return {
+  /** @type {any} */
+  const out = {
     id,
     name: name.slice(0, 40),
     role,
     enabled: raw.enabled !== false,
     conn: normalizeConn(raw.conn || raw),
   }
+  // Idempotent: `normalizeConnection` is applied repeatedly along the read path
+  // (e.g. `topologyFingerprint` re-normalizes an already-normalized list), so an
+  // existing marker must survive rather than silently dropping on the second pass.
+  if (meta.synthesized || raw[SYNTHESIZED_CONNECTION_FLAG] === true) {
+    out[SYNTHESIZED_CONNECTION_FLAG] = true
+  }
+  return out
 }
+
+/**
+ * @param {any} conn
+ * @returns {boolean}
+ */
+export const isSynthesizedConnection = (conn) => conn?.[SYNTHESIZED_CONNECTION_FLAG] === true
 
 /** @param {any} list */
 export const normalizeConnections = (list) => {
-  if (!Array.isArray(list)) return [normalizeConnection({ id: 'c1' })]
+  if (!Array.isArray(list)) return [normalizeConnection({ id: 'c1' }, { synthesized: true })]
   const seen = new Set()
   const out = []
   for (const raw of list) {
@@ -92,7 +117,7 @@ export const normalizeConnections = (list) => {
     out.push(c)
     if (out.length >= 16) break
   }
-  if (!out.length) out.push(normalizeConnection({ id: 'c1' }))
+  if (!out.length) out.push(normalizeConnection({ id: 'c1' }, { synthesized: true }))
   return out
 }
 

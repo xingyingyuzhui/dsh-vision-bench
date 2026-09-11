@@ -70,7 +70,13 @@ export const openocdDownload = async (home, cwd, body, opts) => {
   const signal = signalOf(body, opts)
   if (aborted(signal)) return { ok: false, cancelled: true, error: '已取消' }
   const bindings = loadBindings(home)
-  if (!bindings.openocd) return { ok: false, error: '请先在设置 → Vision 绑定 OpenOCD' }
+  // `openocd-runner` execs `spec.openocd` directly — there is no PATH fallback —
+  // so an unset binding is a genuine hard stop. We deliberately do NOT stat the
+  // bound path here: the probe reports an unusable executable with a precise
+  // error, and pre-checking would reject valid-but-not-yet-installed paths.
+  if (!bindings.openocd) {
+    return { ok: false, errorCode: FLASH_ERROR_CODES.OPENOCD_NOT_FOUND, error: '请先在设置 → Vision 绑定 OpenOCD' }
+  }
 
   if (body && body.confirm === true) {
     return flashFail(FLASH_ERROR_CODES.FLASH_APPROVAL_REQUIRED, '烧录必须通过批准请求')
