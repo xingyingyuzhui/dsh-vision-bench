@@ -59,6 +59,9 @@ export async function executeDebugCommand(input, deps = {}) {
     const cwd = String(cmd.cwd || payload.cwd || '').trim()
     const sessionId = String(cmd.sessionId || payload.sessionId || '').trim()
     const debugSessionId = String(payload.debugSessionId || /** @type {any} */ (cmd).debugSessionId || '').trim()
+    // `normalizeCommand` preserves `home`, so the agent path carries it too.
+    // Without it the launch spec cannot read the user's OpenOCD/GDB bindings.
+    const home = String(/** @type {any} */ (cmd).home || '').trim()
 
     /**
      * Finds active session strictly owned by the calling sessionId.
@@ -102,10 +105,12 @@ export async function executeDebugCommand(input, deps = {}) {
               approved: payload.approved !== undefined ? Boolean(payload.approved) : undefined,
               approvalRequestId: payload.approvalRequestId ? String(payload.approvalRequestId) : undefined,
               debugSessionId,
+              home,
             },
             {
               debugRuntime: runtime,
               approvalStore,
+              home,
             },
           )
 

@@ -20,6 +20,28 @@ import { DEBUG_COMMAND_OPS, DEBUG_RPC_ENDPOINTS } from '../../shared/debug-contr
 export function createDebugRpcHandler(deps) {
   const runtime = deps.debugRuntime || createDebugRuntime()
   const approvalStore = deps.approvalStore || defaultDebugApprovals
+  const getHome = typeof deps.getHome === 'function' ? deps.getHome : null
+
+  /**
+   * Resolves the DSH home for this request.
+   *
+   * Precedence: an explicit `home` on the request body (injected by the RPC
+   * router, which already knows it), then the injected `getHome()` accessor.
+   * An empty result is passed through as-is and handled downstream.
+   *
+   * @param {any} row
+   * @returns {string}
+   */
+  function homeOf(row) {
+    const fromBody = typeof row?.home === 'string' ? row.home.trim() : ''
+    if (fromBody) return fromBody
+    if (!getHome) return ''
+    try {
+      return String(getHome() || '').trim()
+    } catch {
+      return ''
+    }
+  }
 
   /**
    * @param {string} endpoint
@@ -78,8 +100,9 @@ export function createDebugRpcHandler(deps) {
                 source: 'user',
                 backend: row.backend,
                 targetSpec: row.targetSpec,
+                home: homeOf(row),
               },
-              { debugRuntime: runtime, approvalStore },
+              { debugRuntime: runtime, approvalStore, home: homeOf(row) },
             )
           }
 
@@ -258,8 +281,9 @@ export function createDebugRpcHandler(deps) {
                 approvalRequestId: row.requestId,
                 debugSessionId: row.debugSessionId || undefined,
                 targetSpec: launchTargetSpec,
+                home: homeOf(row),
               },
-              { debugRuntime: runtime, approvalStore },
+              { debugRuntime: runtime, approvalStore, home: homeOf(row) },
             )
             if (!startRes.ok) {
               return startRes

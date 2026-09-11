@@ -23,6 +23,7 @@ import { getSharedDebugRuntime } from './debug-runtime.mjs'
  *   debugRuntime?: ReturnType<typeof getSharedDebugRuntime>,
  *   approvalStore?: typeof defaultDebugApprovals,
  *   specResolver?: typeof resolveDebugLaunchSpec,
+ *   home?: string,
  * }} [deps]
  * @returns {Promise<any>}
  */
@@ -40,13 +41,20 @@ export async function startDebugSession(request, deps = {}) {
   const source = String(request.source || 'user').trim()
 
   // 1. Resolve full launch spec (auto-detects artifact, port, binaries)
-  const resolved = await specResolver({
-    cwd,
-    sessionId,
-    source,
-    backend: request.backend,
-    targetSpec: request.targetSpec || {},
-  })
+  //    `home` decides where bindings.json / workspace.json are read from. Without
+  //    it every user binding is invisible and the launch silently falls back to
+  //    PATH lookups and an empty workspace.
+  const home = String(deps.home || request.home || '').trim()
+  const resolved = await specResolver(
+    {
+      cwd,
+      sessionId,
+      source,
+      backend: request.backend,
+      targetSpec: request.targetSpec || {},
+    },
+    home ? { home } : {},
+  )
 
   // Compute launch fingerprint for current resolved spec
   const currentFingerprint = computeLaunchFingerprint({

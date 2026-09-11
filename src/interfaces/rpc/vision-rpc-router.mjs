@@ -248,7 +248,10 @@ export function createVisionRpcRouter(deps) {
     await touchSessionFromPayload(home, body, endpoint)
 
     if (endpoint.startsWith('debug/')) {
-      return debugRpc(endpoint, body, signal)
+      // `home` must travel with the request: the debug launch chain reads
+      // bindings.json and workspace.json, and without it `loadBindings(undefined)`
+      // silently degrades to "user has configured nothing".
+      return debugRpc(endpoint, { ...body, home: body.home || home }, signal)
     }
 
     if (endpoint.startsWith('verify/') || endpoint.startsWith('vision.verify.')) {
