@@ -735,6 +735,10 @@ test('live source list only includes connected RTU, never unconfigured COM', asy
   await waitFor(
     () => {
       assert.ok(calls.state >= 1)
+      const sel = Array.from(tree.container.querySelectorAll('select'))[0]
+      assert.ok(sel, 'select exists')
+      const values = Array.from(sel.querySelectorAll('option')).map((o) => o.value)
+      assert.ok(values.includes('conn:c1'))
     },
     { timeout: 6000 },
   )

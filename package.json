@@ -2,7 +2,14 @@
   "name": "dsh-vision-bench",
   "version": "0.28.0",
   "description": "Vision 模式：会话区调试/上位机点表（倍率/单位/告警上下限、CSV 导入导出、可视化组件），Keil 编译与日志、产物哈希、OpenOCD 烧录确认、串口报文订阅，Modbus 读点和受控写点（Agent 写点需界面批准），人工操作请求卡、共享任务与时间线，并安装「Vision模式」Agent 预设。",
-  "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "bench", "keil", "modbus"],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "bench",
+    "keil",
+    "modbus"
+  ],
   "license": "MIT",
   "type": "module",
   "main": "./host.js",
@@ -460,6 +467,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@deepseek-ai/dsh-agent-presets": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-persona": "^0.1.5-rc.1",
     "@testing-library/react": "16.3.0",
     "@types/node": "^20.17.57",
     "c8": "^10.1.3",
