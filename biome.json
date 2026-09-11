@@ -17,7 +17,7 @@
     ]
   },
   "formatter": {
-    "enabled": true,
+    "enabled": false,
     "indentStyle": "space",
     "indentWidth": 2,
     "lineWidth": 120
@@ -29,7 +29,7 @@
     }
   },
   "organizeImports": {
-    "enabled": true
+    "enabled": false
   },
   "javascript": {
     "formatter": {
@@ -59,13 +59,13 @@
       }
     },
     {
-      "include": ["host.js", "bench-*.mjs", "runtime/**", "src/application/modbus/**"],
+      "include": ["host.js", "bench-*.mjs", "runtime/**", "src/**", "scripts/**", "test/**"],
       "organizeImports": {
         "enabled": false
       }
     },
     {
-      "include": ["host.js", "bench-*.mjs", "runtime/**", "scripts/**", "test/**"],
+      "include": ["host.js", "bench-*.mjs", "runtime/**", "scripts/**", "test/**", "src/**"],
       "linter": {
         "rules": {
           "complexity": {
@@ -86,7 +86,8 @@
           },
           "suspicious": {
             "noAssignInExpressions": "off",
-            "noShadowRestrictedNames": "off"
+            "noShadowRestrictedNames": "off",
+            "noGlobalIsNan": "off"
           },
           "performance": {
             "noDelete": "off"

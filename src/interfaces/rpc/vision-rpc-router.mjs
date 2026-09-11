@@ -158,16 +158,17 @@ function sessionWorkspaceView(workspace, sessionId) {
   return { ...workspace, modbus: omitSessionConfigs(modbus) }
 }
 
+const migratedCwds = new Set()
+let presetHealthAt = 0
+/** @type {any} */
+let presetHealthCached = null
+let presetHealthHome = ''
+
 /**
  * @param {string} home
  * @param {string | undefined} cwd
  * @param {string} [sessionId] pending writes are only exposed to their owning session
  */
-const migratedCwds = new Set()
-let presetHealthAt = 0
-let presetHealthCached = null
-let presetHealthHome = ''
-
 async function snapshot(home, cwd, sessionId) {
   const bindings = loadBindings(home)
   const globalShare = loadGlobalShare(home)
