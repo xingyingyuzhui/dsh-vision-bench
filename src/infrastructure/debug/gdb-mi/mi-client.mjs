@@ -55,12 +55,27 @@ export class MIClient {
    */
   constructor(options = {}) {
     this._tokenCounter = 1
-    /** @type {Map<number, { resolve: (rec: import('./mi-record.mjs').MIRecord) => void, reject: (err: any) => void, timer: NodeJS.Timeout | null, cmd: string }>} */
+    /** @type {Map<number, { resolve: (rec: import('./mi-record.mjs').MIRecord) => void, reject: (err: any) => void, timer: NodeJS.Timeout | null, cmd: string, args: Array<string | number> }>} */
     this._pending = new Map()
     /** @type {Set<(rec: import('./mi-record.mjs').MIRecord) => void>} */
     this._recordListeners = new Set()
     /** @type {Set<(rec: import('./mi-record.mjs').MIRecord) => void>} */
     this._streamListeners = new Set()
+    /**
+     * Rolling tail of GDB console/target/log stream text.
+     *
+     * GDB explains MI failures on its console stream far more often than it
+     * does inside `^error,msg=...`. Without this, a rejected command leaves the
+     * caller with a terse message and no context.
+     *
+     * @type {string[]}
+     */
+    this._recentStreams = []
+    /**
+     * Rolling tail of the GDB process's raw stderr.
+     * @type {string[]}
+     */
+    this._recentStderr = []
     this._defaultTimeoutMs = options.defaultTimeoutMs || 10000
     this._stopped = false
 
@@ -94,6 +109,7 @@ export class MIClient {
         },
         onStderr: (line) => {
           options.onStderr?.(line)
+          this._rememberStderr(line)
         },
       })
       this._proc = managed
@@ -130,6 +146,7 @@ export class MIClient {
 
     // Stream records
     if (record.kind === 'console-stream' || record.kind === 'target-stream' || record.kind === 'log-stream') {
+      this._rememberStream(record)
       for (const listener of this._streamListeners) {
         try {
           listener(record)
@@ -150,6 +167,15 @@ export class MIClient {
           /** @type {any} */
           const err = new Error(msg)
           err.record = record
+          err.errorCode = 'GDB_MI_ERROR'
+          err.miCommand = req.cmd
+          err.miArgs = req.args
+          // Attach the GDB context that explains *why* the command failed.
+          // `Undefined command: ""monitor".` on its own looks like a typo; with
+          // the console stream attached it is obvious the argument was quoted
+          // one level too deep.
+          err.gdbStream = this._recentStreams.slice(-20)
+          err.gdbStderr = this._recentStderr.slice(-20)
           req.reject(err)
         } else {
           req.resolve(record)
@@ -233,6 +259,7 @@ export class MIClient {
         },
         timer,
         cmd,
+        args: (args || []).map((a) => String(a)),
       })
 
       try {
@@ -283,6 +310,30 @@ export class MIClient {
         listener(rec)
       }
     })
+  }
+
+  /**
+   * Records a stream record's text into the rolling diagnostic tail.
+   * @private
+   * @param {any} record
+   */
+  _rememberStream(record) {
+    const text = String(record?.payload?.text ?? record?.results?.text ?? record?.text ?? '').trim()
+    if (!text) return
+    this._recentStreams.push(text)
+    if (this._recentStreams.length > 50) this._recentStreams.shift()
+  }
+
+  /**
+   * Records a raw GDB stderr line into the rolling diagnostic tail.
+   * @private
+   * @param {string} line
+   */
+  _rememberStderr(line) {
+    const text = String(line ?? '').trim()
+    if (!text) return
+    this._recentStderr.push(text)
+    if (this._recentStderr.length > 50) this._recentStderr.shift()
   }
 
   /**
