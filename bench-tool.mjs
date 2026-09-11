@@ -18,6 +18,7 @@ export const ACTIONS = new Set([
   'visualization',
   'alarm',
   'evidence',
+  'config',
   'configureConnection',
   'openConnection',
   'closeConnection',
@@ -112,6 +113,17 @@ export function visionBenchTool(home) {
         stopbits: { type: 'number', enum: [1, 2] },
         sim: { type: 'boolean' },
         op: { type: 'string', enum: ['list', 'get', 'add', 'update', 'remove', 'clear', 'layout'] },
+        operation: {
+          type: 'string',
+          description:
+            'action=config 的配置操作，如 connection.create / connection.update / connection.remove / points.* / visualization.*',
+        },
+        value: {
+          type: 'object',
+          description:
+            'action=config 的配置值（配合 operation/target）。configureConnection 与 points 不用这个字段，直接平铺参数。',
+          additionalProperties: true,
+        },
         items: {
           type: 'array',
           description: 'visualization op=layout 的目标矩形列表',
@@ -227,6 +239,7 @@ export function visionBenchTool(home) {
         focus: { type: 'object', additionalProperties: true },
         target: {
           type: 'object',
+          description: 'action=config 的操作目标，如 { connectionId, deviceId, pointId, visualizationId }',
           additionalProperties: true,
           properties: {
             connectionId: { type: 'string' },
