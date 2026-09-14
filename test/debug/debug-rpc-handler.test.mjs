@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createDebugRuntime } from '../../src/application/debug/debug-runtime.mjs'
 import { createDebugRpcHandler } from '../../src/interfaces/rpc/debug-rpc-handler.mjs'
+import { createVisionRpcRouter } from '../../src/interfaces/rpc/vision-rpc-router.mjs'
+import { DEBUG_RPC_ENDPOINTS } from '../../src/shared/debug-contract.mjs'
 
 test('Debug RPC Handler routes state, commands, and events over Connection RPC', async () => {
   const runtime = createDebugRuntime({
@@ -140,4 +142,120 @@ test('debug events/wait without session identity does not return another session
     sessionId: 'owner-other',
     op: 'stop',
   })
+})
+
+test('createVisionRpcRouter routes debug/* endpoints without Modbus interference', async () => {
+  const runtime = createDebugRuntime({
+    backendFactory: async () => ({
+      start: async () => {},
+      stop: async () => {},
+      continue: async () => {},
+      pause: async () => {},
+    }),
+  })
+
+  const router = createVisionRpcRouter({
+    getHome: () => '/tmp',
+    debugRuntime: runtime,
+  })
+
+  // Start debug session through router
+  const start = await router.dispatch('debug/command', {
+    cwd: '/workspace',
+    sessionId: 'test_session_1',
+    op: 'start',
+    targetSpec: { target: 'stm32f4x' },
+  })
+
+  assert.equal(start.ok, true)
+  assert.ok(start.debugSessionId)
+
+  // Query state through router
+  const state = await router.dispatch('debug/state', {
+    cwd: '/workspace',
+    sessionId: 'test_session_1',
+  })
+
+  assert.equal(state.ok, true)
+  assert.equal(state.active, true)
+  assert.equal(state.session.state, 'ready')
+
+  // Wait events through router
+  const events = await router.dispatch('debug/events/wait', {
+    debugSessionId: start.debugSessionId,
+    sessionId: 'test_session_1',
+    cursor: 0,
+    timeoutMs: 100,
+  })
+
+  assert.equal(events.ok, true)
+  assert.ok(events.events.length > 0)
+
+  // Stop debug session through router
+  const stop = await router.dispatch('debug/command', {
+    debugSessionId: start.debugSessionId,
+    sessionId: 'test_session_1',
+    op: 'stop',
+  })
+
+  assert.equal(stop.ok, true)
+})
+
+test('PR-2: Browser RPC session isolation: same cwd foreign session cannot claim or observe debug session', async () => {
+  const runtime = createDebugRuntime({
+    backendFactory: () => ({
+      start: async () => {},
+      stop: async () => {},
+    }),
+  })
+
+  const handler = createDebugRpcHandler({ debugRuntime: runtime })
+
+  // Session A in /workspace/app1 starts debug session
+  const startRes = await runtime.start({
+    ownerSessionId: 'session_A',
+    workspaceCwd: '/workspace/app1',
+    backend: 'gdb-openocd',
+    targetSpec: {
+      artifactPath: '/workspace/app1/build.elf',
+      interfaceName: 'cmsis-dap',
+      probeSerial: 'PROBE_123',
+    },
+  })
+  assert.ok(startRes.debugSessionId)
+
+  // Session A queries state: active = true
+  const stateA = await handler(DEBUG_RPC_ENDPOINTS.STATE, {
+    sessionId: 'session_A',
+    cwd: '/workspace/app1',
+  })
+  assert.equal(stateA.ok, true)
+  assert.equal(stateA.active, true)
+  assert.equal(stateA.session?.debugSessionId, startRes.debugSessionId)
+
+  // Session B in SAME cwd (/workspace/app1) queries state: must be active = false, session = null
+  const stateB = await handler(DEBUG_RPC_ENDPOINTS.STATE, {
+    sessionId: 'session_B',
+    cwd: '/workspace/app1',
+  })
+  assert.equal(stateB.ok, true)
+  assert.equal(stateB.active, false)
+  assert.equal(stateB.session, null)
+
+  // Session B cannot stop Session A
+  const stopB = await handler(DEBUG_RPC_ENDPOINTS.COMMAND, {
+    sessionId: 'session_B',
+    cwd: '/workspace/app1',
+    op: 'stop',
+  })
+  assert.equal(stopB.alreadyStopped, true)
+
+  // Session A is still running
+  const stateA2 = await handler(DEBUG_RPC_ENDPOINTS.STATE, {
+    sessionId: 'session_A',
+    cwd: '/workspace/app1',
+  })
+  assert.equal(stateA2.active, true)
+
+  await runtime.shutdown()
 })

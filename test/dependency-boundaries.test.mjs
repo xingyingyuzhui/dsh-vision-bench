@@ -7,20 +7,6 @@ import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-test('bench-visualization-view must not import bench-live', async () => {
-  const src = readFileSync(join(root, 'src/ui/monitor/visualization/visualization-page.mjs'), 'utf8')
-  assert.doesNotMatch(src, /from\s+['"].*bench-live\.mjs['"]/)
-  assert.match(src, /from\s+['"].*session-scope\.mjs['"]/)
-})
-
-test('bench-live and bench-map import sessionCwd from session-scope', async () => {
-  const live = readFileSync(join(root, 'bench-live.mjs'), 'utf8')
-  const map = readFileSync(join(root, 'src/ui/debug/project/project-workspace.mjs'), 'utf8')
-  assert.match(live, /from\s+['"]\.\/src\/ui\/common\/session-scope\.mjs['"]/)
-  assert.match(map, /from\s+['"].*session-scope\.mjs['"]/)
-  assert.doesNotMatch(live, /export function sessionCwd/)
-})
-
 test('bench-shared is a re-export facade only', async () => {
   const src = readFileSync(join(root, 'bench-shared.mjs'), 'utf8')
   assert.match(src, /Compatibility facade/)

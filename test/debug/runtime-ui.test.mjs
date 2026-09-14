@@ -35,6 +35,22 @@ const mockReact = {
 
 const mockT = (k) => k
 
+function expand(node) {
+  if (node == null || typeof node !== 'object') return node
+  let cur = node
+  const seen = new Set()
+  while (cur && typeof cur.type === 'function' && !seen.has(cur)) {
+    seen.add(cur)
+    const kids = Array.isArray(cur.children) ? cur.children : []
+    cur = cur.type({ ...(cur.props || {}), children: kids })
+  }
+  if (cur == null || typeof cur !== 'object') return cur
+  return {
+    ...cur,
+    children: (cur.children || []).map(expand),
+  }
+}
+
 test('runtime-controller: dispatches correct RPC endpoints with scope', async () => {
   const calls = []
   const mockPost = async (path, body, timeout) => {
@@ -142,13 +158,13 @@ test('debug-toolbar: renders correct action buttons according to status', () => 
     'Step Into button must exist in paused state',
   )
   assert.ok(
-    pausedLabels.some((l) => l.includes('复位')),
-    'Reset button must exist in paused state',
-  )
-  assert.ok(
     pausedLabels.some((l) => l.includes('停止')),
     'Stop button must exist in paused state',
   )
+  assert.ok(!pausedLabels.some((l) => l.includes('复位')), 'Reset is not on the paused toolbar')
+  assert.ok(!pausedLabels.some((l) => l.includes('刷新')), 'Refresh is not on the paused toolbar')
+  const status = pausedTree.children[0]
+  assert.ok(status.children.some((c) => typeof c.children[0] === 'string' && c.children[0].includes('已暂停')))
 })
 
 test('debug-approval-card: renders pending tickets and dispatches callbacks', () => {
@@ -196,13 +212,13 @@ test('stack-panel: renders call stack frames and triggers frame selection', () =
     { level: 1, function: 'main', file: 'main.c', line: 120 },
   ]
 
-  const tree = StackPanel({
+  const tree = expand(StackPanel({
     stack,
     selectedFrame: 0,
     onSelectFrame: (lvl) => {
       selected = lvl
     },
-  })
+  }))
 
   assert.equal(tree.props.className, 'dvb-debug-panel')
   const body = tree.children[1]
@@ -224,12 +240,12 @@ test('variables-panel: renders variables and registers', () => {
     { name: 'status', value: '0x01', type: 'uint8_t' },
   ]
 
-  const tree = VariablesPanel({
+  const tree = expand(VariablesPanel({
     locals,
     watches: ['buffer[0]'],
     watchValues: [{ expression: 'buffer[0]', value: '0xaa' }],
     registers: [{ name: 'pc', value: '0x08000100' }],
-  })
+  }))
 
   assert.equal(tree.props.className, 'dvb-debug-panel')
   const body = tree.children[1]
@@ -243,19 +259,19 @@ test('breakpoint-panel: renders breakpoints and watchpoints', () => {
   let removedBp = ''
   const breakpoints = [{ id: 'bp-1', file: 'main.c', line: 45, condition: 'i > 5' }]
 
-  const tree = BreakpointPanel({
+  const tree = expand(BreakpointPanel({
     breakpoints,
     watchpoints: [],
     onRemoveBreakpoint: (id) => {
       removedBp = id
     },
-  })
+  }))
 
   assert.equal(tree.props.className, 'dvb-debug-panel')
   const body = tree.children[1]
-  // subTab defaults to bp
   const bpContainer = body.children[0]
-  const bpRow = bpContainer.children[1]
+  const bpRow = bpContainer.children.find((c) => c?.props?.className === 'dvb-debug-item')
+  assert.ok(bpRow, 'breakpoint row is visible without the add form')
   assert.equal(bpRow.props.className, 'dvb-debug-item')
 
   // Click remove breakpoint
@@ -272,12 +288,11 @@ test('debug-timeline-panel: renders debug event stream', () => {
     { type: 'breakpoint_hit', timestamp: 1700000001000, payload: { bpId: 'bp-1' } },
   ]
 
-  const tree = Timeline({ events })
-  assert.equal(tree.props.className, 'dvb-debug-timeline')
+  const tree = expand(Timeline({ events }))
+  assert.equal(tree.props.className, 'dvb-debug-timeline is-open')
   const list = tree.children[1]
-  assert.equal(list.children.length, 3) // 2 entries + 1 end ref div
-  assert.equal(list.children[0].props.className, 'dvb-debug-timeline-entry')
-  assert.equal(list.children[1].props.className, 'dvb-debug-timeline-entry')
+  const entries = list.children.filter((c) => c?.props?.className === 'dvb-debug-timeline-entry')
+  assert.equal(entries.length, 2)
 })
 
 test('debug-workspace: exports 3 sections (workbench, project, runtime)', () => {

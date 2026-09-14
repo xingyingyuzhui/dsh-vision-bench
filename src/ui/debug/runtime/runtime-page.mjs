@@ -2,7 +2,9 @@
 
 import { postWithAbort } from '../../common/latest-request-gate.mjs'
 import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
+import { createPanel } from '../../components/primitives.mjs'
 import { createSourceEditor } from '../../components/source-editor.mjs'
+import { DEMO_DEBUG_SESSION, demoFileText } from '../fixtures/temperature-demo.mjs'
 import { languageForPath } from '../project/project-tree-model.mjs'
 import { createBreakpointPanel } from './breakpoint-panel.mjs'
 import { createDebugApprovalCard } from './debug-approval-card.mjs'
@@ -11,6 +13,8 @@ import { createDebugToolbar } from './debug-toolbar.mjs'
 import { createStackPanel } from './stack-panel.mjs'
 import { useDebugEvents } from './use-debug-events.mjs'
 import { createVariablesPanel } from './variables-panel.mjs'
+
+export { DEMO_DEBUG_SESSION } from '../fixtures/temperature-demo.mjs'
 
 /**
  * Creates the Browser Runtime Debug UI page.
@@ -23,6 +27,7 @@ import { createVariablesPanel } from './variables-panel.mjs'
 export function createRuntimePage(React, t, post) {
   const el = React.createElement
   const SourceEditor = createSourceEditor(React)
+  const Panel = createPanel(React)
   const DebugToolbar = createDebugToolbar(React, t)
   const DebugApprovalCard = createDebugApprovalCard(React, t)
   const StackPanel = createStackPanel(React, t)
@@ -37,20 +42,36 @@ export function createRuntimePage(React, t, post) {
     const debug = useDebugEvents(React, post, { cwd, sessionId })
     const { actions } = debug
 
-    const [sourcePreview, setSourcePreview] = React.useState({
-      rel: '',
-      text: '',
-      jumpLine: 0,
+    const isDemo = !debug.session || debug.status === 'idle'
+    const sessionData = debug.session || (isDemo ? DEMO_DEBUG_SESSION : null)
+    const effectiveStatus = debug.session ? debug.status : isDemo ? 'paused' : debug.status
+
+    const [sourcePreview, setSourcePreview] = React.useState(() => ({
+      rel: 'sensor.c',
+      text: demoFileText('sensor.c'),
+      jumpLine: 7,
       loading: false,
       error: null,
-    })
+    }))
 
     const fileAbortRef = React.useRef(null)
 
     // Load file content for source editor preview
     const loadSource = React.useCallback(
       async (filePath, line = 0) => {
-        if (!filePath || !cwd) return
+        if (!filePath) return
+        const demoText = demoFileText(filePath)
+        if (demoText) {
+          setSourcePreview({
+            rel: filePath,
+            text: demoText,
+            jumpLine: line || 0,
+            loading: false,
+            error: null,
+          })
+          return
+        }
+        if (!cwd) return
         if (fileAbortRef.current) {
           fileAbortRef.current.abort()
         }
@@ -95,13 +116,12 @@ export function createRuntimePage(React, t, post) {
       [cwd, post],
     )
 
-    // Automatically follow paused location
     React.useEffect(() => {
-      const loc = debug.session?.location
+      const loc = sessionData?.location
       if (loc && loc.file) {
         loadSource(loc.file, loc.line || 0)
       }
-    }, [debug.session?.location, loadSource])
+    }, [sessionData?.location?.file, sessionData?.location?.line, loadSource])
 
     // Clean up file fetch on unmount
     React.useEffect(() => {
@@ -117,29 +137,38 @@ export function createRuntimePage(React, t, post) {
       }
     }
 
-    const sessionData = debug.session
-    const breakpoints = sessionData?.breakpoints
-      ? Array.isArray(sessionData.breakpoints)
-        ? sessionData.breakpoints
-        : Object.values(sessionData.breakpoints)
-      : []
-    const watchpoints = sessionData?.watchpoints
-      ? Array.isArray(sessionData.watchpoints)
-        ? sessionData.watchpoints
-        : Object.values(sessionData.watchpoints)
-      : []
+    const listOrDemo = (v, k) => (v?.length ? v : isDemo ? DEMO_DEBUG_SESSION[k] || [] : [])
+    const rawBp = sessionData?.breakpoints
+    const breakpoints = listOrDemo(Array.isArray(rawBp) ? rawBp : rawBp ? Object.values(rawBp) : [], 'breakpoints')
+    const watchpoints = sessionData?.watchpoints || []
+    const locals = debug.variables?.locals?.length ? debug.variables.locals : (isDemo ? DEMO_DEBUG_SESSION.variables.locals : [])
+    const watches = listOrDemo(debug.watches, 'watches')
+    const watchValues = listOrDemo(debug.watchValues, 'watchValues')
+    const events = listOrDemo(debug.events, 'events')
+    const targetLabel = sessionData?.targetKey || sessionData?.target || (isDemo ? 'TemperatureDemo · Debug' : '')
+    const backendRaw = sessionData?.backend || sessionData?.backendKind || 'gdb-openocd'
+    const selectedFrame = sessionData?.stack?.[debug.selectedFrame] || sessionData?.stack?.[0] || null
+    const viewingFile = (sourcePreview.rel || sessionData?.location?.file || 'sensor.c').split(/[\\/]/).pop()
+    const viewingFn = selectedFrame?.function || sessionData?.location?.function || ''
+    const pcFile = sessionData?.location?.file ? String(sessionData.location.file).split(/[\\/]/).pop() : ''
+    const sameFile = Boolean(pcFile && viewingFile && pcFile === viewingFile)
+    const execLine = sameFile ? Number(sessionData?.location?.line) || 0 : 0
+    const fileBreakpoints = breakpoints
+      .filter((bp) => bp && bp.enabled !== false && String(bp.file || '').split(/[\\/]/).pop() === viewingFile)
+      .map((bp) => Number(bp.line) || 0)
+      .filter((n) => n > 0)
 
     return el(
       'div',
-      { className: 'dvb-debug-runtime', 'data-debug-status': debug.status },
-      // 1. Toolbar
+      { className: 'dvb-debug-runtime', 'data-debug-status': effectiveStatus },
       el(DebugToolbar, {
-        status: debug.status,
+        status: effectiveStatus,
         pendingControl: debug.pendingControl,
-        backend: sessionData?.backend || sessionData?.backendKind || 'gdb-openocd',
-        target: sessionData?.targetKey || sessionData?.target || '',
+        backend: backendRaw,
+        target: targetLabel,
         location: sessionData?.location || null,
         loading: debug.loading,
+        isDemo,
         onStart: () => actions.startDebug(),
         onStop: () => actions.stopDebug(),
         onRun: () => actions.run(),
@@ -204,23 +233,22 @@ export function createRuntimePage(React, t, post) {
           { className: 'dvb-debug-col-right' },
           // Source preview panel
           el(
-            'div',
-            { className: 'dvb-debug-panel', style: { flex: 1.2 } },
+            Panel,
+            { style: { flex: 1.2 } },
             el(
-              'div',
-              { className: 'dvb-debug-panel-head' },
+              Panel.Head,
+              null,
+              el('span', null, `${viewingFile}${viewingFn ? ` · ${viewingFn}()` : ''}`),
               el(
-                'span',
-                null,
-                sourcePreview.rel
-                  ? `源码 · ${sourcePreview.rel.split(/[\\/]/).pop()}${sourcePreview.jumpLine ? ` : ${sourcePreview.jumpLine}` : ''}`
-                  : '源码视图 (Source)',
+                'div',
+                { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+                sourcePreview.loading && el('span', { className: 'dvb-hint' }, '加载中…'),
+                el('span', { className: 'dvb-chip dvb-debug-readonly-chip' }, '只读'),
               ),
-              sourcePreview.loading ? el('span', { className: 'dvb-hint' }, '加载中…') : null,
             ),
             el(
-              'div',
-              { className: 'dvb-debug-panel-body', style: { padding: 0 } },
+              Panel.Body,
+              { style: { padding: 0 } },
               sourcePreview.error
                 ? el(
                     'div',
@@ -231,7 +259,10 @@ export function createRuntimePage(React, t, post) {
                   ? el(SourceEditor, {
                       text: sourcePreview.text,
                       rel: sourcePreview.rel,
-                      jumpLine: sourcePreview.jumpLine,
+                      jumpLine: sourcePreview.jumpLine || execLine || 7,
+                      execLine,
+                      breakpoints: fileBreakpoints,
+                      debugGutters: true,
                       language: languageForPath(sourcePreview.rel),
                     })
                   : el(
@@ -247,9 +278,9 @@ export function createRuntimePage(React, t, post) {
             'div',
             { style: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } },
             el(VariablesPanel, {
-              locals: debug.variables.locals || [],
-              watches: debug.watches,
-              watchValues: debug.watchValues,
+              locals,
+              watches,
+              watchValues,
               registers: debug.variables.registers || [],
               onAddWatch: (expr) => actions.addWatch(expr),
               onRemoveWatch: (expr) => actions.removeWatch(expr),
@@ -261,7 +292,7 @@ export function createRuntimePage(React, t, post) {
 
       // 4. Debug Timeline panel (bottom)
       el(DebugTimelinePanel, {
-        events: debug.events,
+        events,
       }),
     )
   }

@@ -31,6 +31,17 @@ export const TYPOGRAPHY_TOKENS = Object.freeze({
   },
 })
 
+export const SPACE_TOKENS = Object.freeze({
+  1: '4px',
+  2: '8px',
+  3: '12px',
+})
+
+export const RADIUS_TOKENS = Object.freeze({
+  btn: '6px',
+  card: '8px',
+})
+
 /**
  * Dynamically adjust the global font scale factor for the entire plugin.
  * A factor of 1.0 is default (base = 13px).

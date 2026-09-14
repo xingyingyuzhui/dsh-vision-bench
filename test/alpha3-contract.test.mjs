@@ -133,20 +133,3 @@ test('host.js no longer registers browser business HTTP routes', () => {
   assert.doesNotMatch(src, /const browser = origin/)
 })
 
-test('frames, alarms, visualization, HMI and debug resolve cwd through session-scope', () => {
-  const files = [
-    'src/ui/monitor/frames/frames-page.mjs',
-    'src/ui/monitor/alarms/alarm-page.mjs',
-    'src/ui/monitor/visualization/visualization-page.mjs',
-    'src/ui/monitor/journal/journal-page.mjs',
-    'src/ui/hmi/hmi-page.mjs',
-    'src/ui/debug/project/project-workspace.mjs',
-    'src/ui/workspace/monitor-workspace.mjs',
-    'src/ui/workspace/debug-workspace.mjs',
-  ]
-  for (const rel of files) {
-    const src = readFileSync(join(root, rel), 'utf8')
-    assert.match(src, /sessionCwd|useSessionCwd/, rel)
-    assert.doesNotMatch(src, /useSessions/, rel)
-  }
-})

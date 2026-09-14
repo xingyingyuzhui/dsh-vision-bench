@@ -37,6 +37,38 @@ export function routeCurvedEdge(from, to, opts = {}) {
 }
 
 /**
+ * Builds a cubic-bezier SVG path `d` between two placed node rectangles.
+ *
+ * `polylinePath(routeCurvedEdge(...))` produces a 4-point orthogonal elbow — it
+ * reads as a hard right angle. The reference design draws edges as smooth
+ * curves, so this emits real `C` commands instead.
+ *
+ * Backward edges (target left of source) get a larger bend so the curve bulges
+ * out rather than collapsing into a straight line through both nodes.
+ *
+ * @param {{ x: number, y: number, w: number, h: number, cy: number }} from
+ * @param {{ x: number, y: number, w: number, h: number, cy: number }} to
+ * @param {{ bendRatio?: number, minBend?: number, maxBend?: number }} [opts]
+ * @returns {string}
+ */
+export function cubicEdgePath(from, to, opts = {}) {
+  const bendRatio = opts.bendRatio || 0.5
+  const minBend = opts.minBend || 28
+  const maxBend = opts.maxBend || 120
+
+  const x1 = from.x + from.w
+  const y1 = from.cy
+  const x2 = to.x
+  const y2 = to.cy
+  const span = x2 - x1
+  const bend = Math.min(maxBend, Math.max(minBend, Math.abs(span) * bendRatio))
+  const back = span < 0
+  const c1 = back ? x1 + bend * 1.6 : x1 + bend
+  const c2 = back ? x2 - bend * 1.6 : x2 - bend
+  return `M${x1},${y1} C${c1},${y1} ${c2},${y2} ${x2},${y2}`
+}
+
+/**
  * Renders SVG <defs> containing arrow markers for standard, active, highlight,
  * watchpoint, read, write, and dimmed edge styles.
  *

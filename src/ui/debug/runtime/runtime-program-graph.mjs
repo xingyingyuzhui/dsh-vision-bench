@@ -259,7 +259,6 @@ export function createRuntimeProgramGraph(React) {
           backgroundColor: 'var(--dvb-bg-canvas, #0d1117)',
           userSelect: 'none',
         },
-        onWheel: camera.onWheel,
         onPointerDown: camera.onPointerDown,
         onPointerMove: camera.onPointerMove,
         onPointerUp: camera.onPointerUp,

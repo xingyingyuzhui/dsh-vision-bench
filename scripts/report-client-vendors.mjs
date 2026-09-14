@@ -103,6 +103,6 @@ const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.arg
 if (isMain) {
   const report = reportClientVendors()
   process.stdout.write(`${format(report)}\n`)
-  // Known 0.25 libraries are documented in VENDOR_SIZE_0.25.md; do not raise
+  // Known 0.25 libraries are documented in docs/archive/VENDOR_SIZE_0.25.md; do not raise
   // CLIENT_BYTE_LIMIT to hide a new library. overGzipLimit is reported for review.
 }

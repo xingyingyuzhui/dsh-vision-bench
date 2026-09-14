@@ -7,7 +7,14 @@ import {
   createDebugApprovalStore,
   defaultDebugApprovals,
 } from '../../src/application/debug/debug-approval-service.mjs'
+import { rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { executeDebugCommand } from '../../src/application/debug/debug-command-service.mjs'
+import { createDebugRuntime } from '../../src/application/debug/debug-runtime.mjs'
+import { startDebugSession } from '../../src/application/debug/debug-start-service.mjs'
 import { DEBUG_ERRORS } from '../../src/domain/debug/errors.mjs'
+import { createDebugRpcHandler } from '../../src/interfaces/rpc/debug-rpc-handler.mjs'
 
 test('debug-approval-service: create, listPending, and consume ticket lifecycle', () => {
   let currentTime = 1000
@@ -137,4 +144,243 @@ test('debug-approval-service: default singleton clear works', () => {
   assert.ok(defaultDebugApprovals.size() > 0)
   clearDebugApprovals()
   assert.equal(defaultDebugApprovals.size(), 0)
+})
+
+test('debug-approval-flow: end-to-end agent start approval, rejection, approve, and subsequent execution', async () => {
+  let startedCount = 0
+  let pausedCount = 0
+  let steppedCount = 0
+
+  const runtime = createDebugRuntime({
+    backendFactory: async () => ({
+      async start() {
+        startedCount++
+      },
+      async stop() {},
+      async pause() {
+        pausedCount++
+      },
+      async step() {
+        steppedCount++
+      },
+    }),
+  })
+  const approvalStore = createDebugApprovalStore()
+  const rpcHandler = createDebugRpcHandler({ debugRuntime: runtime, approvalStore })
+
+  const scope = { cwd: '/workspace/embedded', sessionId: 'sess_agent_1' }
+
+  // 1. Agent calls start without approval -> returns APPROVAL_REQUIRED
+  const agentStartRes = await executeDebugCommand(
+    {
+      action: 'debug.start',
+      source: 'agent',
+      ...scope,
+      payload: {
+        backend: 'gdb-openocd',
+        targetSpec: {
+          target: 'stm32f4x',
+          interfaceName: 'stlink',
+          artifactPath: '/build/fw.elf',
+          artifactSha256: 'sha256_mock_123',
+        },
+      },
+    },
+    { debugRuntime: runtime, approvalStore },
+  )
+
+  assert.equal(agentStartRes.ok, false)
+  assert.equal(agentStartRes.errorCode, DEBUG_ERRORS.APPROVAL_REQUIRED)
+  assert.equal(agentStartRes.needsApproval, true)
+  assert.ok(agentStartRes.approval?.requestId)
+  assert.equal(startedCount, 0, 'backend must not start before approval')
+
+  const reqId1 = agentStartRes.approval.requestId
+
+  // 2. Browser queries pending approvals via debug/approval op=list or debug/state
+  const listRes = await rpcHandler('debug/approval', { op: 'list', ...scope })
+  assert.equal(listRes.ok, true)
+  assert.equal(listRes.pending.length, 1)
+  assert.equal(listRes.pending[0].requestId, reqId1)
+
+  const stateRes = await rpcHandler('debug/state', scope)
+  assert.equal(stateRes.ok, true)
+  assert.equal(stateRes.active, false)
+  assert.equal(stateRes.pendingApprovals.length, 1)
+
+  // 3. User rejects the ticket
+  const rejectRes = await rpcHandler('debug/approval', { op: 'reject', requestId: reqId1, ...scope })
+  assert.equal(rejectRes.ok, true)
+  assert.equal(rejectRes.rejected, true)
+
+  const listAfterReject = await rpcHandler('debug/approval', { op: 'list', ...scope })
+  assert.equal(listAfterReject.pending.length, 0)
+
+  // 4. Agent initiates start again -> new approval ticket generated
+  const agentStartRes2 = await executeDebugCommand(
+    {
+      action: 'debug.start',
+      source: 'agent',
+      ...scope,
+      payload: {
+        backend: 'gdb-openocd',
+        targetSpec: {
+          target: 'stm32f4x',
+          interfaceName: 'stlink',
+          artifactPath: '/build/fw.elf',
+          artifactSha256: 'sha256_mock_123',
+        },
+      },
+    },
+    { debugRuntime: runtime, approvalStore },
+  )
+
+  assert.equal(agentStartRes2.ok, false)
+  assert.equal(agentStartRes2.errorCode, DEBUG_ERRORS.APPROVAL_REQUIRED)
+  const reqId2 = agentStartRes2.approval.requestId
+
+  // 5. User approves the ticket
+  const approveRes = await rpcHandler('debug/approval', { op: 'approve', requestId: reqId2, ...scope })
+  assert.equal(approveRes.ok, true)
+  assert.equal(approveRes.approved, true)
+  assert.ok(approveRes.debugSessionId)
+  assert.equal(startedCount, 1)
+
+  const debugSessionId = approveRes.debugSessionId
+  assert.equal(approvalStore.hasControlLease(debugSessionId), true)
+
+  // 6. Subsequent operations by Agent proceed without requiring approval
+  const pauseRes = await executeDebugCommand(
+    { action: 'debug.pause', source: 'agent', debugSessionId, ...scope },
+    { debugRuntime: runtime, approvalStore },
+  )
+  assert.equal(pauseRes.ok, true)
+  assert.equal(pauseRes.state, 'paused')
+  assert.equal(pausedCount, 1)
+
+  const stepRes = await executeDebugCommand(
+    { action: 'debug.step', source: 'agent', debugSessionId, ...scope },
+    { debugRuntime: runtime, approvalStore },
+  )
+  assert.equal(stepRes.ok, true)
+  assert.equal(stepRes.state, 'paused')
+  assert.equal(steppedCount, 1)
+
+  // 7. Stop session revokes the control lease
+  const stopRes = await executeDebugCommand(
+    { action: 'debug.stop', source: 'agent', debugSessionId, ...scope },
+    { debugRuntime: runtime, approvalStore },
+  )
+  assert.equal(stopRes.ok, true)
+  assert.equal(approvalStore.hasControlLease(debugSessionId), false)
+})
+
+test('PR-2: Debug approval ticket is invalidated with DEBUG_APPROVAL_STALE when firmware artifact changes', async () => {
+  const dummyAxf = join(tmpdir(), `stale_test_${Date.now()}.axf`)
+  await writeFile(dummyAxf, Buffer.from('FIRMWARE_V1'))
+
+  try {
+    const runtime = createDebugRuntime({
+      backendFactory: async () => ({
+        async start() {},
+        async stop() {},
+      }),
+    })
+    const approvalStore = createDebugApprovalStore()
+
+    // 1. Agent requests debug start (creates approval ticket with V1 fingerprint)
+    const reqRes = await startDebugSession(
+      {
+        sessionId: 'agent_session_stale',
+        cwd: tmpdir(),
+        source: 'agent',
+        backend: 'gdb-openocd',
+        targetSpec: { artifactPath: dummyAxf },
+      },
+      { debugRuntime: runtime, approvalStore },
+    )
+
+    assert.equal(reqRes.ok, false)
+    assert.equal(reqRes.needsApproval, true)
+    const ticketId = reqRes.approval.id
+    assert.ok(ticketId)
+
+    // 2. User approves ticket in UI
+    approvalStore.approve(ticketId)
+
+    // 3. Firmware artifact changes before agent launches
+    await writeFile(dummyAxf, Buffer.from('FIRMWARE_V2_CHANGED_CODE'))
+
+    // 4. Agent attempts start with approvalRequestId
+    const staleRes = await startDebugSession(
+      {
+        sessionId: 'agent_session_stale',
+        cwd: tmpdir(),
+        source: 'agent',
+        backend: 'gdb-openocd',
+        approvalRequestId: ticketId,
+        targetSpec: { artifactPath: dummyAxf },
+      },
+      { debugRuntime: runtime, approvalStore },
+    )
+
+    assert.equal(staleRes.ok, false)
+    assert.equal(staleRes.errorCode, DEBUG_ERRORS.APPROVAL_STALE)
+    assert.match(staleRes.error, /已发生变化/)
+    assert.equal(staleRes.needsApproval, true)
+
+    // 5. Verify the ticket was invalidated (no longer in pending store)
+    const pending = approvalStore.listPending({ cwd: tmpdir(), sessionId: 'agent_session_stale' })
+    assert.equal(pending.length, 0)
+    assert.equal(approvalStore.getPending(ticketId), null)
+
+    // 6. Verify session was never started
+    const activeSession = runtime.findSession((s) => s.ownerSessionId === 'agent_session_stale')
+    assert.equal(activeSession, null)
+
+    await runtime.shutdown()
+  } finally {
+    await rm(dummyAxf, { force: true }).catch(() => {})
+  }
+})
+
+test('PR-2: Agent approved=true bypass is rejected and requires approvalRequestId', async () => {
+  const runtime = createDebugRuntime({
+    backendFactory: () => ({ start: async () => {}, stop: async () => {} }),
+  })
+  const approvalStore = createDebugApprovalStore()
+
+  // Spec resolver that returns resolved target spec
+  const specResolver = async () => ({
+    backend: 'gdb-openocd',
+    targetSpec: {
+      artifactPath: '/fake/build.axf',
+      artifactSha256: 'deadbeef1234',
+      interfaceName: 'stlink',
+      target: 'stm32f4x',
+      gdbPort: 3333,
+    },
+  })
+
+  // Agent requests start with { approved: true } without approvalRequestId
+  const res = await startDebugSession(
+    {
+      sessionId: 'agent_session_1',
+      cwd: '/workspace',
+      source: 'agent',
+      approved: true, // Should be ignored!
+    },
+    {
+      debugRuntime: runtime,
+      approvalStore,
+      specResolver,
+    },
+  )
+
+  // Must still require approval ticket
+  assert.equal(res.ok, false)
+  assert.equal(res.errorCode, DEBUG_ERRORS.APPROVAL_REQUIRED)
+  assert.equal(res.needsApproval, true)
+  assert.ok(res.approval?.requestId)
+  assert.ok(res.approval?.launchFingerprint)
 })

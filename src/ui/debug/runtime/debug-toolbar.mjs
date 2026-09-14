@@ -54,19 +54,16 @@ export function createDebugToolbar(React, t) {
       statusColor = 'var(--dsw-alias-label-success, #2e7d32)'
       statusText = '运行中'
     } else if (isPaused) {
-      statusColor = 'var(--dsw-alias-label-info, #4f8ef7)'
+      statusColor = 'var(--dsw-alias-label-warning, #f59e0b)'
       statusText = '已暂停'
     } else if (isFailed) {
       statusColor = 'var(--dsw-alias-label-danger, #c62828)'
       statusText = '异常中断'
     }
 
-    const locText =
-      location && (location.file || location.address)
-        ? `${location.file ? location.file.split(/[\\/]/).pop() : ''}${location.line ? `:${location.line}` : ''}${
-            location.function ? ` (${location.function})` : ''
-          }${location.address ? ` @ ${location.address}` : ''}`
-        : null
+    const filePart = location?.file ? String(location.file).split(/[\\/]/).pop() : ''
+    const locShort = filePart ? `${filePart}${location.line ? `:${location.line}` : ''}` : location?.address || ''
+    const locText = isPaused && locShort ? `命中断点 · ${locShort}` : locShort || null
 
     return el(
       'div',
@@ -77,23 +74,13 @@ export function createDebugToolbar(React, t) {
         el(
           'span',
           {
-            className: 'dvb-chip',
-            style: { fontWeight: 600, color: statusColor, borderColor: statusColor },
+            className: 'dvb-debug-status-chip',
+            style: { color: statusColor },
           },
           statusText,
         ),
-        backend ? el('span', { className: 'dvb-chip' }, backend) : null,
-        target ? el('span', { className: 'dvb-chip' }, target) : null,
-        locText
-          ? el(
-              'span',
-              {
-                className: 'dvb-chip',
-                style: { fontFamily: 'ui-monospace, monospace', opacity: 0.9 },
-              },
-              locText,
-            )
-          : null,
+        locText ? el('span', { className: 'dvb-debug-status-sep' }, '|') : null,
+        locText ? el('span', { className: 'dvb-debug-loc-text' }, locText) : null,
       ),
       el(
         'div',
@@ -144,7 +131,7 @@ export function createDebugToolbar(React, t) {
                 disabled: isBusy,
                 onClick: () => onStep && onStep('over'),
               },
-              '↷ 单步跳过',
+              '⤸ 单步跳过',
             )
           : null,
         isPaused
@@ -157,7 +144,7 @@ export function createDebugToolbar(React, t) {
                 disabled: isBusy,
                 onClick: () => onStep && onStep('into'),
               },
-              '↓ 进入',
+              '↓ 单步进入',
             )
           : null,
         isPaused
@@ -170,20 +157,7 @@ export function createDebugToolbar(React, t) {
                 disabled: isBusy,
                 onClick: () => onStep && onStep('out'),
               },
-              '↑ 跳出',
-            )
-          : null,
-        isPaused
-          ? el(
-              'button',
-              {
-                type: 'button',
-                className: 'dvb-btn dvb-btn-sm',
-                title: '复位并暂停 (Reset & Halt)',
-                disabled: isBusy,
-                onClick: () => onReset && onReset(),
-              },
-              '↺ 复位',
+              '↑ 单步跳出',
             )
           : null,
         !isIdle
@@ -191,24 +165,13 @@ export function createDebugToolbar(React, t) {
               'button',
               {
                 type: 'button',
-                className: 'dvb-btn dvb-btn-sm dvb-btn-danger',
+                className: 'dvb-btn dvb-btn-sm dvb-debug-stop-btn',
                 disabled: isBusy,
                 onClick: () => onStop && onStop(),
               },
-              '⏹ 停止',
+              '■ 停止',
             )
           : null,
-        el(
-          'button',
-          {
-            type: 'button',
-            className: 'dvb-btn dvb-btn-sm',
-            title: '刷新调试状态',
-            disabled: isBusy,
-            onClick: () => onRefresh && onRefresh(),
-          },
-          '刷新',
-        ),
       ),
     )
   }

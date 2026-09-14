@@ -67,6 +67,13 @@ export default {
       to: { path: '(^|/)bench-' },
     },
     {
+      name: 'ui-no-bench-facades',
+      severity: 'warn',
+      comment: 'ADR-024: Client UI should import src/, not bench-* facades. Promote to error after retirement.',
+      from: { path: '(^|/)src/ui/' },
+      to: { path: '(^|/)bench-' },
+    },
+    {
       name: 'agent-tool-no-store-or-io',
       severity: 'error',
       comment: 'Agent proxy may not import store, broker or transport.',

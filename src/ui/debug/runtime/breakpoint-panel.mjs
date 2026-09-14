@@ -1,4 +1,5 @@
 import { getCustomSelect } from '../../components/custom-select.mjs'
+import { createHint, createPanel, createTabs } from '../../components/primitives.mjs'
 
 /**
  * Breakpoints and Hardware Watchpoints panel.
@@ -10,6 +11,9 @@ import { getCustomSelect } from '../../components/custom-select.mjs'
 export function createBreakpointPanel(React, t) {
   const el = React.createElement
   const CustomSelect = getCustomSelect(React)
+  const Panel = createPanel(React)
+  const Tabs = createTabs(React)
+  const Hint = createHint(React)
 
   return function BreakpointPanel({
     breakpoints = [],
@@ -21,6 +25,7 @@ export function createBreakpointPanel(React, t) {
     error = null,
   }) {
     const [subTab, setSubTab] = React.useState('bp') // 'bp' | 'wp'
+    const [adding, setAdding] = React.useState(false)
     const [bpInput, setBpInput] = React.useState('')
     const [bpCondition, setBpCondition] = React.useState('')
     const [wpExpr, setWpExpr] = React.useState('')
@@ -55,6 +60,7 @@ export function createBreakpointPanel(React, t) {
         })
         setBpInput('')
         setBpCondition('')
+        setAdding(false)
       }
     }
 
@@ -75,37 +81,32 @@ export function createBreakpointPanel(React, t) {
     const isWpExhausted = error && String(error).includes('DEBUG_WATCHPOINT_RESOURCE_EXHAUSTED')
 
     return el(
-      'div',
-      { className: 'dvb-debug-panel' },
+      Panel,
+      null,
       el(
-        'div',
-        { className: 'dvb-debug-panel-head' },
+        Panel.Head,
+        null,
+        el(Tabs, {
+          value: subTab,
+          onChange: setSubTab,
+          items: [
+            { key: 'bp', label: '断点', count: bpList.length },
+            { key: 'wp', label: '硬件观察点', count: wpList.length },
+          ],
+        }),
         el(
-          'div',
-          { className: 'dvb-debug-tabs', style: { border: 'none', margin: 0, padding: 0 } },
-          el(
-            'button',
-            {
-              type: 'button',
-              className: `dvb-debug-subtab ${subTab === 'bp' ? 'is-active' : ''}`,
-              onClick: () => setSubTab('bp'),
-            },
-            `断点 (${bpList.length})`,
-          ),
-          el(
-            'button',
-            {
-              type: 'button',
-              className: `dvb-debug-subtab ${subTab === 'wp' ? 'is-active' : ''}`,
-              onClick: () => setSubTab('wp'),
-            },
-            `硬件观察点 (${wpList.length})`,
-          ),
+          'button',
+          {
+            type: 'button',
+            className: 'dvb-btn dvb-btn-sm dvb-debug-add-bp-btn',
+            onClick: () => setAdding((v) => !v),
+          },
+          adding ? '取消' : '+ 添加断点',
         ),
       ),
       el(
-        'div',
-        { className: 'dvb-debug-panel-body' },
+        Panel.Body,
+        null,
         isWpExhausted
           ? el(
               'div',
@@ -124,38 +125,36 @@ export function createBreakpointPanel(React, t) {
           el(
             'div',
             { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
-            el(
-              'form',
-              { className: 'dvb-debug-form', onSubmit: handleAddBp },
-              el('input', {
-                type: 'text',
-                placeholder: '文件名:行号 或 函数名 (如 main.c:45 或 SysTick_Handler)',
-                value: bpInput,
-                onChange: (e) => setBpInput(e.target.value),
-              }),
-              el('input', {
-                type: 'text',
-                placeholder: '条件 (可选, 如 count > 10)',
-                style: { maxWidth: '140px' },
-                value: bpCondition,
-                onChange: (e) => setBpCondition(e.target.value),
-              }),
-              el(
-                'button',
-                {
-                  type: 'submit',
-                  className: 'dvb-btn dvb-btn-sm dvb-btn-primary',
-                  disabled: !bpInput.trim(),
-                },
-                '+ 添加',
-              ),
-            ),
-            bpList.length === 0
+            adding
               ? el(
-                  'div',
-                  { className: 'dvb-hint', style: { padding: '8px', textAlign: 'center' } },
-                  '暂无断点，在上方输入 文件:行号 添加',
+                  'form',
+                  { className: 'dvb-debug-form', onSubmit: handleAddBp },
+                  el('input', {
+                    type: 'text',
+                    placeholder: '文件名:行号 或 函数名 (如 main.c:45 或 SysTick_Handler)',
+                    value: bpInput,
+                    onChange: (e) => setBpInput(e.target.value),
+                  }),
+                  el('input', {
+                    type: 'text',
+                    placeholder: '条件 (可选, 如 count > 10)',
+                    style: { maxWidth: '140px' },
+                    value: bpCondition,
+                    onChange: (e) => setBpCondition(e.target.value),
+                  }),
+                  el(
+                    'button',
+                    {
+                      type: 'submit',
+                      className: 'dvb-btn dvb-btn-sm dvb-btn-primary',
+                      disabled: !bpInput.trim(),
+                    },
+                    '+ 添加',
+                  ),
                 )
+              : null,
+            bpList.length === 0
+              ? el(Hint, null, '暂无断点，在上方输入 文件:行号 添加')
               : bpList.map((bp) => {
                   const id = bp.id || ''
                   const label = bp.file ? `${bp.file.split(/[\\/]/).pop()}:${bp.line}` : bp.function || bp.address || id
@@ -166,20 +165,26 @@ export function createBreakpointPanel(React, t) {
                     { key: id, className: 'dvb-debug-item' },
                     el(
                       'div',
-                      { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
-                      el('span', { style: { color: 'var(--dsw-alias-label-danger, #c62828)' } }, '●'),
-                      el('span', { style: { fontFamily: 'ui-monospace, monospace' } }, `${label}${cond}`),
+                      { className: 'dvb-debug-bp-info' },
+                      el('input', {
+                        type: 'checkbox',
+                        checked: bp.enabled !== false,
+                        readOnly: true,
+                        className: 'dvb-debug-bp-check',
+                        'aria-label': '启用断点',
+                      }),
+                      el('span', { className: 'dvb-debug-bp-dot' }, '●'),
+                      el('span', { className: 'dvb-debug-bp-loc' }, `${label}${cond}`),
                     ),
                     el(
                       'button',
                       {
                         type: 'button',
-                        className: 'dvb-btn dvb-btn-sm',
-                        style: { padding: '0 4px', fontSize: '10px', opacity: 0.6 },
+                        className: 'dvb-btn dvb-btn-sm dvb-debug-item-del',
                         title: '删除断点',
                         onClick: () => onRemoveBreakpoint && onRemoveBreakpoint(id),
                       },
-                      '×',
+                      '⋮',
                     ),
                   )
                 }),
@@ -222,11 +227,7 @@ export function createBreakpointPanel(React, t) {
               ),
             ),
             wpList.length === 0
-              ? el(
-                  'div',
-                  { className: 'dvb-hint', style: { padding: '8px', textAlign: 'center' } },
-                  '暂无硬件观察点（支持写/读/读写监视）',
-                )
+              ? el(Hint, null, '暂无硬件观察点（支持写/读/读写监视）')
               : wpList.map((wp) => {
                   const id = wp.id || ''
                   const expr = wp.expression || wp.expr || id

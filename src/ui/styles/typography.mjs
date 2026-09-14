@@ -20,7 +20,14 @@ export const TYPOGRAPHY_CSS = [
     '--dvb-font-weight-semibold:600;' +
     '--dvb-font-weight-bold:700;' +
     '--dvb-font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;' +
-    '--dvb-font-family-mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace' +
+    '--dvb-font-family-mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;' +
+    '--dvb-space-1:4px;' +
+    '--dvb-space-2:8px;' +
+    '--dvb-space-3:12px;' +
+    '--dvb-radius-btn:6px;' +
+    '--dvb-radius-card:8px;' +
+    '--dvb-border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.28));' +
+    '--dvb-bg-panel:var(--dsw-alias-bg-layer-1,#fff)' +
     '}',
   'body[' +
     ATTR +

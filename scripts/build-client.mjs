@@ -25,7 +25,7 @@ const ESBUILD_COMMON = {
   charset: 'utf8',
   logLevel: 'error',
   metafile: true,
-  external: ['react'],
+  external: ['react', '@deepseek-ai/dsh-client-ui-primitives'],
   alias: { 'react-dom': REACT_DOM_SHIM },
   define: {
     'process.env.NODE_ENV': '"production"',

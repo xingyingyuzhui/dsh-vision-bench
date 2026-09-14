@@ -253,10 +253,6 @@ test('图谱节点具备键盘可访问属性', async () => {
     (b) => b.getAttribute('aria-label') === '适应画布',
   )
   assert.ok(fitBtn, 'fit button has aria-label')
-  const resetBtn = Array.from(tree.container.querySelectorAll('button')).find(
-    (b) => b.getAttribute('aria-label') === '重置缩放为 100%',
-  )
-  assert.ok(resetBtn, 'reset zoom button has aria-label')
   tree.unmount()
 })
 

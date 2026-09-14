@@ -1,4 +1,7 @@
+import { DEMO_CALL_GRAPH_NODES } from '../fixtures/temperature-demo.mjs'
 import { fileKind, filePassesFilter, fileTreeId, findProjectFile } from './project-tree-model.mjs'
+
+export { DEMO_CALL_GRAPH_NODES, DEMO_PROJECT_MAP, DEMO_SOURCE_FILES } from '../fixtures/temperature-demo.mjs'
 
 const DEFAULT_MAX_NODES = 200
 const DEFAULT_MAX_EDGES = 120
@@ -129,7 +132,7 @@ export function buildProjectGraph(groups, includeEdges, opts = {}) {
   }
 }
 
-/** @param {string} selectedId @param {{ edges: { id: string, from: string, to: string }[] }} graph */
+/** @param {string} selectedId @param {{ edges: { id: string, from: string, to: string }[], kind?: string }} graph */
 export function graphNeighborhood(selectedId, graph) {
   const id = String(selectedId || '')
   if (!id || !graph?.edges?.length) return { edgeIds: new Set(), nodeIds: new Set() }
@@ -142,5 +145,87 @@ export function graphNeighborhood(selectedId, graph) {
       nodeIds.add(edge.to)
     }
   }
+  if (graph.kind === 'call') {
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const edge of graph.edges) {
+        if (nodeIds.has(edge.to) && !edgeIds.has(edge.id)) {
+          edgeIds.add(edge.id)
+          nodeIds.add(edge.from)
+          changed = true
+        }
+      }
+    }
+  }
   return { edgeIds, nodeIds }
+}
+
+/**
+ * Builds a function call DAG graph.
+ * @param {any[]} [groups]
+ * @param {{ search?: string, depth?: string }} [opts]
+ */
+export function buildFunctionCallGraph(groups = [], opts = {}) {
+  const depthStr = opts.depth || '2'
+  const needle = String(opts.search || '').trim().toLowerCase()
+  const allNodes = DEMO_CALL_GRAPH_NODES.map((n) => ({ ...n, callees: n.callees.map((c) => ({ ...c })) }))
+  const maxAllowedDepth = depthStr === '1' ? 1 : depthStr === '2' ? 2 : 3
+  const depthById = {
+    'fn:main': 0, 'fn:UpdateTemperature': 1, 'fn:UpdateDisplay': 1, 'fn:ReadTemperature': 2, 'fn:DrawText': 2, 'fn:ReadVoltage': 3,
+  }
+
+  let nodes = allNodes.filter((n) => (depthById[n.id] ?? 0) <= maxAllowedDepth)
+  for (const n of nodes) {
+    if (n.id === 'fn:ReadTemperature') {
+      const exp = maxAllowedDepth >= 3
+      n.canExpand = !exp
+      n.expandBadge = exp ? '' : '+1 可展开'
+      if (n.callees[0]) {
+        n.callees[0].expanded = exp
+        n.callees[0].location = exp ? 'sensor.c:1' : '当前层级未展开'
+      }
+    }
+  }
+
+  if (needle) {
+    nodes = nodes.filter((n) =>
+      n.label.toLowerCase().includes(needle) ||
+      (n.location && n.location.toLowerCase().includes(needle)) ||
+      (n.file && n.file.toLowerCase().includes(needle))
+    )
+  }
+
+  const nodeSet = new Set(nodes.map((n) => n.id))
+  const rawEdges = [
+    ['fn:main', 'fn:UpdateTemperature'],
+    ['fn:main', 'fn:UpdateDisplay'],
+    ['fn:UpdateTemperature', 'fn:ReadTemperature'],
+    ['fn:UpdateDisplay', 'fn:DrawText'],
+    ['fn:ReadTemperature', 'fn:ReadVoltage'],
+  ]
+
+  const edges = []
+  for (const [from, to] of rawEdges) {
+    if (nodeSet.has(from) && nodeSet.has(to)) {
+      edges.push({ id: `e:${from}:${to}:${edges.length}`, from, to, resolved: true })
+    }
+  }
+
+  const depthNote = depthStr === 'all' ? '全部层级调用' : `main的${depthStr}层调用`
+
+  return {
+    kind: 'call',
+    focus: 'main',
+    nodes,
+    edges,
+    clusters: [],
+    maxEdges: 100,
+    maxNodes: 100,
+    capped: false,
+    edgesCapped: false,
+    nodesCapped: false,
+    orphanEdges: 0,
+    scopeNote: `当前范围: ${depthNote}`,
+  }
 }

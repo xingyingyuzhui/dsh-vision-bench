@@ -1,5 +1,5 @@
 import { buildAgentRef, copyAgentRef, hasHarnessInput } from '../../../../bench-shared.mjs'
-import { copyText, fileKindMark } from './project-shared.mjs'
+import { copyText, fileKindMark, renderChevronIcon, renderEllipsisIcon, renderFileIcon, renderFolderIcon } from './project-shared.mjs'
 import { fileKind, fileTreeId } from './project-tree-model.mjs'
 
 export function createProjectTreePanel(React) {
@@ -16,9 +16,11 @@ export function createProjectTreePanel(React) {
     onPreview,
     onCopyPath,
     onCopied,
+    projectName = '',
   }) {
     const el = React.createElement
     const [menuId, setMenuId] = React.useState('')
+    const [rootOpen, setRootOpen] = React.useState(true)
     const selectedRowRef = React.useRef(null)
 
     React.useEffect(() => {
@@ -57,6 +59,11 @@ export function createProjectTreePanel(React) {
           'data-kind': kind,
           'data-treeid': fid,
           ref: selectedId === fid ? selectedRowRef : undefined,
+          onClick() {
+            setSelectedId(fid)
+            setMenuId('')
+            onPreview(file)
+          },
         },
         el(
           'div',
@@ -66,23 +73,26 @@ export function createProjectTreePanel(React) {
                 'button',
                 {
                   type: 'button',
-                  className: 'dvb-btn dvb-btn-sm dvb-map-toggle',
+                  className: 'dvb-map-toggle',
                   'aria-label': isOpen ? '折叠函数列表' : '展开函数列表',
-                  onClick() {
+                  onClick(ev) {
+                    ev.stopPropagation()
                     setOpenFiles((prev) => ({ ...prev, [fid]: !prev[fid] }))
                     setSelectedId(fid)
                   },
                 },
-                isOpen ? '▾' : '▸',
+                renderChevronIcon(React, isOpen),
               )
-            : el('span', { className: 'dvb-map-toggle dvb-map-toggle-void', 'aria-hidden': 'true' }, '·'),
+            : el('span', { className: 'dvb-map-toggle dvb-map-toggle-void', 'aria-hidden': 'true' }),
+          renderFileIcon(React, 14),
           el(
             'button',
             {
               type: 'button',
-              className: `dvb-btn dvb-btn-sm dvb-map-file-name${jumpHere ? ' dvb-map-jump' : ''}`,
+              className: `dvb-map-file-name${jumpHere ? ' dvb-map-jump' : ''}`,
               title: file.rel || file.name,
-              onClick() {
+              onClick(ev) {
+                ev.stopPropagation()
                 setSelectedId(fid)
                 setMenuId('')
                 onPreview(file)
@@ -101,7 +111,7 @@ export function createProjectTreePanel(React) {
                 'button',
                 {
                   type: 'button',
-                  className: 'dvb-btn dvb-btn-sm dvb-btn-icon',
+                  className: 'dvb-btn-icon dvb-map-file-action-trigger',
                   title: '文件操作',
                   'aria-expanded': menuOpen ? 'true' : 'false',
                   onClick(ev) {
@@ -109,7 +119,7 @@ export function createProjectTreePanel(React) {
                     setMenuId(menuOpen ? '' : fid)
                   },
                 },
-                '⋯',
+                renderEllipsisIcon(React, 14),
               ),
               menuOpen
                 ? el(
@@ -121,7 +131,8 @@ export function createProjectTreePanel(React) {
                         type: 'button',
                         className: 'dvb-btn dvb-btn-sm',
                         role: 'menuitem',
-                        onClick() {
+                        onClick(ev) {
+                          ev.stopPropagation()
                           setMenuId('')
                           onPreview(file)
                         },
@@ -134,7 +145,8 @@ export function createProjectTreePanel(React) {
                         type: 'button',
                         className: 'dvb-btn dvb-btn-sm',
                         role: 'menuitem',
-                        onClick() {
+                        onClick(ev) {
+                          ev.stopPropagation()
                           setMenuId('')
                           copyText(file.rel || file.path || file.name, onCopyPath)
                         },
@@ -148,7 +160,8 @@ export function createProjectTreePanel(React) {
                             type: 'button',
                             className: 'dvb-btn dvb-btn-sm',
                             role: 'menuitem',
-                            onClick() {
+                            onClick(ev) {
+                              ev.stopPropagation()
                               setMenuId('')
                               copyToAgent(file)
                             },
@@ -181,7 +194,8 @@ export function createProjectTreePanel(React) {
                       type: 'button',
                       className: 'dvb-btn dvb-btn-sm',
                       title: '打开文件并定位到函数行',
-                      onClick() {
+                      onClick(ev) {
+                        ev.stopPropagation()
                         setSelectedId(fid)
                         setMenuId('')
                         onPreview(file, fn.line || 0)
@@ -196,31 +210,7 @@ export function createProjectTreePanel(React) {
       )
     }
 
-    return el(
-      'div',
-      {
-        className: 'dvb-map-tree',
-        tabIndex: 0,
-        onKeyDown(ev) {
-          if (ev.key !== 'Enter' && ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return
-          const ids = []
-          for (const group of tree) {
-            ids.push(group.id)
-            if (openGroups[group.name] === false) continue
-            for (const file of group.files) ids.push(fileTreeId(file))
-          }
-          if (!ids.length) return
-          const cur = Math.max(0, ids.indexOf(selectedId))
-          if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
-            ev.preventDefault()
-            const next = ev.key === 'ArrowDown' ? Math.min(ids.length - 1, cur + 1) : Math.max(0, cur - 1)
-            setSelectedId(ids[next])
-          }
-        },
-        onClick() {
-          if (menuId) setMenuId('')
-        },
-      },
+    const renderGroups = () =>
       tree.map((group) => {
         const gKey = group.name
         const gOpen = openGroups[gKey] !== false
@@ -229,30 +219,108 @@ export function createProjectTreePanel(React) {
           { key: group.id, className: 'dvb-map-group', 'data-treeid': group.id },
           el(
             'div',
-            { className: 'dvb-map-group-name' },
+            {
+              className: 'dvb-map-group-name',
+              onClick() {
+                setOpenGroups((prev) => ({ ...prev, [gKey]: !(prev[gKey] !== false) }))
+                setSelectedId(group.id)
+              },
+            },
             el(
               'button',
               {
                 type: 'button',
-                className: 'dvb-btn dvb-btn-sm dvb-map-toggle',
+                className: 'dvb-map-toggle',
                 'aria-label': gOpen ? '折叠组' : '展开组',
-                onClick() {
+                onClick(ev) {
+                  ev.stopPropagation()
                   setOpenGroups((prev) => ({ ...prev, [gKey]: !(prev[gKey] !== false) }))
                   setSelectedId(group.id)
                 },
               },
-              gOpen ? '▾' : '▸',
+              renderChevronIcon(React, gOpen),
             ),
-            el(
-              'span',
-              null,
-              `${group.name || ''} · ${String(group.total)} 文件${group.matched !== group.total ? ` · 匹配 ${group.matched}` : ''}`,
-            ),
-            el('span', { className: 'dvb-hint' }, `${group.outside} 外 · ${group.missing} 缺`),
+            renderFolderIcon(React, gOpen, 16),
+            el('span', { className: 'dvb-map-group-title' }, group.name || ''),
+            group.total > 0 && group.matched !== group.total
+              ? el('span', { className: 'dvb-hint' }, ` (${group.matched})`)
+              : null,
           ),
-          gOpen ? group.files.map((file) => fileRow({ ...file, _group: group.name })) : null,
+          gOpen
+            ? el(
+                'div',
+                { className: 'dvb-map-group-files' },
+                group.files.map((file) => fileRow({ ...file, _group: group.name })),
+              )
+            : null,
         )
-      }),
+      })
+
+    return el(
+      'div',
+      { className: 'dvb-tree-panel' },
+      el(
+        'div',
+        { className: 'dvb-tree-panel-head' },
+        el('span', { className: 'dvb-tree-panel-title' }, '工程文件'),
+      ),
+      el(
+        'div',
+        {
+          className: 'dvb-map-tree dvb-tree-panel-scroll',
+          tabIndex: 0,
+          onKeyDown(ev) {
+            if (ev.key !== 'Enter' && ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return
+            const ids = []
+            for (const group of tree) {
+              ids.push(group.id)
+              if (openGroups[group.name] === false) continue
+              for (const file of group.files) ids.push(fileTreeId(file))
+            }
+            if (!ids.length) return
+            const cur = Math.max(0, ids.indexOf(selectedId))
+            if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+              ev.preventDefault()
+              const next = ev.key === 'ArrowDown' ? Math.min(ids.length - 1, cur + 1) : Math.max(0, cur - 1)
+              setSelectedId(ids[next])
+            }
+          },
+          onClick() {
+            if (menuId) setMenuId('')
+          },
+        },
+        projectName
+          ? el(
+              'div',
+              { className: 'dvb-map-group dvb-map-root-group' },
+              el(
+                'div',
+                {
+                  className: 'dvb-map-group-name dvb-map-root-name',
+                  onClick() {
+                    setRootOpen((prev) => !prev)
+                  },
+                },
+                el(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'dvb-map-toggle',
+                    'aria-label': rootOpen ? '折叠工程' : '展开工程',
+                    onClick(ev) {
+                      ev.stopPropagation()
+                      setRootOpen((prev) => !prev)
+                    },
+                  },
+                  renderChevronIcon(React, rootOpen),
+                ),
+                renderFolderIcon(React, rootOpen, 16),
+                el('span', { className: 'dvb-tree-root-label' }, projectName),
+              ),
+              rootOpen ? renderGroups() : null,
+            )
+          : renderGroups(),
+      ),
     )
   }
 }

@@ -4,8 +4,10 @@ import {
   CLUSTER_HEADER_H,
   fitViewTransform,
   focusNodeTransform,
+  isUsableViewport,
   layoutProjectGraph,
   polylinePath,
+  zoomAround,
 } from '../src/ui/debug/project/project-graph-layout.mjs'
 import { buildProjectGraph, graphNeighborhood } from '../src/ui/debug/project/project-graph-model.mjs'
 import { graphTruncationHints } from '../src/ui/debug/project/project-graph-view.mjs'
@@ -161,6 +163,29 @@ test('layoutProjectGraph reserves cluster header space above nodes', () => {
   for (const node of sourceNodes) {
     assert.ok(node.y >= sourceCluster.y + CLUSTER_HEADER_H, `node ${node.label} must sit below cluster header`)
   }
+})
+
+test('fitViewTransform ignores a collapsed host instead of shrinking to min scale', () => {
+  const layout = { width: 900, height: 340 }
+  const tiny = fitViewTransform(layout, 0, 0)
+  assert.equal(tiny.scale, 1)
+  const fitted = fitViewTransform(layout, 1000, 520)
+  assert.ok(fitted.scale > 0.8)
+  assert.ok(fitted.scale <= 1.4)
+  assert.equal(isUsableViewport(40, 400), false)
+  assert.equal(isUsableViewport(400, 400), true)
+})
+
+test('zoomAround keeps the graph point under the origin', () => {
+  const start = { scale: 1, panX: 40, panY: 20 }
+  const originX = 200
+  const originY = 120
+  const gx = (originX - start.panX) / start.scale
+  const gy = (originY - start.panY) / start.scale
+  const next = zoomAround(start, 0.5, originX, originY, 0.35, 2.5)
+  assert.equal(next.scale, 0.5)
+  assert.ok(Math.abs((originX - next.panX) / next.scale - gx) < 1e-9)
+  assert.ok(Math.abs((originY - next.panY) / next.scale - gy) < 1e-9)
 })
 
 test('focusNodeTransform centers on a node', () => {

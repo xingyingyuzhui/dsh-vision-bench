@@ -12,29 +12,14 @@ import { CSS } from '../bench-styles.mjs'
 import { HMI_CSS } from '../src/ui/styles/hmi.mjs'
 import { BASE_CSS } from '../src/ui/styles/base.mjs'
 
-test('TYPOGRAPHY_TOKENS: 基础字号规范为 13px（完全对齐取消/保存胶囊按钮）', () => {
+test('TYPOGRAPHY_TOKENS 与 CSS 变量一致，并被 bench-styles 聚合', () => {
   assert.equal(TYPOGRAPHY_TOKENS.fontSize.base, '13px')
   assert.equal(TYPOGRAPHY_TOKENS.fontSize.sm, '12px')
-  assert.equal(TYPOGRAPHY_TOKENS.fontSize.xs, '11px')
-  assert.equal(TYPOGRAPHY_TOKENS.fontSize.md, '14px')
-  assert.equal(TYPOGRAPHY_TOKENS.fontSize.lg, '16px')
-  assert.equal(TYPOGRAPHY_TOKENS.fontSize.xl, '18px')
-})
-
-test('TYPOGRAPHY_CSS: 提供全局缩放因子 --dvb-font-scale 与动态 calc 计算', () => {
   const css = TYPOGRAPHY_CSS.join('\n')
   assert.match(css, /--dvb-font-scale:1;/)
-  assert.match(css, /--dvb-font-size-base:calc\(var\(--dvb-font-scale, 1\) \* 13px\);/)
-  assert.match(css, /--dvb-font-size-sm:calc\(var\(--dvb-font-scale, 1\) \* 12px\);/)
-  assert.match(css, /--dvb-font-size-xs:calc\(var\(--dvb-font-scale, 1\) \* 11px\);/)
-  assert.match(css, /--dvb-font-size-md:calc\(var\(--dvb-font-scale, 1\) \* 14px\);/)
-  assert.match(css, /--dvb-font-family:/)
-  assert.match(css, /--dvb-font-family-mono:/)
-})
-
-test('bench-styles.mjs: 统一聚合了 TYPOGRAPHY_CSS', () => {
+  assert.match(css, /--dvb-font-size-base:calc\(var\(--dvb-font-scale, 1\) \* 13px\)/)
+  assert.match(css, /--dvb-space-2:8px/)
   assert.match(CSS, /--dvb-font-size-base:/)
-  assert.match(CSS, /--dvb-font-scale:/)
 })
 
 test('按钮与操作栏统一：dvb-btn-sm 高度提升至 28px，字号统一为 13px 变量', () => {

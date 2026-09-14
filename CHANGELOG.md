@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.28.6
+
+- 删掉一批源码/CSS 字符串锁和重复 import 检查；行为测和写点/I/O/preset 保险丝保留。
+
+## 0.28.5
+
+- 工程结构页拆成 `use-project-session`（会话/地图/预览）和 `project-toolbar`，workspace 只拼布局。
+
+## 0.28.4
+
+- 合并 8 个单测 debug 文件到主题文件（批准、RPC、事件游标、探针租约）。工程结构图与运行时图共用同一套 fit/zoom 相机 hook。
+
+## 0.28.3
+
+- TemperatureDemo 源码/工程树/调用图/调试会话收到 `src/ui/debug/fixtures/`，工程结构和运行调试页不再内嵌同一份 demo。
+
+## 0.28.2
+
+- Client 第一刀：空间/圆角/描边 token，`Panel`/`Tabs`/`Hint` 原语，运行调试面板改走共用壳。UI 引用 `bench-*` 门面改为 cruiser warn（ADR-024）。
+
+## 0.28.1
+
+- 工程结构树形页：修复 `PROJECT_CSS` 未插值 `data-dsh-vision-bench`，左右栏卡片框丢失。右侧「示例源码 / 文件符号」补上独立卡片框；去掉树下「当前文件」卡片。树形/图谱切换去掉外围框线和工具栏底部分割线，并收紧工具栏上下间距。源码预览标题与函数/跳转收成一行，去掉复制/搜索按钮和标题栏底部分割线，并收紧标题栏与源码卡片之间的间距。去掉「示例源码」「文件符号」左侧箭头。图谱页去掉底部图例、统计和操作提示。缩放条贴在画布右下角，层级锁在图谱内，不再盖住会话输入框。函数详情：标题栏关闭按钮回到右侧，源码片段用真实行号而不再写死 ReadTemperature；调用图谱默认打开焦点函数详情。图谱画布铺满容器、绕视口中心缩放，不再在选中节点或 Resize 时把相机打回 35%。点击函数节点打开详情卡片，不再被画布拖拽吃掉。函数详情把名称、文件和行号收成一行。去掉树形源码预览底栏状态行。图谱工具栏只保留「适应画布」。运行调试页按理想稿对齐：会话条、已暂停状态、源码执行行/断点槽、两条 demo 断点、可折叠事件表。去掉运行调试页顶部会话条（目标名和 GDB/OpenOCD）。
+
 ## 0.28.0
 
 Requires DSH `0.1.5-rc.1`. Repair release: native DSH contract, upgrade migration, no long-term framework patches.
@@ -68,7 +92,7 @@ Security and integration fixes (no new product features):
 - Project graph layout, truncation hints, keyboard navigation, and `/` search shortcut guards are corrected.
 - `npm run test:full` and `npm run pack:check` pass.
 
-Windows serial / Modbus / OpenOCD device-chain acceptance remains **not** signed off. See `docs/WINDOWS_ACCEPTANCE_0.26.md`.
+Windows serial / Modbus / OpenOCD device-chain acceptance remains **not** signed off. See `docs/archive/WINDOWS_ACCEPTANCE_0.26.md`.
 
 ## 0.26.0
 
@@ -83,6 +107,6 @@ Breaking Harness integration:
 - Browser Host calls no longer use a static `X-DSH-Vision-Bench` header. Loopback Origin is required; Agent HTTP uses a process-lifetime capability. Official Typert Remote is not available to this thin-JS plugin (ADR-012).
 - Vision preset changes apply to **new sessions**. Open sessions keep their generation.
 
-Windows serial / Modbus / OpenOCD device-chain acceptance is **not** signed off. See `docs/WINDOWS_ACCEPTANCE_0.26.md`.
+Windows serial / Modbus / OpenOCD device-chain acceptance is **not** signed off. See `docs/archive/WINDOWS_ACCEPTANCE_0.26.md`.
 
 Profile risk (not Vision bugs): `dsh-excel-panel` 0.6.1 and `@omdsh-dev/dsh-genui` 0.8.4 may still fail on alpha.3. Isolation Profile + Vision tarball is the compatibility evidence.

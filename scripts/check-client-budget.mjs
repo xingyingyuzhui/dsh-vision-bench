@@ -2,8 +2,8 @@
 import { createHash } from 'node:crypto'
 
 export const CLIENT_BYTE_BASELINE = 567475
-/** Stage-1 cap 595849; 0.24 ECharts 1048576; 0.25 adds CodeMirror; 0.28 frames resizer; journal and alarms redesign. */
-export const CLIENT_BYTE_LIMIT = 1650000
+/** Stage-1 cap 595849; 0.24 ECharts 1048576; 0.25 adds CodeMirror; 0.28 frames resizer; journal and alarms redesign; runtime exec-line decorations. */
+export const CLIENT_BYTE_LIMIT = 1655000
 
 const REACT_SOURCE = /node_modules[/\\]react[/\\]/
 const REACT_DOM_REQUIRE = /require\(['"]react-dom['"]\)/

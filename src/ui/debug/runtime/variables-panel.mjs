@@ -1,5 +1,7 @@
 // @ts-check
 
+import { createHint, createPanel, createTabs } from '../../components/primitives.mjs'
+
 /**
  * Variables, Watches, and Registers panel.
  * Parity with Phase 7 Section 11.8.
@@ -9,6 +11,9 @@
  */
 export function createVariablesPanel(React, t) {
   const el = React.createElement
+  const Panel = createPanel(React)
+  const Tabs = createTabs(React)
+  const Hint = createHint(React)
 
   return function VariablesPanel({
     locals = [],
@@ -32,74 +37,61 @@ export function createVariablesPanel(React, t) {
     }
 
     return el(
-      'div',
-      { className: 'dvb-debug-panel' },
+      Panel,
+      null,
       el(
-        'div',
-        { className: 'dvb-debug-panel-head' },
+        Panel.Head,
+        { className: 'dvb-debug-vars-head' },
         el(
           'div',
-          { className: 'dvb-debug-tabs', style: { border: 'none', margin: 0, padding: 0 } },
+          { className: 'dvb-debug-vars-tabs-row' },
+          el(Tabs, {
+            value: subTab,
+            onChange: setSubTab,
+            items: [
+              { key: 'locals', label: '局部变量', count: locals.length },
+              { key: 'watches', label: '监视', count: watches.length },
+              { key: 'registers', label: '寄存器', count: registers.length },
+            ],
+          }),
           el(
             'button',
             {
               type: 'button',
-              className: `dvb-debug-subtab ${subTab === 'locals' ? 'is-active' : ''}`,
-              onClick: () => setSubTab('locals'),
+              className: 'dvb-btn dvb-btn-sm dvb-debug-vars-refresh-btn',
+              title: '手动刷新变量',
+              onClick: () => onRefresh && onRefresh(),
             },
-            `局部变量 (${locals.length})`,
-          ),
-          el(
-            'button',
-            {
-              type: 'button',
-              className: `dvb-debug-subtab ${subTab === 'watches' ? 'is-active' : ''}`,
-              onClick: () => setSubTab('watches'),
-            },
-            `监视 (${watches.length})`,
-          ),
-          el(
-            'button',
-            {
-              type: 'button',
-              className: `dvb-debug-subtab ${subTab === 'registers' ? 'is-active' : ''}`,
-              onClick: () => setSubTab('registers'),
-            },
-            `寄存器 (${registers.length})`,
+            '↻ 刷新',
           ),
         ),
-        el(
-          'button',
-          {
-            type: 'button',
-            className: 'dvb-btn dvb-btn-sm',
-            style: { padding: '1px 6px', fontSize: '10px' },
-            title: '手动刷新变量',
-            onClick: () => onRefresh && onRefresh(),
-          },
-          '刷新',
-        ),
+        subTab === 'locals'
+          ? el(
+              'div',
+              { className: 'dvb-debug-var-table-header' },
+              el('span', { className: 'dvb-var-col dvb-col-name' }, '名称'),
+              el('span', { className: 'dvb-var-col dvb-col-type' }, '类型'),
+              el('span', { className: 'dvb-var-col dvb-col-val' }, '值'),
+            )
+          : null,
       ),
       el(
-        'div',
-        { className: 'dvb-debug-panel-body' },
+        Panel.Body,
+        null,
         subTab === 'locals' &&
           (locals.length === 0
-            ? el(
-                'div',
-                { className: 'dvb-hint', style: { padding: '8px', textAlign: 'center' } },
-                '暂无局部变量（可在暂停时查看当前栈帧局部变量）',
-              )
+            ? el(Hint, null, '暂无局部变量（可在暂停时查看当前栈帧局部变量）')
             : locals.map((item, idx) => {
                 const name = item.name || `var_${idx}`
                 const val = item.value != null ? String(item.value) : 'undefined'
-                const type = item.type ? ` (${item.type})` : ''
+                const type = item.type || '-'
 
                 return el(
                   'div',
                   { key: name, className: 'dvb-debug-var-row' },
-                  el('span', { className: 'dvb-debug-var-name' }, `${name}${type}`),
-                  el('span', { className: 'dvb-debug-var-val' }, val),
+                  el('span', { className: 'dvb-debug-var-name dvb-var-col dvb-col-name' }, name),
+                  el('span', { className: 'dvb-debug-var-type dvb-var-col dvb-col-type' }, type),
+                  el('span', { className: 'dvb-debug-var-val dvb-var-col dvb-col-val' }, val),
                 )
               })),
         subTab === 'watches' &&
@@ -126,11 +118,7 @@ export function createVariablesPanel(React, t) {
               ),
             ),
             watches.length === 0
-              ? el(
-                  'div',
-                  { className: 'dvb-hint', style: { padding: '8px', textAlign: 'center' } },
-                  '暂无监视表达式，在上方输入表达式即可添加',
-                )
+              ? el(Hint, null, '暂无监视表达式，在上方输入表达式即可添加')
               : watches.map((expr) => {
                   const valItem = watchValues.find((v) => v.expression === expr)
                   const hasErr = Boolean(valItem?.error)
@@ -168,11 +156,7 @@ export function createVariablesPanel(React, t) {
           ),
         subTab === 'registers' &&
           (registers.length === 0
-            ? el(
-                'div',
-                { className: 'dvb-hint', style: { padding: '8px', textAlign: 'center' } },
-                '暂无寄存器信息（暂停时自动获取 CPU 寄存器）',
-              )
+            ? el(Hint, null, '暂无寄存器信息（暂停时自动获取 CPU 寄存器）')
             : registers.map((reg) => {
                 const name = reg.name || 'reg'
                 const val = reg.value != null ? String(reg.value) : ''
