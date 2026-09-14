@@ -41,7 +41,7 @@ function releaseAbortController(ref, ac) {
 export function shouldIgnoreProjectSearchShortcut(ev) {
   if (!ev || ev.key !== '/' || ev.defaultPrevented) return true
   const t = ev.target
-  if (!t || t.isContentEditable) return !t ? false : true
+  if (!t || t.isContentEditable) return !!t
   if (typeof t.closest === 'function' && t.closest('[contenteditable="true"],[role="textbox"],[role="dialog"],.cm-editor')) return true
   const tag = String(t.tagName || '').toLowerCase()
   if (tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'button') return true
