@@ -1,12 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createHint, createPanel, createTabs } from '../../src/ui/components/primitives.mjs'
-
-const mockReact = {
-  createElement(type, props, ...children) {
-    return { type, props: props || {}, children: children.flat().filter(Boolean) }
-  },
-}
+import { mockReact } from '../helpers/react-unit.mjs'
 
 test('Panel/Tabs/Hint emit the shared debug chrome classes', () => {
   const Panel = createPanel(mockReact)

@@ -2,12 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import React from 'react'
 import { createCustomSelect, getCustomSelect, renderCustomSelect } from '../../src/ui/components/custom-select.mjs'
-
-const el = (type, props, ...children) => ({
-  type,
-  props: { ...(props || {}), children: children.length === 1 ? children[0] : children },
-  children: children.flat().filter(Boolean),
-})
+import { el } from '../helpers/react-unit.mjs'
 
 test('renderCustomSelect renders closed trigger with current value label', () => {
   const tree = renderCustomSelect(el, {

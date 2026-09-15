@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { createTable, getCoreRowModel, getSortedRowModel } from '@tanstack/table-core'
 import { createDataTable } from '../../src/ui/components/data-table.mjs'
 import { setTableRuntime } from '../../src/ui/vendor/table-runtime.mjs'
+import { mockReact, render } from '../helpers/react-unit.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -29,38 +30,6 @@ function rowsOf(tree) {
   return out
 }
 
-function makeReact() {
-  const store = { i: 0, slots: [] }
-  const React = {
-    createElement(type, props, ...children) {
-      if (typeof type === 'function') return type({ ...(props || {}), children })
-      return { type, props: props || {}, children }
-    },
-    useState(init) {
-      const i = store.i++
-      if (store.slots[i] === undefined) store.slots[i] = typeof init === 'function' ? init() : init
-      return [
-        store.slots[i],
-        (next) => {
-          store.slots[i] = typeof next === 'function' ? next(store.slots[i]) : next
-        },
-      ]
-    },
-    useRef(init) {
-      const i = store.i++
-      if (store.slots[i] === undefined) store.slots[i] = { current: init }
-      return store.slots[i]
-    },
-  }
-  return {
-    React,
-    rerender(fn) {
-      store.i = 0
-      return fn()
-    },
-  }
-}
-
 test('table-core source does not import react-dom or createPortal', () => {
   const src = readFileSync(join(root, 'node_modules/@tanstack/table-core/build/lib/index.mjs'), 'utf8')
   assert.doesNotMatch(src, /react-dom/)
@@ -70,11 +39,10 @@ test('table-core source does not import react-dom or createPortal', () => {
 
 test('DataTable requires getRowId and never uses array index as row id', async () => {
   setTableRuntime({ createTable, getCoreRowModel, getSortedRowModel })
-  const { React, rerender } = makeReact()
-  const DataTable = createDataTable(React)
+  const DataTable = createDataTable(mockReact)
   assert.throws(() => DataTable({ data: [], columns: [] }), /getRowId/)
   const data = Array.from({ length: 8 }, (_, i) => ({ frameId: `f-${i + 1}`, t: i }))
-  const tree = rerender(() =>
+  const tree = render(() =>
     DataTable({
       data,
       columns: [{ id: 't', header: 't', accessorKey: 't' }],
@@ -92,15 +60,14 @@ test('DataTable requires getRowId and never uses array index as row id', async (
 
 test('virtualized DataTable does not put 5000 rows in the tree', async () => {
   setTableRuntime({ createTable, getCoreRowModel, getSortedRowModel })
-  const { React, rerender } = makeReact()
-  const DataTable = createDataTable(React)
+  const DataTable = createDataTable(mockReact)
   const data = Array.from({ length: 5000 }, (_, i) => ({ frameId: `c1-f${i + 1}`, t: i }))
   const vizer = {
     getVirtualItems: () =>
       Array.from({ length: 12 }, (_, i) => ({ index: i, start: i * 36, size: 36, key: data[i].frameId })),
     getTotalSize: () => 5000 * 36,
   }
-  const tree = rerender(() =>
+  const tree = render(() =>
     DataTable({
       data,
       columns: [{ id: 't', header: 't', accessorKey: 't' }],
@@ -119,9 +86,8 @@ test('virtualized DataTable does not put 5000 rows in the tree', async () => {
 
 test('fallback without table-core still uses getRowId', () => {
   setTableRuntime(null)
-  const { React, rerender } = makeReact()
-  const DataTable = createDataTable(React)
-  const tree = rerender(() =>
+  const DataTable = createDataTable(mockReact)
+  const tree = render(() =>
     DataTable({
       data: [
         { id: 'a1', label: 'one' },
@@ -138,12 +104,11 @@ test('fallback without table-core still uses getRowId', () => {
 })
 
 test('DataTable renders resizers and handles when onStartResize is provided', () => {
-  const { React, rerender } = makeReact()
-  const DataTable = createDataTable(React)
+  const DataTable = createDataTable(mockReact)
   let resizedCol = null
   let resetCol = null
 
-  const tree = rerender(() =>
+  const tree = render(() =>
     DataTable({
       data: [{ id: '1', colA: 'A', colB: 'B' }],
       columns: [
