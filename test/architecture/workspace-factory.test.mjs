@@ -3,6 +3,7 @@
 // 换成「重复错误」，所以它必须比调用方更早被验证。
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import test from 'node:test'
 import { connection, createBench, createTempDir, pointSeries } from '../helpers/workspace-factory.mjs'
 
@@ -178,6 +179,6 @@ test('save/load/at/write/read/exists 围绕同一个 home+cwd 工作', async (t)
   await bench.write('notes.txt', 'hello')
   assert.equal(await bench.read('notes.txt'), 'hello')
   assert.equal(bench.exists('notes.txt'), true)
-  assert.equal(bench.at('notes.txt'), `${bench.cwd}/notes.txt`)
+  assert.equal(bench.at('notes.txt'), join(bench.cwd, 'notes.txt'))
   assert.equal(bench.exists('missing.txt'), false)
 })

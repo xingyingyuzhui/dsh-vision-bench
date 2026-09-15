@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import config from '../../structure-budget.config.mjs'
@@ -58,8 +58,10 @@ test('structure budget excludes generated artefacts and dependency directories',
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   const files = collectGroupFiles(dir, GROUP)
   assert.deepEqual(files, ['src/keep.mjs', 'src/nested/deep.mjs'])
-  const excluded = listFiles(join(dir, 'src'), ['.mjs']).map((file) => file.replace(dir, ''))
-  assert.ok(excluded.includes('/src/nested/deep.mjs'))
+  const excluded = listFiles(join(dir, 'src'), ['.mjs']).map((file) =>
+    relative(dir, file).split(sep).join('/'),
+  )
+  assert.ok(excluded.includes('src/nested/deep.mjs'))
   assert.ok(!excluded.some((file) => file.includes('node_modules')))
 })
 
