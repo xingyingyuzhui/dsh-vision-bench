@@ -1,13 +1,6 @@
-import {
-  buildInputBridge,
-  formatErrorMessage,
-  pageSessionId,
-  readInputDraft,
-  runningOf,
-  statusBar,
-  useSessionCwd,
-  visionCollabBar,
-} from '../../../bench-shared.mjs'
+import { buildInputBridge, readInputDraft } from '../common/agent-reference.mjs'
+import { formatErrorMessage, runningOf, statusBar, visionCollabBar } from '../common/ui-format.mjs'
+import { pageSessionId, useSessionCwd } from '../common/session-scope.mjs'
 import { getCustomSelect } from '../components/custom-select.mjs'
 import { renderConnectionEditor } from './connection-editor.mjs'
 import { renderConnectionOverview } from './connection-overview.mjs'

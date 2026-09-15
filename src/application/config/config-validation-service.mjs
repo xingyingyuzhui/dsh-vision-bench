@@ -1,5 +1,6 @@
 // @ts-check
-import { validateConnections, validateDevices } from '../../../bench-devices.mjs'
+import { validateConnections } from '../../domain/modbus/connection-model.mjs'
+import { validateDevices } from '../../domain/modbus/device-model.mjs'
 
 /**
  * @param {any} workspace

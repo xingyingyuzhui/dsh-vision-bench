@@ -1,15 +1,40 @@
 // @ts-check
 
-import { createHash } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
 import { startOpenOcdDebugProcess } from '../openocd/openocd-debug-process.mjs'
+import {
+  dispatchGdbCommand,
+  gdbContinue,
+  gdbInterpreterExec,
+  gdbPause,
+  gdbResetHalt,
+  gdbStepInto,
+  gdbStepOut,
+  gdbStepOver,
+} from './gdb-backend-commands.mjs'
+import {
+  gdbAddBreakpoint,
+  gdbAddWatchpoint,
+  gdbRemoveBreakpoint,
+  gdbRemoveWatchpoint,
+} from './gdb-backend-breakpoints.mjs'
+import { createGdbEventEmitter } from './gdb-backend-events.mjs'
+import {
+  gdbEvaluate,
+  gdbLocals,
+  gdbReadMemory,
+  gdbRegisters,
+  gdbStack,
+} from './gdb-backend-inspect.mjs'
+import { startGdbSession, stopGdbSession } from './gdb-backend-session.mjs'
 import { createMiClient } from './mi-client.mjs'
-import { mapGdbStopReason } from './stop-reason.mjs'
 
 /**
  * GDB/MI + OpenOCD Hardware Debug Backend.
  * Implements the DebugBackend interface for embedded targets.
  * Parity with ADR-013 & Phase 3 Section 7.7.
+ *
+ * Session / command / event / breakpoint / inspect logic lives in sibling modules;
+ * this class keeps the stable public surface for debug-runtime consumers.
  */
 export class GdbBackend {
   /**
@@ -39,9 +64,9 @@ export class GdbBackend {
      */
     this.lastNativeLocation = null
     /** @type {Map<string, string>} */
-    this.breakpointMap = new Map() // bp.id -> gdb breakpoint number
+    this.breakpointMap = new Map()
     /** @type {Map<string, string>} */
-    this.watchpointMap = new Map() // wp.id -> gdb watchpoint number
+    this.watchpointMap = new Map()
     /**
      * Native state cache for GDB.
      * Note: backend cache is NOT public/debug product state.
@@ -61,6 +86,16 @@ export class GdbBackend {
     this._unsubscribeStream = null
     /** @type {Set<(event: import('../../../types/debug-backend.d.ts').DebugBackendEvent) => void>} */
     this.listeners = new Set()
+
+    const emitter = createGdbEventEmitter({
+      listeners: this.listeners,
+      getExitEmitted: () => this.exitEmitted,
+      setExitEmitted: (v) => {
+        this.exitEmitted = v
+      },
+    })
+    this._emit = emitter.emit
+    this._emitExitOnce = emitter.emitExitOnce
   }
 
   /**
@@ -76,32 +111,6 @@ export class GdbBackend {
   }
 
   /**
-   * Emits a backend event to all registered listeners.
-   * @param {import('../../../types/debug-backend.d.ts').DebugBackendEvent} event
-   */
-  _emit(event) {
-    for (const listener of this.listeners) {
-      try {
-        listener(event)
-      } catch {
-        /* ignore listener error */
-      }
-    }
-  }
-
-  /**
-   * Emits backend.exited exactly once to prevent duplicate exit events.
-   * @param {import('../../../types/debug-backend.d.ts').DebugBackendEvent} event
-   */
-  _emitExitOnce(event) {
-    if (this.exitEmitted) return
-    this.exitEmitted = true
-    this._emit(event)
-  }
-
-  /**
-   * Starts GDB and OpenOCD processes, connects MI client, and enters halted debug state.
-   *
    * @param {{
    *   targetSpec?: {
    *     artifactPath?: string,
@@ -115,203 +124,33 @@ export class GdbBackend {
    *   },
    *   ownerSessionId?: string,
    *   workspaceCwd?: string,
-   * }} spec
+   * }} [spec]
    */
   async start(spec = {}) {
-    this.nativeState = 'starting'
-    const targetSpec = spec.targetSpec || {}
-    const artifactPath = targetSpec.artifactPath
-    const gdbPort = targetSpec.gdbPort || 3333
-    const cwd = targetSpec.cwd || this.workspaceCwd || process.cwd()
-
-    // 1. Verify firmware artifact
-    if (!artifactPath) {
-      throw new Error('启动调试必须指定固件产物路径 (artifactPath)')
-    }
-    if (!existsSync(artifactPath)) {
-      throw new Error(`固件产物不存在: ${artifactPath}`)
-    }
-
-    try {
-      const content = readFileSync(artifactPath)
-      this.firmwareHash = createHash('sha256').update(content).digest('hex')
-    } catch (err) {
-      throw new Error(`读取固件产物失败: ${err instanceof Error ? err.message : String(err)}`)
-    }
-
-    const openocdBin = targetSpec.openocdBin || 'openocd'
-    const gdbBin = targetSpec.gdbBin || 'arm-none-eabi-gdb'
-
-    try {
-      // 2. Start OpenOCD debug server
-      this.openocdProcess = await this.openocdStarter({
-        openocdBin,
-        interfaceName: targetSpec.interfaceName,
-        target: targetSpec.target,
-        probeSerial: targetSpec.probeSerial,
-        gdbPort,
-        cwd,
-      })
-
-      // 3. Start GDB MI client
-      const gdbArgs = ['--interpreter=mi3', '--quiet', '--nx', artifactPath]
-      this.miClient = this.miClientFactory({
-        bin: gdbBin,
-        args: gdbArgs,
-        cwd,
-      })
-
-      // Listen for async stop/run events
-      this._unsubscribeAsync = this.miClient.onAsync((rec) => {
-        if (rec.class === 'stopped') {
-          const reason = mapGdbStopReason(rec)
-          const frame = rec.results?.frame
-          /** @type {import('../../../types/debug.d.ts').SourceLocation | undefined} */
-          let loc = undefined
-          if (frame) {
-            loc = {
-              file: frame.file || frame.fullname || '',
-              line: Number(frame.line || 0),
-              function: frame.func || '',
-              address: frame.addr || '',
-            }
-            this.lastNativeLocation = loc
-          }
-          this.nativeState = 'paused'
-          this._emit({
-            type: 'backend.stopped',
-            reason,
-            location: loc,
-            nativeReason: rec.results?.reason,
-            breakpointNumber: rec.results?.bkptno ? String(rec.results.bkptno) : undefined,
-            watchpointNumber:
-              rec.results?.wpt?.number || rec.results?.wpt
-                ? String(rec.results?.wpt?.number || rec.results?.wpt)
-                : undefined,
-            threadId: rec.results?.['thread-id'],
-          })
-        } else if (rec.class === 'running') {
-          this.nativeState = 'running'
-          this._emit({
-            type: 'backend.running',
-            threadId: rec.results?.['thread-id'],
-          })
-        }
-      })
-
-      // Listen for stream records (console, target, log)
-      if (typeof this.miClient.onStream === 'function') {
-        this._unsubscribeStream = this.miClient.onStream((rec) => {
-          let stream = 'console'
-          if (rec.kind === 'target-stream') stream = 'target'
-          else if (rec.kind === 'log-stream') stream = 'log'
-          this._emit({
-            type: 'backend.console',
-            stream: /** @type {'console' | 'target' | 'log'} */ (stream),
-            text: rec.text || '',
-          })
-        })
-      }
-
-      // Monitor exit promise of client
-      if (this.miClient._transport?.exitPromise) {
-        this.miClient._transport.exitPromise.then(
-          (exitInfo) => {
-            this._emitExitOnce({
-              type: 'backend.exited',
-              code: exitInfo?.code ?? undefined,
-              signal: exitInfo?.signal ?? undefined,
-              unexpected: !this.isStopping,
-            })
-          },
-          (err) => {
-            this._emit({
-              type: 'backend.error',
-              message: err instanceof Error ? err.message : String(err),
-              fatal: true,
-            })
-          },
-        )
-      }
-
-      // 4. Connect GDB to OpenOCD port — fatal: without a connection there is
-      //    no debug session to speak of.
-      await this.miClient.command('-target-select', ['extended-remote', `127.0.0.1:${gdbPort}`])
-
-      // 5. Reset target and halt — non-fatal.
-      //    `monitor` is an OpenOCD extension; some probe/firmware combinations do
-      //    not support it. A failure here must degrade to an MI-native interrupt
-      //    rather than taking the whole session down with it.
-      try {
-        await this.interpreterExec('monitor reset halt')
-      } catch (err) {
-        this.lastNonFatalError = err instanceof Error ? err.message : String(err)
-        try {
-          await this.miClient.command('-exec-interrupt')
-        } catch {
-          /* target may already be halted */
-        }
-      }
-
-      // 6. Inspect initial frame
-      try {
-        const frames = await this.stack()
-        if (frames.length > 0) {
-          const top = frames[0]
-          this.lastNativeLocation = {
-            file: top.file || '',
-            line: top.line || 0,
-            function: top.function,
-            address: top.address,
-          }
-        }
-      } catch {
-        /* initial frame read is optional */
-      }
-
-      this.nativeState = 'paused'
-    } catch (err) {
-      await this.stop()
-      throw err
-    }
+    return startGdbSession(this, spec)
   }
 
-  /**
-   * Continues target execution.
-   */
   async continue() {
-    const client = this._getClient()
-    const rec = await client.command('-exec-continue')
+    const rec = await gdbContinue(this._getClient())
     this.nativeState = 'running'
     return rec
   }
 
-  /**
-   * Alias for continue().
-   */
   async run() {
     return this.continue()
   }
 
-  /**
-   * Interrupts target execution (pause).
-   */
   async pause() {
-    const client = this._getClient()
-    const rec = await client.command('-exec-interrupt')
+    const rec = await gdbPause(this._getClient())
     this.nativeState = 'paused'
     return rec
   }
 
-  /**
-   * Requests target pause (standard DebugBackend interface).
-   */
   async requestPause() {
     return this.pause()
   }
 
   /**
-   * Single step over current line.
    * @param {'over' | 'into' | 'out'} [stepType]
    */
   async step(stepType = 'over') {
@@ -320,326 +159,84 @@ export class GdbBackend {
     return this.stepOver()
   }
 
-  /**
-   * Step over next source line (-exec-next).
-   */
   async stepOver() {
-    const client = this._getClient()
-    const rec = await client.command('-exec-next')
-    return rec
+    return gdbStepOver(this._getClient())
   }
 
-  /**
-   * Step into function call (-exec-step).
-   */
   async stepInto() {
-    const client = this._getClient()
-    const rec = await client.command('-exec-step')
-    return rec
+    return gdbStepInto(this._getClient())
   }
 
-  /**
-   * Step out of current function (-exec-finish).
-   */
   async stepOut() {
-    const client = this._getClient()
-    const rec = await client.command('-exec-finish')
-    return rec
+    return gdbStepOut(this._getClient())
   }
 
   /**
    * Executes a GDB console (CLI) command through `-interpreter-exec`.
-   *
-   * MI syntax is `-interpreter-exec CONSOLE-COMMAND`, where CONSOLE-COMMAND is
-   * **one** C string argument. `encodeMiArg()` owns the quoting, so callers pass
-   * the bare CLI text and must NOT pre-quote it.
-   *
-   * Pre-quoting is silently destructive: `'"monitor reset halt"'` gets escaped a
-   * second time into the wire form
-   *   `-interpreter-exec console "\"monitor reset halt\""`
-   * so GDB decodes the console command as `"monitor reset halt"` — quotes
-   * included — splits it on whitespace, and reports
-   *   `Undefined command: ""monitor".  Try "help".`
-   * which then tears down the whole session.
-   *
    * @param {string} cliCommand bare CLI text, e.g. `monitor reset halt`
    */
   async interpreterExec(cliCommand) {
-    const client = this._getClient()
-    const raw = String(cliCommand ?? '')
-    if (raw.trim().length === 0) {
-      throw new Error('interpreterExec 需要非空的 CLI 命令')
-    }
-    if (/^["'].*["']$/.test(raw.trim())) {
-      throw new Error(`interpreterExec 收到已预加引号的参数，请传入裸 CLI 文本: ${raw}`)
-    }
-    return client.command('-interpreter-exec', ['console', raw])
+    return gdbInterpreterExec(this._getClient(), cliCommand)
   }
 
-  /**
-   * Halts and resets CPU via OpenOCD monitor command.
-   */
   async resetHalt() {
-    const rec = await this.interpreterExec('monitor reset halt')
+    const rec = await gdbResetHalt(this._getClient())
     this.nativeState = 'paused'
     return rec
   }
 
-  /**
-   * Sets a breakpoint.
-   * @param {import('../../../types/debug.d.ts').DebugBreakpoint} bp
-   */
+  /** @param {import('../../../types/debug.d.ts').DebugBreakpoint} bp */
   async addBreakpoint(bp) {
-    const client = this._getClient()
-    const loc = `${bp.file}:${bp.line}`
-    const args = []
-    if (bp.condition) {
-      args.push('-c', bp.condition)
-    }
-    args.push(loc)
-
-    const rec = await client.command('-break-insert', args)
-    const bkpt = rec.results?.bkpt
-    const bkptNum = bkpt?.number ? String(bkpt.number) : ''
-    if (bkptNum) {
-      this.breakpointMap.set(bp.id, bkptNum)
-    }
-    return {
-      ...bp,
-      verified: true,
-      address: bkpt?.addr,
-    }
+    return gdbAddBreakpoint(this._getClient(), this.breakpointMap, bp)
   }
 
-  /**
-   * Removes a breakpoint.
-   * @param {import('../../../types/debug.d.ts').DebugBreakpoint} bp
-   */
+  /** @param {import('../../../types/debug.d.ts').DebugBreakpoint} bp */
   async removeBreakpoint(bp) {
-    const client = this._getClient()
-    const num = this.breakpointMap.get(bp.id) || bp.id
-    await client.command('-break-delete', [num])
-    this.breakpointMap.delete(bp.id)
-    return { ok: true }
+    return gdbRemoveBreakpoint(this._getClient(), this.breakpointMap, bp)
   }
 
-  /**
-   * Sets a watchpoint on an expression.
-   * @param {import('../../../types/debug.d.ts').DebugWatchpoint} wp
-   */
+  /** @param {import('../../../types/debug.d.ts').DebugWatchpoint} wp */
   async addWatchpoint(wp) {
-    const client = this._getClient()
-    const args = []
-    if (wp.accessType === 'read') {
-      args.push('-r')
-    } else if (wp.accessType === 'readWrite') {
-      args.push('-a')
-    }
-    args.push(wp.expression)
-
-    const rec = await client.command('-break-watch', args)
-    const wpt = rec.results?.wpt
-    const wptNum = wpt?.number ? String(wpt.number) : ''
-    if (wptNum) {
-      this.watchpointMap.set(wp.id, wptNum)
-    }
-    return {
-      ...wp,
-      verified: true,
-    }
+    return gdbAddWatchpoint(this._getClient(), this.watchpointMap, wp)
   }
 
-  /**
-   * Removes a watchpoint.
-   * @param {import('../../../types/debug.d.ts').DebugWatchpoint} wp
-   */
+  /** @param {import('../../../types/debug.d.ts').DebugWatchpoint} wp */
   async removeWatchpoint(wp) {
-    const client = this._getClient()
-    const num = this.watchpointMap.get(wp.id) || wp.id
-    await client.command('-break-delete', [num])
-    this.watchpointMap.delete(wp.id)
-    return { ok: true }
+    return gdbRemoveWatchpoint(this._getClient(), this.watchpointMap, wp)
   }
 
-  /**
-   * Retrieves current call stack frames.
-   * @returns {Promise<import('../../../types/debug.d.ts').DebugStackFrame[]>}
-   */
   async stack() {
-    const client = this._getClient()
-    const rec = await client.command('-stack-list-frames')
-    const stack = rec.results?.stack
-    if (!Array.isArray(stack)) return []
-
-    return stack.map((item) => {
-      const f = item.frame || item
-      return {
-        level: Number(f.level || 0),
-        function: f.func || '??',
-        file: f.file || f.fullname || '',
-        line: Number(f.line || 0),
-        address: f.addr || '',
-      }
-    })
+    return gdbStack(this._getClient())
   }
 
-  /**
-   * Retrieves local variables in the current stack frame.
-   * @returns {Promise<import('../../../types/debug.d.ts').DebugVariable[]>}
-   */
   async locals() {
-    const client = this._getClient()
-    const rec = await client.command('-stack-list-variables', ['--all-values'])
-    const vars = rec.results?.variables
-    if (!Array.isArray(vars)) return []
-
-    return vars.map((v) => ({
-      name: v.name || '',
-      value: v.value || '',
-      type: v.type || '',
-    }))
+    return gdbLocals(this._getClient())
   }
 
-  /**
-   * Evaluates an expression in current scope.
-   * @param {string} expr
-   * @returns {Promise<string>}
-   */
+  /** @param {string} expr */
   async evaluate(expr) {
-    const client = this._getClient()
-    const rec = await client.command('-data-evaluate-expression', [expr])
-    return rec.results?.value || ''
+    return gdbEvaluate(this._getClient(), expr)
   }
 
-  /**
-   * Retrieves target register names and values.
-   * @returns {Promise<import('../../../types/debug.d.ts').DebugRegister[]>}
-   */
   async registers() {
-    const client = this._getClient()
-    const namesRec = await client.command('-data-list-register-names')
-    const regNames = namesRec.results?.['register-names'] || []
-
-    const valuesRec = await client.command('-data-list-register-values', ['x'])
-    const regValues = valuesRec.results?.['register-values'] || []
-
-    /** @type {import('../../../types/debug.d.ts').DebugRegister[]} */
-    const registers = []
-    if (Array.isArray(regValues)) {
-      for (const item of regValues) {
-        const num = Number(item.number)
-        const name = regNames[num]
-        if (name && item.value) {
-          registers.push({ name, value: item.value })
-        }
-      }
-    }
-    return registers
+    return gdbRegisters(this._getClient())
   }
 
   /**
-   * Reads raw target memory bytes.
    * @param {string} address
    * @param {number} length
-   * @returns {Promise<string>} Hex representation of bytes
    */
   async readMemory(address, length) {
-    const client = this._getClient()
-    const rec = await client.command('-data-read-memory-bytes', [address, length])
-    const memory = rec.results?.memory
-    if (Array.isArray(memory) && memory[0]?.contents) {
-      return memory[0].contents
-    }
-    return ''
+    return gdbReadMemory(this._getClient(), address, length)
   }
 
-  /**
-   * Generic command dispatcher fallback.
-   * @param {{ type: string, [key: string]: any }} cmd
-   */
+  /** @param {{ type: string, [key: string]: any }} cmd */
   async command(cmd) {
-    switch (cmd.type) {
-      case 'continue':
-        return this.continue()
-      case 'pause':
-        return this.pause()
-      case 'step':
-        return this.step(cmd.stepType)
-      case 'resetHalt':
-        return this.resetHalt()
-      case 'evaluate':
-        return this.evaluate(cmd.expression)
-      case 'stack':
-        return this.stack()
-      case 'locals':
-        return this.locals()
-      case 'registers':
-        return this.registers()
-      case 'readMemory':
-        return this.readMemory(cmd.address, cmd.length)
-      case 'addWatchpoint':
-        return this.addWatchpoint(cmd.watchpoint)
-      case 'removeWatchpoint':
-        return this.removeWatchpoint(cmd.watchpoint)
-      default:
-        throw new Error(`未受支持的后端调试命令: ${cmd.type}`)
-    }
+    return dispatchGdbCommand(this, cmd)
   }
 
-  /**
-   * Stops debugging session, detaches, and stops child processes in reverse order.
-   */
   async stop() {
-    this.isStopping = true
-    this.nativeState = 'stopping'
-
-    if (this._unsubscribeAsync) {
-      try {
-        this._unsubscribeAsync()
-      } catch {
-        /* ignore */
-      }
-      this._unsubscribeAsync = null
-    }
-
-    if (this._unsubscribeStream) {
-      try {
-        this._unsubscribeStream()
-      } catch {
-        /* ignore */
-      }
-      this._unsubscribeStream = null
-    }
-
-    // 1. Interrupt and exit GDB
-    if (this.miClient) {
-      try {
-        await Promise.race([
-          this.miClient.command('-gdb-exit', [], { timeoutMs: 2000 }),
-          new Promise((r) => setTimeout(r, 2000)),
-        ])
-      } catch {
-        /* ignore */
-      }
-      try {
-        await this.miClient.stop()
-      } catch {
-        /* ignore */
-      }
-      this.miClient = null
-    }
-
-    // 2. Stop OpenOCD
-    if (this.openocdProcess) {
-      try {
-        await this.openocdProcess.stop()
-      } catch {
-        /* ignore */
-      }
-      this.openocdProcess = null
-    }
-
-    this.nativeState = 'idle'
+    return stopGdbSession(this)
   }
 
   /**

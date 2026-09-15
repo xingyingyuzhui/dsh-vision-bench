@@ -1,4 +1,5 @@
-import { formatErrorMessage, renderModalDialog } from '../../../bench-shared.mjs'
+import { formatErrorMessage } from '../common/ui-format.mjs'
+import { renderModalDialog } from '../components/modal-dialog.mjs'
 
 /** All-connections management view. */
 export function renderConnectionOverview(el, t, ctx) {

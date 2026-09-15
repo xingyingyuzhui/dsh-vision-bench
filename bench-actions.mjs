@@ -1,7 +1,7 @@
-import { listWorkspaceDir } from './bench-fs.mjs'
-
-export { keilScan, keilTargets, keilMap, keilBuild } from './bench-keil.mjs'
-export { FLASH_INTERFACES, FLASH_TARGETS, openocdDownload } from './bench-flash.mjs'
+// Compatibility facade — prefer src application modules.
+export { keilScan, keilTargets, keilMap } from './src/application/keil/project-service.mjs'
+export { keilBuild } from './src/application/keil/build-service.mjs'
+export { FLASH_INTERFACES, FLASH_TARGETS, openocdDownload } from './src/application/flash/flash-service.mjs'
 export {
   ERROR_CODES,
   buildEvidenceRefs,
@@ -18,7 +18,7 @@ export {
   requestFocus,
   resolvePendingWrite,
   takePendingWrite,
-} from './bench-modbus.mjs'
-export { _internal } from './bench-modbus.mjs'
-
+  _internal,
+} from './src/application/modbus/index.mjs'
+import { listWorkspaceDir } from './src/infrastructure/files/project-fs.mjs'
 export const listDir = (cwd, path) => listWorkspaceDir(cwd, path)

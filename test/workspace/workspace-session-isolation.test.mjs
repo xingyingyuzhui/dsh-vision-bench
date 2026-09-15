@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
 import { _internal } from '../../host.js'
-import { createVisionRpcRouter } from '../../src/interfaces/rpc/vision-rpc-router.mjs'
+import { createRouter } from '../helpers/rpc-factory.mjs'
 
 test('workspace/get isolates private sessions and strips sessionConfigs', async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'dsh-ws-iso-'))
@@ -54,7 +54,7 @@ test('workspace/get isolates private sessions and strips sessionConfigs', async 
     },
   })
 
-  const router = createVisionRpcRouter({ getHome: () => home })
+  const router = createRouter(home)
 
   const resA = await router.dispatch('workspace/get', { cwd, sessionId: 'session-A' })
   assert.equal(resA.ok, true)
@@ -119,7 +119,7 @@ test('workspace/save rejects forbidden config keys and preserves cross-session s
     },
   })
 
-  const router = createVisionRpcRouter({ getHome: () => home })
+  const router = createRouter(home)
 
   // 1. Rejection of sessionConfigs bypass
   const resRejectConfigs = await router.dispatch('workspace/save', {

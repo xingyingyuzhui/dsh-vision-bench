@@ -84,11 +84,12 @@ dsh plugin --profile web remove dsh-vision-bench
 
 ## 开发
 
-改 `bench-*.mjs` / `host.js`，然后在**插件源码目录**执行：
+实现优先改 `src/{domain,application,infrastructure,interfaces,ui}`；根目录 `bench-*.mjs` 仅为兼容 re-export。架构决策见 `docs/architecture/`（含 ADR-024）。然后在**插件源码目录**执行：
 
 ```sh
 npm install
 npm test
+npm run quality
 npm run build
 ```
 

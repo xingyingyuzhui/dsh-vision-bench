@@ -2,7 +2,8 @@
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join } from 'node:path'
-import { loadBindings as defaultLoadBindings, loadWorkspace as defaultLoadWorkspace } from '../../../bench-store.mjs'
+import { loadBindings as defaultLoadBindings } from '../../infrastructure/store/bindings-store.mjs'
+import { loadWorkspace as defaultLoadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
 import { createDebugLaunchSpec } from '../../domain/debug/debug-launch-spec.mjs'
 import { DEBUG_ERRORS, DebugError } from '../../domain/debug/errors.mjs'
 import {

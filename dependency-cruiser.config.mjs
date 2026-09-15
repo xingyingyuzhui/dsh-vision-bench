@@ -68,9 +68,30 @@ export default {
     },
     {
       name: 'ui-no-bench-facades',
-      severity: 'warn',
-      comment: 'ADR-024: Client UI should import src/, not bench-* facades. Promote to error after retirement.',
+      severity: 'error',
+      comment: 'ADR-024: Client UI must import src/, not bench-* facades.',
       from: { path: '(^|/)src/ui/' },
+      to: { path: '(^|/)bench-' },
+    },
+    {
+      name: 'application-no-bench-facades',
+      severity: 'error',
+      comment: 'ADR-024: application layer must import src/, not bench-* facades.',
+      from: { path: '(^|/)src/application/' },
+      to: { path: '(^|/)bench-' },
+    },
+    {
+      name: 'infrastructure-no-bench-facades',
+      severity: 'error',
+      comment: 'ADR-024: infrastructure layer must import src/, not bench-* facades.',
+      from: { path: '(^|/)src/infrastructure/' },
+      to: { path: '(^|/)bench-' },
+    },
+    {
+      name: 'interfaces-no-bench-facades',
+      severity: 'error',
+      comment: 'ADR-024: interfaces layer must import src/, not bench-* facades.',
+      from: { path: '(^|/)src/interfaces/' },
       to: { path: '(^|/)bench-' },
     },
     {

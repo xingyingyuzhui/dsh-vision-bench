@@ -1,4 +1,4 @@
-import { clearFramesLog } from '../../../bench-shared.mjs'
+import { clearFramesLog } from '../common/frame-cache.mjs'
 import { hmiGenId } from './hmi-ids.mjs'
 
 /** Connection and device lifecycle actions for the HMI page. */

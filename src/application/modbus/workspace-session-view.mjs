@@ -8,8 +8,8 @@
  *
  *   ensureWorkspaceClaimed → modbusForSession → (operate on flat view)
  */
-import { normalizeModbus } from '../../../bench-devices.mjs'
-import { applyWorkspacePatch, loadWorkspace, saveWorkspace, workspaceRepository } from '../../../bench-store.mjs'
+import { normalizeModbus } from './modbus-migration.mjs'
+import { applyWorkspacePatch, loadWorkspace, saveWorkspace, workspaceRepository } from '../../infrastructure/store/workspace-store.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { isScopePartitioned, normalizeScopeSessionId, omitSessionConfigs } from '../../domain/modbus/config-scope.mjs'
 import { claimLegacyPrivate, foldModbusFromSession, projectModbusForSession } from './config-scope-service.mjs'

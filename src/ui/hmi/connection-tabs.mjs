@@ -1,4 +1,4 @@
-import { connLabel } from '../../../bench-devices.mjs'
+import { connLabel } from '../../domain/modbus/connection-model.mjs'
 import { connTabLabel } from './connection-label.mjs'
 
 /** Connection tab bar (all / per-conn / overflow / add). */

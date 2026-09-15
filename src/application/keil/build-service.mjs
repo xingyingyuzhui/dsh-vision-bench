@@ -1,16 +1,11 @@
 // @ts-check
 import { join } from 'node:path'
-import { pickArtifact } from '../../../bench-fs.mjs'
-import { aborted, originOf, signalOf } from '../../../bench-journal.mjs'
-import { requireKeilProject, requireWorkspaceCwd } from '../../../bench-paths.mjs'
-import {
-  finishTask,
-  loadBindings,
-  loadWorkspace,
-  openExclusiveTask,
-  pruneBuildLogs,
-  storeDir,
-} from '../../../bench-store.mjs'
+import { pickArtifact } from '../../infrastructure/files/project-fs.mjs'
+import { aborted, originOf, signalOf } from '../../domain/modbus/journal-model.mjs'
+import { requireKeilProject, requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
+import { finishTask, openExclusiveTask, pruneBuildLogs } from '../../infrastructure/store/journal-store.mjs'
+import { loadBindings, storeDir } from '../../infrastructure/store/bindings-store.mjs'
+import { loadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
 import { runUv4Build } from '../../infrastructure/keil/uv4-build-runner.mjs'
 
 /**

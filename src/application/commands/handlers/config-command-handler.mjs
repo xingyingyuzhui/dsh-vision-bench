@@ -1,5 +1,5 @@
 // @ts-check
-import { pointsOp } from '../../../../bench-modbus-forward.mjs'
+import { pointsOp } from '../../modbus/index.mjs'
 import { mutateConfig } from '../../config/config-mutation-service.mjs'
 
 /**

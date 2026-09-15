@@ -1,4 +1,4 @@
-import { setFocusState } from '../../../../bench-shared.mjs'
+import { setFocusState } from '../../common/focus-store.mjs'
 
 export function focusEventKey(focus) {
   const r = focus?.request

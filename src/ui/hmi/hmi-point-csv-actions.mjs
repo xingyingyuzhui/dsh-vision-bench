@@ -1,4 +1,4 @@
-import { csvToPoints, pointsToCsv } from '../../../bench-points.mjs'
+import { csvToPoints, pointsToCsv } from '../../domain/modbus/point-csv.mjs'
 import { hmiGenId } from './hmi-ids.mjs'
 
 /**

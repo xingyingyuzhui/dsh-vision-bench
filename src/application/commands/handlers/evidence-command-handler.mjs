@@ -1,6 +1,6 @@
 // @ts-check
-import { buildEvidenceRefs, listFrames, requestFocus } from '../../../../bench-modbus-forward.mjs'
-import { appendEvidence } from '../../../../bench-store.mjs'
+import { buildEvidenceRefs, listFrames, requestFocus } from '../../modbus/index.mjs'
+import { appendEvidence } from '../../../infrastructure/store/journal-store.mjs'
 import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
 
 /**

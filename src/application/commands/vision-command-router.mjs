@@ -1,6 +1,6 @@
 // @ts-check
-import { requireWorkspaceCwd } from '../../../bench-paths.mjs'
-import { touchServiceSession } from '../../../bench-store.mjs'
+import { requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
+import { touchServiceSession } from '../../infrastructure/store/journal-store.mjs'
 import { handleConfigCommand } from './handlers/config-command-handler.mjs'
 import { handleEvidenceCommand } from './handlers/evidence-command-handler.mjs'
 import { handleLiveCommand } from './handlers/live-command-handler.mjs'

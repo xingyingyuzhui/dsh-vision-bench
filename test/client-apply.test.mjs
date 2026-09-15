@@ -5,7 +5,7 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { installDomStub } from './dom-stub.mjs'
 import { alpha3PageProps } from './fixtures/harness-alpha3-props.mjs'
-import { createMockVisionConnection } from './fixtures/mock-vision-connection.mjs'
+import { mockConnection } from './helpers/rpc-factory.mjs'
 
 // Execute the GENERATED bundle exactly like the DSH web loader would
 // (factory(require) -> apply(ctx)) and mount every registered page with a
@@ -86,7 +86,7 @@ function makeCtx(pages) {
   return {
     pages,
     slots,
-    connection: createMockVisionConnection(async () => ({ ok: true })),
+    connection: mockConnection(async () => ({ ok: true })).connection,
     get(key) {
       return key === 'slots' ? slots : null
     },

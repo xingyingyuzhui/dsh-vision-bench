@@ -1,4 +1,4 @@
-import { COMM, COND_ACTIVE } from '../../../../bench-alarm.mjs'
+import { COMM, COND_ACTIVE } from '../../../domain/modbus/alarm-model.mjs'
 import {
   buildAlarmTimelineNodes,
   formatAlarmAck,

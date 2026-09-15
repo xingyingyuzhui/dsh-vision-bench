@@ -1,4 +1,4 @@
-import { functionCodeOf } from '../../../bench-points.mjs'
+import { functionCodeOf } from '../../domain/modbus/point-model.mjs'
 
 export const POLL_INTERVALS = [500, 1000, 2000, 5000]
 

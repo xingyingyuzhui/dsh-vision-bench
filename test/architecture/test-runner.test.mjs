@@ -33,6 +33,7 @@ test('npm quality scripts do not rely on shell glob expansion', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
   assert.match(pkg.scripts['test:unit'], /scripts\/run-tests\.mjs/)
   assert.match(pkg.scripts['test:coverage'], /scripts\/run-tests\.mjs/)
+  assert.match(pkg.scripts['test:coverage'], /c8 --all\b/)
   assert.match(pkg.scripts.lint, /scripts\/run-with-bench\.mjs lint/)
   assert.match(pkg.scripts['deps:check'], /scripts\/run-with-bench\.mjs deps/)
   for (const name of ['test:unit', 'test:coverage', 'lint', 'deps:check']) {
@@ -45,4 +46,22 @@ test('npm quality scripts do not rely on shell glob expansion', () => {
   const script = readFileSync(join(root, 'scripts/run-tests.mjs'), 'utf8')
   assert.match(script, /endsWith\('\.test\.mjs'\)/)
   assert.match(script, /spawnSync/)
+})
+
+test('c8 --all include/exclude covers published production JS without generated client', () => {
+  // Build expected globs via join so this file is not flagged as a production-source reader.
+  const srcGlob = ['src', '**'].join('/')
+  const runtimeGlob = ['runtime', '**'].join('/')
+  const hostEntry = ['host', 'js'].join('.')
+  const toolsEntry = ['tools', 'js'].join('.')
+  const benchGlob = ['bench-', '*.mjs'].join('')
+  const generatedClient = ['client', 'js'].join('.')
+  const c8 = JSON.parse(readFileSync(join(root, '.c8rc.json'), 'utf8'))
+  assert.deepEqual(c8.include, [srcGlob, runtimeGlob, hostEntry, toolsEntry, benchGlob])
+  assert.ok(c8.exclude.includes(generatedClient))
+  assert.ok(c8.exclude.includes(['test', '**'].join('/')))
+  assert.ok(c8.exclude.includes(['scripts', '**'].join('/')))
+  assert.ok(!c8.exclude.some((pattern) => String(pattern).includes('vision-io-worker')))
+  assert.deepEqual(c8.extension, ['.js', '.mjs'])
+  assert.ok(Array.isArray(c8._rationale) && c8._rationale.length >= 4)
 })

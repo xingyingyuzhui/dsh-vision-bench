@@ -1,5 +1,6 @@
 // @ts-check
-import { normalizeModbus } from '../../../../bench-devices.mjs'
+import { normalizeModbus } from '../../modbus/modbus-migration.mjs'
+import { componentLatestValues } from '../../modbus/trend-model.mjs'
 import { mutateConfig } from '../../config/config-mutation-service.mjs'
 import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
 
@@ -55,12 +56,12 @@ export async function handleVisualizationCommand(home, args, room, origin, opts)
   if (op === 'get') {
     const comp = (viz.components || []).find((/** @type {any} */ c) => c.id === id)
     if (!comp) return { ok: false, error: `组件不存在: ${id}`, errorCode: 'VIZ_NOT_FOUND' }
-    const { componentLatestValues } = await import('../../../../bench-trend.mjs')
+    const values = componentLatestValues(pack.values, pack.points, comp.pointIds)
     return {
       ok: true,
       action,
       component: comp,
-      values: componentLatestValues(pack.values, pack.points, comp.pointIds),
+      values,
       degraded: degradedFor(comp),
       configVersion: cv,
     }

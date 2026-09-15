@@ -1,15 +1,8 @@
-import { normalizeModbus } from '../../../bench-devices.mjs'
-import { canUseModbus, ioRuntimeStatus } from '../../../bench-io-capability.mjs'
-import {
-  buildAgentRef,
-  dispatchAgentRef,
-  emptyWorkspace,
-  evidenceFromRef,
-  hasHarnessInput,
-  pickJournal,
-  postEvidence,
-  setTempWatch,
-} from '../../../bench-shared.mjs'
+import { normalizeModbus } from '../../application/modbus/modbus-migration.mjs'
+import { canUseModbus, ioRuntimeStatus } from '../../domain/modbus/io-capability.mjs'
+import { buildAgentRef, dispatchAgentRef, evidenceFromRef, hasHarnessInput, postEvidence } from '../common/agent-reference.mjs'
+import { emptyWorkspace, pickJournal } from '../common/ui-format.mjs'
+import { setTempWatch } from '../common/focus-store.mjs'
 import { getActiveScope } from '../common/session-scope.mjs'
 import { restoreUserLocation } from '../workspace/vision-navigation-store.mjs'
 import { requestOpenView } from '../workspace/vision-view-request.mjs'

@@ -1,5 +1,6 @@
-import { functionCodeOf, isWritableFunction } from '../../../bench-points.mjs'
-import { focusHighlightClass, shouldHighlightFocus } from '../../../bench-shared.mjs'
+import { functionCodeOf } from '../../domain/modbus/point-model.mjs'
+import { isWritableFunction } from '../../domain/modbus/point-math.mjs'
+import { focusHighlightClass, shouldHighlightFocus } from '../common/focus-store.mjs'
 import { renderCustomSelect } from '../components/custom-select.mjs'
 import { AREA_BY_FN_EDIT, fnOptionLabel } from './hmi-ids.mjs'
 import { renderInlineWriteCell } from './inline-write.mjs'

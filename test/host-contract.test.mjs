@@ -1,92 +1,20 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Readable } from 'node:stream'
 import test from 'node:test'
 import { loadWorkspace, openTask, saveWorkspace } from '../bench-store.mjs'
 import { _internal, apply, inject, name } from '../host.js'
 import { clearFlashApprovals, defaultFlashApprovals } from '../src/application/flash/flash-approval-service.mjs'
 import { VISION_RPC_CHANNEL } from '../src/shared/vision-rpc-contract.mjs'
+import {
+  CAPABILITY_HEADERS,
+  capabilityHeaders,
+  createHostContext,
+  fakeRequest,
+  fakeResponse,
+  mockRpcHost,
+} from './helpers/rpc-factory.mjs'
+import { createBench } from './helpers/workspace-factory.mjs'
 
-function createMockConnection() {
-  /** @type {((endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>) | null} */
-  let handler = null
-  let disposed = false
-  return {
-    rpc: {
-      handle(channel, fn) {
-        assert.equal(channel, VISION_RPC_CHANNEL)
-        handler = fn
-        return () => {
-          disposed = true
-          handler = null
-          return Promise.resolve()
-        }
-      },
-      async call(_channel, endpoint, payload, signal) {
-        if (!handler) throw new Error('rpc handler missing')
-        return handler(endpoint, payload, signal)
-      },
-    },
-    get disposed() {
-      return disposed
-    },
-    get hasHandler() {
-      return handler != null
-    },
-  }
-}
-
-function createHostCtx(connection) {
-  const routes = []
-  const ctx = {
-    connection,
-    webServer: {
-      register(entry) {
-        routes.push(entry)
-        return () => {}
-      },
-    },
-    tools: {
-      register() {
-        return () => {}
-      },
-    },
-    effect(factory) {
-      ctx._stop = factory()
-    },
-  }
-  return { ctx, routes }
-}
-
-function req(method, headers, body, addr = '127.0.0.1') {
-  const stream = Readable.from([body ? Buffer.from(body) : Buffer.alloc(0)])
-  stream.method = method
-  stream.headers = headers || {}
-  stream.socket = { remoteAddress: addr }
-  return stream
-}
-
-function resBox() {
-  const box = { status: 0, body: '' }
-  box.res = {
-    writeHead(code) {
-      box.status = code
-    },
-    end(text) {
-      box.body = text
-    },
-  }
-  return box
-}
-
-const csrf = { origin: 'http://127.0.0.1:3080', 'content-type': 'application/json' }
-
-function withCapability(headers = csrf) {
-  const cap = _internal.issueBridgeCapability()
-  return { ...headers, 'x-dsh-vision-capability': cap }
-}
 
 test('host named exports', async () => {
   assert.equal(name, 'dsh-vision-bench')
@@ -100,10 +28,10 @@ test('host named exports', async () => {
 })
 
 test('host apply does not inject agentPresets or bind tools', async () => {
-  const connection = createMockConnection()
+  const connection = mockRpcHost()
   const injected = []
   let toolRegs = 0
-  const { ctx } = createHostCtx(connection)
+  const { ctx } = createHostContext(connection)
   ctx.tools = {
     register() {
       toolRegs += 1
@@ -120,33 +48,28 @@ test('host apply does not inject agentPresets or bind tools', async () => {
   if (ctx._stop) ctx._stop()
 })
 
-test('state returns idle ioRuntime without starting a Worker', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'dvb-host-io-'))
-  const connection = createMockConnection()
-  const { ctx } = createHostCtx(connection)
-  let stop
+test('state returns idle ioRuntime without starting a Worker', async (t) => {
+  const bench = await createBench(t, { prefix: 'dvb-host-io-' })
+  const connection = mockRpcHost()
+  const { ctx, stop } = createHostContext(connection)
   apply(ctx)
-  stop = ctx._stop
-  _internal.setDshHome(home)
-  try {
-    const result = await connection.rpc.call(VISION_RPC_CHANNEL, 'state', {}, AbortSignal.timeout(5000))
-    assert.equal(result.ok, true)
-    const snap = result.value
-    assert.equal(snap.ok, true)
-    assert.ok(snap.ioRuntime)
-    assert.equal(snap.ioRuntime.state, 'idle')
-    assert.equal(snap.ioRuntime.pid, 0)
-    assert.equal(snap.health.python.bound, false)
-    assert.equal(snap.ioRuntime.capabilities.modbusTcp, 'unknown')
-  } finally {
-    if (stop) stop()
-    await rm(home, { recursive: true, force: true })
-  }
+  await bench.useAsDshHome()
+  // 断言失败也要拆掉宿主，否则 io worker 之类的资源会留在进程里。
+  t.after(stop)
+  const result = await connection.rpc.call(VISION_RPC_CHANNEL, 'state', {}, AbortSignal.timeout(5000))
+  assert.equal(result.ok, true)
+  const snap = result.value
+  assert.equal(snap.ok, true)
+  assert.ok(snap.ioRuntime)
+  assert.equal(snap.ioRuntime.state, 'idle')
+  assert.equal(snap.ioRuntime.pid, 0)
+  assert.equal(snap.health.python.bound, false)
+  assert.equal(snap.ioRuntime.capabilities.modbusTcp, 'unknown')
 })
 
 test('apply registers only agent command bridge and disposes RPC', async () => {
   const disposed = []
-  const connection = createMockConnection()
+  const connection = mockRpcHost()
   const ctx = {
     connection,
     webServer: {
@@ -258,8 +181,8 @@ test('host dispose waits until the late RPC disposer finishes', async () => {
 })
 
 test('plugin dispose 清空刷写审批仓库', async () => {
-  const connection = createMockConnection()
-  const ctx = createHostCtx(connection).ctx
+  const connection = mockRpcHost()
+  const ctx = createHostContext(connection).ctx
   clearFlashApprovals()
   apply(ctx)
   defaultFlashApprovals.create({
@@ -278,83 +201,78 @@ test('plugin dispose 清空刷写审批仓库', async () => {
 })
 
 test('command bridge rejects GET, missing capability, forged header, and foreign origin', async () => {
-  const connection = createMockConnection()
-  const { ctx, routes } = createHostCtx(connection)
+  const connection = mockRpcHost()
+  const { ctx, routes } = createHostContext(connection)
   apply(ctx)
   const handler = routes[0].handler
 
-  let box = resBox()
-  handler(req('GET', withCapability()), box.res)
+  let box = fakeResponse()
+  handler(fakeRequest('GET', capabilityHeaders()), box.res)
   assert.equal(box.status, 405)
 
-  box = resBox()
-  handler(req('POST', csrf), box.res)
+  box = fakeResponse()
+  handler(fakeRequest('POST', CAPABILITY_HEADERS), box.res)
   assert.equal(box.status, 403)
   assert.match(box.body, /missing capability/)
 
-  box = resBox()
-  handler(req('POST', { ...withCapability(), 'x-dsh-vision-capability': 'wrong-token' }), box.res)
+  box = fakeResponse()
+  handler(fakeRequest('POST', { ...capabilityHeaders(), 'x-dsh-vision-capability': 'wrong-token' }), box.res)
   assert.equal(box.status, 403)
   assert.match(box.body, /invalid capability/)
 
-  box = resBox()
-  handler(req('POST', { ...withCapability(), origin: 'https://evil.example' }), box.res)
+  box = fakeResponse()
+  handler(fakeRequest('POST', { ...capabilityHeaders(), origin: 'https://evil.example' }), box.res)
   assert.equal(box.status, 403)
 
-  box = resBox()
-  handler(req('POST', withCapability(), '', '8.8.8.8'), box.res)
+  box = fakeResponse()
+  handler(fakeRequest('POST', capabilityHeaders(), '', '8.8.8.8'), box.res)
   assert.equal(box.status, 403)
   assert.match(box.body, /loopback only/)
 })
 
-test('HTTP system.ping does not bind or mutate the workspace session', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'dvb-host-ping-'))
-  const cwd = join(home, 'board')
-  await mkdir(cwd)
-  saveWorkspace(home, cwd, {})
-  const connection = createMockConnection()
-  const { ctx, routes } = createHostCtx(connection)
-  let stop = () => {}
+test('HTTP system.ping does not bind or mutate the workspace session', async (t) => {
+  const bench = await createBench(t, { prefix: 'dvb-host-ping-' })
+  const { home, cwd } = bench
+  bench.save({})
+  const connection = mockRpcHost()
+  const { ctx, routes, stop } = createHostContext(connection)
   apply(ctx)
-  stop = ctx._stop
-  _internal.setDshHome(home)
-  try {
-    const command = routes.find((r) => r.path === '/dsh-vision-bench/command').handler
-    const box = resBox()
-    await new Promise((resolve) => {
-      box.res.end = (text) => {
-        box.body = text
-        resolve()
-      }
-      command(
-        req(
-          'POST',
-          withCapability(),
-          JSON.stringify({
-            action: 'system.ping',
-            payload: { action: 'system.ping' },
-            cwd,
-            sessionId: 'must-not-bind',
-            source: 'system',
-          }),
-        ),
-        box.res,
-      )
-    })
-    assert.equal(JSON.parse(box.body).ok, true)
-    assert.equal(loadWorkspace(home, cwd).session.boundId, '')
-  } finally {
-    stop()
-    await rm(home, { recursive: true, force: true })
-  }
+  await bench.useAsDshHome()
+  t.after(stop)
+  const command = routes.find((r) => r.path === '/dsh-vision-bench/command').handler
+  const box = fakeResponse()
+  await new Promise((resolve) => {
+    box.res.end = (text) => {
+      box.body = text
+      resolve()
+    }
+    command(
+      fakeRequest(
+        'POST',
+        capabilityHeaders(),
+        JSON.stringify({
+          action: 'system.ping',
+          payload: { action: 'system.ping' },
+          cwd,
+          sessionId: 'must-not-bind',
+          source: 'system',
+        }),
+      ),
+      box.res,
+    )
+  })
+  assert.equal(JSON.parse(box.body).ok, true)
+  assert.equal(loadWorkspace(home, cwd).session.boundId, '')
 })
 
-test('state and bindings round-trip against an isolated home', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'dvb-host-'))
-  const connection = createMockConnection()
-  const { ctx } = createHostCtx(connection)
+test('state and bindings round-trip against an isolated home', async (t) => {
+  const bench = await createBench(t, { prefix: 'dvb-host-' })
+  const { home } = bench
+  const connection = mockRpcHost()
+  const { ctx, stop } = createHostContext(connection)
   apply(ctx)
-  _internal.setDshHome(home)
+  await bench.useAsDshHome()
+  t.after(stop)
 
   const empty = (await connection.rpc.call(VISION_RPC_CHANNEL, 'state', {}, AbortSignal.timeout(5000))).value
   assert.equal(empty.ok, true)
@@ -372,57 +290,51 @@ test('state and bindings round-trip against an isolated home', async () => {
   ).value
   assert.equal(saved.ok, true)
   assert.equal(saved.bindings.python, abs)
-
-  await rm(home, { recursive: true, force: true })
 })
 
-test('state snapshot includes journal and workspace save cannot wipe tasks', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'dvb-host-j-'))
-  const cwd = join(home, 'board')
-  await mkdir(cwd)
-  const connection = createMockConnection()
-  const { ctx } = createHostCtx(connection)
+test('state snapshot includes journal and workspace save cannot wipe tasks', async (t) => {
+  const bench = await createBench(t, { prefix: 'dvb-host-j-' })
+  const { home, cwd } = bench
+  const connection = mockRpcHost()
+  const { ctx, stop } = createHostContext(connection)
   apply(ctx)
-  _internal.setDshHome(home)
-  try {
-    const project = join(cwd, 'app.uvprojx')
-    saveWorkspace(home, cwd, { keil: { project, target: 'Debug' } })
-    await openTask(home, cwd, { type: 'build', source: 'agent', sessionId: 'sess-3', summary: '编译 Debug' })
+  await bench.useAsDshHome()
+  t.after(stop)
+  const project = bench.at('app.uvprojx')
+  saveWorkspace(home, cwd, { keil: { project, target: 'Debug' } })
+  await openTask(home, cwd, { type: 'build', source: 'agent', sessionId: 'sess-3', summary: '编译 Debug' })
 
-    const snap = (await connection.rpc.call(VISION_RPC_CHANNEL, 'state', { cwd }, AbortSignal.timeout(5000))).value
-    assert.equal(snap.ok, true)
-    assert.equal(snap.journal.running.length, 1)
-    assert.equal(snap.journal.running[0].source, 'agent')
-    assert.equal(snap.workspace.tasks[0].status, 'running')
+  const snap = (await connection.rpc.call(VISION_RPC_CHANNEL, 'state', { cwd }, AbortSignal.timeout(5000))).value
+  assert.equal(snap.ok, true)
+  assert.equal(snap.journal.running.length, 1)
+  assert.equal(snap.journal.running[0].source, 'agent')
+  assert.equal(snap.workspace.tasks[0].status, 'running')
 
-    const saved = (
-      await connection.rpc.call(
-        VISION_RPC_CHANNEL,
-        'workspace/save',
-        {
-          cwd,
-          keil: { project, target: 'Debug', artifact: 'hex' },
-          tasks: [],
-          timeline: [],
-        },
-        AbortSignal.timeout(5000),
-      )
-    ).value
-    assert.equal(saved.ok, true)
-    assert.equal(saved.workspace.tasks[0].status, 'running')
-    assert.equal(saved.journal.running.length, 1)
+  const saved = (
+    await connection.rpc.call(
+      VISION_RPC_CHANNEL,
+      'workspace/save',
+      {
+        cwd,
+        keil: { project, target: 'Debug', artifact: 'hex' },
+        tasks: [],
+        timeline: [],
+      },
+      AbortSignal.timeout(5000),
+    )
+  ).value
+  assert.equal(saved.ok, true)
+  assert.equal(saved.workspace.tasks[0].status, 'running')
+  assert.equal(saved.journal.running.length, 1)
 
-    const rejected = (
-      await connection.rpc.call(
-        VISION_RPC_CHANNEL,
-        'workspace/save',
-        { cwd, modbus: { points: [], version: 3 } },
-        AbortSignal.timeout(5000),
-      )
-    ).value
-    assert.equal(rejected.ok, false)
-    assert.equal(rejected.errorCode, 'CONFIG_COMMAND_REQUIRED')
-  } finally {
-    await rm(home, { recursive: true, force: true })
-  }
+  const rejected = (
+    await connection.rpc.call(
+      VISION_RPC_CHANNEL,
+      'workspace/save',
+      { cwd, modbus: { points: [], version: 3 } },
+      AbortSignal.timeout(5000),
+    )
+  ).value
+  assert.equal(rejected.ok, false)
+  assert.equal(rejected.errorCode, 'CONFIG_COMMAND_REQUIRED')
 })

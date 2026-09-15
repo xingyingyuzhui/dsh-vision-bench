@@ -1,5 +1,5 @@
 // @ts-check
-import { runExecFile } from '../../../bench-run.mjs'
+import { runExecFile } from './run-command.mjs'
 import { FLASH_ERROR_CODES } from '../../domain/flash/errors.mjs'
 import { resolveOpenOcdProfile } from '../../domain/flash/openocd-profile.mjs'
 

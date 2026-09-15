@@ -1,8 +1,8 @@
 // TaskP2/0.20.0: 单个可视化卡片组件 VizCard
 // 负责卡片容器渲染、标题、拖动抓手、Agent 引用复制、两阶段删除确认、降级提示与 4 类渲染器分发。
 
-import { componentLatestValues } from '../../../../../bench-trend.mjs'
-import { visualizationComponentStatus } from '../../../../../bench-visualization-model.mjs'
+import { componentLatestValues } from '../../../../application/modbus/trend-model.mjs'
+import { visualizationComponentStatus } from '../../../../domain/modbus/visualization-model.mjs'
 import { getEcharts } from '../../../vendor/echarts-runtime.mjs'
 import { renderBarRenderer } from '../renderers/bar-renderer.mjs'
 import { renderLineRenderer } from '../renderers/line-renderer.mjs'

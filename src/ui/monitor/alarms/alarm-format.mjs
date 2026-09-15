@@ -1,4 +1,4 @@
-import { COMM, COND_ACTIVE, PROCESS } from '../../../../bench-alarm.mjs'
+import { COMM, COND_ACTIVE, PROCESS } from '../../../domain/modbus/alarm-model.mjs'
 import { formatFullDateTime, formatTimeOnly, pad2 } from '../journal/journal-format.mjs'
 
 export { formatFullDateTime, formatTimeOnly, pad2 }

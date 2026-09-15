@@ -17,7 +17,7 @@
  * Layered store ⇄ flat session view:
  *   claimLegacyPrivate → projectModbusForSession → (applyOperation) → foldModbusFromSession
  */
-import { normalizeModbus } from '../../../bench-devices.mjs'
+import { normalizeModbus } from './modbus-migration.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import {
   SHARE_CATEGORIES,

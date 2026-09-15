@@ -1,21 +1,18 @@
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
-import {
-  normalizeConn,
-  normalizeFramesByConnection,
-  normalizeModbus,
-  validateConnections,
-  validateDevices,
-} from '../../../bench-devices.mjs'
+import { normalizeConn, validateConnections } from '../../domain/modbus/connection-model.mjs'
+import { normalizeFramesByConnection } from '../../domain/modbus/frames-buffer.mjs'
+import { normalizeModbus } from '../../application/modbus/modbus-migration.mjs'
+import { validateDevices } from '../../domain/modbus/device-model.mjs'
 import {
   normalizeTasks,
   normalizeTimeline,
   normalizeTimelineEvent,
   prepend,
   trimTimeline,
-} from '../../../bench-journal.mjs'
-import { emptyLog, mergeLog, normalizeEvent } from '../../../bench-prompt.mjs'
+} from '../../domain/modbus/journal-model.mjs'
+import { emptyLog, mergeLog, normalizeEvent } from '../../domain/prompt/prompt-log.mjs'
 import { runExclusiveSync } from '../persistence/workspace-lock.mjs'
 import { createWorkspaceRepository } from '../persistence/workspace-repository.mjs'
 import { storeDir } from './bindings-store.mjs'

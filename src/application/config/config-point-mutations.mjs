@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizePointV3 } from '../../../bench-devices.mjs'
+import { normalizePointV3 } from '../../domain/modbus/point-model.mjs'
 import { explicitId } from '../../domain/config/config-operation.mjs'
 import { applyPointPatch } from '../../domain/modbus/point-patch.mjs'
 import { resolveHierarchy } from '../../domain/modbus/target-resolver.mjs'

@@ -1,0 +1,25 @@
+{
+  "_rationale": [
+    "P1-4 c8 --all include/exclude decisions (JSON has no comments; keep rationale here).",
+    "EXCLUDE client.js: generated 1.6MB single-line bundle — including it would zero coverage.",
+    "INCLUDE src/**, runtime/**, host.js, tools.js, bench-*.mjs: published production code; facades still hold real logic until P3; acceptance requires published .mjs/.js in the report except generated artifacts.",
+    "INCLUDE runtime/vision-io-worker.mjs even at 0%: unloaded modules must appear as 0%, not vanish from the denominator — do not exclude it.",
+    "EXCLUDE test/**, node_modules/**, coverage/**, scripts/** (dev gates).",
+    "EXTENSION .js/.mjs only: drop .ts/.tsx/.jsx/.d.ts and other non-JS published assets from the denominator."
+  ],
+  "include": [
+    "src/**",
+    "runtime/**",
+    "host.js",
+    "tools.js",
+    "bench-*.mjs"
+  ],
+  "exclude": [
+    "client.js",
+    "test/**",
+    "node_modules/**",
+    "coverage/**",
+    "scripts/**"
+  ],
+  "extension": [".js", ".mjs"]
+}

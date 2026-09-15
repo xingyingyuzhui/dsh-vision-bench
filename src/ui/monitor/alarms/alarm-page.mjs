@@ -1,16 +1,9 @@
-import { COMM, COND_ACTIVE, PROCESS, acknowledgeAlarm, groupAlarms } from '../../../../bench-alarm.mjs'
-import { normalizeModbus } from '../../../../bench-devices.mjs'
-import { clockOf } from '../../../../bench-points.mjs'
-import {
-  buildAgentRef,
-  buildInputBridge,
-  dispatchAgentRef,
-  evidenceFromRef,
-  postEvidence,
-  readInputDraft,
-  subscribeState,
-} from '../../../../bench-shared.mjs'
-import { vendorUseVirtualizer } from '../../../../bench-vendor.mjs'
+import { COMM, COND_ACTIVE, PROCESS, acknowledgeAlarm, groupAlarms } from '../../../domain/modbus/alarm-model.mjs'
+import { normalizeModbus } from '../../../application/modbus/modbus-migration.mjs'
+import { clockOf } from '../../../domain/modbus/point-model.mjs'
+import { buildAgentRef, buildInputBridge, dispatchAgentRef, evidenceFromRef, postEvidence, readInputDraft } from '../../common/agent-reference.mjs'
+import { subscribeState } from '../../common/state-subscription.mjs'
+import { vendorUseVirtualizer } from '../../vendor/vendor-bridge.mjs'
 import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
 import { createDataTable } from '../../components/data-table.mjs'
 import { createAlarmDetailCard } from './alarm-detail-card.mjs'

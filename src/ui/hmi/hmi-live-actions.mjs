@@ -1,5 +1,6 @@
-import { encodeValue, normalizeWriteValues } from '../../../bench-points.mjs'
-import { formatErrorMessage, pickJournal, pushFramesLog } from '../../../bench-shared.mjs'
+import { encodeValue, normalizeWriteValues } from '../../domain/modbus/point-model.mjs'
+import { formatErrorMessage, pickJournal } from '../common/ui-format.mjs'
+import { pushFramesLog } from '../common/frame-cache.mjs'
 import { rtuOccupierAmong, tcpOccupierAmong } from './hmi-controller.mjs'
 
 /** Live read/write, connection link, and polling actions. */

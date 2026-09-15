@@ -1,4 +1,4 @@
-import { getPreserveNavPreference } from '../../../../bench-settings.mjs'
+import { getPreserveNavPreference } from '../../settings/navigation-preference.mjs'
 import { usePointColWidths } from './use-point-col-widths.mjs'
 
 const LAST_POINTS_DEV_KEY = 'dsh-vision-bench:last-editing-points-dev'

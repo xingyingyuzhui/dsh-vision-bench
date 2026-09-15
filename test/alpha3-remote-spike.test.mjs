@@ -45,7 +45,7 @@ test('ADR-012 records Connection RPC as the supported alpha.3 browser transport'
 })
 
 test('browser client does not send the retired static Vision header', () => {
-  const runtime = readFileSync(join(root, 'bench-runtime.mjs'), 'utf8')
+  const runtime = readFileSync(join(root, 'src/ui/client/client-entry.mjs'), 'utf8')
   assert.doesNotMatch(runtime, /X-DSH-Vision-Bench/)
   assert.match(runtime, /createVisionRpcPost/)
   const host = readFileSync(join(root, 'host.js'), 'utf8')

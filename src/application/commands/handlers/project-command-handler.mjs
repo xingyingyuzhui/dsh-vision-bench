@@ -1,11 +1,16 @@
 // @ts-check
-import { connLabel, normalizeModbus } from '../../../../bench-devices.mjs'
-import { keilBuild, keilMap, listDir } from '../../../../bench-modbus-forward.mjs'
-import { buildEvidenceRefs } from '../../../../bench-modbus-forward.mjs'
-import { requireKeilProject } from '../../../../bench-paths.mjs'
-import { decodeValue, pointRuntimeStatus } from '../../../../bench-points.mjs'
-import { listConnectionStates } from '../../../../bench-serial-monitor.mjs'
-import { journalView, loadWorkspace, saveWorkspaceAsync } from '../../../../bench-store.mjs'
+import { connLabel } from '../../../domain/modbus/connection-model.mjs'
+import { normalizeModbus } from '../../modbus/modbus-migration.mjs'
+import { listWorkspaceDir as listDir } from '../../../infrastructure/files/project-fs.mjs'
+import { keilMap } from '../../keil/project-service.mjs'
+import { keilBuild } from '../../keil/build-service.mjs'
+import { buildEvidenceRefs } from '../../modbus/index.mjs'
+import { requireKeilProject } from '../../../shared/workspace-paths.mjs'
+import { decodeValue } from '../../../domain/modbus/point-math.mjs'
+import { pointRuntimeStatus } from '../../../domain/modbus/point-model.mjs'
+import { listConnectionStates } from '../../../infrastructure/modbus/serial-monitor.mjs'
+import { journalView } from '../../../infrastructure/store/journal-store.mjs'
+import { loadWorkspace, saveWorkspaceAsync } from '../../../infrastructure/store/workspace-store.mjs'
 
 /**
  * @param {any} src

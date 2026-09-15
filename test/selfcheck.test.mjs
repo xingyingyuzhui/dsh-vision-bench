@@ -297,7 +297,7 @@ test('HTTP Host ping rejects an unrelated server that only returns ok:true', asy
 test('system.ping is side-effect free and self-check uses real availability', async () => {
   const src = readFileSync(join(root, 'src/application/commands/handlers/system-command-handler.mjs'), 'utf8')
   assert.doesNotMatch(src, /serialport|modbus-serial|VisionIoBroker|notifyConnectionRelease|mutateConfig/)
-  const checkSrc = readFileSync(join(root, 'bench-check.mjs'), 'utf8')
+  const checkSrc = readFileSync(join(root, 'src/application/system/self-check.mjs'), 'utf8')
   assert.doesNotMatch(checkSrc, /push\(\s*['"]host-bridge['"]\s*,\s*true/)
   assert.match(checkSrc, /pingVisionHost/)
 

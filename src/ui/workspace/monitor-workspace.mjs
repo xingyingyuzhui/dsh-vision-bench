@@ -1,4 +1,4 @@
-import { getPreserveNavPreference } from '../../../bench-settings.mjs'
+import { getPreserveNavPreference } from '../settings/navigation-preference.mjs'
 import { sessionCwd } from '../common/session-scope.mjs'
 import { createAlarmPage } from '../monitor/alarms/alarm-page.mjs'
 import { createFramesPage } from '../monitor/frames/frames-page.mjs'

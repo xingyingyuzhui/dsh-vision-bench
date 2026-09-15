@@ -1,5 +1,6 @@
+// @ts-check
 export {
   createVisionIoBroker,
   getVisionIoBroker,
   stopVisionIoBroker,
-} from '../../../bench-io-broker.mjs'
+} from './io-broker.mjs'

@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
 import { createMonitorWorkspace } from '../../src/ui/workspace/monitor-workspace.mjs'
-import { clearNavStore, navigate } from '../../src/ui/workspace/vision-navigation-store.mjs'
+import { clearNavStore, getNav, isManualNavLeaseActive, navigate } from '../../src/ui/workspace/vision-navigation-store.mjs'
 import { MONITOR_SECTIONS, VIEW_MONITOR } from '../../src/ui/workspace/vision-route.mjs'
 
 function makeReact() {
@@ -66,9 +63,23 @@ test('Session B first open defaults to visualization and does not inherit Sessio
 })
 
 test('monitor workspace tab click uses manual nav source', () => {
-  const src = readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), '../../src/ui/workspace/monitor-workspace.mjs'),
-    'utf8',
+  clearNavStore()
+  const React = makeReact()
+  const Page = createMonitorWorkspace(
+    React,
+    (key) => key,
+    async () => ({}),
+    {
+      openHmi() {},
+      openFrames() {},
+    },
   )
-  assert.match(src, /source: 'manual'/)
+  const tree = Page({ sessionId: 's1', scope: { cwd: '/tmp' } })
+  const tabs = tree.children[0]
+  const framesBtn = tabs.children.find((btn) => btn.props['data-section'] === MONITOR_SECTIONS.FRAMES)
+  assert.ok(framesBtn?.props?.onClick)
+  framesBtn.props.onClick()
+  assert.equal(isManualNavLeaseActive('s1', '/tmp'), true)
+  assert.equal(getNav('s1', '/tmp').section, MONITOR_SECTIONS.FRAMES)
+  clearNavStore()
 })

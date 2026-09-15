@@ -1,6 +1,6 @@
 // @ts-check
 import { spawn } from 'node:child_process'
-import { killProcessTree } from '../../../../bench-run.mjs'
+import { killProcessTree } from '../../process/run-command.mjs'
 
 /**
  * Spawns a session-scoped managed child process with line framing,

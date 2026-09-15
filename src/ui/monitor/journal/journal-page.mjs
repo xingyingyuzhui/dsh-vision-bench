@@ -1,13 +1,6 @@
-import {
-  buildAgentRef,
-  buildInputBridge,
-  dispatchAgentRef,
-  evidenceFromRef,
-  postEvidence,
-  readInputDraft,
-  subscribeState,
-} from '../../../../bench-shared.mjs'
-import { vendorUseVirtualizer } from '../../../../bench-vendor.mjs'
+import { buildAgentRef, buildInputBridge, dispatchAgentRef, evidenceFromRef, postEvidence, readInputDraft } from '../../common/agent-reference.mjs'
+import { subscribeState } from '../../common/state-subscription.mjs'
+import { vendorUseVirtualizer } from '../../vendor/vendor-bridge.mjs'
 import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
 import { createDataTable } from '../../components/data-table.mjs'
 import { createJournalDetailCard } from './journal-detail-card.mjs'

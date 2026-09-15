@@ -1,0 +1,368 @@
+// TaskP0/0.20.0: 可视化组件纯模型 — 类型规范、数量限制、监视资格、degraded 语义。
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import {
+  COMPONENT_LIMITS,
+  componentUsesPoint,
+  defaultComponentLayout,
+  emptyVisualization,
+  findComponent,
+  migrateVisualizationToV2,
+  monitoredPointOptions,
+  normalizeVisualization,
+  normalizeVisualizationComponent,
+  normalizeVisualizationForRead,
+  parseVisualizationLayoutItems,
+  validateVisualizationComponent,
+  visualizationComponentStatus,
+} from '../../bench-visualization-model.mjs'
+
+const pts = (list) =>
+  list.map((p, i) => ({
+    id: p.id || 'p' + (i + 1),
+    connectionId: p.connectionId || 'c1',
+    deviceId: p.deviceId || 'd1',
+    name: p.name || '点' + (i + 1),
+    function: p.function || 3,
+    address: p.address !== undefined ? p.address : i,
+    monitorEnabled: p.monitorEnabled !== false,
+    alarmEnabled: p.alarmEnabled === true,
+    alarmMin: p.alarmMin ?? null,
+    alarmMax: p.alarmMax ?? null,
+  }))
+
+test('四类组件规范化和数量限制（line/bar/value/switch）', async () => {
+  const byId = {}
+  for (const type of ['line', 'bar', 'value', 'switch']) {
+    const lim = COMPONENT_LIMITS[type]
+    const c = normalizeVisualizationComponent({
+      id: 'x',
+      type,
+      name: 'n',
+      pointIds: Array.from({ length: lim.max }, (_, i) => 'p' + i),
+    })
+    byId[type] = c
+    assert.equal(c.type, type)
+    assert.equal(c.pointIds.length, lim.max)
+  }
+  // 超限截断：line 传入 12 → 规范化只保留? 模型不截断数量，validate 拒绝
+  const tooMany = normalizeVisualizationComponent({
+    id: 'y',
+    type: 'line',
+    pointIds: Array.from({ length: 12 }, (_, i) => 'p' + i),
+  })
+  const v = validateVisualizationComponent(tooMany, pts(Array.from({ length: 12 }, (_, i) => ({ id: 'p' + i }))))
+  assert.equal(v.ok, false, '超过 8 条序列被拒绝')
+  const okSmall = validateVisualizationComponent(
+    normalizeVisualizationComponent({ type: 'line', pointIds: ['p1', 'p2'] }),
+    pts([{ id: 'p1' }, { id: 'p2' }]),
+  )
+  assert.equal(okSmall.ok, true)
+})
+
+test('非监视点位不可新关联（validate 拒绝）', async () => {
+  const points = pts([
+    { id: 'p1', monitorEnabled: true },
+    { id: 'p2', monitorEnabled: false },
+  ])
+  const c = normalizeVisualizationComponent({ type: 'value', pointIds: ['p2'] })
+  const v = validateVisualizationComponent(c, points)
+  assert.equal(v.ok, false)
+  assert.ok(v.error.includes('未开启监视'), v.error)
+  // 已存在的旧组件引用关闭监视点位 → 不删除，只 degraded
+  const c2 = normalizeVisualizationComponent({ id: 'keep', type: 'value', pointIds: ['p2'] })
+  assert.equal(visualizationComponentStatus(c2, points), 'degraded')
+  const viz = normalizeVisualization({ components: [c2] }, points)
+  assert.equal(viz.components.length, 1, '组件保留')
+})
+
+test('删除点位只产生 degraded，不自动删除组件', async () => {
+  const points = pts([{ id: 'p1' }])
+  const c = normalizeVisualizationComponent({ id: 'gone', type: 'value', pointIds: ['p1', 'pX'] })
+  assert.equal(visualizationComponentStatus(c, points), 'degraded')
+  assert.equal(c.pointIds.length, 2, '引用保留')
+  assert.equal(findComponent(normalizeVisualization({ components: [c] }), 'gone').id, 'gone')
+})
+
+test('switch 只接受 FC01 可写线圈点位', async () => {
+  const points = pts([
+    { id: 'coil', function: 1 },
+    { id: 'hr', function: 3 },
+    { id: 'di', function: 2 },
+  ])
+  const ok = validateVisualizationComponent(
+    normalizeVisualizationComponent({ type: 'switch', pointIds: ['coil'] }),
+    points,
+  )
+  assert.equal(ok.ok, true, ok.error || '')
+  const bad = validateVisualizationComponent(
+    normalizeVisualizationComponent({ type: 'switch', pointIds: ['hr'] }),
+    points,
+  )
+  assert.equal(bad.ok, false)
+  assert.equal(bad.errorCode, 'VIZ_POINT_TYPE_UNSUPPORTED', bad.error)
+  const bad2 = validateVisualizationComponent(
+    normalizeVisualizationComponent({ type: 'switch', pointIds: ['di'] }),
+    points,
+  )
+  assert.equal(bad2.ok, false)
+})
+
+test('组件 ID/名称/pointIds/settings 边界', async () => {
+  const c = normalizeVisualizationComponent({
+    name: 'x'.repeat(90),
+    pointIds: ['a', 'a', 'b', ''],
+    settings: { windowMs: 5, confirmWrite: false },
+  })
+  assert.ok(c.name.length <= 40, '名称截断 40')
+  assert.deepEqual(c.pointIds, ['a', 'b'], 'pointIds 去重且忽略空串')
+  assert.equal(c.settings.windowMs, 10000, 'windowMs 钳制下限')
+  assert.equal(c.settings.confirmWrite, false)
+  const def = normalizeVisualizationComponent({})
+  assert.equal(def.id.startsWith('viz_'), true, '无 ID 自动生成')
+  assert.equal(def.type, 'line')
+  assert.equal(def.settings.windowMs, 300000)
+  assert.equal(def.settings.confirmWrite, true)
+})
+
+test('monitoredPointOptions 只列监视点位并带限定路径', async () => {
+  const pack = {
+    connections: [
+      { id: 'c1', name: 'C1' },
+      { id: 'c2', name: 'C2' },
+    ],
+    devices: [
+      { id: 'd1', connectionId: 'c1', name: '设备1' },
+      { id: 'd2', connectionId: 'c1', name: '设备2' },
+    ],
+    points: pts([
+      { id: 'p1', connectionId: 'c1', deviceId: 'd1', name: '温度' },
+      { id: 'p2', connectionId: 'c1', deviceId: 'd2', name: '压力', monitorEnabled: false },
+      { id: 'p3', connectionId: 'c1', deviceId: 'd1', name: '开关', function: 1 },
+    ]),
+    values: [{ key: 'p1', value: 23.5 }],
+  }
+  const opts = monitoredPointOptions(pack)
+  assert.deepEqual(
+    opts.map((o) => o.pointId),
+    ['p1', 'p3'],
+    '只列监视点位',
+  )
+  assert.ok(
+    opts[0].path.includes('C1') && opts[0].path.includes('设备1') && opts[0].path.includes('温度'),
+    '限定路径: ' + opts[0].path,
+  )
+  assert.equal(opts[0].value, 23.5)
+  assert.equal(opts[1].function, 1)
+})
+
+test('emptyVisualization / componentUsesPoint', async () => {
+  const v = emptyVisualization()
+  assert.equal(v.schemaVersion, 2)
+  assert.equal(v.minimumPluginVersion, '0.25.1')
+  assert.equal(v.columns, 12)
+  assert.deepEqual(v.components, [])
+  assert.equal(componentUsesPoint({ pointIds: ['p1', 'p2'] }, 'p2'), true)
+  assert.equal(componentUsesPoint({ pointIds: ['p1'] }, 'pX'), false)
+})
+
+test('schema v1 migrates to v2 with default layout; modbus version is not visualization schema', () => {
+  const v1 = {
+    schemaVersion: 1,
+    components: [
+      { id: 'viz_a', name: '趋势', type: 'line', pointIds: ['p1'] },
+      { id: 'viz_b', name: '数值', type: 'value', pointIds: ['p2'] },
+    ],
+  }
+  const read = normalizeVisualizationForRead(v1, pts([{ id: 'p1' }, { id: 'p2' }]))
+  assert.equal(read.schemaVersion, 1, 'read path must not rewrite v1 to v2')
+  assert.deepEqual(read.components[0].layout, defaultComponentLayout(0, 'line'))
+  const v2 = migrateVisualizationToV2(v1, pts([{ id: 'p1' }, { id: 'p2' }]))
+  assert.equal(v2.schemaVersion, 2)
+  assert.equal(v2.columns, 12)
+  assert.equal(v2.minimumPluginVersion, '0.25.1')
+  assert.equal(v2.components[0].id, 'viz_a')
+  assert.deepEqual(v2.components[0].layout, defaultComponentLayout(0, 'line'))
+  assert.deepEqual(v2.components[1].layout, defaultComponentLayout(1, 'value'))
+  const kept = normalizeVisualizationForRead(
+    {
+      schemaVersion: 2,
+      components: [{ id: 'viz_a', type: 'line', pointIds: ['p1'], layout: { x: 3, y: 2, w: 4, h: 5 } }],
+    },
+    pts([{ id: 'p1' }]),
+  )
+  assert.deepEqual(kept.components[0].layout, { x: 3, y: 2, w: 4, h: 5 })
+})
+
+test('parseVisualizationLayoutItems rejects empty, duplicate, missing and out-of-bounds items', () => {
+  const comps = [{ id: 'viz_a' }]
+  assert.equal(parseVisualizationLayoutItems([], comps).errorCode, 'LAYOUT_REQUIRED')
+  assert.equal(
+    parseVisualizationLayoutItems(
+      [
+        { id: 'viz_a', x: 0, y: 0, w: 3, h: 3 },
+        { id: 'viz_a', x: 1, y: 0, w: 3, h: 3 },
+      ],
+      comps,
+    ).errorCode,
+    'LAYOUT_DUPLICATE_ID',
+  )
+  assert.equal(
+    parseVisualizationLayoutItems([{ id: 'gone', x: 0, y: 0, w: 3, h: 3 }], comps).errorCode,
+    'VIZ_NOT_FOUND',
+  )
+  assert.equal(
+    parseVisualizationLayoutItems([{ id: 'viz_a', x: 11, y: 0, w: 4, h: 3 }], comps).errorCode,
+    'LAYOUT_OUT_OF_BOUNDS',
+  )
+  const ok = parseVisualizationLayoutItems([{ id: 'viz_a', x: 2, y: 1, w: 4, h: 3 }], comps)
+  assert.equal(ok.ok, true)
+  assert.deepEqual(ok.items[0].layout, { x: 2, y: 1, w: 4, h: 3 })
+})
+test('Task11/0.20.1: 组件类型-功能码约束（line/bar 仅数值型，value 任意，switch 仅 FC01）', async () => {
+  const allPts = pts([
+    { id: 'coil', function: 1 },
+    { id: 'di', function: 2 },
+    { id: 'hr', function: 3 },
+    { id: 'ir', function: 4 },
+  ])
+  // line/bar: FC01/02 拒绝
+  for (const type of ['line', 'bar']) {
+    const bad = validateVisualizationComponent(normalizeVisualizationComponent({ type, pointIds: ['coil'] }), allPts)
+    assert.equal(bad.ok, false)
+    assert.equal(bad.errorCode, 'VIZ_POINT_TYPE_UNSUPPORTED')
+    const bad2 = validateVisualizationComponent(normalizeVisualizationComponent({ type, pointIds: ['di'] }), allPts)
+    assert.equal(bad2.ok, false)
+    const ok3 = validateVisualizationComponent(normalizeVisualizationComponent({ type, pointIds: ['hr'] }), allPts)
+    assert.equal(ok3.ok, true)
+    const ok4 = validateVisualizationComponent(normalizeVisualizationComponent({ type, pointIds: ['ir'] }), allPts)
+    assert.equal(ok4.ok, true)
+  }
+  // value 可显示任意（含布尔线圈）
+  const v = validateVisualizationComponent(
+    normalizeVisualizationComponent({ type: 'value', pointIds: ['coil'] }),
+    allPts,
+  )
+  assert.equal(v.ok, true)
+  // switch 仅 FC01
+  const sOk = validateVisualizationComponent(
+    normalizeVisualizationComponent({ type: 'switch', pointIds: ['coil'] }),
+    allPts,
+  )
+  assert.equal(sOk.ok, true)
+  const sBad = validateVisualizationComponent(
+    normalizeVisualizationComponent({ type: 'switch', pointIds: ['hr'] }),
+    allPts,
+  )
+  assert.equal(sBad.ok, false)
+  assert.equal(sBad.errorCode, 'VIZ_POINT_TYPE_UNSUPPORTED')
+})
+
+test('X/Y 轴设置规范化与校验 (yMin/yMax 范围)', async () => {
+  const allPts = pts([{ id: 'hr', function: 3, monitorEnabled: true }])
+  // 正常传入 yMin, yMax
+  const c1 = normalizeVisualizationComponent({
+    type: 'line',
+    pointIds: ['hr'],
+    settings: { yMin: '10.5', yMax: 50, windowMs: 60000 },
+  })
+  assert.equal(c1.settings.yMin, 10.5)
+  assert.equal(c1.settings.yMax, 50)
+  assert.equal(c1.settings.windowMs, 60000)
+  const v1 = validateVisualizationComponent(c1, allPts)
+  assert.equal(v1.ok, true)
+
+  // yMin >= yMax 校验失败
+  const c2 = normalizeVisualizationComponent({
+    type: 'line',
+    pointIds: ['hr'],
+    settings: { yMin: 100, yMax: 50 },
+  })
+  const v2 = validateVisualizationComponent(c2, allPts)
+  assert.equal(v2.ok, false)
+  assert.match(v2.error, /Y轴最小值必须小于最大值/)
+
+  // 留空/无效字符规范化为不设
+  const c3 = normalizeVisualizationComponent({
+    type: 'line',
+    pointIds: ['hr'],
+    settings: { yMin: '', yMax: null, yInterval: '0' },
+  })
+  assert.equal(c3.settings.yMin, undefined)
+  assert.equal(c3.settings.yMax, undefined)
+  assert.equal(c3.settings.yInterval, undefined)
+
+  // 正常传入 yInterval
+  const c4 = normalizeVisualizationComponent({
+    type: 'line',
+    pointIds: ['hr'],
+    settings: { yMin: 0, yMax: 100, yInterval: '10' },
+  })
+  assert.equal(c4.settings.yInterval, 10)
+  const v4 = validateVisualizationComponent(c4, allPts)
+  assert.equal(v4.ok, true)
+
+  // yInterval <= 0 校验失败
+  const c5 = {
+    type: 'line',
+    pointIds: ['hr'],
+    settings: { yInterval: -5 },
+  }
+  const v5 = validateVisualizationComponent(c5, allPts)
+  assert.equal(v5.ok, false)
+  assert.match(v5.error, /Y轴刻度必须为大于0的数字/)
+
+  // 扩展选项：yUnit, showGrid, smooth, showLegend
+  const c6 = normalizeVisualizationComponent({
+    type: 'line',
+    pointIds: ['hr'],
+    settings: { yUnit: ' ℃ ', showGrid: false, smooth: false, showLegend: false },
+  })
+  assert.equal(c6.settings.yUnit, '℃')
+  assert.equal(c6.settings.showGrid, false)
+  assert.equal(c6.settings.smooth, false)
+  assert.equal(c6.settings.showLegend, false)
+
+  // X/Y 轴高级刻度、次刻度、颜色与文字标记配置规范化
+  const c7 = normalizeVisualizationComponent({
+    type: 'line',
+    pointIds: ['hr'],
+    settings: {
+      xSplitNumber: '8',
+      xTickLength: 6,
+      xMinorTick: true,
+      xMinorSplit: 4,
+      xMinorLength: 3,
+      xAxisColor: '#4f8ef7',
+      xShowGrid: true,
+      xGridColor: 'rgba(255,0,0,0.2)',
+      xShowLabel: true,
+      xLabelSize: 12,
+      xScaleType: 'count',
+      ySplitNumber: 5,
+      yTickLength: 5,
+      yMinorTick: false,
+      yAxisColor: '#333333',
+      yShowLabel: true,
+      yLabelSize: 10,
+    },
+  })
+  assert.equal(c7.settings.xSplitNumber, 8)
+  assert.equal(c7.settings.xTickLength, 6)
+  assert.equal(c7.settings.xMinorTick, true)
+  assert.equal(c7.settings.xMinorSplit, 4)
+  assert.equal(c7.settings.xMinorLength, 3)
+  assert.equal(c7.settings.xAxisColor, '#4f8ef7')
+  assert.equal(c7.settings.xShowGrid, true)
+  assert.equal(c7.settings.xGridColor, 'rgba(255,0,0,0.2)')
+  assert.equal(c7.settings.xShowLabel, true)
+  assert.equal(c7.settings.xLabelSize, 12)
+  assert.equal(c7.settings.xScaleType, 'count')
+  assert.equal(c7.settings.ySplitNumber, 5)
+  assert.equal(c7.settings.yTickLength, 5)
+  assert.equal(c7.settings.yMinorTick, false)
+  assert.equal(c7.settings.yAxisColor, '#333333')
+  assert.equal(c7.settings.yShowLabel, true)
+  assert.equal(c7.settings.yLabelSize, 10)
+})
+

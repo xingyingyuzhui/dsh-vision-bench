@@ -1,4 +1,4 @@
-import { buildAgentRef, copyAgentRef, hasHarnessInput } from '../../../../bench-shared.mjs'
+import { buildAgentRef, copyAgentRef, hasHarnessInput } from '../../common/agent-reference.mjs'
 import { copyText, fileKindMark, renderChevronIcon, renderEllipsisIcon, renderFileIcon, renderFolderIcon } from './project-shared.mjs'
 import { fileKind, fileTreeId } from './project-tree-model.mjs'
 

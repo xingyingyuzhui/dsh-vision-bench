@@ -1,5 +1,5 @@
 // @ts-check
-import { validateConnections } from '../../../bench-devices.mjs'
+import { validateConnections } from '../../domain/modbus/connection-model.mjs'
 import { explicitId } from '../../domain/config/config-operation.mjs'
 import { isSynthesizedConnection, normalizeConnections } from '../../domain/modbus/connection-model.mjs'
 import { resolveHierarchy } from '../../domain/modbus/target-resolver.mjs'

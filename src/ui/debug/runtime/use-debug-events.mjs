@@ -1,28 +1,17 @@
 // @ts-check
 
-import { DEBUG_EVENT_TYPES } from '../../../shared/debug-events.mjs'
-import { beginRequest, shouldApplyRequest } from '../../common/latest-request-gate.mjs'
 import { createRuntimeController } from './runtime-controller.mjs'
+import { normalizeDebugEventType } from './debug-event-projection.mjs'
+import { startDebugEventSubscription } from './use-debug-event-subscription.mjs'
+import { useDebugRuntimeActions } from './use-debug-runtime-actions.mjs'
 
-/**
- * Normalizes legacy event alias strings to canonical DEBUG_EVENT_TYPES.
- * @param {string} [type]
- * @returns {string}
- */
-export function normalizeDebugEventType(type) {
-  const t = String(type || '')
-  if (t === 'running') return DEBUG_EVENT_TYPES.RUNNING
-  if (t === 'paused') return DEBUG_EVENT_TYPES.PAUSED
-  if (t === 'step_complete') return DEBUG_EVENT_TYPES.STEP_COMPLETE
-  if (t === 'breakpoint_hit') return DEBUG_EVENT_TYPES.BREAKPOINT_HIT
-  if (t === 'watchpoint_hit') return DEBUG_EVENT_TYPES.WATCHPOINT_HIT
-  if (t === 'session_stopped') return DEBUG_EVENT_TYPES.SESSION_STOPPED
-  return t
-}
+export { normalizeDebugEventType }
 
 /**
  * Hook for managing debug runtime events and state.
  * Implements ADR-014 cursor long-poll loop and request-gate lifecycle.
+ * Composes subscription, projection, and control actions — does not own
+ * persistence or host-side session state.
  *
  * @param {any} React
  * @param {(path: string, body?: any, timeout?: number) => Promise<any>} post
@@ -59,7 +48,6 @@ export function useDebugEvents(React, post, scope) {
     return createRuntimeController(post, { cwd, sessionId })
   }, [post, cwd, sessionId])
 
-  // Helper to safely update session data
   const applyState = React.useCallback((data) => {
     if (!data || typeof data !== 'object') return
     const curSession = data.session || null
@@ -81,7 +69,6 @@ export function useDebugEvents(React, post, scope) {
     }
   }, [])
 
-  // Evaluate watches on demand
   const evaluateWatches = React.useCallback(
     async (watchList, frame = 0) => {
       const seq = ++watchSeqRef.current
@@ -110,7 +97,6 @@ export function useDebugEvents(React, post, scope) {
     [controller],
   )
 
-  // Fetch registers
   const refreshRegisters = React.useCallback(async () => {
     try {
       const res = await controller.command('registers')
@@ -122,7 +108,6 @@ export function useDebugEvents(React, post, scope) {
     }
   }, [controller])
 
-  // Select stack frame
   const selectFrame = React.useCallback(
     async (frameLevel) => {
       setSelectedFrame(frameLevel)
@@ -143,390 +128,43 @@ export function useDebugEvents(React, post, scope) {
     [controller, evaluateWatches],
   )
 
-  // Snapshot on mount. Long-poll only after a debug session is active.
   React.useEffect(() => {
-    mountedRef.current = true
-    const currentIdentity = identityKey
-    const reqId = beginRequest(reqRef)
-    if (abortRef.current) {
-      abortRef.current.abort()
-      abortRef.current = null
-    }
-    const ac = new AbortController()
-    abortRef.current = ac
-    setLoading(true)
-    setError(null)
-    cursorRef.current = 0
-    let stopped = false
+    return startDebugEventSubscription({
+      React,
+      controller,
+      identityKey,
+      sessionId,
+      cwd,
+      reqRef,
+      mountedRef,
+      abortRef,
+      cursorRef,
+      watchesRef,
+      applyState,
+      refreshRegisters,
+      evaluateWatches,
+      setLoading,
+      setError,
+      setEvents,
+      setStatus,
+      setPendingControl,
+      setActive,
+    })
+  }, [identityKey, controller, applyState, refreshRegisters, evaluateWatches, sessionId, cwd])
 
-    async function pollLoop() {
-      if (!sessionId || !cwd) {
-        setLoading(false)
-        return
-      }
-      try {
-        const stateRes = await controller.getState()
-        if (!shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) || stopped) {
-          return
-        }
-        setLoading(false)
-        if (stateRes?.ok) applyState(stateRes)
-      } catch (err) {
-        if (!shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) || stopped) {
-          return
-        }
-        setLoading(false)
-        setError(err instanceof Error ? err.message : String(err))
-      }
-
-      while (!stopped && !ac.signal.aborted && mountedRef.current) {
-        try {
-          const waitRes = await controller.waitEvents(cursorRef.current, ac.signal)
-          if (!shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) || stopped) {
-            break
-          }
-          if (waitRes?.ok) {
-            if (waitRes.identityRequired) {
-              break
-            }
-            if (waitRes.woke) {
-              const fresh = await controller.getState()
-              if (shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) && fresh?.ok) {
-                applyState(fresh)
-              }
-              continue
-            }
-            if (waitRes.closed) {
-              applyState({ ok: true, session: null, pendingApprovals: [] })
-              cursorRef.current = 0
-              continue
-            }
-            if (waitRes.nextCursor != null) {
-              cursorRef.current = waitRes.nextCursor
-            }
-            const incoming = Array.isArray(waitRes.events) ? waitRes.events : []
-            if (incoming.length > 0) {
-              setEvents((prev) => [...prev, ...incoming].slice(-100))
-
-              // Check if any stop or pause events arrived
-              let needStateRefresh = false
-              for (const ev of incoming) {
-                const type = normalizeDebugEventType(ev.type)
-                if (type === DEBUG_EVENT_TYPES.RUNNING) {
-                  setStatus('running')
-                  setPendingControl(null)
-                } else if (
-                  type === DEBUG_EVENT_TYPES.PAUSED ||
-                  type === DEBUG_EVENT_TYPES.STEP_COMPLETE ||
-                  type === DEBUG_EVENT_TYPES.BREAKPOINT_HIT ||
-                  type === DEBUG_EVENT_TYPES.WATCHPOINT_HIT
-                ) {
-                  setStatus('paused')
-                  setPendingControl(null)
-                  needStateRefresh = true
-                } else if (type === DEBUG_EVENT_TYPES.EXCEPTION) {
-                  setStatus('failed')
-                  setPendingControl(null)
-                  needStateRefresh = true
-                } else if (type === DEBUG_EVENT_TYPES.SESSION_STOPPED) {
-                  setStatus('stopped')
-                  setActive(false)
-                  setPendingControl(null)
-                  needStateRefresh = true
-                } else if (type.includes('breakpoint') || type.includes('watchpoint') || type.includes('snapshot')) {
-                  needStateRefresh = true
-                }
-              }
-
-              if (needStateRefresh) {
-                const fresh = await controller.getState()
-                if (shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) && fresh?.ok) {
-                  applyState(fresh)
-                  refreshRegisters()
-                  evaluateWatches(watchesRef.current, 0)
-                }
-              }
-            }
-          } else {
-            await new Promise((r) => setTimeout(r, 1000))
-          }
-        } catch (err) {
-          if (ac.signal.aborted || stopped || !mountedRef.current) {
-            break
-          }
-          // Sleep briefly on network error before retrying poll
-          await new Promise((r) => setTimeout(r, 2000))
-        }
-      }
-    }
-
-    pollLoop()
-
-    return () => {
-      stopped = true
-      mountedRef.current = false
-      if (abortRef.current) {
-        abortRef.current.abort()
-        abortRef.current = null
-      }
-    }
-  }, [identityKey, controller, applyState])
-
-  // Controller Actions
-  const startDebug = React.useCallback(
-    async (options = {}) => {
-      setError(null)
-      setPendingControl('starting')
-      try {
-        const res = await controller.command('start', options)
-        if (!res?.ok) {
-          setPendingControl(null)
-          setError(res?.error || '启动调试失败')
-        } else {
-          const fresh = await controller.getState()
-          if (fresh?.ok) applyState(fresh)
-          setPendingControl(null)
-        }
-        return res
-      } catch (err) {
-        setPendingControl(null)
-        const msg = err instanceof Error ? err.message : String(err)
-        setError(msg)
-        return { ok: false, error: msg }
-      }
-    },
-    [controller, applyState],
-  )
-
-  const stopDebug = React.useCallback(async () => {
-    setPendingControl('stopping')
-    try {
-      const res = await controller.command('stop')
-      const fresh = await controller.getState()
-      if (fresh?.ok) applyState(fresh)
-      setPendingControl(null)
-      return res
-    } catch (err) {
-      setPendingControl(null)
-      const msg = err instanceof Error ? err.message : String(err)
-      setError(msg)
-      return { ok: false, error: msg }
-    }
-  }, [controller, applyState])
-
-  const run = React.useCallback(async () => {
-    setPendingControl(null)
-    try {
-      const res = await controller.command('continue')
-      if (res?.ok) setStatus('running')
-      return res
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setError(msg)
-      return { ok: false, error: msg }
-    }
-  }, [controller])
-
-  const pause = React.useCallback(async () => {
-    setPendingControl('pausing')
-    try {
-      const res = await controller.command('pause')
-      if (!res?.ok) {
-        setPendingControl(null)
-        setError(res?.error || '暂停失败')
-      }
-      return res
-    } catch (err) {
-      setPendingControl(null)
-      const msg = err instanceof Error ? err.message : String(err)
-      setError(msg)
-      return { ok: false, error: msg }
-    }
-  }, [controller])
-
-  const step = React.useCallback(
-    async (stepType = 'over') => {
-      setPendingControl('stepping')
-      try {
-        const res = await controller.command('step', { stepType })
-        if (!res?.ok) {
-          setPendingControl(null)
-          setError(res?.error || '单步失败')
-        }
-        return res
-      } catch (err) {
-        setPendingControl(null)
-        const msg = err instanceof Error ? err.message : String(err)
-        setError(msg)
-        return { ok: false, error: msg }
-      }
-    },
-    [controller],
-  )
-
-  const reset = React.useCallback(async () => {
-    setPendingControl('resetting')
-    try {
-      const res = await controller.command('resetHalt')
-      if (!res?.ok) {
-        setPendingControl(null)
-        setError(res?.error || '复位失败')
-      }
-      return res
-    } catch (err) {
-      setPendingControl(null)
-      const msg = err instanceof Error ? err.message : String(err)
-      setError(msg)
-      return { ok: false, error: msg }
-    }
-  }, [controller])
-
-  const addBreakpoint = React.useCallback(
-    async (spec) => {
-      try {
-        const res = await controller.command('addBreakpoint', spec)
-        if (res?.ok) {
-          const fresh = await controller.getState()
-          if (fresh?.ok) applyState(fresh)
-        } else {
-          setError(res?.error || '添加断点失败')
-        }
-        return res
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        setError(msg)
-        return { ok: false, error: msg }
-      }
-    },
-    [controller, applyState],
-  )
-
-  const removeBreakpoint = React.useCallback(
-    async (id) => {
-      try {
-        const res = await controller.command('removeBreakpoint', { id })
-        if (res?.ok) {
-          const fresh = await controller.getState()
-          if (fresh?.ok) applyState(fresh)
-        }
-        return res
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        setError(msg)
-        return { ok: false, error: msg }
-      }
-    },
-    [controller, applyState],
-  )
-
-  const addWatchpoint = React.useCallback(
-    async (spec) => {
-      try {
-        const res = await controller.command('addWatchpoint', spec)
-        if (res?.ok) {
-          const fresh = await controller.getState()
-          if (fresh?.ok) applyState(fresh)
-        } else {
-          setError(res?.error || '添加观察点失败')
-        }
-        return res
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        setError(msg)
-        return { ok: false, error: msg }
-      }
-    },
-    [controller, applyState],
-  )
-
-  const removeWatchpoint = React.useCallback(
-    async (id) => {
-      try {
-        const res = await controller.command('removeWatchpoint', { id })
-        if (res?.ok) {
-          const fresh = await controller.getState()
-          if (fresh?.ok) applyState(fresh)
-        }
-        return res
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        setError(msg)
-        return { ok: false, error: msg }
-      }
-    },
-    [controller, applyState],
-  )
-
-  const addWatch = React.useCallback(
-    (expr) => {
-      const trimmed = String(expr || '').trim()
-      if (!trimmed || watchesRef.current.includes(trimmed)) return
-      const next = [...watchesRef.current, trimmed]
-      watchesRef.current = next
-      setWatches(next)
-      evaluateWatches(next, selectedFrame)
-    },
-    [watches, selectedFrame, evaluateWatches],
-  )
-
-  const removeWatch = React.useCallback(
-    (expr) => {
-      const next = watchesRef.current.filter((w) => w !== expr)
-      watchesRef.current = next
-      setWatches(next)
-      evaluateWatches(next, selectedFrame)
-    },
-    [watches, selectedFrame, evaluateWatches],
-  )
-
-  const approve = React.useCallback(
-    async (requestId) => {
-      try {
-        const res = await controller.approval('approve', { requestId })
-        const fresh = await controller.getState()
-        if (fresh?.ok) applyState(fresh)
-        return res
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        setError(msg)
-        return { ok: false, error: msg }
-      }
-    },
-    [controller, applyState],
-  )
-
-  const reject = React.useCallback(
-    async (requestId) => {
-      try {
-        const res = await controller.approval('reject', { requestId })
-        const fresh = await controller.getState()
-        if (fresh?.ok) applyState(fresh)
-        return res
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        setError(msg)
-        return { ok: false, error: msg }
-      }
-    },
-    [controller, applyState],
-  )
-
-  const refresh = React.useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const fresh = await controller.getState()
-      if (fresh?.ok) {
-        applyState(fresh)
-        refreshRegisters()
-        evaluateWatches(watchesRef.current, selectedFrame)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setLoading(false)
-    }
-  }, [controller, applyState, refreshRegisters, evaluateWatches, selectedFrame])
+  const controlActions = useDebugRuntimeActions(React, {
+    controller,
+    applyState,
+    evaluateWatches,
+    refreshRegisters,
+    watchesRef,
+    selectedFrame,
+    setError,
+    setPendingControl,
+    setStatus,
+    setWatches,
+    setLoading,
+  })
 
   return {
     active,
@@ -542,22 +180,8 @@ export function useDebugEvents(React, post, scope) {
     loading,
     error,
     actions: {
-      startDebug,
-      stopDebug,
-      run,
-      pause,
-      step,
-      reset,
-      addBreakpoint,
-      removeBreakpoint,
-      addWatchpoint,
-      removeWatchpoint,
+      ...controlActions,
       selectFrame,
-      addWatch,
-      removeWatch,
-      approve,
-      reject,
-      refresh,
     },
   }
 }

@@ -1,4 +1,4 @@
-import { getVendor } from '../../../bench-vendor.mjs'
+import { getVendor } from './vendor-bridge.mjs'
 
 let override = null
 

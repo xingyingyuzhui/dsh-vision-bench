@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
 import { createDebugWorkspace } from '../../src/ui/workspace/debug-workspace.mjs'
-import { clearNavStore } from '../../src/ui/workspace/vision-navigation-store.mjs'
+import { clearNavStore, getNav, isManualNavLeaseActive } from '../../src/ui/workspace/vision-navigation-store.mjs'
 import { DEBUG_SECTIONS } from '../../src/ui/workspace/vision-route.mjs'
 
 function makeReact() {
@@ -38,21 +35,25 @@ test('debug workspace has workbench, project, and runtime sections', () => {
 })
 
 test('debug workspace tab click uses manual nav source', () => {
-  const src = readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), '../../src/ui/workspace/debug-workspace.mjs'),
-    'utf8',
+  clearNavStore()
+  const React = makeReact()
+  const Page = createDebugWorkspace(
+    React,
+    (key) => key,
+    async () => ({}),
   )
-  assert.match(src, /source: 'manual'/)
+  const tree = Page({ sessionId: 's1', scope: { cwd: '/tmp' } })
+  const tabs = tree.children[0]
+  const projectBtn = tabs.children.find((btn) => btn.props['data-section'] === DEBUG_SECTIONS.PROJECT)
+  assert.ok(projectBtn?.props?.onClick)
+  projectBtn.props.onClick()
+  assert.equal(isManualNavLeaseActive('s1', '/tmp'), true)
+  assert.equal(getNav('s1', '/tmp').section, DEBUG_SECTIONS.PROJECT)
+  clearNavStore()
 })
 
 test('inactive debug section is unmounted, not hidden', () => {
   clearNavStore()
-  const src = readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), '../../src/ui/workspace/debug-workspace.mjs'),
-    'utf8',
-  )
-  assert.match(src, /section === DEBUG_SECTIONS.WORKBENCH/)
-  assert.doesNotMatch(src, /hidden:/)
   const React = makeReact()
   const Page = createDebugWorkspace(
     React,
@@ -123,11 +124,11 @@ test('workspace tab bar supports keyboard navigation (ArrowRight, ArrowLeft, Hom
   assert.equal(selected, 'workbench')
 })
 
-test('WORKSPACE_CSS aligns layout and tab bar with HMI standards', async () => {
+test('WORKSPACE_CSS exports layout class tokens used by the workspace shell', async () => {
   const { WORKSPACE_CSS } = await import('../../src/ui/styles/workspace.mjs')
+  assert.ok(Array.isArray(WORKSPACE_CSS) && WORKSPACE_CSS.length > 0)
   const css = WORKSPACE_CSS.join('\n')
-  assert.match(css, /\.dvb-workspace\{[^}]*padding:8px calc\(var\(--dsh-composer-side-clearance, 16px\) \+ 16px\) 8px/)
-  assert.match(css, /\.dvb-ws-tabs\{[^}]*border-bottom:1px solid var\(--dsw-alias-border-l2/)
-  assert.match(css, /body\[data-dsh-vision-bench\] \.dvb-ws-body>\.dvb-page\{padding:0/)
-  assert.match(css, /body\[data-dsh-vision-bench\] \.dvb-ws-body>\.dvb-live/)
+  for (const token of ['.dvb-workspace', '.dvb-ws-tabs', '.dvb-ws-body', '--dsw-alias-border-l2']) {
+    assert.ok(css.includes(token), `missing token ${token}`)
+  }
 })

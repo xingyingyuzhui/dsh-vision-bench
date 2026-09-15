@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createDebugRuntime } from '../../src/application/debug/debug-runtime.mjs'
 import { createDebugRpcHandler } from '../../src/interfaces/rpc/debug-rpc-handler.mjs'
-import { createVisionRpcRouter } from '../../src/interfaces/rpc/vision-rpc-router.mjs'
+import { createRouter } from '../helpers/rpc-factory.mjs'
 import { DEBUG_RPC_ENDPOINTS } from '../../src/shared/debug-contract.mjs'
 
 test('Debug RPC Handler routes state, commands, and events over Connection RPC', async () => {
@@ -144,7 +144,7 @@ test('debug events/wait without session identity does not return another session
   })
 })
 
-test('createVisionRpcRouter routes debug/* endpoints without Modbus interference', async () => {
+test('createRouter routes debug/* endpoints without Modbus interference', async () => {
   const runtime = createDebugRuntime({
     backendFactory: async () => ({
       start: async () => {},
@@ -154,10 +154,7 @@ test('createVisionRpcRouter routes debug/* endpoints without Modbus interference
     }),
   })
 
-  const router = createVisionRpcRouter({
-    getHome: () => '/tmp',
-    debugRuntime: runtime,
-  })
+  const router = createRouter('/tmp', { debugRuntime: runtime })
 
   // Start debug session through router
   const start = await router.dispatch('debug/command', {

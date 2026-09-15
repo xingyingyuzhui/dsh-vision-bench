@@ -12,7 +12,7 @@ import { Window } from 'happy-dom'
 import React from 'react'
 import { createElement } from 'react'
 import { alpha3PageProps } from './fixtures/harness-alpha3-props.mjs'
-import { createMockVisionConnection } from './fixtures/mock-vision-connection.mjs'
+import { mockConnection } from './helpers/rpc-factory.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 let win
@@ -240,7 +240,7 @@ test('Task10: generated client renders the real frames tab with 5000 rows (1–4
   }
   const ctx = {
     slots,
-    connection: createMockVisionConnection(async (endpoint) => globalThis.__visionRpcBackend(endpoint)),
+    connection: mockConnection(async (endpoint) => globalThis.__visionRpcBackend(endpoint)).connection,
     get(key) {
       return key === 'slots' ? slots : null
     },

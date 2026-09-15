@@ -1,40 +1,31 @@
 // @ts-check
-import { evaluateAlarms, normalizeAlarmState } from '../../../bench-alarm.mjs'
-import { normalizeModbus, normalizePointV3 } from '../../../bench-devices.mjs'
-import { pickArtifact } from '../../../bench-fs.mjs'
-import { toEndpoint } from '../../../bench-io-contract.mjs'
-import { aborted, hasRunning, originOf, signalOf } from '../../../bench-journal.mjs'
-import { commitPollResult, commitReadResult, commitWriteResult } from '../../../bench-modbus-commit.mjs'
-import { notifyBenchEvent } from '../../../bench-notify.mjs'
-import { requireWorkspaceCwd } from '../../../bench-paths.mjs'
+import { evaluateAlarms, normalizeAlarmState } from '../../domain/modbus/alarm-model.mjs'
+import { normalizeModbus } from './modbus-migration.mjs'
+import { normalizePointV3 } from '../../domain/modbus/point-model.mjs'
+import { pickArtifact } from '../../infrastructure/files/project-fs.mjs'
+import { toEndpoint } from '../../domain/modbus/io-contract.mjs'
+import { aborted, hasRunning, originOf, signalOf } from '../../domain/modbus/journal-model.mjs'
+import { commitPollResult, commitReadResult, commitWriteResult } from './modbus-commit.mjs'
+import { notifyBenchEvent } from '../../infrastructure/host/notify.mjs'
+import { requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
 import {
   clampInt,
-  decodeValue,
-  evaluateAlarm,
-  evaluatePointAlarms,
   fillSimValues,
   functionTag,
-  isWritableFunction,
   normalizePoints,
   normalizeWriteValues,
-  pointIdOf,
   pointLabel,
   scatterBatch,
   setPointValue,
-} from '../../../bench-points.mjs'
-import { planScopedReadBatches } from '../../../bench-pollplan.mjs'
-import { portKey } from '../../../bench-portlock.mjs'
-import {
-  finishTask,
-  loadWorkspace,
-  normalizeFocusRequest,
-  normalizeFocusState,
-  openTask,
-  pruneBuildLogs,
-  recordBenchEvent,
-  saveWorkspaceAsync,
-} from '../../../bench-store.mjs'
-import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from '../../../bench-targets.mjs'
+} from '../../domain/modbus/point-model.mjs'
+import { decodeValue, isWritableFunction, pointIdOf } from '../../domain/modbus/point-math.mjs'
+import { evaluateAlarm, evaluatePointAlarms } from '../../domain/modbus/point-alarm.mjs'
+import { planScopedReadBatches } from '../../domain/modbus/poll-plan.mjs'
+import { portKey } from '../../infrastructure/modbus/port-lock.mjs'
+import { finishTask, openTask, pruneBuildLogs, recordBenchEvent } from '../../infrastructure/store/journal-store.mjs'
+import { loadWorkspace, saveWorkspaceAsync } from '../../infrastructure/store/workspace-store.mjs'
+import { normalizeFocusRequest, normalizeFocusState } from '../../infrastructure/store/focus-store.mjs'
+import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from './target-resolver-service.mjs'
 import { endpointFingerprint, endpointLabelText, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { findPointV3, fnOfPoint } from '../../domain/modbus/function-code.mjs'
@@ -87,18 +78,18 @@ import {
 export const migrateLegacyDisabled = async (home, cwd) => {
   const workspace = loadWorkspace(home, cwd)
   const pack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus || {}))
-  const disabledConnIds = (pack.connections || []).filter((c) => c.enabled === false).map((c) => c.id)
-  const hasDisabledDevice = (pack.devices || []).some((d) => d.enabled === false)
+  const disabledConnIds = (pack.connections || []).filter((/** @type {any} */ c) => c.enabled === false).map((/** @type {any} */ c) => c.id)
+  const hasDisabledDevice = (pack.devices || []).some((/** @type {any} */ d) => d.enabled === false)
   if (!disabledConnIds.length && !hasDisabledDevice) return { ok: true, migrated: false }
   const nextPolling = { ...(pack.pollingByConnection || {}) }
   for (const cid of disabledConnIds) {
     const cur = nextPolling[cid] || { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' }
     nextPolling[cid] = { ...cur, enabled: false } // 停止自动采集
   }
-  const connections = (pack.connections || []).map((c) =>
+  const connections = (pack.connections || []).map((/** @type {any} */ c) =>
     disabledConnIds.includes(c.id) ? { ...c, enabled: true } : c,
   )
-  const devices = (pack.devices || []).map((d) => (d.enabled === false ? { ...d, enabled: true } : d))
+  const devices = (pack.devices || []).map((/** @type {any} */ d) => (d.enabled === false ? { ...d, enabled: true } : d))
   await saveWorkspaceAsync(home, cwd, {
     modbus: {
       connections,
@@ -125,7 +116,7 @@ export const modbusPoll = async (home, cwd, opts) => {
   const scMap = workspace.modbus?.sessionConfigs || {}
   if (!targetSessionId && cidArg) {
     targetSessionId =
-      Object.keys(scMap).find((sid) => scMap[sid]?.connections?.some((/** @type {any} */ c) => c && c.id === cidArg)) ||
+      Object.keys(scMap).find((/** @type {any} */ sid) => scMap[sid]?.connections?.some((/** @type {any} */ c) => c && c.id === cidArg)) ||
       ''
   }
   if (!targetSessionId && workspace.session?.boundId && scMap[workspace.session.boundId]) {
@@ -162,8 +153,8 @@ export const modbusPoll = async (home, cwd, opts) => {
     }
   }
   const targetConns = cidArg
-    ? pack.connections.filter((c) => c.id === cidArg)
-    : pack.connections.filter((c) => c.enabled !== false)
+    ? pack.connections.filter((/** @type {any} */ c) => c.id === cidArg)
+    : pack.connections.filter((/** @type {any} */ c) => c.enabled !== false)
   if (cidArg && !targetConns.length) return { ok: false, error: `连接不存在: ${cidArg}` }
   if (!targetConns.length) return { ok: false, error: '无可用连接' }
   // use a global lock per cwd (legacy) plus per-conn locks for multi
@@ -195,7 +186,7 @@ export const modbusPoll = async (home, cwd, opts) => {
     for (const connObj of targetConns) {
       const conn = connObj.conn
       const connId = connObj.id
-      const pts = pack.points.filter((p) => (p.connectionId || p.connId) === connId)
+      const pts = pack.points.filter((/** @type {any} */ p) => (p.connectionId || p.connId) === connId)
       if (!pts.length) {
         // still update polling timestamp for empty but enabled connection?
         pollingByConnection[connId] = {
@@ -217,8 +208,8 @@ export const modbusPoll = async (home, cwd, opts) => {
       }
       let connOk = true
       for (const scope of scopes) {
-        const batchConnObj = pack.connections.find((c) => c.id === scope.connectionId) || connObj
-        const batchDevice = pack.devices.find((d) => d.id === scope.deviceId) || {
+        const batchConnObj = pack.connections.find((/** @type {any} */ c) => c.id === scope.connectionId) || connObj
+        const batchDevice = pack.devices.find((/** @type {any} */ d) => d.id === scope.deviceId) || {
           id: scope.deviceId,
           unitId: scope.unitId,
         }
@@ -313,10 +304,10 @@ export const modbusPoll = async (home, cwd, opts) => {
     })
     const alarms = {
       next: alarmEval.next,
-      fired: alarmEval.fired.filter((f) => f.point),
-      cleared: alarmEval.recovered.filter((r) => r.point),
-      commFired: alarmEval.fired.filter((f) => !f.point),
-      commCleared: alarmEval.recovered.filter((r) => !r.point),
+      fired: alarmEval.fired.filter((/** @type {any} */ f) => f.point),
+      cleared: alarmEval.recovered.filter((/** @type {any} */ r) => r.point),
+      commFired: alarmEval.fired.filter((/** @type {any} */ f) => !f.point),
+      commCleared: alarmEval.recovered.filter((/** @type {any} */ r) => !r.point),
     }
     const activeBool = Object.fromEntries(
       Object.entries(alarmEval.next)
@@ -324,8 +315,8 @@ export const modbusPoll = async (home, cwd, opts) => {
         .map(([k]) => [k, true]),
     )
     if (alarmEval.fired.length) {
-      const procFired = alarmEval.fired.filter((f) => f.point)
-      const commFired = alarmEval.fired.filter((f) => f.connectionId)
+      const procFired = alarmEval.fired.filter((/** @type {any} */ f) => f.point)
+      const commFired = alarmEval.fired.filter((/** @type {any} */ f) => f.connectionId)
       if (procFired.length) {
         await recordBenchEvent(
           home,
@@ -335,7 +326,7 @@ export const modbusPoll = async (home, cwd, opts) => {
             ok: false,
             summary: `越限告警：${procFired
               .slice(0, 5)
-              .map((item) => {
+              .map((/** @type {any} */ item) => {
                 const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
                 return `${pointLabel(item.point)}=${decodeValue(item.point, item.raw ?? item.alarm?.value)}${item.kind === 'max' ? `>${limit}` : `<${limit}`}`
               })
@@ -348,7 +339,7 @@ export const modbusPoll = async (home, cwd, opts) => {
           room.cwd,
           `Vision 告警：${procFired
             .slice(0, 3)
-            .map((item) => {
+            .map((/** @type {any} */ item) => {
               const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
               return `${pointLabel(item.point)}=${decodeValue(item.point, item.raw ?? item.alarm?.value)}${item.kind === 'max' ? `>${limit}` : `<${limit}`}`
             })
@@ -364,7 +355,7 @@ export const modbusPoll = async (home, cwd, opts) => {
             ok: false,
             summary: `通信告警：${commFired
               .slice(0, 3)
-              .map((c) => c.label || c.connectionId)
+              .map((/** @type {any} */ c) => c.label || c.connectionId)
               .join('；')}`,
           },
           { source: 'system' },
@@ -372,8 +363,8 @@ export const modbusPoll = async (home, cwd, opts) => {
       }
     }
     if (alarmEval.recovered.length) {
-      const procRec = alarmEval.recovered.filter((r) => r.point)
-      const commRec = alarmEval.recovered.filter((r) => r.connectionId && !r.point)
+      const procRec = alarmEval.recovered.filter((/** @type {any} */ r) => r.point)
+      const commRec = alarmEval.recovered.filter((/** @type {any} */ r) => r.connectionId && !r.point)
       if (procRec.length) {
         await recordBenchEvent(
           home,
@@ -383,7 +374,7 @@ export const modbusPoll = async (home, cwd, opts) => {
             ok: true,
             summary: `告警恢复：${procRec
               .slice(0, 5)
-              .map((item) => `${pointLabel(item.point)}=${decodeValue(item.point, item.raw ?? item.alarm?.value)}`)
+              .map((/** @type {any} */ item) => `${pointLabel(item.point)}=${decodeValue(item.point, item.raw ?? item.alarm?.value)}`)
               .join('；')}`,
           },
           { source: 'system' },
@@ -398,7 +389,7 @@ export const modbusPoll = async (home, cwd, opts) => {
             ok: true,
             summary: `通信恢复：${commRec
               .slice(0, 3)
-              .map((c) => c.connectionId)
+              .map((/** @type {any} */ c) => c.connectionId)
               .join('；')}`,
           },
           { source: 'system' },

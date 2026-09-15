@@ -1,4 +1,5 @@
-import { emptyJournal, emptyWorkspace, pickJournal, subscribeState } from '../../../../bench-shared.mjs'
+import { emptyJournal, emptyWorkspace, pickJournal } from '../../common/ui-format.mjs'
+import { subscribeState } from '../../common/state-subscription.mjs'
 
 export function useHmiState(React, post, cwd, sessionId) {
   const [health, setHealth] = React.useState({})

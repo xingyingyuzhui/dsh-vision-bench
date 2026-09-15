@@ -1,40 +1,23 @@
 // @ts-check
-import { evaluateAlarms, normalizeAlarmState } from '../../../bench-alarm.mjs'
-import { normalizeModbus, normalizePointV3 } from '../../../bench-devices.mjs'
-import { pickArtifact } from '../../../bench-fs.mjs'
-import { toEndpoint } from '../../../bench-io-contract.mjs'
-import { aborted, hasRunning, originOf, signalOf } from '../../../bench-journal.mjs'
-import { commitPollResult, commitReadResult, commitWriteResult } from '../../../bench-modbus-commit.mjs'
-import { notifyBenchEvent } from '../../../bench-notify.mjs'
-import { requireWorkspaceCwd } from '../../../bench-paths.mjs'
-import {
-  clampInt,
-  decodeValue,
-  evaluateAlarm,
-  evaluatePointAlarms,
-  fillSimValues,
-  functionTag,
-  isWritableFunction,
-  normalizePoints,
-  normalizeWriteValues,
-  pointIdOf,
-  pointLabel,
-  scatterBatch,
-  setPointValue,
-} from '../../../bench-points.mjs'
-import { planScopedReadBatches } from '../../../bench-pollplan.mjs'
-import { portKey } from '../../../bench-portlock.mjs'
-import {
-  finishTask,
-  loadWorkspace,
-  normalizeFocusRequest,
-  normalizeFocusState,
-  openTask,
-  pruneBuildLogs,
-  recordBenchEvent,
-} from '../../../bench-store.mjs'
+import { evaluateAlarms, normalizeAlarmState } from '../../domain/modbus/alarm-model.mjs'
+import { normalizeModbus } from './modbus-migration.mjs'
+import { normalizePointV3 } from '../../domain/modbus/point-model.mjs'
+import { pickArtifact } from '../../infrastructure/files/project-fs.mjs'
+import { toEndpoint } from '../../domain/modbus/io-contract.mjs'
+import { aborted, hasRunning, originOf, signalOf } from '../../domain/modbus/journal-model.mjs'
+import { commitPollResult, commitReadResult, commitWriteResult } from './modbus-commit.mjs'
+import { notifyBenchEvent } from '../../infrastructure/host/notify.mjs'
+import { requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
+import { clampInt, fillSimValues, functionTag, normalizePoints, normalizeWriteValues, pointLabel, scatterBatch, setPointValue } from '../../domain/modbus/point-model.mjs'
+import { decodeValue, isWritableFunction, pointIdOf } from '../../domain/modbus/point-math.mjs'
+import { evaluateAlarm, evaluatePointAlarms } from '../../domain/modbus/point-alarm.mjs'
+import { planScopedReadBatches } from '../../domain/modbus/poll-plan.mjs'
+import { portKey } from '../../infrastructure/modbus/port-lock.mjs'
+import { finishTask, openTask, pruneBuildLogs, recordBenchEvent } from '../../infrastructure/store/journal-store.mjs'
+import { loadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
+import { normalizeFocusRequest, normalizeFocusState } from '../../infrastructure/store/focus-store.mjs'
 import { ensureWorkspaceClaimed, modbusForSession, saveSessionModbusPatch } from './workspace-session-view.mjs'
-import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from '../../../bench-targets.mjs'
+import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from './target-resolver-service.mjs'
 import { endpointFingerprint, endpointLabelText, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { findPointV3, fnOfPoint } from '../../domain/modbus/function-code.mjs'

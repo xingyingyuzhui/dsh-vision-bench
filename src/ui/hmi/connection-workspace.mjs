@@ -1,4 +1,5 @@
-import { formatErrorMessage, renderModalDialog } from '../../../bench-shared.mjs'
+import { formatErrorMessage } from '../common/ui-format.mjs'
+import { renderModalDialog } from '../components/modal-dialog.mjs'
 
 /** Single-connection workspace: devices, points, pending writes. */
 export function renderConnectionWorkspace(el, t, ctx) {

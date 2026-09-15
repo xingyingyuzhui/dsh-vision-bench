@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
 import { afterEach, test } from 'node:test'
-import { fileURLToPath } from 'node:url'
 import {
   MANUAL_NAV_LEASE_MS,
   NAV_LRU_LIMIT,
@@ -17,11 +14,6 @@ import {
   subscribeNav,
 } from '../../src/ui/workspace/vision-navigation-store.mjs'
 import { MONITOR_SECTIONS, VIEW_HMI, VIEW_MONITOR } from '../../src/ui/workspace/vision-route.mjs'
-
-const storeSrc = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), '../../src/ui/workspace/vision-navigation-store.mjs'),
-  'utf8',
-)
 
 function memoryStorage() {
   const m = new Map()
@@ -44,26 +36,35 @@ afterEach(() => {
   setNavStorage(null)
 })
 
-test('nav store persists to sessionStorage and never mentions localStorage', () => {
-  assert.match(storeSrc, /sessionStorage/)
-  assert.doesNotMatch(storeSrc, /localStorage/)
-  const mem = memoryStorage()
-  setNavStorage(mem)
-  navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES }, { source: 'manual' })
-  const dumped = JSON.parse(mem.getItem(NAV_STORAGE_KEY))
-  assert.equal(dumped.v, 1)
-  assert.ok(dumped.items.some((item) => item.key === 's1\0/ws'))
-  assert.equal(
-    dumped.items.some((item) => item.key === '\0/ws'),
-    false,
-    'must not mirror named session onto the empty-session key',
-  )
-  const snapshot = mem.getItem(NAV_STORAGE_KEY)
-  clearNavStore()
-  setNavStorage(mem)
-  mem.setItem(NAV_STORAGE_KEY, snapshot)
-  assert.equal(getNav('s1', '/ws').section, MONITOR_SECTIONS.FRAMES)
-  assert.equal(getNav('s1', '/ws').preferred.section, MONITOR_SECTIONS.FRAMES)
+test('nav store persists through injected sessionStorage and never writes localStorage', () => {
+  const session = memoryStorage()
+  const local = memoryStorage()
+  const prevSession = globalThis.sessionStorage
+  const prevLocal = globalThis.localStorage
+  globalThis.sessionStorage = session
+  globalThis.localStorage = local
+  try {
+    setNavStorage(null)
+    navigate('s1', '/ws', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.FRAMES }, { source: 'manual' })
+    const dumped = JSON.parse(session.getItem(NAV_STORAGE_KEY))
+    assert.equal(dumped.v, 1)
+    assert.ok(dumped.items.some((item) => item.key === 's1\0/ws'))
+    assert.equal(local.getItem(NAV_STORAGE_KEY), null, 'must not write localStorage')
+    assert.equal(
+      dumped.items.some((item) => item.key === '\0/ws'),
+      false,
+      'must not mirror named session onto the empty-session key',
+    )
+    const snapshot = session.getItem(NAV_STORAGE_KEY)
+    clearNavStore()
+    setNavStorage(null)
+    session.setItem(NAV_STORAGE_KEY, snapshot)
+    assert.equal(getNav('s1', '/ws').section, MONITOR_SECTIONS.FRAMES)
+    assert.equal(getNav('s1', '/ws').preferred.section, MONITOR_SECTIONS.FRAMES)
+  } finally {
+    globalThis.sessionStorage = prevSession
+    globalThis.localStorage = prevLocal
+  }
 })
 
 test('Session A navigation does not notify Session B subscribers', () => {

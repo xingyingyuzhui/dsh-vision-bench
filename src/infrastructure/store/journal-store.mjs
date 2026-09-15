@@ -1,6 +1,6 @@
 import { readdirSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { normalizeModbus } from '../../../bench-devices.mjs'
+import { normalizeModbus } from '../../application/modbus/modbus-migration.mjs'
 import {
   MAX_TASKS,
   capTasks,
@@ -13,10 +13,10 @@ import {
   prepend,
   runningTasks,
   trimTimeline,
-} from '../../../bench-journal.mjs'
-import { requireWorkspaceCwd } from '../../../bench-paths.mjs'
-import { mergeLog } from '../../../bench-prompt.mjs'
-import { resolveTarget } from '../../../bench-targets.mjs'
+} from '../../domain/modbus/journal-model.mjs'
+import { requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
+import { mergeLog } from '../../domain/prompt/prompt-log.mjs'
+import { resolveTarget } from '../../application/modbus/target-resolver-service.mjs'
 import { projectModbusForSession } from '../../application/modbus/config-scope-service.mjs'
 import { isScopePartitioned } from '../../domain/modbus/config-scope.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'

@@ -1,12 +1,5 @@
 // @ts-check
-import {
-  migrateVisualizationToV2,
-  normalizeComponentLayout,
-  normalizeVisualizationComponent,
-  parseVisualizationLayoutItems,
-  validateVisualizationComponent,
-  visualizationSchemaGuard,
-} from '../../../bench-visualization-model.mjs'
+import { migrateVisualizationToV2, normalizeComponentLayout, normalizeVisualizationComponent, parseVisualizationLayoutItems, validateVisualizationComponent, visualizationSchemaGuard } from '../../domain/modbus/visualization-model.mjs'
 import { explicitId } from '../../domain/config/config-operation.mjs'
 
 /**

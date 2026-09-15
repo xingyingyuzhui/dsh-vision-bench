@@ -1,4 +1,5 @@
-import { formatErrorMessage, subscribeState } from '../../../../bench-shared.mjs'
+import { formatErrorMessage } from '../../common/ui-format.mjs'
+import { subscribeState } from '../../common/state-subscription.mjs'
 import { beginRequest, postWithAbort, shouldApplyRequest } from '../../common/latest-request-gate.mjs'
 import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
 import { getNav, subscribeNav } from '../../workspace/vision-navigation-store.mjs'

@@ -1,4 +1,4 @@
-import { getPreserveNavPreference } from '../../../../bench-settings.mjs'
+import { getPreserveNavPreference } from '../../settings/navigation-preference.mjs'
 import { useConnColWidths } from './use-conn-col-widths.mjs'
 
 const LAST_HMI_TAB_STORAGE_KEY = 'dsh-vision-bench:last-hmi-tab'

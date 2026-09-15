@@ -36,10 +36,15 @@ test('debug view mounts without hidden-scope ReferenceErrors', async () => {
   const DebugView = createDebugView(makeReact(), () => 'k', post, {})
   const tree = DebugView({ ...alpha3PageProps({ sessionId: 's1', path: '/tmp' }) })
   assert.ok(tree, 'debug tree rendered')
-  const src = await import('node:fs').then(
-    (fs) =>
-      `${fs.readFileSync(new URL('../bench-view.mjs', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../src/ui/debug/debug-view.mjs', import.meta.url), 'utf8')}`,
-  )
+  const src = await import('node:fs').then((fs) => {
+    const files = [
+      '../bench-view.mjs',
+      '../src/ui/debug/debug-view.mjs',
+      '../src/ui/debug/use-debug-flash-actions.mjs',
+      '../src/ui/debug/debug-flash-panel.mjs',
+    ]
+    return files.map((file) => fs.readFileSync(new URL(file, import.meta.url), 'utf8')).join('\n')
+  })
   assert.match(src, /openocdFlash.status !== 'ready'/)
   assert.match(src, /function probeOpenOcd/)
   assert.match(src, /probeOpenOcd\(\{\s*force:\s*true\s*\}\)/)

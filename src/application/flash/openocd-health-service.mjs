@@ -1,5 +1,5 @@
 // @ts-check
-import { loadBindings, probeBindings } from '../../../bench-store.mjs'
+import { loadBindings, probeBindings } from '../../infrastructure/store/bindings-store.mjs'
 import { FLASH_ERROR_CODES } from '../../domain/flash/errors.mjs'
 import { probeOpenOcdExecutable } from '../../infrastructure/process/openocd-runner.mjs'
 

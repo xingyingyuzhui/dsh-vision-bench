@@ -2,8 +2,8 @@
 
 import { stat } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
-import { requireKeilProject, requireWorkspaceCwd } from '../../../bench-paths.mjs'
-import { loadWorkspace } from '../../../bench-store.mjs'
+import { requireKeilProject, requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
+import { loadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
 import { keilErrorResult } from '../../domain/keil/errors.mjs'
 import {
   MAX_FUNCS_TOTAL,

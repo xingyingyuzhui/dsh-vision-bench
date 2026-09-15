@@ -137,13 +137,41 @@ test('pause events re-evaluate watches added after subscribe', async () => {
 })
 
 test('useDebugEvents queries state once then waits; idle wake does not tight-loop', async () => {
-  const { readFileSync } = await import('node:fs')
-  const src = readFileSync(new URL('../../src/ui/debug/runtime/use-debug-events.mjs', import.meta.url), 'utf8')
-  assert.match(src, /getState\(\)/)
-  assert.match(src, /waitEvents/)
-  assert.match(src, /waitRes\.woke/)
-  assert.match(src, /if \(!sessionId \|\| !cwd\)/)
-  assert.doesNotMatch(src, /\[active, identityKey/)
+  const React = createMockReact()
+  /** @type {Array<() => any>} */
+  const effects = []
+  React.useEffect = (fn) => {
+    effects.push(fn)
+  }
+  let stateCalls = 0
+  let waitCalls = 0
+  /** @type {(value: any) => void} */
+  let settleWait
+  const waitGate = new Promise((resolve) => {
+    settleWait = resolve
+  })
+  const mockPost = async (path) => {
+    if (String(path).includes('/debug/state')) {
+      stateCalls += 1
+      return { ok: true, session: { state: 'running', variables: [] } }
+    }
+    if (String(path).includes('/debug/events/wait')) {
+      waitCalls += 1
+      if (waitCalls === 1) return waitGate
+      return new Promise(() => {})
+    }
+    return { ok: true }
+  }
+  useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-1' })
+  const stop = effects[0]?.()
+  await new Promise((r) => setImmediate(r))
+  assert.equal(stateCalls, 1, 'bootstraps with a single state query')
+  assert.equal(waitCalls, 1, 'then parks on waitEvents')
+  settleWait({ ok: true, woke: true, events: [], nextCursor: 0 })
+  await new Promise((r) => setTimeout(r, 30))
+  assert.ok(waitCalls >= 2, 'idle wake resumes waiting')
+  assert.ok(waitCalls <= 4, 'idle wake must not tight-loop')
+  if (typeof stop === 'function') stop()
 })
 
 test('PR-4: useDebugEvents: pause and step set pendingControl without optimistic paused state', async () => {

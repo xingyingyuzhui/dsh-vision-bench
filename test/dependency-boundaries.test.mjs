@@ -16,7 +16,7 @@ test('bench-shared is a re-export facade only', async () => {
 })
 
 test('internal runtime uses createVisualizationPage (not createTrendPage)', async () => {
-  const runtime = readFileSync(join(root, 'bench-runtime.mjs'), 'utf8')
+  const runtime = readFileSync(join(root, 'src/ui/client/client-entry.mjs'), 'utf8')
   const monitor = readFileSync(join(root, 'src/ui/workspace/monitor-workspace.mjs'), 'utf8')
   assert.match(monitor, /createVisualizationPage/)
   assert.doesNotMatch(runtime, /createTrendPage/)

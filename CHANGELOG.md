@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.29.0
+
+结构与测试重构收口（计划 P0–P6）：
+
+- `src/**` 禁止导入根目录 `bench-*`（dependency-cruiser 四条 error）；门面仅保留 ≤80 行 re-export。
+- 生产大文件按职责拆分；structure-budget allowlist 清空。
+- 测试按领域目录重组，结构/源码断言/包闭包进 `npm run quality`。
+- 补齐 ADR-019～023（debug/写点会话所有权、告警模型、verify 真实性、Windows 验收边界）；ADR-024 标 Completed。
+- Client 体积上限随模块边界税上调至 1 665 000 bytes。
+
 ## 0.28.7
 
 - 修复 `normalizeCwd` 相对路径单测：用 `path.isAbsolute`，不再假设 POSIX `/` 前缀（Windows CI 绿）。

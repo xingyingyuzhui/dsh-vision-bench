@@ -1,6 +1,6 @@
 // UI formatting helpers (split from bench-shared).
-import { statusKind } from '../../../bench-settings.mjs'
-export { clockOf } from '../../../bench-points.mjs'
+import { statusKind } from '../settings/tool-status.mjs'
+export { clockOf } from '../../domain/modbus/point-model.mjs'
 
 export function emptyWorkspace() {
   return {

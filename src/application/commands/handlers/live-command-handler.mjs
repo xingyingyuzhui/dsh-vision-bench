@@ -1,9 +1,9 @@
 // @ts-check
-import { connectOp, modbusRead, modbusWrite } from '../../../../bench-modbus-forward.mjs'
-import { buildEvidenceRefs } from '../../../../bench-modbus-forward.mjs'
-import { createManualRequest } from '../../../../bench-store.mjs'
-import { resolveTarget } from '../../../../bench-targets.mjs'
-import { readTrendSeries } from '../../../../bench-trend-store.mjs'
+import { connectOp, modbusRead, modbusWrite } from '../../modbus/index.mjs'
+import { buildEvidenceRefs } from '../../modbus/index.mjs'
+import { createManualRequest } from '../../../infrastructure/store/journal-store.mjs'
+import { resolveTarget } from '../../modbus/target-resolver-service.mjs'
+import { readTrendSeries } from '../../modbus/trend-store.mjs'
 import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
 
 /** @param {any} args */

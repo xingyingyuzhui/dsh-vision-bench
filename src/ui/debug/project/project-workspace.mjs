@@ -1,5 +1,5 @@
 // 工程结构 — 树形/图谱双视图 + 左右分栏（导航 + 源码预览）。
-import { formatErrorMessage } from '../../../../bench-shared.mjs'
+import { formatErrorMessage } from '../../common/ui-format.mjs'
 import { createSourceEditor } from '../../components/source-editor.mjs'
 import { createFunctionDetailPanel } from './function-detail-panel.mjs'
 import { createProjectGraphView } from './project-graph-view.mjs'

@@ -1,5 +1,4 @@
-// Stable import surface for the agent tool while the actions module keeps its
-// forwarding role.
+// Compatibility facade — agent-stable surface; prefer src/application/modbus.
 export {
   ERROR_CODES,
   buildEvidenceRefs,

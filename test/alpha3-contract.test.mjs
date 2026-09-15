@@ -119,8 +119,8 @@ test('client and host inject connection for authenticated RPC', () => {
   assert.match(hostSrc, /connection\.rpc\.handle/)
 })
 
-test('bench-runtime post uses Connection RPC instead of fetch', () => {
-  const src = readFileSync(join(root, 'bench-runtime.mjs'), 'utf8')
+test('client apply post uses Connection RPC instead of fetch', () => {
+  const src = readFileSync(join(root, 'src/ui/client/client-entry.mjs'), 'utf8')
   assert.match(src, /createVisionRpcPost/)
   assert.doesNotMatch(src, /\bfetch\s*\(/)
 })

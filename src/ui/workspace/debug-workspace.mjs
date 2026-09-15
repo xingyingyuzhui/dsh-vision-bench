@@ -1,5 +1,5 @@
-import { getPreserveNavPreference } from '../../../bench-settings.mjs'
-import { createDebugView } from '../../../bench-view.mjs'
+import { getPreserveNavPreference } from '../settings/navigation-preference.mjs'
+import { createDebugView } from '../debug/debug-view.mjs'
 import { sessionCwd } from '../common/session-scope.mjs'
 import { createMapView } from '../debug/project/project-page.mjs'
 import { createRuntimePage } from '../debug/runtime/runtime-page.mjs'

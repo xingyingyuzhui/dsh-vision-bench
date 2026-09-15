@@ -1,5 +1,6 @@
-import { connLabel } from '../../../bench-devices.mjs'
-import { renderModalDialog, shouldHighlightFocus } from '../../../bench-shared.mjs'
+import { connLabel } from '../../domain/modbus/connection-model.mjs'
+import { renderModalDialog } from '../components/modal-dialog.mjs'
+import { shouldHighlightFocus } from '../common/focus-store.mjs'
 import { renderConnectionThead } from './connection-thead.mjs'
 
 /** Connection list / collection toolbar panel. */

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { executeDebugCommand } from '../../src/application/debug/debug-command-service.mjs'
 import { createVerifyCommandService } from '../../src/application/verify/verify-command-service.mjs'
-import { createVisionRpcRouter } from '../../src/interfaces/rpc/vision-rpc-router.mjs'
+import { createRouter } from '../helpers/rpc-factory.mjs'
 
 test('host singleton: agent vision_debug verify and browser RPC share the same verifyCommandService instance', async () => {
   const mockWorkspace = {
@@ -38,10 +38,7 @@ test('host singleton: agent vision_debug verify and browser RPC share the same v
   assert.ok(runId)
 
   // 2. Browser queries status via VisionRpcRouter using the SAME verifyCommandService
-  const router = createVisionRpcRouter({
-    getHome: () => '/test/home',
-    verifyCommandService,
-  })
+  const router = createRouter('/test/home', { verifyCommandService })
 
   const statusRes = /** @type {any} */ (
     await router.dispatch('verify/status', {

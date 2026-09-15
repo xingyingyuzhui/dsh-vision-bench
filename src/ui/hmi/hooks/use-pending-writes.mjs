@@ -1,4 +1,4 @@
-import { formatErrorMessage, pickJournal } from '../../../../bench-shared.mjs'
+import { formatErrorMessage, pickJournal } from '../../common/ui-format.mjs'
 import { ERROR_CODES } from '../../../domain/modbus/errors.mjs'
 
 export function usePendingWrites(React, post, cwd, sessionId, setPending, setJournal, setWorkspace, setError, t) {

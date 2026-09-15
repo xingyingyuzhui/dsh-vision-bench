@@ -1,16 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createVerifyTelemetryAdapter } from '../../src/infrastructure/modbus/verify-telemetry-adapter.mjs'
-import { createVisionRpcRouter } from '../../src/interfaces/rpc/vision-rpc-router.mjs'
+import { createRouter } from '../helpers/rpc-factory.mjs'
 
 test('vision-rpc-router: dispatches verify/run, verify/status, and verify/cancel endpoints', async () => {
   const adapter = createVerifyTelemetryAdapter()
   adapter.publishPointValue('flow_rate', 15.2)
 
-  const router = createVisionRpcRouter({
-    getHome: () => '/test/home',
-    telemetryReader: adapter,
-  })
+  const router = createRouter('/test/home', { telemetryReader: adapter })
 
   // 1. Run scenario via canonical endpoint `verify/run`
   const runRes = /** @type {any} */ (
