@@ -71,6 +71,7 @@ export const COPY_EN = {
     timeline: 'Timeline',
     sourceUser: 'User',
     sourceAgent: 'Agent',
+    sourcePreview: 'Source preview',
     statusRunning: 'Running',
     statusOk: 'Done',
     statusError: 'Failed',

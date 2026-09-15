@@ -140,6 +140,7 @@ export function createProjectPreviewPanel(React, t, SourceEditor) {
                       rel,
                       jumpLine: activeJumpLine || 6,
                       language: languageForPath(rel),
+                      ariaLabel: t('sourcePreview'),
                     }),
                   ),
                 ),

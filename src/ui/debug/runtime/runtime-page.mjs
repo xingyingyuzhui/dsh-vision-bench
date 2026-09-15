@@ -264,6 +264,7 @@ export function createRuntimePage(React, t, post) {
                       breakpoints: fileBreakpoints,
                       debugGutters: true,
                       language: languageForPath(sourcePreview.rel),
+                      ariaLabel: t('sourcePreview'),
                     })
                   : el(
                       'div',

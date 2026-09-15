@@ -69,6 +69,7 @@ export const COPY_ZH = {
     timeline: '时间线',
     sourceUser: '用户',
     sourceAgent: 'Agent',
+    sourcePreview: '源码预览',
     statusRunning: '进行中',
     statusOk: '完成',
     statusError: '失败',

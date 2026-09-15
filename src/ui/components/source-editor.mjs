@@ -183,6 +183,8 @@ export function createSourceEditor(React) {
         'pre',
         {
           className: 'dvb-log dvb-map-preview',
+          role: 'region',
+          'aria-label': props.ariaLabel,
           style: { maxHeight: '320px', overflow: 'auto', whiteSpace: 'pre' },
           'data-jump-line': jumpLine > 0 ? String(jumpLine) : undefined,
         },
@@ -191,6 +193,8 @@ export function createSourceEditor(React) {
     }
     return el('div', {
       className: 'dvb-source-editor',
+      role: 'region',
+      'aria-label': props.ariaLabel,
       ref: hostRef,
       'data-rel': rel,
       'data-jump-line': jumpLine > 0 ? String(jumpLine) : undefined,
