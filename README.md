@@ -84,7 +84,7 @@ dsh plugin --profile web remove dsh-vision-bench
 
 ## 开发
 
-实现优先改 `src/{domain,application,infrastructure,interfaces,ui}`；根目录 `bench-*.mjs` 仅为兼容 re-export。架构决策见 `docs/architecture/`（含 ADR-024）。然后在**插件源码目录**执行：
+实现优先改 `src/{domain,application,infrastructure,interfaces,ui}`；根目录 `bench-*.mjs` 仅为兼容 re-export。架构决策见 `docs/architecture/`（含 ADR-024 客户端原语与门面退役、ADR-025 公共 UI 组件 API 契约）。然后在**插件源码目录**执行：
 
 ```sh
 npm install
