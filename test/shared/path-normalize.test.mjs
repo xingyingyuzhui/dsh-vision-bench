@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join, parse as parsePath } from 'node:path'
 import test from 'node:test'
 import { normalizeCwd, sameCwd } from '../../src/shared/path-normalize.mjs'
 
@@ -28,9 +28,11 @@ test('normalizeCwd 去掉结尾斜杠', () => {
 
 test('normalizeCwd 把相对路径解析为绝对路径', () => {
   const rel = normalizeCwd('.')
-  assert.ok(rel.startsWith('/'), '应解析为绝对路径')
-  // 根目录 '/' 允许保留尾斜杠，其它路径一律去掉
-  assert.equal(rel.endsWith('/'), rel === '/')
+  assert.ok(isAbsolute(rel), '应解析为绝对路径')
+  // 根目录（POSIX `/` 或 Windows `C:\`）允许保留尾斜杠，其它路径一律去掉
+  const root = parsePath(rel).root
+  const endsWithSep = rel.endsWith('/') || rel.endsWith('\\')
+  assert.equal(endsWithSep, rel === root)
 })
 
 test('normalizeCwd 空值与非法值返回空串', () => {

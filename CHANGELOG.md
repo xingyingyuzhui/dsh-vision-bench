@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.28.7
+
+- 修复 `normalizeCwd` 相对路径单测：用 `path.isAbsolute`，不再假设 POSIX `/` 前缀（Windows CI 绿）。
+
 ## 0.28.6
 
 - 删掉一批源码/CSS 字符串锁和重复 import 检查；行为测和写点/I/O/preset 保险丝保留。
