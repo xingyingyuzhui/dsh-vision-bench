@@ -142,8 +142,8 @@ export function createSettingsPage(React, t, post, options = {}) {
         .finally(() => setShareBusy(false))
     }
 
-    function renderSwitch(checked, disabled, onChange, id) {
-      return renderToggleSwitch(el, { checked, disabled, onChange, id })
+    function renderSwitch(checked, disabled, onChange, id, ariaLabel) {
+      return renderToggleSwitch(el, { checked, disabled, onChange, id, ariaLabel })
     }
 
     function settingRow(labelNode, controlNode, isSub = false) {
@@ -236,7 +236,7 @@ export function createSettingsPage(React, t, post, options = {}) {
       el('div', { className: 'dvb-hint', style: { marginBottom: '6px' } }, t('shareHint')),
       settingRow(
         el('span', { style: { fontWeight: 500 } }, t('shareMaster')),
-        renderSwitch(share.enabled === true, shareBusy, (enabled) => applyShare({ ...share, enabled }), 'share-master'),
+        renderSwitch(share.enabled === true, shareBusy, (enabled) => applyShare({ ...share, enabled }), 'share-master', t('shareMaster')),
       ),
       el(
         'div',
@@ -264,6 +264,7 @@ export function createSettingsPage(React, t, post, options = {}) {
               shareBusy || share.enabled !== true,
               (on) => applyShare({ ...share, [box.key]: on }),
               'share-' + box.key,
+              t(box.label),
             ),
             true,
           ),
@@ -281,6 +282,7 @@ export function createSettingsPage(React, t, post, options = {}) {
             setPreserveNavPreference(on)
           },
           'preserve-last-view',
+          t('preserveLastView'),
         ),
       ),
       message ? el('div', { className: 'dvb-msg', 'data-kind': message.kind }, message.text) : null,

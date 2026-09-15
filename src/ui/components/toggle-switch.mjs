@@ -2,6 +2,11 @@
  * ToggleSwitch
  * Centralized, reusable slider switch component for DSH Vision Bench.
  * Used for boolean toggles (settings, monitored points selection, share options, etc.).
+ *
+ * Activation contract (ADR-025 D6/D9): a native `<button>` already turns
+ * Enter/Space into a `click`, so the component wires **only** `onClick`.
+ * A manual key handler would make a real keyboard activation fire the change
+ * twice; `test/ui/toggle-switch.test.mjs` pins this down.
  */
 
 export function renderToggleSwitch(el, {
@@ -31,12 +36,6 @@ export function renderToggleSwitch(el, {
       onClick(e) {
         e.preventDefault()
         if (!disabled && onChange) onChange(!isOn)
-      },
-      onKeyDown(e) {
-        if ((e.key === ' ' || e.key === 'Enter') && !disabled && onChange) {
-          e.preventDefault()
-          onChange(!isOn)
-        }
       },
     },
     el('span', { className: 'dvb-setting-switch-thumb' }),
