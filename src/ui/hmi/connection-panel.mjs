@@ -1,11 +1,11 @@
 import { connLabel } from '../../domain/modbus/connection-model.mjs'
-import { renderModalDialog } from '../components/modal-dialog.mjs'
 import { shouldHighlightFocus } from '../common/focus-store.mjs'
 import { renderConnectionThead } from './connection-thead.mjs'
 
 /** Connection list / collection toolbar panel. */
 export function renderConnectionPanel(el, t, ctx) {
   const {
+    ModalDialog,
     focusState,
     connections,
     cwd,
@@ -250,8 +250,8 @@ export function renderConnectionPanel(el, t, ctx) {
           ),
         )
       : el('div', { className: 'dvb-empty' }, '暂无连接，点击「＋连接」创建'),
-    deletingConn
-      ? renderModalDialog(el, t, {
+    deletingConn && ModalDialog
+      ? el(ModalDialog, {
           open: true,
           kind: 'confirm',
           title: t('deleteConnConfirmTitle') || '删除连接',

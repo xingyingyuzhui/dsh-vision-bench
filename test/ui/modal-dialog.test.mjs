@@ -1,114 +1,72 @@
+// P2-1: ModalDialog pure structure (ADR-025 D2).
+//
+// No HappyDOM / page runtime — structure and callbacks are asserted through
+// the DOM-free `react-unit` harness.
 import assert from 'node:assert/strict'
-import test from 'node:test'
-import { createModalDialog, renderModalDialog } from '../../bench-shared.mjs'
-
-const el = (type, props, ...children) => ({
-  type,
-  props: { ...(props || {}), children: children.length === 1 ? children[0] : children },
-  children: children.flat(),
-})
+import { test } from 'node:test'
+import { renderModalDialog } from '../../src/ui/components/modal-dialog.mjs'
+import { click, el } from '../helpers/react-unit.mjs'
 
 const t = (k) => k
 
-test('renderModalDialog returns null when open is falsy or props is missing', () => {
+test('renderModalDialog returns null when closed or without props', () => {
   assert.equal(renderModalDialog(el, t, null), null)
   assert.equal(renderModalDialog(el, t, { open: false }), null)
 })
 
-test('renderModalDialog renders error alert with title, message and badges', () => {
-  let closed = false
-  let confirmed = false
-  const node = renderModalDialog(el, t, {
-    open: true,
-    kind: 'err',
-    title: '连接失败',
-    message: '无法连接到串口 COM3',
-    onClose() {
-      closed = true
-    },
-    onConfirm() {
-      confirmed = true
-    },
-  })
-
-  assert.ok(node)
-  assert.equal(node.props.className, 'dvb-mask')
-  const dialog = node.children[0]
-  assert.ok(dialog.props.className.includes('dvb-dialog'))
-  assert.ok(dialog.props.className.includes('is-error'))
-
-  // Header
-  const header = dialog.children[0]
-  assert.equal(header.props.className, 'dvb-dialog-header')
-
-  // Body
-  const body = dialog.children[1]
-  assert.equal(body.props.className, 'dvb-dialog-body')
-  assert.equal(body.children[0], '无法连接到串口 COM3')
-
-  // Footer
-  const footer = dialog.children[2]
-  assert.equal(footer.props.className, 'dvb-dialog-footer')
-  const confirmBtn = footer.children.find((c) => c && c.props && c.props.className.includes('dvb-btn-primary'))
-  assert.ok(confirmBtn)
-  confirmBtn.props.onClick()
-  assert.equal(confirmed, true)
-
-  // Close button
-  const closeBtn = header.children.find((c) => c && c.props && c.props.className === 'dvb-dialog-close')
-  assert.ok(closeBtn)
-  closeBtn.props.onClick()
-  assert.equal(closed, true)
+test('structure: role, aria-modal, labelled title and shared classes', () => {
+  const node = renderModalDialog(el, t, { open: true, title: '连接失败', titleId: 'dlg-title' })
+  assert.equal(node.props.role, 'dialog')
+  assert.equal(node.props['aria-modal'], 'true')
+  assert.equal(node.props['aria-labelledby'], 'dlg-title')
+  const title = node.children[0].children[0].children[0].children[1]
+  assert.equal(title.props.className, 'dvb-dialog-title')
+  assert.equal(title.props.id, 'dlg-title')
+  assert.equal(title.children[0], '连接失败')
 })
 
-test('renderModalDialog renders confirm dialog with cancel and danger confirm buttons', () => {
-  let canceled = false
-  let confirmed = false
+test('structure: danger confirm and cancel buttons keep their contracts', () => {
+  const canceled = []
+  const confirmed = []
   const node = renderModalDialog(el, t, {
     open: true,
     kind: 'confirm',
-    title: '删除连接',
-    message: '确定要删除此连接吗？',
-    confirmText: '确认删除',
-    cancelText: '取消',
     danger: true,
-    onCancel() {
-      canceled = true
-    },
-    onConfirm() {
-      confirmed = true
-    },
+    showCancel: true,
+    onCancel: () => canceled.push(true),
+    onConfirm: () => confirmed.push(true),
   })
-
-  assert.ok(node)
-  const dialog = node.children[0]
-  const footer = dialog.children[2]
-  const cancelBtn = footer.children.find(
-    (c) => c && c.props && (c.props.children === '取消' || c.children[0] === '取消'),
-  )
-  assert.ok(cancelBtn)
-  cancelBtn.props.onClick()
-  assert.equal(canceled, true)
-
-  const confirmBtn = footer.children.find((c) => c && c.props && c.props.className.includes('dvb-btn-danger-solid'))
-  assert.ok(confirmBtn)
-  confirmBtn.props.onClick()
-  assert.equal(confirmed, true)
+  const footer = node.children[0].children[2]
+  const cancel = footer.children[0]
+  const confirm = footer.children[1]
+  assert.ok(cancel.props.className.includes('dvb-dialog-btn-cancel'))
+  assert.ok(confirm.props.className.includes('dvb-dialog-btn-danger'))
+  click(cancel)
+  click(confirm)
+  assert.equal(canceled.length, 1)
+  assert.equal(confirmed.length, 1)
 })
 
-test('createModalDialog provides React component wrapper', () => {
-  const ReactMock = { createElement: el }
-  const ModalDialog = createModalDialog(ReactMock, t)
-  const node = ModalDialog({
-    open: true,
-    title: '自定义内容',
-    width: '500px',
-    content: el('div', { className: 'custom-body' }, '自定义主体'),
-  })
+test('structure: loading disables both actions and marks aria-busy', () => {
+  const node = renderModalDialog(el, t, { open: true, showCancel: true, loading: true })
+  assert.equal(node.props['aria-busy'], 'true')
+  const footer = node.children[0].children[2]
+  assert.equal(footer.children[0].props.disabled, true)
+  assert.equal(footer.children[1].props.disabled, true)
+})
 
-  assert.ok(node)
-  const dialog = node.children[0]
-  assert.deepEqual(dialog.props.style, { width: '500px' })
-  const body = dialog.children[1]
-  assert.equal(body.children[0].props.className, 'custom-body')
+test('mask click closes, inner click does not', () => {
+  const closed = []
+  const node = renderModalDialog(el, t, { open: true, onClose: () => closed.push(true) })
+  node.children[0].props.onClick({ stopPropagation() {} })
+  assert.equal(closed.length, 0, 'inner click is stopped')
+  node.props.onClick()
+  assert.equal(closed.length, 1)
+})
+
+test('maskClosable=false keeps the mask inert', () => {
+  const closed = []
+  const node = renderModalDialog(el, t, { open: true, maskClosable: false, onClose: () => closed.push(true) })
+  node.props.onClick()
+  assert.equal(closed.length, 0)
 })

@@ -99,6 +99,9 @@ function renderDialogIcon(el, kind) {
 /**
  * Reusable modal dialog component formatted to match DSH design system.
  * Supports Alert, Confirm, and Custom content dialogs.
+ *
+ * `renderModalDialog` stays the pure structural form (ADR-025 D2). Lifecycle
+ * (Escape, initial focus, focus restore) lives in `createModalDialog`.
  */
 export function renderModalDialog(el, t, props) {
   if (!props || !props.open) return null
@@ -116,6 +119,11 @@ export function renderModalDialog(el, t, props) {
     onClose = onCancel || onConfirm,
     maskClosable = true,
     width,
+    loading = false,
+    confirmLoading = false,
+    titleId,
+    confirmButtonRef,
+    maskRef,
     children,
   } = props
 
@@ -138,8 +146,11 @@ export function renderModalDialog(el, t, props) {
     'div',
     {
       className: 'dvb-mask',
+      ref: maskRef,
       role: 'dialog',
       'aria-modal': 'true',
+      'aria-labelledby': titleId,
+      'aria-busy': loading ? 'true' : undefined,
       onClick() {
         if (maskClosable && typeof onClose === 'function') onClose()
       },
@@ -160,7 +171,7 @@ export function renderModalDialog(el, t, props) {
           'div',
           { className: 'dvb-dialog-title-wrap' },
           renderDialogIcon(el, kind),
-          el('span', { className: 'dvb-dialog-title' }, finalTitle),
+          el('span', { className: 'dvb-dialog-title', id: titleId }, finalTitle),
         ),
         onClose
           ? el(
@@ -168,6 +179,7 @@ export function renderModalDialog(el, t, props) {
               {
                 type: 'button',
                 className: 'dvb-dialog-close',
+                disabled: loading,
                 'aria-label': resolveI18n(t, 'pickerClose', '关闭'),
                 onClick() {
                   onClose()
@@ -201,6 +213,7 @@ export function renderModalDialog(el, t, props) {
               {
                 type: 'button',
                 className: 'dvb-btn dvb-dialog-btn dvb-dialog-btn-cancel',
+                disabled: loading,
                 onClick() {
                   if (typeof onCancel === 'function') onCancel()
                   else if (typeof onClose === 'function') onClose()
@@ -213,7 +226,10 @@ export function renderModalDialog(el, t, props) {
           'button',
           {
             type: 'button',
+            ref: confirmButtonRef,
+            'aria-busy': confirmLoading ? 'true' : undefined,
             className: `dvb-btn dvb-dialog-btn ${danger ? 'dvb-dialog-btn-danger dvb-btn-danger-solid' : 'dvb-dialog-btn-primary dvb-btn-primary'}`,
+            disabled: loading || confirmLoading,
             onClick() {
               if (typeof onConfirm === 'function') onConfirm()
               else if (typeof onClose === 'function') onClose()
@@ -226,9 +242,72 @@ export function renderModalDialog(el, t, props) {
   )
 }
 
+let fallbackDialogId = 0
+
+/**
+ * Hook-bearing wrapper. Owns the dialog lifecycle the structural form cannot:
+ * Escape closes (once), initial focus moves into the dialog, and focus returns
+ * to the element that was focused before the dialog opened.
+ *
+ * @param {any} React
+ * @param {(key: string) => string} [t]
+ */
 export function createModalDialog(React, t) {
   const el = React.createElement
   return function ModalDialog(props) {
-    return renderModalDialog(el, t, props)
+    const open = Boolean(props && props.open)
+    const maskRef = React.useRef(null)
+    const confirmRef = React.useRef(null)
+    const restoreRef = React.useRef(null)
+    const latestRef = React.useRef(props)
+    const generated = typeof React.useId === 'function' ? React.useId() : `dvb-dialog-${(fallbackDialogId += 1)}`
+    const titleId = (props && props.titleId) || `${generated}-title`
+
+    // Keep the Escape handler reading current props instead of the closure from
+    // the render that opened the dialog.
+    React.useEffect(() => {
+      latestRef.current = props
+    })
+
+    React.useEffect(() => {
+      if (!open) return undefined
+      const node = maskRef.current
+      const ownerDocument = (node && node.ownerDocument) || (typeof document !== 'undefined' ? document : null)
+      const previous = ownerDocument && ownerDocument.activeElement
+      restoreRef.current = previous && previous !== ownerDocument.body ? previous : null
+
+      const current = latestRef.current || {}
+      const initial = (current.initialFocusRef && current.initialFocusRef.current) || confirmRef.current
+      if (initial && typeof initial.focus === 'function') {
+        try {
+          initial.focus()
+        } catch {}
+      }
+
+      const onKeyDown = (event) => {
+        if (event.key !== 'Escape') return
+        event.preventDefault?.()
+        event.stopPropagation?.()
+        const host = latestRef.current || {}
+        const close = host.onClose || host.onCancel || host.onConfirm
+        if (typeof close === 'function') close()
+      }
+      ownerDocument?.addEventListener('keydown', onKeyDown)
+      return () => {
+        ownerDocument?.removeEventListener('keydown', onKeyDown)
+        const restore = restoreRef.current
+        restoreRef.current = null
+        if (restore && typeof restore.focus === 'function') {
+          try {
+            restore.focus()
+          } catch {}
+        }
+      }
+      // props may be a fresh object every render; only `open` changes the lifecycle.
+    }, [open])
+
+    if (!props || !props.open) return null
+    return renderModalDialog(el, t, { ...props, titleId, maskRef, confirmButtonRef: confirmRef })
   }
 }
+

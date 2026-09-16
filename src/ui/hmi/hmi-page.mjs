@@ -2,6 +2,7 @@ import { buildInputBridge, readInputDraft } from '../common/agent-reference.mjs'
 import { formatErrorMessage, runningOf, statusBar, visionCollabBar } from '../common/ui-format.mjs'
 import { pageSessionId, useSessionCwd } from '../common/session-scope.mjs'
 import { getCustomSelect } from '../components/custom-select.mjs'
+import { createModalDialog } from '../components/modal-dialog.mjs'
 import { renderConnectionEditor } from './connection-editor.mjs'
 import { renderConnectionOverview } from './connection-overview.mjs'
 import { renderConnectionPanel } from './connection-panel.mjs'
@@ -20,6 +21,7 @@ import { usePoints } from './hooks/use-points.mjs'
 
 export function createHmiView(React, t, post) {
   const CustomSelect = getCustomSelect(React)
+  const ModalDialog = createModalDialog(React, t)
   return function HmiView(props) {
     const el = React.createElement
     const cwd = useSessionCwd(React, props)
@@ -241,6 +243,7 @@ export function createHmiView(React, t, post) {
       setFocusUi,
     })
     const connListPanel = renderConnectionPanel(el, t, {
+      ModalDialog,
       focusState,
       connections: d.connections,
       cwd,
@@ -390,6 +393,7 @@ export function createHmiView(React, t, post) {
       addConnection: actions.addConnection,
     })
     const pageCtx = {
+      ModalDialog,
       cwd,
       sessionId,
       workspace,

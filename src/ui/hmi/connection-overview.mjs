@@ -1,9 +1,9 @@
 import { formatErrorMessage } from '../common/ui-format.mjs'
-import { renderModalDialog } from '../components/modal-dialog.mjs'
 
 /** All-connections management view. */
 export function renderConnectionOverview(el, t, ctx) {
   const {
+    ModalDialog,
     cwd,
     sessionId,
     workspace,
@@ -51,6 +51,6 @@ export function renderConnectionOverview(el, t, ctx) {
     focusToast,
     connListPanel,
     connFormPanel,
-    renderModalDialog(el, t, activeModal),
+    activeModal && ModalDialog ? el(ModalDialog, activeModal) : null,
   )
 }

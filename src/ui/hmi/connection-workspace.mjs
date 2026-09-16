@@ -1,9 +1,9 @@
 import { formatErrorMessage } from '../common/ui-format.mjs'
-import { renderModalDialog } from '../components/modal-dialog.mjs'
 
 /** Single-connection workspace: devices, points, pending writes. */
 export function renderConnectionWorkspace(el, t, ctx) {
   const {
+    ModalDialog,
     cwd,
     sessionId,
     workspace,
@@ -53,6 +53,6 @@ export function renderConnectionWorkspace(el, t, ctx) {
     devFormPanel,
     deviceCardsPanel,
     pendingPanel,
-    renderModalDialog(el, t, activeModal),
+    activeModal && ModalDialog ? el(ModalDialog, activeModal) : null,
   )
 }

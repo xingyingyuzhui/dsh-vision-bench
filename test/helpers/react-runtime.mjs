@@ -13,15 +13,19 @@
  * - `page`：页面级 DOM（HMI / visualization / project-tree）
  * - `virtualized`：完整 vendor + 稳定测量矩形 + 意外 warn 失败（real-effects）
  *
- * 生命周期：`useReactPageRuntime()` 挂到 `beforeEach` / `afterEach`，
- * 每个测试结束时调用 `@testing-library/react` 的 `cleanup()`，并还原
- * vendor / warn 包装。不删除 `globalThis.window`（裸 `window` 引用在 ESM
- * 里会变成 ReferenceError，迟到的 uPlot/rAF 回调会炸）。
+ * 生命周期：`useReactPageRuntime()` 挂到 `beforeEach` / `afterEach` /
+ * `after`。每个测试结束时 `cleanup()` 并还原 vendor / warn；套件结束时
+ * 对**最后一个** HappyDOM Window 同步 `close()`，释放句柄好让 Node 退出。
+ *
+ * 不要在每个测试之间 `abort()`/`close()` 后再 `new Window()`：HappyDOM 20
+ * 下会把事件循环打进死转（CPU 自旋、数 GB 内存）。也不要 await
+ * `abort()`/`close()`。测试之间仍保留 `globalThis.window`（裸 `window`
+ * 引用在 ESM 里否则 ReferenceError）；下一次 `beforeEach` 换新 Window。
  *
  * 放置：`test/helpers/` —— 不进 runner、结构预算、源码断言、发布清单。
  */
 
-import { afterEach, beforeEach } from 'node:test'
+import { after, afterEach, beforeEach } from 'node:test'
 import { cleanup } from '@testing-library/react'
 import { Window } from 'happy-dom'
 
@@ -274,6 +278,14 @@ export async function installReactPageRuntime(options = {}) {
 
   const restoreWarn = opts.failOnWarn ? installWarnGuard(opts.warnAllow) : () => {}
 
+  /**
+   * Tear down React trees, warn guards, and vendor. Globals stay on this
+   * Window until the next install — see header.
+   *
+   * HappyDOM async abort/close is deferred to the suite `after()` hook in
+   * `useReactPageRuntime`. Calling `abort()`/`close()` between tests then
+   * constructing a fresh Window has been observed to spin the event loop.
+   */
   const restore = () => {
     cleanup()
     restoreWarn()
@@ -281,9 +293,6 @@ export async function installReactPageRuntime(options = {}) {
       delete globalThis.DvbVendor
       delete globalThis.__rvUseVirtualizer
     }
-    // Keep window/document — see module header. pageWindow stays pointing at
-    // the last Window so late event constructors in the same tick still work;
-    // the next beforeEach replaces it.
   }
 
   return { win, restore }
@@ -304,6 +313,16 @@ export function useReactPageRuntime(options = {}) {
   afterEach(() => {
     restore?.()
     restore = null
+  })
+  after(() => {
+    const last = pageWindow
+    pageWindow = null
+    // Suite-end only: per-test close()+new Window() spins HappyDOM 20.
+    try {
+      if (typeof last?.close === 'function') last.close()
+    } catch {
+      /* already closed */
+    }
   })
 }
 
