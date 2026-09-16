@@ -38,6 +38,12 @@ export default {
       targets: ['bench-hmi.mjs', 'bench-runtime.mjs', 'package.json', 'scripts/run-tests.mjs'],
     },
     {
+      file: 'test/architecture/ui-dependency-gates.test.mjs',
+      purpose: 'architecture-boundary',
+      reason: 'P5-1 UI 依赖方向门禁：components/patterns 不得依赖功能域，禁止直连 vendor npm',
+      targets: ['host.js', 'node_modules/dependency-cruiser/bin/dependency-cruise.mjs', 'runtime/io'],
+    },
+    {
       file: 'test/architecture/workspace-single-writer.test.mjs',
       purpose: 'architecture-boundary',
       reason: '单写者边界与生成物契约',
