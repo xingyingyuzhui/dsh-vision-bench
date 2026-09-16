@@ -10,6 +10,7 @@ import { connTabLabel } from '../../src/ui/hmi/connection-label.mjs'
 import { renderConnectionTabs } from '../../src/ui/hmi/connection-tabs.mjs'
 import { renderConnectionThead } from '../../src/ui/hmi/connection-thead.mjs'
 import { renderConnectionWorkspace } from '../../src/ui/hmi/connection-workspace.mjs'
+import { renderModalDialog } from '../../src/ui/components/modal-dialog.mjs'
 import { renderDeviceCards } from '../../src/ui/hmi/device-card.mjs'
 import { alpha3PageProps } from '../fixtures/harness-alpha3-props.mjs'
 import { makePost, t } from '../helpers/hmi-page-fixtures.mjs'
@@ -73,9 +74,14 @@ test('连接总览挂载 connListPanel，单连接工作区挂载 deviceCardsPan
 })
 
 test('renderConnectionOverview 和 renderConnectionWorkspace 面对 object error 安全渲染字符串', () => {
-  const el = (type, props, ...children) => ({ type, props, children: children.flat() })
+  const el = (type, props, ...children) => {
+    if (typeof type === 'function') return type(props)
+    return { type, props, children: children.flat() }
+  }
   const t = (k) => k
+  const ModalDialog = (props) => renderModalDialog(el, t, props)
   const ctx = {
+    ModalDialog,
     cwd: '/ws',
     sessionId: 's1',
     workspace: {},
