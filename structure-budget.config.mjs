@@ -197,13 +197,6 @@ export default {
       "error": 500,
       "allow": [
         {
-          "file": "test/hmi/multi-conn.test.mjs",
-          "max": 493,
-          "reason": "P5-4 debt ratchet; split in later P4/P6",
-          "stage": "P4",
-          "owner": "vision-bench"
-        },
-        {
           "file": "test/agent/ui.test.mjs",
           "max": 448,
           "reason": "P5-4 debt ratchet; split in later P4/P6",
