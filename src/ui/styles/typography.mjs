@@ -1,5 +1,10 @@
 import { ATTR } from './base.mjs'
 
+/**
+ * Vision design tokens on the plugin root.
+ * Host `--dsw-alias-*` wins when present; fallbacks keep standalone / test renders usable.
+ * Domain chart / pill / graph colors stay in feature stylesheets.
+ */
 export const TYPOGRAPHY_CSS = [
   'body[' +
     ATTR +
@@ -24,10 +29,43 @@ export const TYPOGRAPHY_CSS = [
     '--dvb-space-1:4px;' +
     '--dvb-space-2:8px;' +
     '--dvb-space-3:12px;' +
+    '--dvb-space-4:16px;' +
+    '--dvb-space-5:24px;' +
+    '--dvb-space-control:10px;' +
+    '--dvb-control-height:28px;' +
+    '--dvb-radius-sm:4px;' +
     '--dvb-radius-btn:6px;' +
     '--dvb-radius-card:8px;' +
-    '--dvb-border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.28));' +
-    '--dvb-bg-panel:var(--dsw-alias-bg-layer-1,#fff)' +
+    '--dvb-radius-popover:10px;' +
+    '--dvb-radius-dialog:16px;' +
+    '--dvb-radius-pill:999px;' +
+    '--dvb-color-fg:var(--dsw-alias-label-primary,inherit);' +
+    '--dvb-color-fg-muted:var(--dsw-alias-label-secondary,rgba(128,128,128,.72));' +
+    '--dvb-color-fg-subtle:var(--dsw-alias-label-tertiary,rgba(128,128,128,.7));' +
+    '--dvb-color-success:var(--dsw-alias-label-success,#2e7d32);' +
+    '--dvb-color-danger:var(--dsw-alias-label-danger,#c62828);' +
+    '--dvb-color-warning:var(--dsw-alias-label-warning,#b45309);' +
+    '--dvb-color-info:var(--dsw-alias-label-info,#4f8ef7);' +
+    '--dvb-color-brand:var(--dsw-alias-brand-primary,#3b82f6);' +
+    '--dvb-color-error:var(--dsw-alias-state-error-primary,#ef4444);' +
+    '--dvb-color-exec-line:rgba(250,204,21,.35);' +
+    '--dvb-color-border:var(--dsw-alias-border-l2,rgba(128,128,128,.28));' +
+    '--dvb-color-border-strong:var(--dsw-alias-border-l1,rgba(128,128,128,.4));' +
+    '--dvb-bg-base:var(--dsw-alias-bg-base,#fff);' +
+    '--dvb-bg-surface:var(--dsw-alias-bg-layer-1,#fff);' +
+    '--dvb-bg-muted:var(--dsw-alias-bg-layer-2,rgba(128,128,128,.08));' +
+    '--dvb-bg-hover:var(--dsw-alias-bg-layer-2,rgba(128,128,128,.12));' +
+    '--dvb-bg-panel:var(--dvb-bg-surface);' +
+    '--dvb-border:1px solid var(--dvb-color-border);' +
+    '--dvb-border-strong:1px solid var(--dvb-color-border-strong);' +
+    '--dvb-focus-ring:2px solid var(--dvb-color-brand);' +
+    '--dvb-z-sticky:1;' +
+    '--dvb-z-raised:10;' +
+    '--dvb-z-menu:30;' +
+    '--dvb-z-select:1050;' +
+    '--dvb-z-popover:4000;' +
+    '--dvb-z-modal:2147483000;' +
+    '--dvb-mask-bg:rgba(0,0,0,.35)' +
     '}',
   'body[' +
     ATTR +

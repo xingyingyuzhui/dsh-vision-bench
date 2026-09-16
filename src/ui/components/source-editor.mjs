@@ -119,13 +119,13 @@ export function createSourceEditor(React) {
         CM.EditorView.editable.of(false),
         CM.EditorState.readOnly.of(true),
         CM.EditorView.theme({
-          '&': { height: '100%', fontSize: '12px' },
+          '&': { height: '100%', fontSize: 'var(--dvb-font-size-sm, 12px)' },
           '.cm-scroller': {
             overflow: 'auto',
             maxHeight: '320px',
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+            fontFamily: 'var(--dvb-font-family-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)',
           },
-          '.dvb-cm-exec': { backgroundColor: 'rgba(250, 204, 21, 0.35)' },
+          '.dvb-cm-exec': { backgroundColor: 'var(--dvb-color-exec-line, rgba(250, 204, 21, 0.35))' },
           '.dvb-cm-exec.dvb-cm-bp': { boxShadow: 'inset 14px 0 0 0 transparent' },
         }),
       ]

@@ -113,7 +113,7 @@ export function createHint(React) {
       'div',
       {
         className: joinClass('dvb-hint', className),
-        style: { padding: '8px', textAlign: 'center' },
+        style: { padding: 'var(--dvb-space-2, 8px)', textAlign: 'center' },
       },
       children,
     )
