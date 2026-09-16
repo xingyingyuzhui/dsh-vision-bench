@@ -8,6 +8,12 @@ export const BASE_CSS = [
   'body[' + ATTR + '] .dvb-hint{opacity:.58;font-size:var(--dvb-font-size-sm,12px);line-height:1.45}',
   'body[' +
     ATTR +
+    '] .dvb-empty{display:flex;flex-direction:column;gap:var(--dvb-space-2,8px);min-width:0}',
+  'body[' + ATTR + '] .dvb-empty-title{font-weight:600;font-size:var(--dvb-font-size-md,14px)}',
+  'body[' + ATTR + '] .dvb-empty[data-kind="loading"]{opacity:.72}',
+  'body[' + ATTR + '] .dvb-empty[data-kind="error"]{color:var(--dvb-color-danger,#c62828)}',
+  'body[' +
+    ATTR +
     '] .dvb-bar{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between}',
   'body[' + ATTR + '] .dvb-health{display:flex;flex-wrap:wrap;gap:6px}',
   'body[' + ATTR + '] :is(.dvb-chip,.dvb-btn-pill,.dvb-dialog-btn-cancel,.dvb-journal,.dvb-panel,.dvb-tag){border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.35))}',

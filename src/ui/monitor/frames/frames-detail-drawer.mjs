@@ -7,6 +7,7 @@ import {
   framePayloadHex,
   hexToUtf8Preview,
 } from './frames-format.mjs'
+import { renderEmptyState } from '../../components/empty-state.mjs'
 
 function copyText(text) {
   const v = String(text || '')
@@ -41,7 +42,11 @@ export function createFramesDetailDrawer(React) {
           { className: 'dvb-frames-detail-head' },
           el('span', { className: 'dvb-frames-detail-title' }, '报文详情'),
         ),
-        el('div', { className: 'dvb-hint dvb-frames-detail-empty' }, '选择一条报文查看详情'),
+        renderEmptyState(el, {
+          kind: 'empty',
+          detail: '选择一条报文查看详情',
+          className: 'dvb-frames-detail-empty',
+        }),
       )
     }
     const hex = framePayloadHex(frame)

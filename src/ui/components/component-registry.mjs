@@ -45,6 +45,17 @@ export const CONTRACT_RULES = /** @type {const} */ ({
 /** @type {ComponentEntry[]} */
 export const COMPONENT_ENTRIES = [
   {
+    id: 'empty-state',
+    path: 'src/ui/components/empty-state.mjs',
+    exports: ['renderEmptyState', 'createEmptyState'],
+    callers: 3,
+    stateOwner: 'caller (pure presentation)',
+    tests: ['test/ui/empty-state.test.mjs'],
+    ruleStatus: { D1: 'compliant', D2: 'compliant', D3: 'compliant', D4: 'compliant', D5: 'compliant', D6: 'compliant', D7: 'n/a', D8: 'compliant', D9: 'n/a', D10: 'gap', D11: 'compliant' },
+    gaps: ['未声明 @ts-check'],
+    migrationTask: 'P3-1 Journal/Alarm/Frames detail 已迁移；HMI/Viz CTA 空态后续接入',
+  },
+  {
     id: 'primitives',
     path: 'src/ui/components/primitives.mjs',
     exports: ['createPanel', 'createTabs', 'createHint'],

@@ -7,6 +7,7 @@ import {
   formatJournalTarget,
   serializeJournalItem,
 } from './journal-format.mjs'
+import { renderEmptyState } from '../../components/empty-state.mjs'
 
 export function createJournalDetailCard(React, t) {
   const el = React.createElement
@@ -21,7 +22,11 @@ export function createJournalDetailCard(React, t) {
         'div',
         { className: 'dvb-detail-card dvb-journal-detail is-empty' },
         el('div', { className: 'dvb-detail-head' }, el('span', { className: 'dvb-detail-title' }, '操作详情')),
-        el('div', { className: 'dvb-detail-empty-hint' }, '请从左侧列表选择一条操作记录查看详情'),
+        renderEmptyState(el, {
+          kind: 'empty',
+          detail: '请从左侧列表选择一条操作记录查看详情',
+          className: 'dvb-detail-empty-hint',
+        }),
       )
     }
 
