@@ -535,10 +535,12 @@
     "deps:check": "node scripts/run-with-bench.mjs deps",
     "structure:check": "node scripts/check-structure-budget.mjs",
     "assertions:check": "node scripts/check-source-assertions.mjs",
+    "ui:ownership:check": "node scripts/check-ui-ownership.mjs",
+    "facades:check": "node scripts/check-facade-purity.mjs",
     "test:unit": "node scripts/run-tests.mjs",
     "test:coverage": "c8 --all --check-coverage --statements 75 --branches 60 --functions 60 --lines 75 --reporter=text-summary --reporter=html node scripts/run-tests.mjs",
     "pack:check": "node scripts/check-package.mjs",
-    "quality": "npm run build:check && npm run lint && npm run typecheck && npm run deps:check && npm run structure:check && npm run assertions:check && npm run test:coverage && npm run pack:check",
+    "quality": "npm run build:check && npm run lint && npm run typecheck && npm run deps:check && npm run facades:check && npm run ui:ownership:check && npm run structure:check && npm run assertions:check && npm run test:coverage && npm run pack:check",
     "test": "npm run build:check && npm run test:unit",
     "test:full": "npm run quality"
   },
