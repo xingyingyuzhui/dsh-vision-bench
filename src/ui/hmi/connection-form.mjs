@@ -1,5 +1,6 @@
 import { getCustomSelect } from '../components/custom-select.mjs'
 import { renderSaveCancelGroup } from '../components/save-cancel-buttons.mjs'
+import { renderToggleSwitch } from '../components/toggle-switch.mjs'
 import { POLL_INTERVALS } from './hmi-ids.mjs'
 
 /** Connection edit form panel. */
@@ -302,59 +303,14 @@ export function renderConnectionForm(el, t, ctx) {
         el(
           'div',
           { style: { display: 'flex', alignItems: 'center', height: '32px' } },
-          el(
-            'button',
-            {
-              id: 'conn-sim-switch',
-              type: 'button',
-              role: 'switch',
-              'aria-checked': connForm.conn.sim ? 'true' : 'false',
-              'aria-label': t('sim') || '仿真',
-              className: 'dvb-setting-switch',
-              'data-checked': connForm.conn.sim ? 'true' : 'false',
-              style: {
-                width: '36px',
-                height: '20px',
-                flex: 'none',
-                margin: 0,
-                border: 0,
-                padding: '2px',
-                borderRadius: '999px',
-                backgroundColor: connForm.conn.sim ? '#0f1115' : '#e5e5e5',
-                cursor: 'pointer',
-                position: 'relative',
-                boxSizing: 'border-box',
-                display: 'inline-flex',
-                alignItems: 'center',
-                transition: 'background-color .16s ease, opacity .16s ease',
-                outline: 'none',
-              },
-              onClick(e) {
-                e.preventDefault()
-                setConnForm((prev) => ({ ...prev, conn: { ...prev.conn, sim: !prev.conn.sim } }))
-              },
-              onKeyDown(e) {
-                if (e.key === ' ' || e.key === 'Enter') {
-                  e.preventDefault()
-                  setConnForm((prev) => ({ ...prev, conn: { ...prev.conn, sim: !prev.conn.sim } }))
-                }
-              },
+          renderToggleSwitch(el, {
+            id: 'conn-sim-switch',
+            checked: !!connForm.conn.sim,
+            ariaLabel: t('sim') || '仿真',
+            onChange(next) {
+              setConnForm((prev) => ({ ...prev, conn: { ...prev.conn, sim: next } }))
             },
-            el('span', {
-              className: 'dvb-setting-switch-thumb',
-              style: {
-                display: 'block',
-                width: '16px',
-                height: '16px',
-                borderRadius: '50%',
-                backgroundColor: '#ffffff',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                transform: connForm.conn.sim ? 'translateX(16px)' : 'translateX(0)',
-                transition: 'transform .16s ease',
-                pointerEvents: 'none',
-              },
-            }),
-          ),
+          }),
         ),
       ),
     ),
