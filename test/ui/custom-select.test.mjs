@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import React from 'react'
 import { createCustomSelect, getCustomSelect, renderCustomSelect } from '../../src/ui/components/custom-select.mjs'
-import { el } from '../helpers/react-unit.mjs'
+import { el, mockReact, resetReactUnit } from '../helpers/react-unit.mjs'
 
 test('renderCustomSelect renders closed trigger with current value label', () => {
   const tree = renderCustomSelect(el, {
@@ -111,6 +111,42 @@ test('getCustomSelect returns stable cached component instance across renders', 
   const comp1 = getCustomSelect(React)
   const comp2 = getCustomSelect(React)
   assert.equal(comp1, comp2, 'Same React instance returns identical CustomSelect function reference')
+})
+
+test('createCustomSelect generates unique listbox ids when caller omits id', () => {
+  resetReactUnit()
+  const Select = createCustomSelect(mockReact)
+  const a = Select({
+    value: 'rtu',
+    options: [{ value: 'rtu', label: 'RTU' }],
+    open: true,
+  })
+  const b = Select({
+    value: 'tcp',
+    options: [{ value: 'tcp', label: 'TCP' }],
+    open: true,
+  })
+  const idA = a.children[1].props.id
+  const idB = b.children[1].props.id
+  assert.ok(idA && idB, 'both listboxes have ids')
+  assert.notEqual(idA, idB, 'same-page selects must not share listbox ids')
+  assert.notEqual(idA, 'dvb-select-listbox')
+  assert.notEqual(idB, 'dvb-select-listbox')
+  assert.equal(a.children[0].props['aria-controls'], idA)
+  assert.equal(b.children[0].props['aria-controls'], idB)
+})
+
+test('createCustomSelect lets an explicit id win over the generated one', () => {
+  resetReactUnit()
+  const Select = createCustomSelect(mockReact)
+  const tree = Select({
+    id: 'explicit-select',
+    value: 'rtu',
+    options: [{ value: 'rtu', label: 'RTU' }],
+    open: true,
+  })
+  assert.equal(tree.children[1].props.id, 'explicit-select-listbox')
+  assert.equal(tree.children[0].props['aria-controls'], 'explicit-select-listbox')
 })
 
 test('renderCustomSelect ARIA attributes: combobox, listbox, option, aria-controls, aria-activedescendant', () => {

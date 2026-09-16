@@ -347,6 +347,7 @@ export function renderCustomSelect(el, props) {
 }
 
 const selectComponentCache = new WeakMap()
+let fallbackSelectId = 0
 
 /**
  * React Component factory for CustomSelect.
@@ -366,6 +367,9 @@ export function createCustomSelect(React) {
     const [internalOpen, setInternalOpen] = React.useState(false)
     const [highlightIndex, setHighlightIndex] = React.useState(-1)
     const containerRef = React.useRef(null)
+    const generatedId =
+      typeof React.useId === 'function' ? React.useId() : `dvb-select-${(fallbackSelectId += 1)}`
+    const selectId = props.id || generatedId
 
     const isOpen = typeof props.open === 'boolean' ? props.open : internalOpen
 
@@ -441,6 +445,7 @@ export function createCustomSelect(React) {
 
     return renderCustomSelect(el, {
       ...props,
+      id: selectId,
       renderNativeSelect: props.renderNativeSelect !== false,
       internalOpen,
       containerRef,
