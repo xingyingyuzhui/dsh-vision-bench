@@ -1,9 +1,8 @@
+// Connection presentation structure (ADR-025 / react-unit).
+// No HappyDOM — stub trees only. Page-runtime coverage lives in
+// `connection-presentation-runtime.test.mjs`.
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { act, render, waitFor } from '@testing-library/react'
-import React from 'react'
-import { createElement } from 'react'
-import { createHmiView } from '../../bench-hmi.mjs'
 import { renderConnectionOverview } from '../../src/ui/hmi/connection-overview.mjs'
 import { renderConnectionPanel } from '../../src/ui/hmi/connection-panel.mjs'
 import { connTabLabel } from '../../src/ui/hmi/connection-label.mjs'
@@ -12,14 +11,9 @@ import { renderConnectionThead } from '../../src/ui/hmi/connection-thead.mjs'
 import { renderConnectionWorkspace } from '../../src/ui/hmi/connection-workspace.mjs'
 import { renderModalDialog } from '../../src/ui/components/modal-dialog.mjs'
 import { renderDeviceCards } from '../../src/ui/hmi/device-card.mjs'
-import { alpha3PageProps } from '../fixtures/harness-alpha3-props.mjs'
-import { makePost, t } from '../helpers/hmi-page-fixtures.mjs'
-import { pageWindow as win, useReactPageRuntime } from '../helpers/react-runtime.mjs'
-
-useReactPageRuntime({ profile: 'page' })
+import { el } from '../helpers/react-unit.mjs'
 
 test('连接表表头为四列：名称|角色|端点/状态|操作', () => {
-  const el = (type, props, ...children) => ({ type, props, children: children.flat().filter(Boolean) })
   const thead = renderConnectionThead(el, (k) => ({ role: '角色' })[k] || k, {})
   const labels = thead.children[0].children.map((th) => {
     const span = th.children.find((c) => c && c.props && c.props.className === 'dvb-th-label')
@@ -29,7 +23,6 @@ test('连接表表头为四列：名称|角色|端点/状态|操作', () => {
 })
 
 test('连接总览挂载 connListPanel，单连接工作区挂载 deviceCardsPanel', () => {
-  const el = (type, props, ...children) => ({ type, props, children: children.flat().filter(Boolean) })
   const t = (k) => k
   const ctx = {
     cwd: '/ws',
@@ -74,10 +67,6 @@ test('连接总览挂载 connListPanel，单连接工作区挂载 deviceCardsPan
 })
 
 test('renderConnectionOverview 和 renderConnectionWorkspace 面对 object error 安全渲染字符串', () => {
-  const el = (type, props, ...children) => {
-    if (typeof type === 'function') return type(props)
-    return { type, props, children: children.flat() }
-  }
   const t = (k) => k
   const ModalDialog = (props) => renderModalDialog(el, t, props)
   const ctx = {
@@ -116,7 +105,6 @@ test('renderConnectionOverview 和 renderConnectionWorkspace 面对 object error
 })
 
 test('renderConnectionTabs renders permanent physical connection status dot with matching kind and tooltip', () => {
-  const el = (type, props, ...children) => ({ type, props, children: children.flat().filter(Boolean) })
   const t = (k) => k
   const ctx = {
     pack: { points: [], values: [] },
@@ -167,7 +155,6 @@ test('renderConnectionTabs renders permanent physical connection status dot with
 })
 
 test('renderConnectionPanel renders clean connection name without trailing black dot', () => {
-  const el = (type, props, ...children) => ({ type, props, children: children.flat().filter(Boolean) })
   const t = (k) => ({ connBar: '全部连接' })[k] || k
   const ctx = {
     focusState: {},
@@ -213,7 +200,6 @@ test('renderConnectionPanel renders clean connection name without trailing black
 })
 
 test('renderConnectionPanel toolbar does not have collection buttons or interval select', () => {
-  const el = (type, props, ...children) => ({ type, props, children: children.flat().filter(Boolean) })
   const t = (k) => k
   const ctx = {
     focusState: {},
@@ -260,7 +246,6 @@ test('connTabLabel 与二级页签一致：连接名 · COM号', () => {
 })
 
 test('renderDeviceCards has 连接/断开 button next to 添加设备 in panel-head, and no single 读取 button in toolbar', () => {
-  const el = (type, props, ...children) => ({ type, props, children: children.flat().filter(Boolean) })
   const t = (k) =>
     ({
       connLink: '连接',
@@ -357,28 +342,4 @@ test('renderDeviceCards has 连接/断开 button next to 添加设备 in panel-h
   assert.ok(!toolbarTexts.includes('读取'), 'toolbar has no single 读取 button')
   assert.ok(!toolbarTexts.includes('readAll'), 'toolbar has no readAll button')
   assert.deepEqual(toolbarTexts, ['编辑点位', '导入 CSV', '导出 CSV', 'AI'])
-})
-
-test('新建连接的添加设备窗口不会串到其他连接 tab', async () => {
-  const { post } = makePost()
-  const Hmi = createHmiView(React, t, post)
-  const tree = render(createElement(Hmi, { ...alpha3PageProps({ sessionId: 's1', path: '/tmp/proj' }) }))
-  await waitFor(() => assert.ok(tree.container.textContent.includes('C1')), { timeout: 8000 })
-  const addConn = Array.from(tree.container.querySelectorAll('button')).find((b) => /＋连接/.test(b.textContent || ''))
-  assert.ok(addConn, '有＋连接')
-  await act(async () => {
-    addConn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
-    await new Promise((r) => setTimeout(r, 40))
-  })
-  await waitFor(() => assert.ok(tree.container.querySelector('.dvb-write-panel')), { timeout: 6000 })
-  assert.ok(tree.container.textContent.includes('如 温度传感器') || tree.container.querySelector('.dvb-write-panel'))
-  const c1Tab = Array.from(tree.container.querySelectorAll('.dvb-tab')).find((b) => b.textContent.includes('C1'))
-  assert.ok(c1Tab, 'C1 tab')
-  await act(async () => {
-    c1Tab.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
-    await new Promise((r) => setTimeout(r, 40))
-  })
-  await waitFor(() => assert.ok(tree.container.textContent.includes('设备1')), { timeout: 6000 })
-  assert.equal(!!tree.container.querySelector('.dvb-write-panel'), false, 'C1 tab 不显示新连接的添加设备窗')
-  tree.unmount()
 })
