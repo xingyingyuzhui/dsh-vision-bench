@@ -31,11 +31,21 @@ test('save button is primary and disabled while saving', () => {
   const idle = renderSaveButton(el, t, { saving: false })
   assert.ok(idle.props.className.includes('dvb-btn-pill-primary'))
   assert.equal(idle.props.disabled, false)
+  assert.equal(idle.props['aria-busy'], undefined)
   assert.equal(text(idle), 'Save')
 
   const saving = renderSaveButton(el, t, { saving: true })
   assert.equal(saving.props.disabled, true, 'saving implies disabled')
+  assert.equal(saving.props['aria-busy'], 'true')
   assert.equal(text(saving), 'Saving…')
+})
+
+test('loading is a synonym of saving and sets aria-busy', () => {
+  const loading = renderSaveButton(el, t, { loading: true })
+  assert.equal(loading.props.disabled, true)
+  assert.equal(loading.props['aria-busy'], 'true')
+  assert.equal(text(loading), 'Saving…')
+  assert.equal(loading.props['aria-label'], '保存中')
 })
 
 test('explicit disabled also disables the save button', () => {
@@ -95,6 +105,15 @@ test('group forwards saving and custom copy', () => {
   assert.equal(group.children[0].props.disabled, false)
   assert.equal(text(group.children[1]), 'Saving…')
   assert.equal(group.children[1].props.disabled, true)
+  assert.equal(group.children[1].props['aria-busy'], 'true')
+})
+
+test('group loading alias mirrors saving on the save button', () => {
+  const group = renderSaveCancelGroup(el, t, { loading: true })
+  assert.equal(text(group.children[1]), 'Saving…')
+  assert.equal(group.children[1].props.disabled, true)
+  assert.equal(group.children[1].props['aria-busy'], 'true')
+  assert.equal(group.children[0].props.disabled, false)
 })
 
 test('createSaveCancelGroup wraps the render form with an injected translator', () => {

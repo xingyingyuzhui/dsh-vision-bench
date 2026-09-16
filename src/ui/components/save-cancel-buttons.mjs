@@ -13,24 +13,26 @@ export function renderCancelButton(el, t, props = {}) {
 }
 
 export function renderSaveButton(el, t, props = {}) {
-  const { onClick, disabled, saving, text, savingText, className, size, style, title, ariaLabel } = props
+  const { onClick, disabled, saving, loading, text, savingText, className, size, style, title, ariaLabel } = props
+  const busy = !!(saving || loading)
   const tSave = typeof t === 'function' ? t('save') : null
-  const label = saving ? (savingText || (typeof t === 'function' ? t('saving') : null) || '保存中…') : (text || (!tSave || tSave === 'save' ? '保存' : tSave))
+  const label = busy ? (savingText || (typeof t === 'function' ? t('saving') : null) || '保存中…') : (text || (!tSave || tSave === 'save' ? '保存' : tSave))
   return el('button', {
     type: 'button',
     className: `dvb-btn-pill dvb-btn-pill-primary${size === 'sm' ? ' dvb-btn-sm' : ''}${className ? ` ${className}` : ''}`,
-    disabled: !!disabled || !!saving,
+    disabled: !!disabled || busy,
     onClick,
     style,
     title,
-    'aria-label': ariaLabel || (saving ? '保存中' : '保存'),
+    'aria-busy': busy ? 'true' : undefined,
+    'aria-label': ariaLabel || (busy ? '保存中' : '保存'),
   }, label)
 }
 
 export function renderSaveCancelGroup(el, t, options = {}) {
-  const { onCancel, onSave, cancelText, saveText, saving, disabled, saveDisabled, cancelDisabled, size = 'normal', reverseDomOrder, className, style, gap = 10, justifyContent = 'flex-end' } = options
+  const { onCancel, onSave, cancelText, saveText, saving, loading, disabled, saveDisabled, cancelDisabled, size = 'normal', reverseDomOrder, className, style, gap = 10, justifyContent = 'flex-end' } = options
   const cBtn = renderCancelButton(el, t, { onClick: onCancel, disabled: disabled || cancelDisabled, text: cancelText, size })
-  const sBtn = renderSaveButton(el, t, { onClick: onSave, disabled: disabled || saveDisabled, saving, text: saveText, savingText: options.savingText, size })
+  const sBtn = renderSaveButton(el, t, { onClick: onSave, disabled: disabled || saveDisabled, saving, loading, text: saveText, savingText: options.savingText, size })
   const s = reverseDomOrder
     ? { display: 'flex', flexDirection: 'row-reverse', justifyContent: 'flex-start', gap: `${gap}px`, ...style }
     : { display: 'flex', alignItems: 'center', justifyContent, gap: `${gap}px`, ...style }
