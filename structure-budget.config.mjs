@@ -204,13 +204,6 @@ export default {
           "owner": "vision-bench"
         },
         {
-          "file": "test/flash/runner.test.mjs",
-          "max": 407,
-          "reason": "P5-4 debt ratchet; split in later P4/P6",
-          "stage": "P4",
-          "owner": "vision-bench"
-        },
-        {
           "file": "test/ui/vision-view-request.test.mjs",
           "max": 398,
           "reason": "P5-4 debt ratchet; split in later P4/P6",
@@ -218,22 +211,8 @@ export default {
           "owner": "vision-bench"
         },
         {
-          "file": "test/ui/frames-feed-real-effects.test.mjs",
-          "max": 387,
-          "reason": "P5-4 debt ratchet; split in later P4/P6",
-          "stage": "P4",
-          "owner": "vision-bench"
-        },
-        {
           "file": "test/debug/debug-approval-service.test.mjs",
           "max": 386,
-          "reason": "P5-4 debt ratchet; split in later P4/P6",
-          "stage": "P4",
-          "owner": "vision-bench"
-        },
-        {
-          "file": "test/ui/frames-real-effects.test.mjs",
-          "max": 381,
           "reason": "P5-4 debt ratchet; split in later P4/P6",
           "stage": "P4",
           "owner": "vision-bench"
