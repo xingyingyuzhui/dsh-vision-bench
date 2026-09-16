@@ -37,20 +37,61 @@ export function createPanel(React) {
  */
 export function createTabs(React) {
   const el = React.createElement
-  return function Tabs({ items = [], value, onChange, className }) {
+  return function Tabs({ items = [], value, onChange, className, style }) {
     const list = Array.isArray(items) ? items : []
+
+    function selectByIndex(index) {
+      if (!list.length || !onChange) return
+      const next = list[((index % list.length) + list.length) % list.length]
+      if (next && next.key !== value) onChange(next.key)
+    }
+
+    function onKeyDown(event) {
+      if (!list.length) return
+      const currentIndex = list.findIndex((item) => item.key === value)
+      const safeIndex = currentIndex >= 0 ? currentIndex : 0
+      switch (event.key) {
+        case 'ArrowRight':
+          event.preventDefault()
+          selectByIndex(safeIndex + 1)
+          break
+        case 'ArrowLeft':
+          event.preventDefault()
+          selectByIndex(safeIndex - 1)
+          break
+        case 'Home':
+          event.preventDefault()
+          selectByIndex(0)
+          break
+        case 'End':
+          event.preventDefault()
+          selectByIndex(list.length - 1)
+          break
+        default:
+          break
+      }
+    }
+
     return el(
       'div',
-      { className: joinClass('dvb-debug-tabs', className) },
+      {
+        role: 'tablist',
+        className: joinClass('dvb-debug-tabs', className),
+        style,
+        onKeyDown,
+      },
       list.map((item) => {
         const key = String(item.key)
+        const selected = value === item.key
         const label = item.count == null ? item.label : `${item.label} (${item.count})`
         return el(
           'button',
           {
             key,
             type: 'button',
-            className: `dvb-debug-subtab${value === item.key ? ' is-active' : ''}`,
+            role: 'tab',
+            'aria-selected': selected,
+            className: `dvb-debug-subtab${selected ? ' is-active' : ''}`,
             onClick: () => onChange && onChange(item.key),
           },
           label,
