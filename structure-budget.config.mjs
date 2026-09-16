@@ -197,13 +197,6 @@ export default {
       "error": 500,
       "allow": [
         {
-          "file": "test/domain/write.test.mjs",
-          "max": 500,
-          "reason": "P5-4 debt ratchet; split in later P4/P6",
-          "stage": "P4",
-          "owner": "vision-bench"
-        },
-        {
           "file": "test/hmi/multi-conn.test.mjs",
           "max": 493,
           "reason": "P5-4 debt ratchet; split in later P4/P6",
@@ -248,13 +241,6 @@ export default {
         {
           "file": "test/debug/debug-approval-service.test.mjs",
           "max": 386,
-          "reason": "P5-4 debt ratchet; split in later P4/P6",
-          "stage": "P4",
-          "owner": "vision-bench"
-        },
-        {
-          "file": "test/hmi/connection-presentation.test.mjs",
-          "max": 384,
           "reason": "P5-4 debt ratchet; split in later P4/P6",
           "stage": "P4",
           "owner": "vision-bench"
