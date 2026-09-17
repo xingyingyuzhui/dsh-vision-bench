@@ -1,0 +1,5 @@
+# Phase-0 probe A: exact Fetch route on shared /api (Web + Desktop candidate).
+# No client UI. No hardware. inject connection only.
+- insert:
+    - id: dsh.vision.probe.fetch
+      name: '@dsh-vision/probe-fetch'
