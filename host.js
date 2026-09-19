@@ -172,13 +172,42 @@ export function apply(ctx) {
 
   const stopFetch = registerVisionFetchDispatch(ctx.connection, router)
 
+  /** Fallback mount when tests expose webServer without Cordis inject. */
   /** @type {{ stop: () => unknown, httpPaths: string[] } | null} */
-  let webCompat = null
+  let legacyWebCompat = null
   let webMounted = false
-  const mountWeb = (webCtx) => {
-    webCompat = mountVisionWebCompat({
-      connection: webCtx.connection || ctx.connection,
-      webServer: webCtx.webServer,
+
+  /**
+   * Bind Web compat to the injected webServer fiber so leave/re-enter remounts cleanly.
+   * @param {any} webCtx
+   */
+  const attachWebCompat = (webCtx) => {
+    const effectHost = typeof webCtx?.effect === 'function' ? webCtx : ctx
+    effectHost.effect(() => {
+      const compat = mountVisionWebCompat({
+        connection: webCtx.connection || ctx.connection,
+        webServer: webCtx.webServer,
+        router,
+        dshHome,
+        touchSession: (sessionId) => touchServiceSession(sessionId, dshHome),
+        capabilityMatches,
+        commandDeps: { debugRuntime, verifyCommandService },
+      })
+      webMounted = true
+      return () => {
+        webMounted = false
+        return compat.stop()
+      }
+    })
+  }
+
+  if (typeof ctx.inject === 'function') {
+    ctx.inject(['webServer'], attachWebCompat)
+  } else if (ctx.webServer) {
+    // Unit-test hosts without Cordis inject still expose webServer on ctx.
+    legacyWebCompat = mountVisionWebCompat({
+      connection: ctx.connection,
+      webServer: ctx.webServer,
       router,
       dshHome,
       touchSession: (sessionId) => touchServiceSession(sessionId, dshHome),
@@ -186,12 +215,6 @@ export function apply(ctx) {
       commandDeps: { debugRuntime, verifyCommandService },
     })
     webMounted = true
-  }
-  if (typeof ctx.inject === 'function') {
-    ctx.inject(['webServer'], mountWeb)
-  } else if (ctx.webServer) {
-    // Unit-test hosts without Cordis inject still expose webServer on ctx.
-    mountWeb(ctx)
   }
 
   logHostLifecycle('vision.host.start', {
@@ -221,13 +244,14 @@ export function apply(ctx) {
     })
 
     // Instance-owned resources: always tear down this apply's registrations.
+    // Web compat is owned by the inject sub-fiber (Cordis) or legacyWebCompat (tests).
     const fetchStop =
       typeof stopFetch === 'function'
         ? Promise.resolve()
             .then(() => stopFetch())
             .catch(() => {})
         : Promise.resolve()
-    const webStop = webCompat ? webCompat.stop() : Promise.resolve()
+    const webStop = legacyWebCompat ? legacyWebCompat.stop() : Promise.resolve()
     try {
       stopHost()
     } catch {

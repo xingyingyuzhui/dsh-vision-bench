@@ -31,22 +31,23 @@ test('host apply optionally injects webServer for Web compat only', async () => 
   const connection = mockRpcHost()
   const injected = []
   let toolRegs = 0
-  const { ctx } = createHostContext(connection)
+  const { ctx, stop } = createHostContext(connection)
   ctx.tools = {
     register() {
       toolRegs += 1
       return () => {}
     },
   }
+  const baseInject = ctx.inject.bind(ctx)
   ctx.inject = (deps, fn) => {
     injected.push(deps)
-    if (Array.isArray(deps) && deps.includes('webServer') && ctx.webServer && typeof fn === 'function') fn(ctx)
+    return baseInject(deps, fn)
   }
   apply(ctx)
   apply(ctx)
   assert.deepEqual(injected, [['webServer'], ['webServer']])
   assert.equal(toolRegs, 0)
-  if (ctx._stop) ctx._stop()
+  await stop()
 })
 
 test('state returns idle ioRuntime without starting a Worker', async (t) => {
@@ -71,24 +72,12 @@ test('state returns idle ioRuntime without starting a Worker', async (t) => {
 test('apply registers Fetch dispatch, Web command bridge, and disposes RPC', async () => {
   const disposed = []
   const connection = mockRpcHost()
-  const ctx = {
-    connection,
-    webServer: {
-      register(entry) {
-        disposed.push(entry.path)
-        return () => {}
-      },
-    },
-    tools: {
-      register() {
-        return () => {}
-      },
-    },
-    inject(deps, fn) {
-      if (deps?.includes?.('webServer') && ctx.webServer) fn(ctx)
-    },
-    effect(factory) {
-      ctx._stop = factory()
+  const { ctx, routes, stop } = createHostContext(connection)
+  ctx.webServer = {
+    register(entry) {
+      disposed.push(entry.path)
+      routes.push(entry)
+      return () => {}
     },
   }
   apply(ctx)
@@ -107,7 +96,7 @@ test('apply registers Fetch dispatch, Web command bridge, and disposes RPC', asy
   assert.doesNotMatch(hostSrc, /const browser = origin/)
   assert.doesNotMatch(hostSrc, /route\('\/dsh-vision-bench\/state'/)
   assert.doesNotMatch(hostSrc, /connection\.register\(/)
-  await ctx._stop()
+  await stop()
   assert.equal(connection.disposed, true)
 })
 
@@ -123,22 +112,9 @@ test('late RPC disposer still runs after the host fiber has disposed', async () 
     baseHandle(channel, fn)
     return registration
   }
-  const ctx = {
-    connection,
-    webServer: {
-      register() {
-        return () => {}
-      },
-    },
-    inject(deps, fn) {
-      if (deps?.includes?.('webServer')) fn(ctx)
-    },
-    effect(factory) {
-      ctx._stop = factory()
-    },
-  }
+  const { ctx, stop } = createHostContext(connection)
   apply(ctx)
-  const stopping = ctx._stop()
+  const stopping = Promise.resolve(stop())
   resolveReg(() => {
     disposeCalls += 1
   })
@@ -158,22 +134,9 @@ test('host dispose waits until the late RPC disposer finishes', async () => {
     baseHandle(channel, fn)
     return registration
   }
-  const ctx = {
-    connection,
-    webServer: {
-      register() {
-        return () => {}
-      },
-    },
-    inject(deps, fn) {
-      if (deps?.includes?.('webServer')) fn(ctx)
-    },
-    effect(factory) {
-      ctx._stop = factory()
-    },
-  }
+  const { ctx, stop } = createHostContext(connection)
   apply(ctx)
-  const stopping = Promise.resolve(ctx._stop())
+  const stopping = Promise.resolve(stop())
   let stopDone = false
   stopping.then(() => {
     stopDone = true
@@ -196,7 +159,7 @@ test('host dispose waits until the late RPC disposer finishes', async () => {
 
 test('plugin dispose 清空刷写审批仓库', async () => {
   const connection = mockRpcHost()
-  const ctx = createHostContext(connection).ctx
+  const { ctx, stop } = createHostContext(connection)
   clearFlashApprovals()
   apply(ctx)
   defaultFlashApprovals.create({
@@ -210,7 +173,7 @@ test('plugin dispose 清空刷写审批仓库', async () => {
     target: 'stm32f1x',
   })
   assert.ok(defaultFlashApprovals.size() > 0)
-  ctx._stop()
+  await stop()
   assert.equal(defaultFlashApprovals.size(), 0)
 })
 

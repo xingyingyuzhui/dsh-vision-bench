@@ -209,12 +209,32 @@ export function mockRpcHost() {
 export function createHostContext(connection, overrides = {}) {
   const routes = []
   const tools = []
+  /** @type {Array<() => unknown>} */
+  const childStops = []
+  /** @type {(() => unknown) | null} */
+  let hostStop = null
+
+  const runAllStops = async () => {
+    const children = childStops.splice(0)
+    const results = []
+    for (const child of children) {
+      results.push(await Promise.resolve(typeof child === 'function' ? child() : undefined))
+    }
+    if (typeof hostStop === 'function') {
+      results.push(await Promise.resolve(hostStop()))
+    }
+    return results
+  }
+
   const ctx = {
     connection,
     webServer: {
       register(entry) {
         routes.push(entry)
-        return () => {}
+        return () => {
+          const i = routes.indexOf(entry)
+          if (i >= 0) routes.splice(i, 1)
+        }
       },
     },
     tools: {
@@ -224,20 +244,41 @@ export function createHostContext(connection, overrides = {}) {
       },
     },
     effect(factory) {
-      ctx._stop = factory()
+      hostStop = factory()
+      ctx._stop = runAllStops
     },
     /**
      * Cordis-like optional inject: call fn when deps are present on ctx.
+     * Child scopes get their own effect list so webServer leave can unmount compat
+     * without disposing the Host fiber.
      * @param {string[]} deps
      * @param {(scope: any) => void} fn
      */
     inject(deps, fn) {
       if (!Array.isArray(deps) || typeof fn !== 'function') return
-      if (deps.every((name) => ctx[name] != null)) fn(ctx)
+      if (!deps.every((name) => ctx[name] != null)) return
+      const child = {
+        ...ctx,
+        effect(childFactory) {
+          const stop = childFactory()
+          if (typeof stop === 'function') childStops.push(stop)
+        },
+      }
+      fn(child)
     },
     ...overrides,
   }
-  return { ctx, routes, tools, stop: () => (typeof ctx._stop === 'function' ? ctx._stop() : undefined) }
+  return {
+    ctx,
+    routes,
+    tools,
+    stop: () => (typeof ctx._stop === 'function' ? ctx._stop() : runAllStops()),
+    /** Simulate webServer fiber leaving while Host stays alive. */
+    stopWebInjects: async () => {
+      const children = childStops.splice(0)
+      await Promise.all(children.map((child) => Promise.resolve(child())))
+    },
+  }
 }
 
 // ---------------------------------------------------------------------------
