@@ -1,45 +1,43 @@
-# ADR-012: Browser operations use authenticated Connection RPC
+# ADR-012: Browser / Desktop UI uses authenticated Connection Fetch (RPC Web-compat)
 
 ## Status
 
-Accepted (0.26.1). Supersedes the 0.26.0 spike decision that blocked browser RPC migration.
+Accepted (0.29.0 native Web/Desktop migration). Supersedes the 0.26.x “RPC-only browser” framing for **product** UI transport. Web may still mount legacy RPC as a thin compat layer.
 
 ## Context
 
-DSH 0.1.2-alpha.3 authenticates first-party UI through the Cordis `connection` service. Official Typert Remote (`ctx.remote.*`) still requires compiler output that community JS plugins cannot emit without copying Harness private tooling (see the 0.26.0 spike notes).
+DSH authenticates first-party UI through the Cordis `connection` service. On `0.1.6-alpha.1`:
 
-However, alpha.3 exposes a documented, authenticated RPC surface on the same Connection carrier:
+- `connection.fetch.register({ path, methods, requestBody, fetch })` is shared by Web `/api` and Desktop Host (`dsh-app://app/api/...`).
+- `connection.rpc.handle(channel, handler)` still installs via the caller’s `webServer` in current Harness source, so a Host that injects only `connection` **cannot** use RPC on Desktop.
 
-- Host: `ctx.connection.rpc.handle('/vision-bench', handler)`
-- Client: `ctx.connection.rpc.call('/vision-bench', endpoint, payload, signal)`
-
-Harness Connection owns browser authentication, Host/Origin checks, and transport selection. Vision must not register a second `/api` interceptor; API Gateway already owns that channel.
+Vision therefore cannot require `webServer` at the Host fiber top level if Desktop must load the plugin.
 
 ## Decision
 
-1. Move all browser business operations from loopback HTTP routes to Connection RPC on channel `/vision-bench`.
-2. Keep UI pages on the stable `post(path, payload, timeoutMs)` abstraction; `bench-runtime.mjs` maps `/dsh-vision-bench/*` paths to RPC endpoints internally.
-3. Do not fake authentication with static headers, Origin trust, or shared secrets for browser traffic.
-4. Retain exactly one HTTP route for out-of-process Agent bridge: `POST /dsh-vision-bench/command`.
-5. The Agent bridge is loopback-only, JSON-only, and requires the process-lifetime random capability issued at Host apply time. Origin checks remain defense-in-depth only and never substitute for capability.
-6. If `ctx.connection` is missing on Host or Client, Vision fails closed. There is no browser HTTP fallback.
+1. **Product UI transport** is one exact Fetch route: `POST /api/vision-bench/dispatch` with body `{ endpoint, payload }`. Endpoint names stay the existing RPC whitelist (`src/shared/vision-rpc-contract.mjs`).
+2. Host top-level `inject = ['connection']`. Register Fetch in `vision-fetch-route.mjs`; business dispatch stays on `createVisionRpcRouter`.
+3. Keep UI pages on `post(path, payload, timeoutOrOptions)`; Client uses `createVisionFetchPost` (HTTP path → endpoint map unchanged).
+4. **Web-only compat** (`vision-web-compat.mjs`), mounted only when optional `webServer` inject succeeds:
+   - Legacy `rpc.handle('/vision-bench', …)` for older Web clients during the 0.29.x / 0.30.x window.
+   - Loopback Agent HTTP bridge `POST /dsh-vision-bench/command` (capability + loopback). Desktop does not load this bridge.
+5. Agent tools prefer in-process `registerVisionHost()`; never guess `127.0.0.1:3080`. Missing Host → `HOST_UNAVAILABLE`.
+6. If `ctx.connection.fetch.register` is missing, Host fails closed. No browser HTTP fallback for UI.
 
 ## Consequences
 
-- Unauthenticated browser sessions cannot read workspace state or mutate configuration through Vision.
-- Forged local Origin headers cannot bypass the Agent bridge.
-- In-process Agent tools continue to prefer `registerVisionHost()` dispatch; HTTP is only for child processes that cannot attach to the Host Cordis graph.
-- Typert Remote remains optional future work if DSH publishes a plugin contribution contract with compiler output; Connection RPC is the supported alpha.3 path for community plugins today.
+- Same UI build works on Web and Desktop without Vision listen ports.
+- Desktop product install still requires registry `name@version`; local `link:`/`tgz` are dev/probe only.
+- Scheme B (Desktop `rpc.handle` without `webServer`) remains rejected until upstream changes; Fetch stays the shared carrier.
+- Unauthenticated browser sessions are still blocked by Harness Connection auth before Vision sees the request.
 
 ## Endpoint map
 
-Browser paths such as `/dsh-vision-bench/state` map to RPC endpoints such as `state`. The authoritative list lives in `src/shared/vision-rpc-contract.mjs`.
+Browser paths such as `/dsh-vision-bench/state` map to logical endpoints such as `state`, then ride Fetch dispatch (or Web RPC compat). Authoritative list: `src/shared/vision-rpc-contract.mjs` (`VISION_FETCH_DISPATCH_PATH`, `VISION_HTTP_TO_RPC`, `VISION_RPC_CHANNEL`).
 
 ## Security tests
 
-Contract tests cover:
-
-- Missing or invalid capability on `/dsh-vision-bench/command`.
-- Foreign Origin rejection on the bridge.
-- RPC registration and disposal on plugin unload.
-- Client fail-closed behavior when `ctx.connection.rpc.call` is absent.
+- Capability / Origin on Web Agent HTTP bridge.
+- Fetch cancel forwards `request.signal` into `debug/events/wait`.
+- Host dispose clears Fetch registration and Host handle; late Promise disposers still run.
+- Client fail-closed when Connection Fetch is unavailable.

@@ -24,7 +24,7 @@ export type ConnectionRpcLike = {
   }
 }
 
-export type VisionRpcTransport = 'connection-rpc' | 'in-process' | 'http'
+export type VisionRpcTransport = 'connection-rpc' | 'in-process' | 'http' | 'unavailable'
 
 export type HttpRequestLike = {
   method?: string
@@ -58,6 +58,9 @@ export type HostPingData = {
   transport: VisionRpcTransport
   pid: number
   timestamp: string
+  /** ESM singleton id of vision-host-client.mjs on the Host side (B2). */
+  clientInstanceId?: string
+  hostFiber?: string
 }
 
 export type PostCommitWarning = {

@@ -1,0 +1,96 @@
+#!/usr/bin/env node
+/**
+ * Stage-5 acceptance slice: aggregate prior automated gates + static contract checks.
+ * Manual / Windows / registry product install remain checklist items in
+ * docs/ACCEPTANCE_NATIVE_WEB_DESKTOP.md.
+ *
+ * Usage: node scripts/probes/check-stage5-acceptance.mjs
+ */
+import { readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
+const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+
+function read(rel) {
+  return readFileSync(join(root, rel), 'utf8')
+}
+
+function runNode(script) {
+  const r = spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8' })
+  return { script, status: r.status ?? 1, stdout: r.stdout || '', stderr: r.stderr || '' }
+}
+
+const staticChecks = []
+
+function check(name, ok, detail = '') {
+  staticChecks.push({ name, ok: !!ok, detail })
+}
+
+const hostSrc = read('host.js')
+check('host.inject.connectionOnly', /export const inject = \['connection'\]/.test(hostSrc), 'host.js inject')
+check('host.noTopLevelWebServer', !/export const inject = \['connection',\s*'webServer'\]/.test(hostSrc))
+
+const hostClient = read('src/infrastructure/host/vision-host-client.mjs')
+check(
+  'agent.noDefault3080',
+  !/['"`]https?:\/\/(?:127\.0\.0\.1|localhost):3080['"`]/.test(hostClient),
+  'no hardcoded origin literal (comment may mention 3080)',
+)
+check('agent.HOST_UNAVAILABLE', hostClient.includes('HOST_UNAVAILABLE'))
+
+const contract = read('src/shared/vision-rpc-contract.mjs')
+check(
+  'fetch.dispatchPath',
+  contract.includes("VISION_FETCH_DISPATCH_PATH = '/api/vision-bench/dispatch'"),
+)
+check('rpc.channelCompat', contract.includes("VISION_RPC_CHANNEL = '/vision-bench'"))
+
+const dshContract = read('src/infrastructure/harness/dsh-contract.mjs')
+check(
+  'supportedContractPinned',
+  /SUPPORTED_DSH_CONTRACT = '0\.1\.5-rc\.1'/.test(dshContract),
+  'keep pin until release re-measure',
+)
+
+check('client.platform.web', pkg.dsh?.client?.platform === 'web')
+check('adr012.fetchCarrier', read('docs/architecture/ADR-012-remote-transport.md').includes('Fetch'))
+check('adr014.idlePark', read('docs/architecture/ADR-014-debug-events-over-connection-rpc.md').includes('waitForOwnerSession'))
+check(
+  'acceptanceMatrixDoc',
+  read('docs/ACCEPTANCE_NATIVE_WEB_DESKTOP.md').includes('registry `name@version`'),
+)
+
+const staticOk = staticChecks.every((c) => c.ok)
+
+const stage3 = runNode('scripts/probes/check-stage3-pack.mjs')
+const stage4 = runNode('scripts/probes/run-stage4-lifecycle.mjs')
+
+const report = {
+  event: 'vision.stage5.acceptance',
+  package: `${pkg.name}@${pkg.version}`,
+  staticChecks,
+  staticOk,
+  priorGates: {
+    stage3: { ok: stage3.status === 0, status: stage3.status },
+    stage4: { ok: stage4.status === 0, status: stage4.status },
+  },
+  capabilityClaim: {
+    uiFetchTcpSim: true,
+    noVisionListenPort: true,
+    desktopRtuNative: false,
+    registryProductInstall: 'manual',
+    windowsHardware: 'docs/WINDOWS_ACCEPTANCE_0.27.md',
+    soak10to15min: 'deferred',
+  },
+  ok: staticOk && stage3.status === 0 && stage4.status === 0,
+}
+
+if (stage3.stdout) process.stdout.write(stage3.stdout)
+if (stage3.stderr) process.stderr.write(stage3.stderr)
+if (stage4.stdout) process.stdout.write(stage4.stdout)
+if (stage4.stderr) process.stderr.write(stage4.stderr)
+console.log(JSON.stringify(report, null, 2))
+process.exit(report.ok ? 0 : 1)

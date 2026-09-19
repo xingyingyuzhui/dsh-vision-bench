@@ -110,26 +110,29 @@ test('scope.cwd remains a documented short-term fallback', () => {
   assert.equal(sessionCwd(props), '/legacy/scope')
 })
 
-test('client and host inject connection for authenticated RPC', () => {
+test('client and host inject connection for authenticated transport', () => {
   const clientEntry = readFileSync(join(root, 'src/ui/client/client-entry.mjs'), 'utf8')
   const hostSrc = readFileSync(join(root, 'host.js'), 'utf8')
   assert.match(clientEntry, /inject = \['slots', 'locale', 'connection'\]/)
-  assert.match(hostSrc, /inject = \['connection', 'webServer'\]/)
+  assert.match(hostSrc, /inject = \['connection'\]/)
   assert.doesNotMatch(hostSrc, /inject = \['connection', 'webServer', 'tools', 'agentPresets', 'systemPrompt'\]/)
-  assert.match(hostSrc, /connection\.rpc\.handle/)
+  assert.match(hostSrc, /registerVisionFetchDispatch|vision-fetch-route/)
+  assert.match(hostSrc, /mountVisionWebCompat/)
 })
 
-test('client apply post uses Connection RPC instead of fetch', () => {
+test('client apply post uses shared Connection Fetch dispatch', () => {
   const src = readFileSync(join(root, 'src/ui/client/client-entry.mjs'), 'utf8')
-  assert.match(src, /createVisionRpcPost/)
-  assert.doesNotMatch(src, /\bfetch\s*\(/)
+  assert.match(src, /createVisionFetchPost/)
+  assert.doesNotMatch(src, /createVisionRpcPost/)
+  assert.doesNotMatch(src, /127\.0\.0\.1:3080/)
 })
 
 test('host.js no longer registers browser business HTTP routes', () => {
   const src = readFileSync(join(root, 'host.js'), 'utf8')
+  const webCompat = readFileSync(join(root, 'src/interfaces/web/vision-web-compat.mjs'), 'utf8')
   assert.doesNotMatch(src, /route\('\/dsh-vision-bench\/state'/)
   assert.doesNotMatch(src, /route\('\/dsh-vision-bench\/modbus\/write'/)
-  assert.match(src, /\/dsh-vision-bench\/command/)
+  assert.match(webCompat, /\/dsh-vision-bench\/command/)
   assert.doesNotMatch(src, /const browser = origin/)
 })
 

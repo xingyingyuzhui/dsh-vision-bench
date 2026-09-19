@@ -11,8 +11,10 @@ import {
 
 test('agent execute requires host and returns HOST_UNAVAILABLE when missing', async () => {
   unregisterVisionHost()
-  const prev = process.env.VISION_BENCH_HOST_ORIGIN
-  process.env.VISION_BENCH_HOST_ORIGIN = 'http://127.0.0.1:1'
+  const prevVision = process.env.VISION_BENCH_HOST_ORIGIN
+  const prevWeb = process.env.DSH_WEB_ORIGIN
+  delete process.env.VISION_BENCH_HOST_ORIGIN
+  delete process.env.DSH_WEB_ORIGIN
   try {
     const tool = visionBenchTool('/tmp')
     const ran = await tool.execute(
@@ -23,8 +25,10 @@ test('agent execute requires host and returns HOST_UNAVAILABLE when missing', as
     assert.equal(ran.errorCode, HOST_UNAVAILABLE)
     assert.equal(isLosslessJsonValue(ran), true)
   } finally {
-    if (prev == null) delete process.env.VISION_BENCH_HOST_ORIGIN
-    else process.env.VISION_BENCH_HOST_ORIGIN = prev
+    if (prevVision == null) delete process.env.VISION_BENCH_HOST_ORIGIN
+    else process.env.VISION_BENCH_HOST_ORIGIN = prevVision
+    if (prevWeb == null) delete process.env.DSH_WEB_ORIGIN
+    else process.env.DSH_WEB_ORIGIN = prevWeb
   }
 })
 

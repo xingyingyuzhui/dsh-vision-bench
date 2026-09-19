@@ -1,6 +1,6 @@
 # Vision 原生接入 DSH Web / Desktop：分阶段迁移计划
 
-> 状态：阶段 0 实施中（2026-09-17）。核对日期：2026-09-17。Vision 源码基线：`dsh-vision-bench@0.29.0`；DSH 目标基线：`dsh-v0.1.6-alpha.1`（本机 `dsh --version`）。§8 实施默认已填；每次 DSH 升级都要重新跑本文的契约门禁。
+> 状态：阶段 5 自动化切片已跑（2026-09-19）— ADR-012/014 已改为 Fetch 载体；验收矩阵见 `docs/ACCEPTANCE_NATIVE_WEB_DESKTOP.md`；`check-stage5-acceptance.mjs` 聚合阶段 3–4 + 静态契约。**仍待**：registry 产品安装、Windows 真机、10–15min soak、上游 allowBuilds / 可选 RTU。`SUPPORTED_DSH_CONTRACT` 仍钉 `0.1.5-rc.1`。
 
 ## 执行口径（2026-09-17）
 
@@ -282,10 +282,10 @@ Host 句柄存在且未 disposed → 直接调用 Host dispatcher
 | 编号 | 疑问（摘要） | 不实证的后果 | 回复（版本 / 结果 / 日志位置） |
 | --- | --- | --- | --- |
 | **B0** | 阶段 0「官方 Desktop」是否严格对齐 `dsh-v0.1.6-alpha.1`？探针失败时：停工等上游，还是允许 Web 继续、Desktop 标实验双轨？ | 基线漂移会使后续契约门禁失效 | **实施默认（2026-09-17 开搞）**：目标对齐本机 `dsh --version` = `0.1.6-alpha.1`。B1 Desktop 失败 → Web 可继续阶段 1 实验，Desktop 标阻塞不剥 `webServer`；不转向私有管道。 |
-| **B1** | `fetch.register` + 相对 `/api/...` 在目标 Desktop 上：注册、鉴权、调用、重复激活、卸载 404、重启是否完整？ | 阶段 1 不能剥 `webServer`，方案 A 立不住 | **Web（隔离 Home）已通过** — 见 `scripts/probes/RESULTS.md`。Desktop 仍 pending。 |
-| **B2** | Agent tool fiber 与 Host 是否同一 Node 模块实例？若否，有无公开跨进程 Host 通道？ | 阶段 2 不能只靠进程内句柄；禁止用 Web 端口硬桥 | （待阶段 0 ping/PID 实测） |
-| **B3** | Desktop `allowBuilds` + 捆绑 Node ABI 能否安装/重建/加载 `serialport`？ | 不能宣称完整硬件兼容；须限能力或拆可选包 | （本轮硬件 defer，见 S1/C3） |
-| **B4** | Client 元数据 `platform: web` 是否被官方 Desktop 接受并加载？ | 阶段 1/3 可能卡在资源注入 | （待 Desktop 加载实测） |
+| **B1** | `fetch.register` + 相对 `/api/...` 在目标 Desktop 上：注册、鉴权、调用、重复激活、卸载 404、重启是否完整？ | 阶段 1 不能剥 `webServer`，方案 A 立不住 | **Web + Desktop 已通过** — 见 `scripts/probes/RESULTS.md`（Desktop 经 `DesktopHostProcess` `/api` 管道）。 |
+| **B2** | Agent tool fiber 与 Host 是否同一 Node 模块实例？若否，有无公开跨进程 Host 通道？ | 阶段 2 不能只靠进程内句柄；禁止用 Web 端口硬桥 | **同进程已通过**（`run-b2-identity.mjs`）。阶段 2 已删 `hostOriginOf` 默认 `:3080`；无句柄且无显式 origin → `HOST_UNAVAILABLE`。 |
+| **B3** | Desktop `allowBuilds` + 捆绑 Node ABI 能否安装/重建/加载 `serialport`？ | 不能宣称完整硬件兼容；须限能力或拆可选包 | **否（当前官方白名单）** — `serialport` / `@serialport/bindings-cpp` 不在 Desktop `allowBuilds`；阶段 3 标记 Desktop RTU 能力限制，TCP/仿真仍可验收。 |
+| **B4** | Client 元数据 `platform: web` 是否被官方 Desktop 接受并加载？ | 阶段 1/3 可能卡在资源注入 | **是** — `client-modules` 仅接受 `dsh.client.platform === 'web'`；Desktop 与 Web 共用该契约。 |
 | **B5** | Web 与 Desktop 共用同一产品数据时，是否允许并发 Host 写入？ | 未证实前不能承诺「双开同 Home」 | **默认不承诺**；验收用隔离 `DSH_HOME`。 |
 
 ### 8.2 方案与范围拍板

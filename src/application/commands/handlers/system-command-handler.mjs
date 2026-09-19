@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { VISION_HOST_CLIENT_INSTANCE_ID } from '../../../infrastructure/host/vision-host-client.mjs'
 
 const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../../package.json'), 'utf8'))
 
@@ -22,6 +23,8 @@ export async function handleSystemCommand(ctx) {
       transport: ctx?.opts?.transport === 'http' ? 'http' : 'in-process',
       pid: process.pid,
       timestamp: new Date().toISOString(),
+      clientInstanceId: VISION_HOST_CLIENT_INSTANCE_ID,
+      hostFiber: 'dsh-vision-bench',
     },
   }
 }

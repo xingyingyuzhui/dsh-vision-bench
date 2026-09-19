@@ -1,6 +1,8 @@
 # dsh-vision-bench · Vision 模式
 
-Requires DSH 0.1.5-rc.1. Install from an `npm pack` tarball, not a `link:` checkout. Supported contract is pinned in `src/infrastructure/harness/dsh-contract.mjs`.
+Requires DSH 0.1.5-rc.1+（目标对齐本机 `0.1.6-alpha.1`）。Web 开发可用 `npm pack` tarball；**官方 Desktop 产品安装只认 registry `name@version`**（拒绝 `file:` / 本地 tgz）。Supported contract is pinned in `src/infrastructure/harness/dsh-contract.mjs`.
+
+**Desktop 硬件能力**：UI / TCP / 仿真可走无端口 Fetch；`serialport` / `@serialport/bindings-cpp` **不在**官方 Desktop `allowBuilds` 白名单，因此 **不能宣称官方 Desktop 完整 RTU 原生兼容**。跨平台验收矩阵见 [`docs/ACCEPTANCE_NATIVE_WEB_DESKTOP.md`](docs/ACCEPTANCE_NATIVE_WEB_DESKTOP.md)。
 
 日常开发用的会话工作台。跟 Claw 无关。
 
@@ -14,7 +16,7 @@ Requires DSH 0.1.5-rc.1. Install from an `npm pack` tarball, not a `link:` check
 
 ## Vision模式
 
-宿主插件 `dsh-vision-bench` 只挂 `connection` / `webServer`。Agent 工具是另一条 loader：`dsh-vision-bench/agent`（`export name` 为 `dsh-vision-bench-tools`），由 **Vision模式** 预设插入，不和宿主同名。
+宿主插件 `dsh-vision-bench` 顶层只挂 `connection`（共享 `/api/vision-bench/dispatch`）；旧 `/vision-bench` RPC 与 Agent HTTP 命令桥仅在有 `webServer` 时挂载。Agent 工具是另一条 loader：`dsh-vision-bench/agent`（`export name` 为 `dsh-vision-bench-tools`），由 **Vision模式** 预设插入，不和宿主同名。
 
 预设是安装物，不在宿主 `apply()` 里 seed。首次安装或升级后执行 `node scripts/seed-preset.mjs`（或设置页重建），写入 `$DSH_HOME/.agent-presets/vision-bench/`。**新建 Session 后生效**。
 

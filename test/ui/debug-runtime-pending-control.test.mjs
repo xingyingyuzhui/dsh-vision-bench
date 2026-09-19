@@ -174,6 +174,124 @@ test('useDebugEvents queries state once then waits; idle wake does not tight-loo
   if (typeof stop === 'function') stop()
 })
 
+test('stage4: missing sessionId does not poll debug events', async () => {
+  const React = createMockReact()
+  /** @type {Array<() => any>} */
+  const effects = []
+  React.useEffect = (fn) => {
+    effects.push(fn)
+  }
+  let stateCalls = 0
+  let waitCalls = 0
+  const mockPost = async (path) => {
+    if (String(path).includes('/debug/state')) stateCalls += 1
+    if (String(path).includes('/debug/events/wait')) waitCalls += 1
+    return { ok: true }
+  }
+  useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: '' })
+  const stop = effects[0]?.()
+  await new Promise((r) => setTimeout(r, 30))
+  assert.equal(stateCalls, 0)
+  assert.equal(waitCalls, 0)
+  if (typeof stop === 'function') stop()
+})
+
+test('stage4: no debug session parks without waitForOwnerSession', async () => {
+  const React = createMockReact()
+  /** @type {Array<() => any>} */
+  const effects = []
+  React.useEffect = (fn) => {
+    effects.push(fn)
+  }
+  let stateCalls = 0
+  let waitCalls = 0
+  const mockPost = async (path) => {
+    if (String(path).includes('/debug/state')) {
+      stateCalls += 1
+      return { ok: true, session: null, pendingApprovals: [] }
+    }
+    if (String(path).includes('/debug/events/wait')) waitCalls += 1
+    return { ok: true }
+  }
+  useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-idle' })
+  const stop = effects[0]?.()
+  await new Promise((r) => setTimeout(r, 50))
+  assert.equal(stateCalls, 1)
+  assert.equal(waitCalls, 0, 'idle must not long-poll waitForOwnerSession')
+  if (typeof stop === 'function') stop()
+})
+
+test('stage4: closed session parks and does not re-enter wait', async () => {
+  const React = createMockReact()
+  /** @type {Array<() => any>} */
+  const effects = []
+  React.useEffect = (fn) => {
+    effects.push(fn)
+  }
+  let waitCalls = 0
+  const mockPost = async (path) => {
+    if (String(path).includes('/debug/state')) {
+      return { ok: true, session: { state: 'running', variables: [] } }
+    }
+    if (String(path).includes('/debug/events/wait')) {
+      waitCalls += 1
+      return { ok: true, closed: true, events: [], nextCursor: 0 }
+    }
+    return { ok: true }
+  }
+  useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-closed' })
+  const stop = effects[0]?.()
+  await new Promise((r) => setTimeout(r, 40))
+  assert.equal(waitCalls, 1, 'one wait then park on closed')
+  if (typeof stop === 'function') stop()
+})
+
+test('stage4: consecutive wait failures stop subscription (no reload storm)', async () => {
+  const React = createMockReact()
+  /** @type {Array<() => any>} */
+  const effects = []
+  React.useEffect = (fn) => {
+    effects.push(fn)
+  }
+  let waitCalls = 0
+  const mockPost = async (path) => {
+    if (String(path).includes('/debug/state')) {
+      return { ok: true, session: { state: 'running', variables: [] } }
+    }
+    if (String(path).includes('/debug/events/wait')) {
+      waitCalls += 1
+      return { ok: false, error: 'boom' }
+    }
+    return { ok: true }
+  }
+  const { DEBUG_WAIT_FAILURE_BUDGET } = await import(
+    '../../src/ui/debug/runtime/use-debug-event-subscription.mjs'
+  )
+  useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-fail' })
+  const stop = effects[0]?.()
+  // budget * 1s backoff would be slow; patch timers
+  const realSetTimeout = globalThis.setTimeout
+  /** @type {Array<() => void>} */
+  const due = []
+  globalThis.setTimeout = /** @type {any} */ (
+    (fn, _ms) => {
+      due.push(fn)
+      return 0
+    }
+  )
+  try {
+    await new Promise((r) => setImmediate(r))
+    for (let i = 0; i < DEBUG_WAIT_FAILURE_BUDGET + 3; i++) {
+      while (due.length) due.shift()?.()
+      await new Promise((r) => setImmediate(r))
+    }
+    assert.equal(waitCalls, DEBUG_WAIT_FAILURE_BUDGET, 'stops after failure budget')
+  } finally {
+    globalThis.setTimeout = realSetTimeout
+    if (typeof stop === 'function') stop()
+  }
+})
+
 test('PR-4: useDebugEvents: pause and step set pendingControl without optimistic paused state', async () => {
   const React = createMockReact()
   let lastCommand = null

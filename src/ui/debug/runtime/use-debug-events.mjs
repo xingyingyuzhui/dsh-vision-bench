@@ -150,7 +150,9 @@ export function useDebugEvents(React, post, scope) {
       setPendingControl,
       setActive,
     })
-  }, [identityKey, controller, applyState, refreshRegisters, evaluateWatches, sessionId, cwd])
+    // Remount when a debug session becomes active so Start / Agent create enters wait;
+    // idle (active=false) parks after getState with no session.
+  }, [identityKey, controller, applyState, refreshRegisters, evaluateWatches, sessionId, cwd, active])
 
   const controlActions = useDebugRuntimeActions(React, {
     controller,

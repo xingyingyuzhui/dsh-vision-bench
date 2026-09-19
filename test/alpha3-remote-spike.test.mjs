@@ -28,11 +28,12 @@ test('client inject uses connection for authenticated RPC, not Typert remote', (
   assert.doesNotMatch(entry, /['"]remote['"]/)
 })
 
-test('host inject registers Connection RPC and keeps only the Agent command bridge', () => {
+test('host inject registers Connection Fetch and keeps Web Agent command bridge', () => {
   const host = readFileSync(join(root, 'host.js'), 'utf8')
-  assert.match(host, /inject = \['connection', 'webServer'\]/)
+  assert.match(host, /inject = \['connection'\]/)
   assert.doesNotMatch(host, /inject = \['connection', 'webServer', 'tools', 'agentPresets', 'systemPrompt'\]/)
-  assert.match(host, /connection\.rpc\.handle/)
+  assert.match(host, /registerVisionFetchDispatch|vision-fetch-route/)
+  assert.match(host, /mountVisionWebCompat/)
   assert.doesNotMatch(host, /dsh-api-remotes/)
   assert.doesNotMatch(host, /TypertRemoteService/)
 })
@@ -47,8 +48,9 @@ test('ADR-012 records Connection RPC as the supported alpha.3 browser transport'
 test('browser client does not send the retired static Vision header', () => {
   const runtime = readFileSync(join(root, 'src/ui/client/client-entry.mjs'), 'utf8')
   assert.doesNotMatch(runtime, /X-DSH-Vision-Bench/)
-  assert.match(runtime, /createVisionRpcPost/)
+  assert.match(runtime, /createVisionFetchPost/)
   const host = readFileSync(join(root, 'host.js'), 'utf8')
-  assert.match(host, /x-dsh-vision-capability/)
+  const webCompat = readFileSync(join(root, 'src/interfaces/web/vision-web-compat.mjs'), 'utf8')
+  assert.match(webCompat, /x-dsh-vision-capability/)
   assert.doesNotMatch(host, /const browser = origin/)
 })

@@ -1,5 +1,6 @@
 // @ts-check
 import { finalizeAgentCommandResult } from '../../application/commands/lossless-json.mjs'
+import { executeHostCommand } from '../../application/commands/host-command-service.mjs'
 import { dispatchVisionCommand } from '../../infrastructure/host/vision-host-client.mjs'
 
 export const ACTIONS = new Set([
@@ -57,7 +58,10 @@ const originFrom = (input) => ({
   sessionId: input && input.sessionId ? String(input.sessionId) : '',
 })
 
-/** In-process helper used by tests; Agent execute() sets requireHost.
+/**
+ * Test / app-service helper: calls the Host application layer directly.
+ * Production Agent tools must use `visionBenchTool` → `dispatchVisionCommand({ requireHost: true })`
+ * so missing Host never falls back to a second local writer.
  * @param {any} [home]
  * @param {any} [args]
  * @param {any} [cwd]
@@ -68,7 +72,7 @@ const originFrom = (input) => ({
 export async function runVisionBench(home, args, cwd, originInput, opts) {
   const origin = originFrom(originInput)
   return finalizeAgentCommandResult(
-    await dispatchVisionCommand({
+    await executeHostCommand({
       home,
       cwd,
       action: args && args.action,
@@ -78,7 +82,6 @@ export async function runVisionBench(home, args, cwd, originInput, opts) {
       signal: opts && opts.signal,
       commandId: opts && opts.commandId,
       expectedConfigVersion: args && (args.expectedConfigVersion ?? args.configVersion),
-      requireHost: opts && opts.requireHost === true,
       transport: opts && opts.transport,
     }),
     origin.source,

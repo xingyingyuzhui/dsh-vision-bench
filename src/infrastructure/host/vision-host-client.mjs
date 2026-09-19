@@ -1,4 +1,5 @@
 // @ts-check
+import { randomUUID } from 'node:crypto'
 import {
   HOST_FORBIDDEN,
   HOST_HTTP_STATUS_ERROR,
@@ -21,35 +22,54 @@ import {
  * @typedef {{ dispatch: (cmd: AgentCommandEnvelope) => Promise<AgentCommandResult> | AgentCommandResult }} VisionHostHandle
  */
 
-/** @type {VisionHostHandle | null} */
-let hostHandle = null
+/**
+ * Load-time identity of this ESM module graph. Host `registerVisionHost` and
+ * Agent `getVisionHost` share one instance iff they import the same module URL
+ * in the same Node process (B2 gate).
+ */
+export const VISION_HOST_CLIENT_INSTANCE_ID = randomUUID()
+
+/**
+ * @typedef {{ handle: VisionHostHandle, epoch: string }} VisionHostRegistration
+ */
+
+/** @type {VisionHostRegistration | null} */
+let hostRegistration = null
 
 /**
  * @param {VisionHostHandle | null | undefined} handle
  * @returns {() => void}
  */
 export function registerVisionHost(handle) {
-  hostHandle = handle && typeof handle.dispatch === 'function' ? handle : null
+  const valid = handle && typeof handle.dispatch === 'function' ? handle : null
+  const epoch = randomUUID()
+  hostRegistration = valid ? { handle: valid, epoch } : null
   return () => {
-    if (hostHandle === handle) hostHandle = null
+    if (hostRegistration && hostRegistration.epoch === epoch) hostRegistration = null
   }
 }
 
 export function unregisterVisionHost() {
-  hostHandle = null
+  hostRegistration = null
 }
 
 /** @returns {VisionHostHandle | null} */
 export function getVisionHost() {
-  return hostHandle
+  return hostRegistration?.handle ?? null
 }
 
-/** @returns {string} */
+/** @returns {string | null} */
+export function getVisionHostEpoch() {
+  return hostRegistration?.epoch ?? null
+}
+
+/**
+ * Explicit Web Agent bridge origin only. Never guess localhost:3080 (Desktop must not
+ * accidentally hit a concurrent Web Host).
+ * @returns {string}
+ */
 export function hostOriginOf() {
-  return String(process.env.VISION_BENCH_HOST_ORIGIN || process.env.DSH_WEB_ORIGIN || 'http://127.0.0.1:3080').replace(
-    /\/$/,
-    '',
-  )
+  return String(process.env.VISION_BENCH_HOST_ORIGIN || process.env.DSH_WEB_ORIGIN || '').replace(/\/$/, '')
 }
 
 /**
@@ -188,23 +208,40 @@ async function tryHostHttp(cmd) {
 
 /**
  * Universal host command dispatcher for agent tools and internal callers.
+ * In-process handle first; optional explicit HTTP bridge when `requireHost` and
+ * `VISION_BENCH_HOST_ORIGIN` / `DSH_WEB_ORIGIN` are set. No implicit local
+ * `executeHostCommand` fallback (that path is for test helpers / app services only).
  * @param {Partial<AgentCommandEnvelope> & { action?: string, requireHost?: boolean, timeoutMs?: number }} cmd
  * @returns {Promise<AgentCommandResult>}
  */
 export async function dispatchHostCommand(cmd) {
   const input = cmd && typeof cmd === 'object' ? cmd : { action: '' }
   const source = input.source === 'agent' || input.source === 'system' ? input.source : 'user'
-  if (hostHandle && typeof hostHandle.dispatch === 'function') {
+  const registered = hostRegistration
+  if (registered?.handle && typeof registered.handle.dispatch === 'function') {
     return /** @type {AgentCommandResult} */ (
-      finalizeAgentCommandResult(await hostHandle.dispatch(/** @type {AgentCommandEnvelope} */ (input)), source)
+      finalizeAgentCommandResult(
+        await registered.handle.dispatch(/** @type {AgentCommandEnvelope} */ (input)),
+        source,
+      )
     )
   }
-  if (input.requireHost !== true) {
-    const { executeHostCommand } = await import('../../application/commands/host-command-service.mjs')
-    return /** @type {AgentCommandResult} */ (finalizeAgentCommandResult(await executeHostCommand(input), source))
+  if (input.requireHost === true) {
+    return /** @type {AgentCommandResult} */ (
+      finalizeAgentCommandResult(await tryHostHttp(/** @type {AgentCommandEnvelope} */ (input)), source)
+    )
   }
   return /** @type {AgentCommandResult} */ (
-    finalizeAgentCommandResult(await tryHostHttp(/** @type {AgentCommandEnvelope} */ (input)), source)
+    finalizeAgentCommandResult(
+      {
+        ok: false,
+        errorCode: HOST_UNAVAILABLE,
+        error: 'Vision Host 不可用',
+        commandId: input.commandId,
+        origin: hostOriginOf() || undefined,
+      },
+      source,
+    )
   )
 }
 
@@ -236,12 +273,12 @@ export async function dispatchVisionDebugCommand(cmd) {
 /** @returns {HostBridgeDescriptor} */
 export function describeHostBridge() {
   const origin = hostOriginOf()
-  const inProcess = !!(hostHandle && typeof hostHandle.dispatch === 'function')
+  const inProcess = !!(hostRegistration?.handle && typeof hostRegistration.handle.dispatch === 'function')
   return {
     origin,
     inProcess,
     available: false,
-    transport: inProcess ? 'in-process' : 'http',
+    transport: inProcess ? 'in-process' : origin ? 'http' : 'unavailable',
   }
 }
 
@@ -252,7 +289,7 @@ export function describeHostBridge() {
  */
 export async function pingVisionHost(options = {}) {
   const started = Date.now()
-  const inProcess = !!(hostHandle && typeof hostHandle.dispatch === 'function')
+  const inProcess = !!(hostRegistration?.handle && typeof hostRegistration.handle.dispatch === 'function')
   const result = await dispatchVisionCommand({
     action: 'system.ping',
     commandId: options.commandId || `ping-${Date.now().toString(36)}`,
@@ -260,7 +297,7 @@ export async function pingVisionHost(options = {}) {
     sessionId: options.sessionId || '',
     source: 'system',
     payload: { action: 'system.ping' },
-    requireHost: !inProcess,
+    requireHost: true,
     timeoutMs: Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 3000,
     signal: options.signal,
   })
@@ -292,6 +329,11 @@ export async function pingVisionHost(options = {}) {
         roundtripMs,
       }
     } else {
+      const hostInstanceId =
+        typeof raw.clientInstanceId === 'string' && raw.clientInstanceId.length > 0
+          ? raw.clientInstanceId
+          : undefined
+      const agentPid = process.pid
       out = {
         ok: true,
         available: true,
@@ -301,6 +343,20 @@ export async function pingVisionHost(options = {}) {
           transport: inProcess ? 'in-process' : 'http',
           pid,
           timestamp,
+          ...(hostInstanceId ? { clientInstanceId: hostInstanceId } : {}),
+          ...(typeof raw.hostFiber === 'string' ? { hostFiber: raw.hostFiber } : {}),
+        },
+        identity: {
+          agentPid,
+          hostPid: pid,
+          samePid: agentPid === pid,
+          localClientInstanceId: VISION_HOST_CLIENT_INSTANCE_ID,
+          hostClientInstanceId: hostInstanceId ?? null,
+          sameModuleInstance: hostInstanceId === VISION_HOST_CLIENT_INSTANCE_ID,
+          hasHandle: inProcess,
+          hostEpoch: getVisionHostEpoch(),
+          agentFiber: 'dsh-vision-bench-tools',
+          dispatchPath: inProcess ? 'in-process-handle' : 'http-bridge',
         },
         origin: result.origin || hostOriginOf(),
         roundtripMs,

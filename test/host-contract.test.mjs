@@ -18,7 +18,7 @@ import { createBench } from './helpers/workspace-factory.mjs'
 
 test('host named exports', async () => {
   assert.equal(name, 'dsh-vision-bench')
-  assert.deepEqual(inject, ['connection', 'webServer'])
+  assert.deepEqual(inject, ['connection'])
   const pkg = JSON.parse(
     await (await import('node:fs/promises')).readFile(new URL('../package.json', import.meta.url), 'utf8'),
   )
@@ -27,7 +27,7 @@ test('host named exports', async () => {
   assert.equal(pkg.exports['./scan-guard'], undefined)
 })
 
-test('host apply does not inject agentPresets or bind tools', async () => {
+test('host apply optionally injects webServer for Web compat only', async () => {
   const connection = mockRpcHost()
   const injected = []
   let toolRegs = 0
@@ -38,12 +38,13 @@ test('host apply does not inject agentPresets or bind tools', async () => {
       return () => {}
     },
   }
-  ctx.inject = (deps) => {
+  ctx.inject = (deps, fn) => {
     injected.push(deps)
+    if (Array.isArray(deps) && deps.includes('webServer') && ctx.webServer && typeof fn === 'function') fn(ctx)
   }
   apply(ctx)
   apply(ctx)
-  assert.deepEqual(injected, [])
+  assert.deepEqual(injected, [['webServer'], ['webServer']])
   assert.equal(toolRegs, 0)
   if (ctx._stop) ctx._stop()
 })
@@ -67,7 +68,7 @@ test('state returns idle ioRuntime without starting a Worker', async (t) => {
   assert.equal(snap.ioRuntime.capabilities.modbusTcp, 'unknown')
 })
 
-test('apply registers only agent command bridge and disposes RPC', async () => {
+test('apply registers Fetch dispatch, Web command bridge, and disposes RPC', async () => {
   const disposed = []
   const connection = mockRpcHost()
   const ctx = {
@@ -83,12 +84,16 @@ test('apply registers only agent command bridge and disposes RPC', async () => {
         return () => {}
       },
     },
+    inject(deps, fn) {
+      if (deps?.includes?.('webServer') && ctx.webServer) fn(ctx)
+    },
     effect(factory) {
       ctx._stop = factory()
     },
   }
   apply(ctx)
   assert.deepEqual(disposed, ['/dsh-vision-bench/command'])
+  assert.ok(connection.hasFetchHandler)
   assert.ok(connection.hasHandler)
   const hostSrc = await (await import('node:fs/promises')).readFile(new URL('../host.js', import.meta.url), 'utf8')
   assert.doesNotMatch(hostSrc, /schedulePresetSeed\(/)
@@ -101,6 +106,7 @@ test('apply registers only agent command bridge and disposes RPC', async () => {
   assert.doesNotMatch(hostSrc, /roster copy is best-effort/)
   assert.doesNotMatch(hostSrc, /const browser = origin/)
   assert.doesNotMatch(hostSrc, /route\('\/dsh-vision-bench\/state'/)
+  assert.doesNotMatch(hostSrc, /connection\.register\(/)
   await ctx._stop()
   assert.equal(connection.disposed, true)
 })
@@ -111,17 +117,21 @@ test('late RPC disposer still runs after the host fiber has disposed', async () 
   const registration = new Promise((resolve) => {
     resolveReg = resolve
   })
+  const connection = mockRpcHost()
+  const baseHandle = connection.rpc.handle.bind(connection.rpc)
+  connection.rpc.handle = (channel, fn) => {
+    baseHandle(channel, fn)
+    return registration
+  }
   const ctx = {
-    connection: {
-      rpc: { handle() {} },
-      register(_ctx, _channel, _handler) {
-        return registration
-      },
-    },
+    connection,
     webServer: {
       register() {
         return () => {}
       },
+    },
+    inject(deps, fn) {
+      if (deps?.includes?.('webServer')) fn(ctx)
     },
     effect(factory) {
       ctx._stop = factory()
@@ -142,17 +152,21 @@ test('host dispose waits until the late RPC disposer finishes', async () => {
     resolveReg = resolve
   })
   let disposeFinished = false
+  const connection = mockRpcHost()
+  const baseHandle = connection.rpc.handle.bind(connection.rpc)
+  connection.rpc.handle = (channel, fn) => {
+    baseHandle(channel, fn)
+    return registration
+  }
   const ctx = {
-    connection: {
-      rpc: { handle() {} },
-      register() {
-        return registration
-      },
-    },
+    connection,
     webServer: {
       register() {
         return () => {}
       },
+    },
+    inject(deps, fn) {
+      if (deps?.includes?.('webServer')) fn(ctx)
     },
     effect(factory) {
       ctx._stop = factory()

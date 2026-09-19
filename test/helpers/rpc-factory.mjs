@@ -134,7 +134,10 @@ export function createPost(handler) {
 export function mockRpcHost() {
   /** @type {((endpoint: string, payload: any, signal?: AbortSignal) => any) | null} */
   let handler = null
+  /** @type {((request: Request) => Promise<Response>) | null} */
+  let fetchHandler = null
   let disposed = false
+  let fetchDisposed = false
   return {
     rpc: {
       handle(channel, fn) {
@@ -151,15 +154,46 @@ export function mockRpcHost() {
         return handler(endpoint, payload, signal)
       },
     },
+    fetch: {
+      register(route) {
+        if (!route || typeof route.fetch !== 'function') throw new Error('invalid fetch route')
+        fetchHandler = route.fetch
+        return () => {
+          fetchDisposed = true
+          fetchHandler = null
+        }
+      },
+    },
     get disposed() {
       return disposed
+    },
+    get fetchDisposed() {
+      return fetchDisposed
     },
     get hasHandler() {
       return handler != null
     },
+    get hasFetchHandler() {
+      return fetchHandler != null
+    },
     invoke(endpoint, payload, signal) {
       if (!handler) throw new Error('rpc handler missing')
       return handler(endpoint, payload, signal)
+    },
+    /**
+     * @param {string} endpoint
+     * @param {any} [payload]
+     * @param {AbortSignal} [signal]
+     */
+    async invokeFetch(endpoint, payload = {}, signal) {
+      if (!fetchHandler) throw new Error('fetch handler missing')
+      const request = new Request('http://host/api/vision-bench/dispatch', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ endpoint, payload }),
+        signal,
+      })
+      return fetchHandler(request)
     },
   }
 }
@@ -191,6 +225,15 @@ export function createHostContext(connection, overrides = {}) {
     },
     effect(factory) {
       ctx._stop = factory()
+    },
+    /**
+     * Cordis-like optional inject: call fn when deps are present on ctx.
+     * @param {string[]} deps
+     * @param {(scope: any) => void} fn
+     */
+    inject(deps, fn) {
+      if (!Array.isArray(deps) || typeof fn !== 'function') return
+      if (deps.every((name) => ctx[name] != null)) fn(ctx)
     },
     ...overrides,
   }
