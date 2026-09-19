@@ -57,16 +57,28 @@ check(
 
 check('client.platform.web', pkg.dsh?.client?.platform === 'web')
 check('adr012.fetchCarrier', read('docs/architecture/ADR-012-remote-transport.md').includes('Fetch'))
-check('adr014.idlePark', read('docs/architecture/ADR-014-debug-events-over-connection-rpc.md').includes('waitForOwnerSession'))
+check('adr014.waitForOwnerSession', read('docs/architecture/ADR-014-debug-events-over-connection-rpc.md').includes('waitForOwnerSession'))
 check(
   'acceptanceMatrixDoc',
   read('docs/ACCEPTANCE_NATIVE_WEB_DESKTOP.md').includes('registry `name@version`'),
+)
+check(
+  'desktopB2.probeScript',
+  read('scripts/probes/run-desktop-b2-identity.mts').includes('run-desktop-b2-identity') ||
+    read('scripts/probes/run-desktop-b2-identity.mts').includes('vision.probe.desktop.b2'),
+  'real Desktop B2 probe present',
+)
+check(
+  'desktopB2.resultsRecorded',
+  read('scripts/probes/RESULTS.md').includes('Real Desktop B2') &&
+    read('scripts/probes/RESULTS.md').includes('run-desktop-b2-identity.mts'),
 )
 
 const staticOk = staticChecks.every((c) => c.ok)
 
 const stage3 = runNode('scripts/probes/check-stage3-pack.mjs')
 const stage4 = runNode('scripts/probes/run-stage4-lifecycle.mjs')
+const unitB2 = runNode('scripts/probes/run-b2-identity.mjs')
 
 const report = {
   event: 'vision.stage5.acceptance',
@@ -76,6 +88,9 @@ const report = {
   priorGates: {
     stage3: { ok: stage3.status === 0, status: stage3.status },
     stage4: { ok: stage4.status === 0, status: stage4.status },
+    unitB2: { ok: unitB2.status === 0, status: unitB2.status },
+    desktopB2:
+      'run from apps/desktop: pnpm exec tsx scripts/probes/run-desktop-b2-identity.mts (recorded pass in RESULTS.md)',
   },
   capabilityClaim: {
     uiFetchTcpSim: true,
@@ -84,13 +99,16 @@ const report = {
     registryProductInstall: 'manual',
     windowsHardware: 'docs/WINDOWS_ACCEPTANCE_0.27.md',
     soak10to15min: 'deferred',
+    desktopB2Identity: true,
   },
-  ok: staticOk && stage3.status === 0 && stage4.status === 0,
+  ok: staticOk && stage3.status === 0 && stage4.status === 0 && unitB2.status === 0,
 }
 
 if (stage3.stdout) process.stdout.write(stage3.stdout)
 if (stage3.stderr) process.stderr.write(stage3.stderr)
 if (stage4.stdout) process.stdout.write(stage4.stdout)
 if (stage4.stderr) process.stderr.write(stage4.stderr)
+if (unitB2.stdout) process.stdout.write(unitB2.stdout)
+if (unitB2.stderr) process.stderr.write(unitB2.stderr)
 console.log(JSON.stringify(report, null, 2))
 process.exit(report.ok ? 0 : 1)

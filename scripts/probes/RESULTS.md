@@ -56,10 +56,11 @@ pnpm exec tsx /Users/qin/DSH/plugins/dsh-vision-suite/dsh-vision-bench/scripts/p
 
 | Check | Result | Notes |
 | --- | --- | --- |
-| Same-process `system.ping` PID + module instance | **pass** | `node scripts/probes/run-b2-identity.mjs` → `samePid` ∧ `sameModuleInstance` ∧ `dispatchPath=in-process-handle` |
-| Child-process negative (no handle) | **pass** | separate PID, `HOST_UNAVAILABLE`, distinct `VISION_HOST_CLIENT_INSTANCE_ID` |
-| Fiber names | **pass** | Host `dsh-vision-bench` / Agent `dsh-vision-bench-tools` (logged on apply + ping `identity.agentFiber`) |
-| Desktop product Host apply today | **blocked until stage 1** | Host still `inject=['connection','webServer']` — will not activate on Desktop; B2 contract holds once Host applies after stage 1 |
+| Module-unit same-process `system.ping` | **pass** | `node scripts/probes/run-b2-identity.mjs` (not Desktop product proof) |
+| Child-process negative (no handle) | **pass** | separate PID, `HOST_UNAVAILABLE`, distinct instance id |
+| Fiber names | **pass** | Host `dsh-vision-bench` / Agent `dsh-vision-bench-tools` |
+| **Real Desktop B2** (pack → temp profile → DesktopHostProcess) | **pass** | `pnpm exec tsx scripts/probes/run-desktop-b2-identity.mts` from `apps/desktop`: `hasHandle` ∧ `sameModuleInstance` ∧ `dispatchPath=in-process-handle` ∧ no `:3080` |
+| Source `link:` install | **rejected by probe** | Desktop B2 installs `file:./.dsh-local-plugins/*.tgz` only |
 
 Instrumentation: `VISION_HOST_CLIENT_INSTANCE_ID` in `vision-host-client.mjs`; echoed by `system.ping` as `clientInstanceId`; `pingVisionHost().identity` compares Agent vs Host.
 
@@ -137,7 +138,7 @@ Date: 2026-09-19
 | Check | Result | Notes |
 | --- | --- | --- |
 | ADR-012 Fetch carrier | **updated** | UI product path = `/api/vision-bench/dispatch`; RPC Web-compat only |
-| ADR-014 idle + Fetch | **updated** | cursor wait semantics; no idle `waitForOwnerSession` |
+| ADR-014 idle + Fetch | **updated** | cursor wait; idle hangs on `waitForOwnerSession` |
 | Acceptance matrix doc | **added** | `docs/ACCEPTANCE_NATIVE_WEB_DESKTOP.md` |
 | Aggregated auto gate | **pass** | `check-stage5-acceptance.mjs` (static + stage3 + stage4) |
 | `SUPPORTED_DSH_CONTRACT` | **unchanged** | still `0.1.5-rc.1` pending release re-measure |
@@ -151,7 +152,7 @@ Repro: `node scripts/probes/check-stage5-acceptance.mjs`
 
 - [x] B1 Web pass (register / auth fence / call / uninstall 404)
 - [x] B1 Desktop pass (register / call / uninstall 404 on Desktop Host `/api` pipe) → unlock stage 1 Host `inject=['connection']` work for both carriers
-- [x] B2 same-process module identity pass → stage 2 may use in-process handle; keep deleting `127.0.0.1:3080` guess; no Desktop→Web port bridge
+- [x] Real Desktop B2 pass (`run-desktop-b2-identity.mts`) → in-process handle; keep deleting `127.0.0.1:3080` guess; no Desktop→Web port bridge
 - [x] Scheme B (`rpc.handle`) rejected on Desktop without `webServer`
 - [ ] B1 Desktop fail → keep `webServer` for Desktop; Web-only Fetch experiment allowed per B0 default
 - [ ] Product Desktop GUI install still requires registry publish (S6); not a B1 blocker for the transport decision

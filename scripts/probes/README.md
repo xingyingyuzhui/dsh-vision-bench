@@ -47,13 +47,23 @@ Repeat the same calls after **re-add**, **reload**, and **Desktop profile** (off
 
 ```bash
 node scripts/probes/run-fetch-contract.mjs   # Connection fetch.register unit
-node scripts/probes/run-b2-identity.mjs      # Agent/Host module identity (B2)
+node scripts/probes/run-b2-identity.mjs      # Module-unit Agent/Host identity (not Desktop proof)
+# Real Desktop B2 (from apps/desktop):
+#   pnpm exec tsx …/scripts/probes/run-desktop-b2-identity.mts
 node scripts/probes/check-stage3-pack.mjs    # pack:check + Desktop allowBuilds / install notes
 node scripts/probes/run-stage4-lifecycle.mjs # Host dispose / idle debug / cancel gates
 node scripts/probes/check-stage5-acceptance.mjs  # stage 5 aggregate + ADR/contract static checks
 node scripts/probes/install-desktop-local.mjs    # lab: pack + install into ~/.dsh/profiles/desktop
 ```
 
+### Real Desktop B2
+
+```bash
+cd /path/to/deepseek-harness-desktop-official/apps/desktop
+pnpm exec tsx /path/to/dsh-vision-bench/scripts/probes/run-desktop-b2-identity.mts
+```
+
+Packs the current tree, installs `file:./.dsh-local-plugins/*.tgz` into a temp profile (no source `link:`), boots `DesktopHostProcess`, loads `dsh-vision-bench/agent`, and asserts `system.ping` identity (`samePid`, `sameModuleInstance`, `dispatchPath=in-process-handle`, no `:3080`).
 ### Desktop lab install (local tarball)
 
 Official Desktop GUI only accepts exact `name@version` specs against npmjs; this plugin is not published there yet. Lab install mirrors `dsh-chat-tune`:

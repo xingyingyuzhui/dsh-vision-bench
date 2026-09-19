@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Phase-0 B2: Agent tool fiber vs Host module identity.
+ * Module-level B2 contract (same Node process / child negative).
  *
- * Proves (same Node process, real package paths):
- *   - Host registerVisionHost + Agent pingVisionHost share VISION_HOST_CLIENT_INSTANCE_ID
- *   - samePid ∧ hasHandle ∧ dispatchPath=in-process-handle
- * Negative control: child process without register → no shared handle (HTTP/unavailable).
+ * This is NOT a Desktop product proof. For real Desktop B2 (pack → temp profile →
+ * DesktopHostProcess → Agent entry + system.ping), run:
+ *   pnpm exec tsx scripts/probes/run-desktop-b2-identity.mts
+ * from deepseek-harness-desktop-official/apps/desktop.
  *
  * Usage: node scripts/probes/run-b2-identity.mjs
  */
@@ -114,7 +114,7 @@ async function main() {
     same,
     child,
     note:
-      'Desktop product Host still injects webServer — Host fiber will not activate on Desktop until stage 1; B2 same-process proof is the module singleton contract once Host applies.',
+      'Module-unit B2 only. Desktop product proof: scripts/probes/run-desktop-b2-identity.mts (pack + DesktopHostProcess).',
   }
   console.log(JSON.stringify(report, null, 2))
   if (!report.ok) process.exitCode = 1
