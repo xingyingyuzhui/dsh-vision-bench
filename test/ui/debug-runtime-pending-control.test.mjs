@@ -196,7 +196,7 @@ test('stage4: missing sessionId does not poll debug events', async () => {
   if (typeof stop === 'function') stop()
 })
 
-test('stage4: no debug session parks without waitForOwnerSession', async () => {
+test('idle with identity hangs on one waitForOwnerSession (no 1Hz poll)', async () => {
   const React = createMockReact()
   /** @type {Array<() => any>} */
   const effects = []
@@ -210,18 +210,90 @@ test('stage4: no debug session parks without waitForOwnerSession', async () => {
       stateCalls += 1
       return { ok: true, session: null, pendingApprovals: [] }
     }
-    if (String(path).includes('/debug/events/wait')) waitCalls += 1
+    if (String(path).includes('/debug/events/wait')) {
+      waitCalls += 1
+      return new Promise(() => {})
+    }
     return { ok: true }
   }
   useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-idle' })
   const stop = effects[0]?.()
   await new Promise((r) => setTimeout(r, 50))
   assert.equal(stateCalls, 1)
-  assert.equal(waitCalls, 0, 'idle must not long-poll waitForOwnerSession')
+  assert.equal(waitCalls, 1, 'exactly one hung wait while discovering Agent sessions')
   if (typeof stop === 'function') stop()
 })
 
-test('stage4: closed session parks and does not re-enter wait', async () => {
+test('wait timeout re-hangs without short-period loop', async () => {
+  const React = createMockReact()
+  /** @type {Array<() => any>} */
+  const effects = []
+  React.useEffect = (fn) => {
+    effects.push(fn)
+  }
+  let waitCalls = 0
+  /** @type {(value: any) => void} */
+  let settleFirst
+  const firstWait = new Promise((resolve) => {
+    settleFirst = resolve
+  })
+  const mockPost = async (path) => {
+    if (String(path).includes('/debug/state')) {
+      return { ok: true, session: null, pendingApprovals: [] }
+    }
+    if (String(path).includes('/debug/events/wait')) {
+      waitCalls += 1
+      if (waitCalls === 1) return firstWait
+      return new Promise(() => {})
+    }
+    return { ok: true }
+  }
+  useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-timeout' })
+  const stop = effects[0]?.()
+  await new Promise((r) => setImmediate(r))
+  assert.equal(waitCalls, 1, 'single hung wait before timeout')
+  settleFirst({ ok: true, woke: false, closed: false, events: [], nextCursor: 0 })
+  await new Promise((r) => setTimeout(r, 30))
+  assert.equal(waitCalls, 2, 'timeout re-enters exactly one new hang')
+  if (typeof stop === 'function') stop()
+})
+
+test('woke discovers Agent-created debug session then continues waiting', async () => {
+  const React = createMockReact()
+  /** @type {Array<() => any>} */
+  const effects = []
+  React.useEffect = (fn) => {
+    effects.push(fn)
+  }
+  let stateCalls = 0
+  let waitCalls = 0
+  let sawSession = false
+  const mockPost = async (path) => {
+    if (String(path).includes('/debug/state')) {
+      stateCalls += 1
+      if (waitCalls >= 1) {
+        sawSession = true
+        return { ok: true, session: { state: 'running', variables: [] }, pendingApprovals: [] }
+      }
+      return { ok: true, session: null, pendingApprovals: [] }
+    }
+    if (String(path).includes('/debug/events/wait')) {
+      waitCalls += 1
+      if (waitCalls === 1) return { ok: true, woke: true, events: [], nextCursor: 0 }
+      return new Promise(() => {})
+    }
+    return { ok: true }
+  }
+  useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-woke' })
+  const stop = effects[0]?.()
+  await new Promise((r) => setTimeout(r, 40))
+  assert.ok(sawSession, 'getState after woke must observe the new session')
+  assert.ok(waitCalls >= 2, 'continues event wait after discovery')
+  assert.ok(stateCalls >= 2)
+  if (typeof stop === 'function') stop()
+})
+
+test('closed returns to discovery so a later Agent start is found', async () => {
   const React = createMockReact()
   /** @type {Array<() => any>} */
   const effects = []
@@ -235,15 +307,56 @@ test('stage4: closed session parks and does not re-enter wait', async () => {
     }
     if (String(path).includes('/debug/events/wait')) {
       waitCalls += 1
-      return { ok: true, closed: true, events: [], nextCursor: 0 }
+      if (waitCalls === 1) return { ok: true, closed: true, events: [], nextCursor: 0 }
+      return new Promise(() => {})
     }
     return { ok: true }
   }
   useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-closed' })
   const stop = effects[0]?.()
   await new Promise((r) => setTimeout(r, 40))
-  assert.equal(waitCalls, 1, 'one wait then park on closed')
+  assert.ok(waitCalls >= 2, 'closed must re-enter waitForOwnerSession discovery')
   if (typeof stop === 'function') stop()
+})
+
+test('identity change aborts the in-flight wait', async () => {
+  const React = createMockReact()
+  /** @type {Array<() => any>} */
+  const effects = []
+  React.useEffect = (fn) => {
+    effects.push(fn)
+  }
+  let aborted = false
+  const mockPost = async (path, _body, timeoutOrOpts) => {
+    if (String(path).includes('/debug/state')) {
+      return { ok: true, session: null, pendingApprovals: [] }
+    }
+    if (String(path).includes('/debug/events/wait')) {
+      const signal = timeoutOrOpts && typeof timeoutOrOpts === 'object' ? timeoutOrOpts.signal : undefined
+      return new Promise((_resolve, reject) => {
+        if (signal?.aborted) {
+          aborted = true
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+          return
+        }
+        signal?.addEventListener?.(
+          'abort',
+          () => {
+            aborted = true
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+          },
+          { once: true },
+        )
+      })
+    }
+    return { ok: true }
+  }
+  useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-a' })
+  const stop = effects[0]?.()
+  await new Promise((r) => setImmediate(r))
+  if (typeof stop === 'function') stop()
+  await new Promise((r) => setTimeout(r, 20))
+  assert.equal(aborted, true)
 })
 
 test('stage4: consecutive wait failures stop subscription (no reload storm)', async () => {
@@ -269,7 +382,6 @@ test('stage4: consecutive wait failures stop subscription (no reload storm)', as
   )
   useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-fail' })
   const stop = effects[0]?.()
-  // budget * 1s backoff would be slow; patch timers
   const realSetTimeout = globalThis.setTimeout
   /** @type {Array<() => void>} */
   const due = []
@@ -286,6 +398,47 @@ test('stage4: consecutive wait failures stop subscription (no reload storm)', as
       await new Promise((r) => setImmediate(r))
     }
     assert.equal(waitCalls, DEBUG_WAIT_FAILURE_BUDGET, 'stops after failure budget')
+  } finally {
+    globalThis.setTimeout = realSetTimeout
+    if (typeof stop === 'function') stop()
+  }
+})
+
+test('single transient wait failure recovers after backoff', async () => {
+  const React = createMockReact()
+  /** @type {Array<() => any>} */
+  const effects = []
+  React.useEffect = (fn) => {
+    effects.push(fn)
+  }
+  let waitCalls = 0
+  const mockPost = async (path) => {
+    if (String(path).includes('/debug/state')) {
+      return { ok: true, session: { state: 'running', variables: [] } }
+    }
+    if (String(path).includes('/debug/events/wait')) {
+      waitCalls += 1
+      if (waitCalls === 1) return { ok: false, error: 'transient' }
+      return new Promise(() => {})
+    }
+    return { ok: true }
+  }
+  useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-recover' })
+  const stop = effects[0]?.()
+  const realSetTimeout = globalThis.setTimeout
+  /** @type {Array<() => void>} */
+  const due = []
+  globalThis.setTimeout = /** @type {any} */ (
+    (fn, _ms) => {
+      due.push(fn)
+      return 0
+    }
+  )
+  try {
+    await new Promise((r) => setImmediate(r))
+    while (due.length) due.shift()?.()
+    await new Promise((r) => setImmediate(r))
+    assert.ok(waitCalls >= 2, 'recovers and re-enters wait after one failure')
   } finally {
     globalThis.setTimeout = realSetTimeout
     if (typeof stop === 'function') stop()

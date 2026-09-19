@@ -120,8 +120,8 @@ Date: 2026-09-19
 | Late Fetch disposer awaited | **pass** | `registerVisionFetchDispatch` Promise disposer + Host `allSettled` |
 | Dispose idempotent | **pass** | double `stop()` |
 | Debug idle without sessionId | **pass** | no state/wait polls |
-| Debug idle with chat identity but no debug session | **pass** | getState once, **no** `waitForOwnerSession` / waitEvents |
-| Debug `closed` parks | **pass** | does not re-enter wait |
+| Debug idle with chat identity but no debug session | **pass** | getState once, one hung `waitForOwnerSession` via `debug/events/wait` |
+| Debug `closed` rediscovers | **pass** | clears local session then re-enters wait |
 | Debug wait failure budget | **pass** | stops after `DEBUG_WAIT_FAILURE_BUDGET` (5); no reload storm |
 | Host dispose clears shared DebugRuntime | **pass** | `getSharedDebugRuntime()` → null |
 | State bus last-unsub stops pulls | **pass** | `busPull` guards deleted bus |

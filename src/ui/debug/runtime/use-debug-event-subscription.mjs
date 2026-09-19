@@ -6,19 +6,53 @@ import { projectDebugEvents } from './debug-event-projection.mjs'
 /** Consecutive wait/state failures before the loop stops (no plugin-tree reload). */
 export const DEBUG_WAIT_FAILURE_BUDGET = 5
 
+/** Exponential backoff after transport/business wait failures (ms). */
+export const DEBUG_WAIT_BACKOFF_MS = Object.freeze([1000, 2000, 4000, 8000, 16000])
+
+/**
+ * @param {number} consecutiveFailures 1-based failure count
+ * @returns {number}
+ */
+export function debugWaitBackoffMs(consecutiveFailures) {
+  const n = Math.max(1, Number(consecutiveFailures) || 1)
+  const idx = Math.min(n - 1, DEBUG_WAIT_BACKOFF_MS.length - 1)
+  return DEBUG_WAIT_BACKOFF_MS[idx]
+}
+
+/**
+ * @param {number} ms
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<void>}
+ */
+function sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+      return
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener?.('abort', onAbort)
+      resolve()
+    }, ms)
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+    }
+    signal?.addEventListener?.('abort', onAbort, { once: true })
+  })
+}
+
 /**
  * Starts the ADR-014 cursor long-poll subscription for debug events.
  * Returns a cleanup function that aborts the poll and marks the effect stopped.
  *
- * Idle rules (stage 4):
- * - Missing chat sessionId/cwd → no polls.
- * - Bootstrap getState with no debug session → park (no waitForOwnerSession).
- * - Session `closed` → park (do not re-wait).
- * - Transport failures back off and stop after {@link DEBUG_WAIT_FAILURE_BUDGET}.
- *
- * Callers must remount this subscription when a debug session becomes active
- * (e.g. depend on `active` in the React effect) so Start / Agent-created sessions
- * enter the wait loop.
+ * State machine:
+ * - No chat `sessionId`/`cwd` → idle, zero requests.
+ * - Identity present, no debug session → `debug/events/wait` → Host `waitForOwnerSession`
+ *   (20–25s hang; no 1Hz poll). Timeout re-hangs.
+ * - `woke` → refresh state → active event wait.
+ * - `closed` → clear local session → back to owner-session discovery.
+ * - Failures back off 1s→2s→4s→8s→16s then stop with a retry error (no plugin reload).
  *
  * @param {{
  *   React: any,
@@ -80,67 +114,72 @@ export function startDebugEventSubscription(ctx) {
   let stopped = false
   let consecutiveFailures = 0
 
+  const alive = () =>
+    !stopped &&
+    !ac.signal.aborted &&
+    mountedRef.current &&
+    shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef)
+
   async function pollLoop() {
-    // No chat/workspace identity → idle; do not long-poll or short-retry.
+    // NO_SESSION identity: completely idle.
     if (!sessionId || !cwd) {
       setLoading(false)
       return
     }
+
     try {
       const stateRes = await controller.getState()
-      if (!shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) || stopped) {
-        return
-      }
-      setLoading(false)
-      if (stateRes?.ok) applyState(stateRes)
-      consecutiveFailures = 0
-      // No live debug session → idle; do not long-poll waitForOwnerSession.
-      if (!stateRes?.session) {
-        return
+      if (!alive()) return
+      if (stateRes?.ok) {
+        applyState(stateRes)
+        consecutiveFailures = 0
+      } else {
+        consecutiveFailures += 1
       }
     } catch (err) {
-      if (!shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) || stopped) {
-        return
-      }
-      setLoading(false)
+      if (!alive()) return
       consecutiveFailures += 1
       setError(err instanceof Error ? err.message : String(err))
-      if (consecutiveFailures >= DEBUG_WAIT_FAILURE_BUDGET) {
-        return
-      }
-      // Bootstrap failed — do not enter wait without a confirmed session.
-      return
+    } finally {
+      if (alive()) setLoading(false)
     }
 
-    while (!stopped && !ac.signal.aborted && mountedRef.current) {
+    while (alive()) {
+      if (consecutiveFailures >= DEBUG_WAIT_FAILURE_BUDGET) {
+        setError('debug events wait failed repeatedly; subscription stopped — retry from Debug page')
+        break
+      }
+
       try {
         const waitRes = await controller.waitEvents(cursorRef.current, ac.signal)
-        if (!shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) || stopped) {
-          break
-        }
+        if (!alive()) break
+
         if (waitRes?.ok) {
           consecutiveFailures = 0
+          setError(null)
+
           if (waitRes.identityRequired) {
             break
           }
+
           if (waitRes.woke) {
             const fresh = await controller.getState()
-            if (shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) && fresh?.ok) {
-              applyState(fresh)
-            }
-            if (!fresh?.session) {
-              break
-            }
+            if (alive() && fresh?.ok) applyState(fresh)
             continue
           }
+
           if (waitRes.closed) {
             applyState({ ok: true, session: null, pendingApprovals: [] })
             cursorRef.current = 0
-            break
+            setEvents([])
+            // Return to owner-session discovery for the next Agent/debug start.
+            continue
           }
+
           if (waitRes.nextCursor != null) {
             cursorRef.current = waitRes.nextCursor
           }
+
           const incoming = Array.isArray(waitRes.events) ? waitRes.events : []
           if (incoming.length > 0) {
             setEvents((prev) => [...prev, ...incoming].slice(-100))
@@ -153,23 +192,25 @@ export function startDebugEventSubscription(ctx) {
 
             if (needStateRefresh) {
               const fresh = await controller.getState()
-              if (shouldApplyRequest(reqRef, reqId, currentIdentity, identityKey, mountedRef) && fresh?.ok) {
+              if (alive() && fresh?.ok) {
                 applyState(fresh)
                 refreshRegisters()
                 evaluateWatches(watchesRef.current, 0)
               }
             }
           }
-        } else {
-          consecutiveFailures += 1
-          if (consecutiveFailures >= DEBUG_WAIT_FAILURE_BUDGET) {
-            setError('debug events wait failed repeatedly; subscription stopped')
-            break
-          }
-          await new Promise((r) => setTimeout(r, 1000))
+          // Empty timeout (no woke/closed/events): re-hang waitForOwnerSession / waitEvents.
+          continue
         }
+
+        consecutiveFailures += 1
+        if (consecutiveFailures >= DEBUG_WAIT_FAILURE_BUDGET) {
+          setError('debug events wait failed repeatedly; subscription stopped — retry from Debug page')
+          break
+        }
+        await sleep(debugWaitBackoffMs(consecutiveFailures), ac.signal)
       } catch (err) {
-        if (ac.signal.aborted || stopped || !mountedRef.current) {
+        if (!alive() || ac.signal.aborted || (err && /** @type {any} */ (err).name === 'AbortError')) {
           break
         }
         consecutiveFailures += 1
@@ -177,7 +218,11 @@ export function startDebugEventSubscription(ctx) {
           setError(err instanceof Error ? err.message : String(err))
           break
         }
-        await new Promise((r) => setTimeout(r, 2000))
+        try {
+          await sleep(debugWaitBackoffMs(consecutiveFailures), ac.signal)
+        } catch {
+          break
+        }
       }
     }
   }
