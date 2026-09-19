@@ -94,6 +94,51 @@ test('host lease: B dispose clears shared resources; cleanup is idempotent', asy
   assert.equal(b.connection.fetchDisposed, true)
 })
 
+test('host lease: failed B apply does not steal A capability/Host/runtime', async () => {
+  unregisterVisionHost()
+  setSharedDebugRuntime(null)
+
+  const a = await applyHost()
+  const epochA = getVisionHostEpoch()
+  const capA = process.env.VISION_BENCH_CAPABILITY
+  const runtimeA = peekSharedDebugRuntime()
+  const leaseA = _internal.getActiveHostLease()?.epoch
+  assert.ok(epochA)
+  assert.ok(capA)
+  assert.ok(runtimeA)
+  assert.ok(leaseA)
+
+  const connectionB = mockRpcHost()
+  connectionB.fetch.register = () => {
+    throw new Error('duplicate route')
+  }
+  const b = createHostContext(connectionB)
+  assert.throws(() => apply(b.ctx), /duplicate route/)
+
+  assert.equal(getVisionHostEpoch(), epochA, 'Host registration must stay on A')
+  assert.equal(process.env.VISION_BENCH_CAPABILITY, capA, 'capability must stay on A')
+  assert.equal(_internal.capabilityMatches(capA), true)
+  assert.equal(_internal.getActiveHostLease()?.epoch, leaseA)
+  assert.equal(peekSharedDebugRuntime(), runtimeA)
+  assert.equal(a.connection.fetchDisposed, false)
+  assert.equal(a.connection.hasFetchHandler, true)
+
+  const live = await a.connection.invokeFetch('state', {})
+  assert.equal(live.status, 200)
+
+  const ping = await dispatchVisionCommand({
+    action: 'system.ping',
+    cwd: '/tmp/host-lease-fail-b',
+    source: 'agent',
+  })
+  assert.equal(ping.ok, true, ping.error || ping.errorCode)
+
+  await a.stop()
+  assert.equal(process.env.VISION_BENCH_CAPABILITY, undefined)
+  assert.equal(peekSharedDebugRuntime(), null)
+  assert.equal(getVisionHost(), null)
+})
+
 test('host lease: A dispose after B still leaves shared DebugRuntime alive until B stops', async () => {
   unregisterVisionHost()
   setSharedDebugRuntime(null)

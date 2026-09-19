@@ -98,6 +98,25 @@ function logHostLifecycle(event, opts) {
   )
 }
 
+/**
+ * Roll back registrations that happened before shared-lease commit.
+ * @param {{ stopFetch?: (() => unknown) | null, legacyWebCompat?: { stop: () => unknown } | null }} partial
+ */
+function rollbackUncommitted(partial) {
+  try {
+    if (typeof partial.stopFetch === 'function') partial.stopFetch()
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (partial.legacyWebCompat && typeof partial.legacyWebCompat.stop === 'function') {
+      partial.legacyWebCompat.stop()
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 export function apply(ctx) {
   dshHome = defaultDshHome()
 
@@ -105,15 +124,8 @@ export function apply(ctx) {
     throw new Error('dsh-vision-bench: Host requires ctx.connection.fetch.register')
   }
 
-  const capability = issueBridgeCapability()
-  resetPollingService()
-  void sweepStaleTasks(dshHome).catch(() => {})
-  try {
-    setAgentsRegistry(() => (ctx.get ? ctx.get('agents') : null))
-  } catch {
-    /* agent registry is optional */
-  }
-
+  // Phase 1 — local construction only. Do not publish capability / Host / lease yet.
+  // Reusing an existing shared DebugRuntime is safe: we never shut it down on failed commit.
   const debugRuntime = getSharedDebugRuntime({
     home: dshHome,
     onJournalEvent: async (ev) => {
@@ -161,21 +173,16 @@ export function apply(ctx) {
   })
   const router = createVisionRpcRouter({ getHome: () => dshHome, debugRuntime, verifyCommandService })
   const commandDispatcher = createVisionCommandDispatcher(dshHome, { debugRuntime, verifyCommandService })
-  const stopHost = registerVisionHost(commandDispatcher)
 
-  const lease = {
-    epoch: randomUUID(),
-    capability,
-    debugRuntime,
-  }
-  activeHostLease = lease
-
-  const stopFetch = registerVisionFetchDispatch(ctx.connection, router)
-
-  /** Fallback mount when tests expose webServer without Cordis inject. */
+  /** @type {(() => void | Promise<void>) | null} */
+  let stopFetch = null
   /** @type {{ stop: () => unknown, httpPaths: string[] } | null} */
   let legacyWebCompat = null
   let webMounted = false
+  /** @type {(() => void) | null} */
+  let stopHost = null
+  /** @type {{ epoch: string, capability: string, debugRuntime: any } | null} */
+  let lease = null
 
   /**
    * Bind Web compat to the injected webServer fiber so leave/re-enter remounts cleanly.
@@ -201,20 +208,54 @@ export function apply(ctx) {
     })
   }
 
-  if (typeof ctx.inject === 'function') {
-    ctx.inject(['webServer'], attachWebCompat)
-  } else if (ctx.webServer) {
-    // Unit-test hosts without Cordis inject still expose webServer on ctx.
-    legacyWebCompat = mountVisionWebCompat({
-      connection: ctx.connection,
-      webServer: ctx.webServer,
-      router,
-      dshHome,
-      touchSession: (sessionId) => touchServiceSession(sessionId, dshHome),
-      capabilityMatches,
-      commandDeps: { debugRuntime, verifyCommandService },
-    })
-    webMounted = true
+  try {
+    // Fallible registrations first — must not steal the active lease on throw.
+    stopFetch = registerVisionFetchDispatch(ctx.connection, router)
+
+    if (typeof ctx.inject === 'function') {
+      ctx.inject(['webServer'], attachWebCompat)
+    } else if (ctx.webServer) {
+      legacyWebCompat = mountVisionWebCompat({
+        connection: ctx.connection,
+        webServer: ctx.webServer,
+        router,
+        dshHome,
+        touchSession: (sessionId) => touchServiceSession(sessionId, dshHome),
+        capabilityMatches,
+        commandDeps: { debugRuntime, verifyCommandService },
+      })
+      webMounted = true
+    }
+
+    // Phase 2 — commit shared ownership only after fallible mounts succeed.
+    const capability = issueBridgeCapability()
+    resetPollingService()
+    void sweepStaleTasks(dshHome).catch(() => {})
+    try {
+      setAgentsRegistry(() => (ctx.get ? ctx.get('agents') : null))
+    } catch {
+      /* agent registry is optional */
+    }
+    stopHost = registerVisionHost(commandDispatcher)
+    lease = {
+      epoch: randomUUID(),
+      capability,
+      debugRuntime,
+    }
+    activeHostLease = lease
+  } catch (error) {
+    rollbackUncommitted({ stopFetch, legacyWebCompat })
+    console.info(
+      JSON.stringify({
+        event: 'vision.host.apply-failed',
+        fiber: name,
+        pid: process.pid,
+        error: String(error && /** @type {Error} */ (error).message ? error.message : error).slice(0, 300),
+        activeEpoch: activeHostLease?.epoch ?? null,
+        at: Date.now(),
+      }),
+    )
+    throw error
   }
 
   logHostLifecycle('vision.host.start', {
@@ -243,8 +284,6 @@ export function apply(ctx) {
       stale,
     })
 
-    // Instance-owned resources: always tear down this apply's registrations.
-    // Web compat is owned by the inject sub-fiber (Cordis) or legacyWebCompat (tests).
     const fetchStop =
       typeof stopFetch === 'function'
         ? Promise.resolve()
@@ -253,7 +292,7 @@ export function apply(ctx) {
         : Promise.resolve()
     const webStop = legacyWebCompat ? legacyWebCompat.stop() : Promise.resolve()
     try {
-      stopHost()
+      if (typeof stopHost === 'function') stopHost()
     } catch {
       /* ignore */
     }
@@ -275,14 +314,12 @@ export function apply(ctx) {
       return Promise.allSettled([fetchStop, Promise.resolve(webStop)])
     }
 
-    // Process-shared resources: only the active lease may clear them.
     clearBridgeCapability(lease.capability)
     clearSerialMonitorState()
     stopAllPolling()
     clearFlashApprovals()
     clearDebugApprovals()
     const brokerStop = stopVisionIoBroker('plugin-dispose')
-    // Use peek — getSharedDebugRuntime() would recreate a singleton after clear.
     const runtimeStop =
       peekSharedDebugRuntime() === lease.debugRuntime
         ? lease.debugRuntime.shutdown('plugin-dispose').catch(() => {})
