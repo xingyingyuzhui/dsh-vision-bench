@@ -46,11 +46,19 @@ test('debug boundary: Host registers exactly one HTTP route (/dsh-vision-bench/c
       },
     },
     inject(deps, fn) {
-      if (deps?.includes?.('webServer') && mockCtx.webServer) fn(mockCtx)
+      if (deps?.includes?.('webServer') && mockCtx.webServer) {
+        const child = {
+          ...mockCtx,
+          effect(factory) {
+            // Keep Web compat mounted for boundary assertions; Host effect owns cleanup.
+            factory()
+          },
+        }
+        fn(child)
+      }
     },
     effect(factory) {
-      const cleanup = factory()
-      if (typeof cleanup === 'function') cleanup()
+      mockCtx._stop = factory()
     },
   }
 
