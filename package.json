@@ -514,6 +514,7 @@
     "src/infrastructure/modbus/io-broker.mjs",
     "src/infrastructure/harness/preset.mjs",
     "src/infrastructure/harness/preset-overlay.mjs",
+    "src/infrastructure/harness/preset-workflow-migrate.mjs",
     "src/infrastructure/harness/preset-transaction.mjs",
     "src/application/modbus/trend-store.mjs",
     "src/infrastructure/harness/guidance.mjs",

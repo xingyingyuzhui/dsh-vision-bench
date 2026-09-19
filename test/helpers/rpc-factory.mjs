@@ -272,7 +272,11 @@ export function createHostContext(connection, overrides = {}) {
     ctx,
     routes,
     tools,
-    stop: () => (typeof ctx._stop === 'function' ? ctx._stop() : runAllStops()),
+    stop: () => {
+      if (typeof ctx._stop === 'function') return ctx._stop()
+      if (childStops.length === 0 && hostStop == null) return undefined
+      return runAllStops()
+    },
     /** Simulate webServer fiber leaving while Host stays alive. */
     stopWebInjects: async () => {
       const children = childStops.splice(0)

@@ -38,11 +38,12 @@ test('host inject registers Connection Fetch and keeps Web Agent command bridge'
   assert.doesNotMatch(host, /TypertRemoteService/)
 })
 
-test('ADR-012 records Connection RPC as the supported alpha.3 browser transport', () => {
+test('ADR-012 records Connection Fetch as the supported browser/Desktop transport', () => {
   const adr = readFileSync(join(root, 'docs/architecture/ADR-012-remote-transport.md'), 'utf8')
-  assert.match(adr, /connection\.rpc\.handle/)
-  assert.match(adr, /connection\.rpc\.call/)
-  assert.match(adr, /Do not fake authentication/)
+  assert.match(adr, /connection\.fetch\.register/)
+  assert.match(adr, /\/api\/vision-bench\/dispatch/)
+  assert.match(adr, /createVisionFetchPost/)
+  assert.match(adr, /vision-web-compat/)
 })
 
 test('browser client does not send the retired static Vision header', () => {

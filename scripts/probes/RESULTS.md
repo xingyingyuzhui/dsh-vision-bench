@@ -1,10 +1,10 @@
 # Phase-0 probe results
 
-Date: 2026-09-18  
-Vision branch: `feat/native-web-desktop-migration`  
-`dsh --version`: `0.1.6-alpha.1`  
-Isolated Web `DSH_HOME`: `/tmp/dsh-vision-probe-home`  
-Web profile: `vision-probe-web` (from default `web`)  
+Date: 2026-09-18
+Vision branch: `feat/native-web-desktop-migration`
+`dsh --version`: `0.1.6-alpha.1`
+Isolated Web `DSH_HOME`: `/tmp/dsh-vision-probe-home`
+Web profile: `vision-probe-web` (from default `web`)
 Desktop B1: isolated temp `DSH_HOME` + harness `DesktopHostProcess` pipe (same `/api` dispatch as Electron)
 
 ## Harness contract (automated)

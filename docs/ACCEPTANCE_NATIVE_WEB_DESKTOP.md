@@ -2,7 +2,7 @@
 
 Companion to plan `docs/plans/2026-09-17-003-vision-native-web-desktop-migration.md` and `scripts/probes/RESULTS.md`.
 
-**Capability claim (ship):** UI + Agent in-process Host + Modbus TCP/sim over Connection Fetch, no Vision listen port.  
+**Capability claim (ship):** UI + Agent in-process Host + Modbus TCP/sim over Connection Fetch, no Vision listen port.
 **Not claimed:** Official Desktop full Modbus RTU native (`serialport` not in Desktop `allowBuilds`). Windows hardware / Keil-OpenOCD physical chain still follow `docs/WINDOWS_ACCEPTANCE_0.27.md`.
 
 | Scenario | Web macOS | Desktop macOS | Desktop Windows | Gate |
@@ -10,7 +10,7 @@ Companion to plan `docs/plans/2026-09-17-003-vision-native-web-desktop-migration
 | Install / update / remove (registry `name@version`) | manual | **manual product** | manual | Desktop GUI rejects `file:`/`tgz`/`link:` |
 | Pack closure + platform `web` | **auto** | **auto** | auto | `check-stage3-pack.mjs` |
 | Fetch dispatch + uninstall 404 | **auto** (B1) | **auto** (DesktopHostProcess) | manual mirror | `run-desktop-b1.mts` / Web probe |
-| Agent Host identity / no `:3080` | **auto** | **auto** (same process) | auto | `run-b2-identity.mjs`, stage2 tests |
+| Agent Host identity / no `:3080` | **auto** | **auto** (Desktop B2 pack) | auto | `run-desktop-b2-identity.mts` + unit `run-b2-identity.mjs` |
 | Lifecycle dispose / idle debug | **auto** | auto (same code) | auto | `run-stage4-lifecycle.mjs` |
 | Settings / points / monitor / Debug UI | manual smoke | manual smoke | manual | same Host command service |
 | Modbus TCP / simulator | manual + unit | manual | manual | existing Modbus tests + smoke |
@@ -20,10 +20,10 @@ Companion to plan `docs/plans/2026-09-17-003-vision-native-web-desktop-migration
 
 ## Rollback units
 
-1. Transport probes / contract tests  
-2. Connection Fetch adapter + Web compat  
-3. Agent ownership tightening  
-4. Pack / native / lifecycle gates  
+1. Transport probes / contract tests
+2. Connection Fetch adapter + Web compat
+3. Agent ownership tightening
+4. Pack / native / lifecycle gates
 
 Prefer rolling back the plugin `name@version` in the profile over relying on Desktop auto-rollback (partial profile writes).
 

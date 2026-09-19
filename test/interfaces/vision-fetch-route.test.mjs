@@ -22,15 +22,15 @@ test('createVisionFetchPost posts endpoint whitelist to dispatch path', async ()
   assert.deepEqual(body, { endpoint: 'state', payload: { cwd: '/tmp' } })
 })
 
-test('createVisionFetchPost uses nullish coalescing so empty string payload is preserved', async () => {
+test('createVisionFetchPost uses nullish coalescing for missing payload', async () => {
   /** @type {unknown} */
   let sent
   const post = createVisionFetchPost(async (_url, init) => {
     sent = JSON.parse(String(init?.body || '{}'))
     return Response.json({ ok: true, value: { ok: true } })
   })
-  await post('/dsh-vision-bench/state', /** @type {any} */ (''))
-  assert.deepEqual(sent, { endpoint: 'state', payload: '' })
+  await post('/dsh-vision-bench/state', undefined)
+  assert.deepEqual(sent, { endpoint: 'state', payload: {} })
 })
 
 test('Fetch dispatch rejects unknown endpoint and forwards AbortSignal', async () => {

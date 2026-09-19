@@ -79,6 +79,7 @@ const staticOk = staticChecks.every((c) => c.ok)
 const stage3 = runNode('scripts/probes/check-stage3-pack.mjs')
 const stage4 = runNode('scripts/probes/run-stage4-lifecycle.mjs')
 const unitB2 = runNode('scripts/probes/run-b2-identity.mjs')
+const quality = spawnSync('npm', ['run', 'quality'], { cwd: root, encoding: 'utf8' })
 
 const report = {
   event: 'vision.stage5.acceptance',
@@ -86,11 +87,13 @@ const report = {
   staticChecks,
   staticOk,
   priorGates: {
+    quality: { ok: quality.status === 0, status: quality.status },
     stage3: { ok: stage3.status === 0, status: stage3.status },
     stage4: { ok: stage4.status === 0, status: stage4.status },
     unitB2: { ok: unitB2.status === 0, status: unitB2.status },
     desktopB2:
-      'run from apps/desktop: pnpm exec tsx scripts/probes/run-desktop-b2-identity.mts (recorded pass in RESULTS.md)',
+      'required evidence: pnpm exec tsx scripts/probes/run-desktop-b2-identity.mts from apps/desktop (RESULTS.md)',
+    desktopFetch: 'required evidence: run-desktop-dispatch-smoke.mts / B1 (RESULTS.md)',
   },
   capabilityClaim: {
     uiFetchTcpSim: true,
@@ -101,9 +104,16 @@ const report = {
     soak10to15min: 'deferred',
     desktopB2Identity: true,
   },
-  ok: staticOk && stage3.status === 0 && stage4.status === 0 && unitB2.status === 0,
+  ok:
+    staticOk &&
+    quality.status === 0 &&
+    stage3.status === 0 &&
+    stage4.status === 0 &&
+    unitB2.status === 0,
 }
 
+if (quality.stdout) process.stdout.write(quality.stdout)
+if (quality.stderr) process.stderr.write(quality.stderr)
 if (stage3.stdout) process.stdout.write(stage3.stdout)
 if (stage3.stderr) process.stderr.write(stage3.stderr)
 if (stage4.stdout) process.stdout.write(stage4.stdout)

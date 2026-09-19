@@ -127,6 +127,19 @@ before(async () => {
     return { ok: true }
   }
   globalThis.__visionRpcBackend = rpcBackend
+  let fetchCalls = 0
+  const installFetchMock = () => {
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body || '{}'))
+      const endpoint = typeof body.endpoint === 'string' ? body.endpoint : ''
+      if (endpoint === 'state') fetchCalls += 1
+      const value = await rpcBackend(endpoint, body.payload || {})
+      return Response.json({ ok: true, value })
+    }
+  }
+  installFetchMock()
+  globalThis.__visionFetchCalls = () => fetchCalls
+  globalThis.__visionInstallFetchMock = installFetchMock
   const src = readFileSync(join(root, 'client.js'), 'utf8')
   let loaded = null
   const sandboxWindow = {
@@ -227,6 +240,7 @@ frames = { c1: makeFrames(5000) }
 
 test('Task10: generated client renders the real frames tab with 5000 rows (1–49) and no warnings', async () => {
   stateCalls = 0
+  globalThis.__visionInstallFetchMock?.()
   let monitorPage = null
   const slots = {
     inject(_name, fn) {
