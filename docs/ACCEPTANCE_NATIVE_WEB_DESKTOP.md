@@ -1,9 +1,28 @@
-# Native Web / Desktop acceptance matrix (migration stage 5)
+# Native Web / Desktop acceptance matrix (migration stage 5–7)
 
 Companion to plan `docs/plans/2026-09-17-003-vision-native-web-desktop-migration.md` and `scripts/probes/RESULTS.md`.
 
 **Capability claim (ship):** UI + Agent in-process Host + Modbus TCP/sim over Connection Fetch, no Vision listen port.
-**Not claimed:** Official Desktop full Modbus RTU native (`serialport` not in Desktop `allowBuilds`). Windows hardware / Keil-OpenOCD physical chain still follow `docs/WINDOWS_ACCEPTANCE_0.27.md`.
+
+**Verified automated (2026-09-19, `feat/native-web-desktop-migration`):**
+
+| Gate | Result |
+| --- | --- |
+| `npm run quality` | **pass** |
+| Host lease (A dispose ↛ B) | **pass** (`test/host-lease.test.mjs`) |
+| Web compat inject fiber lifecycle | **pass** |
+| Debug idle `waitForOwnerSession` | **pass** |
+| Fetch dispatch contract (no local 64 KiB cap) | **pass** |
+| Real Desktop B2 (pack → temp profile → DesktopHostProcess) | **pass** (`run-desktop-b2-identity.mts`) |
+| Desktop Fetch smoke | **pass** (`run-desktop-dispatch-smoke.mts`) |
+| Stage 3 pack / Stage 4 lifecycle | **pass** |
+
+**Not claimed / deferred:**
+
+- Official Desktop full Modbus RTU native (`serialport` not in Desktop `allowBuilds`) — optional RTU package or upstream allowBuilds.
+- Windows hardware / Keil-OpenOCD physical chain — `docs/WINDOWS_ACCEPTANCE_0.27.md`.
+- 10–15 min soak (CPU/log storm) — run manually with isolated `DSH_HOME`; Web XOR Desktop, never both on one Home.
+- Product GUI install — registry `name@version` only (Desktop rejects `file:`/`tgz`/`link:`).
 
 | Scenario | Web macOS | Desktop macOS | Desktop Windows | Gate |
 | --- | --- | --- | --- | --- |
@@ -17,6 +36,28 @@ Companion to plan `docs/plans/2026-09-17-003-vision-native-web-desktop-migration
 | Modbus RTU / serialport | conditional | **blocked claim** | required before “full HW” | allowBuilds or optional RTU package |
 | Keil / OpenOCD | platform | platform | **WINDOWS_ACCEPTANCE** | physical checklist |
 | 10–15 min soak | deferred | deferred | deferred | isolate `DSH_HOME`; Web XOR Desktop |
+
+## Manual soak checklist (stage 7)
+
+Run Web and Desktop **separately** (different `DSH_HOME` / quit the other app).
+
+### Web
+
+1. Open Vision page; create/switch presets.
+2. Agent starts Debug → page discovers via hung `waitForOwnerSession`.
+3. Stop Debug, start again → rediscovery.
+4. Configure points / monitor / TCP or sim.
+5. Unload and reload plugin; confirm no duplicate routes.
+6. Idle 10–15 min: CPU near baseline, no log storm.
+
+### Desktop
+
+1. Use packed plugin (lab: `install-desktop-local.mjs`; product: registry).
+2. Same-origin Fetch (`/api/vision-bench/dispatch`).
+3. Agent in-process Host (`system.ping` identity).
+4. Reload Host / toggle `webServer` if present; re-enter Vision.
+5. Repeat Debug start/stop; idle CPU back to baseline.
+6. Confirm no duplicate route, infinite wait, reload loop, or continuous log spam.
 
 ## Rollback units
 
@@ -34,5 +75,12 @@ Prefer rolling back the plugin `name@version` in the profile over relying on Des
 ## Repro (automated slice)
 
 ```bash
+npm run quality
+node scripts/probes/check-stage3-pack.mjs
+node scripts/probes/run-stage4-lifecycle.mjs
+node scripts/probes/run-b2-identity.mjs
+# from deepseek-harness-desktop-official/apps/desktop:
+pnpm exec tsx /path/to/dsh-vision-bench/scripts/probes/run-desktop-b2-identity.mts
+pnpm exec tsx /path/to/dsh-vision-bench/scripts/probes/run-desktop-dispatch-smoke.mts
 node scripts/probes/check-stage5-acceptance.mjs
 ```
