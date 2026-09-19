@@ -22,6 +22,17 @@ test('createVisionFetchPost posts endpoint whitelist to dispatch path', async ()
   assert.deepEqual(body, { endpoint: 'state', payload: { cwd: '/tmp' } })
 })
 
+test('createVisionFetchPost uses nullish coalescing so empty string payload is preserved', async () => {
+  /** @type {unknown} */
+  let sent
+  const post = createVisionFetchPost(async (_url, init) => {
+    sent = JSON.parse(String(init?.body || '{}'))
+    return Response.json({ ok: true, value: { ok: true } })
+  })
+  await post('/dsh-vision-bench/state', /** @type {any} */ (''))
+  assert.deepEqual(sent, { endpoint: 'state', payload: '' })
+})
+
 test('Fetch dispatch rejects unknown endpoint and forwards AbortSignal', async () => {
   const handler = createVisionFetchDispatchHandler({
     async dispatch(endpoint, payload, signal) {
@@ -51,6 +62,123 @@ test('Fetch dispatch rejects unknown endpoint and forwards AbortSignal', async (
   const cancelledBody = await cancelled.json()
   assert.equal(cancelledBody.ok, false)
   assert.equal(cancelledBody.error.code, 'cancelled')
+})
+
+test('Fetch dispatch accepts large JSON bodies (no local 64KiB cap)', async () => {
+  /** @type {unknown} */
+  let seenPayload = null
+  const handler = createVisionFetchDispatchHandler({
+    async dispatch(_endpoint, payload) {
+      seenPayload = payload
+      return { ok: true }
+    },
+  })
+  const blob = '中'.repeat(40_000)
+  assert.ok(Buffer.byteLength(JSON.stringify({ endpoint: 'state', payload: { blob } }), 'utf8') > 65536)
+  const res = await handler(
+    new Request('http://host/api/vision-bench/dispatch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ endpoint: 'state', payload: { blob } }),
+    }),
+  )
+  assert.equal(res.status, 200)
+  assert.equal(typeof seenPayload?.blob, 'string')
+  assert.equal(seenPayload.blob.length, 40_000)
+})
+
+test('Fetch dispatch rejects non-object payload with 400', async () => {
+  const handler = createVisionFetchDispatchHandler({
+    async dispatch() {
+      return { ok: true }
+    },
+  })
+  const res = await handler(
+    new Request('http://host/api/vision-bench/dispatch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ endpoint: 'state', payload: 'nope' }),
+    }),
+  )
+  assert.equal(res.status, 400)
+  const body = await res.json()
+  assert.match(body.error.message, /payload must be a JSON object/)
+})
+
+test('Fetch dispatch missing payload defaults to empty object', async () => {
+  /** @type {unknown} */
+  let seen = null
+  const handler = createVisionFetchDispatchHandler({
+    async dispatch(_e, payload) {
+      seen = payload
+      return { ok: true }
+    },
+  })
+  const res = await handler(
+    new Request('http://host/api/vision-bench/dispatch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ endpoint: 'state' }),
+    }),
+  )
+  assert.equal(res.status, 200)
+  assert.deepEqual(seen, {})
+})
+
+test('Fetch dispatch returns business ok:false as transport success', async () => {
+  const handler = createVisionFetchDispatchHandler({
+    async dispatch() {
+      return { ok: false, errorCode: 'CONFIG_DRIFT', error: '请刷新' }
+    },
+  })
+  const res = await handler(
+    new Request('http://host/api/vision-bench/dispatch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ endpoint: 'state', payload: {} }),
+    }),
+  )
+  assert.equal(res.status, 200)
+  const body = await res.json()
+  assert.equal(body.ok, true)
+  assert.equal(body.value.ok, false)
+  assert.equal(body.value.errorCode, 'CONFIG_DRIFT')
+})
+
+test('Fetch dispatch returns 500 for unserializable router results', async () => {
+  const cyclic = /** @type {any} */ ({})
+  cyclic.self = cyclic
+  const handler = createVisionFetchDispatchHandler({
+    async dispatch() {
+      return cyclic
+    },
+  })
+  const res = await handler(
+    new Request('http://host/api/vision-bench/dispatch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ endpoint: 'state', payload: {} }),
+    }),
+  )
+  assert.equal(res.status, 500)
+})
+
+test('Fetch dispatch returns 500 for router exceptions', async () => {
+  const handler = createVisionFetchDispatchHandler({
+    async dispatch() {
+      throw new Error('router boom')
+    },
+  })
+  const res = await handler(
+    new Request('http://host/api/vision-bench/dispatch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ endpoint: 'state', payload: {} }),
+    }),
+  )
+  assert.equal(res.status, 500)
+  const body = await res.json()
+  assert.equal(body.error.code, 'internal')
 })
 
 test('registerVisionFetchDispatch requires connection.fetch.register', () => {

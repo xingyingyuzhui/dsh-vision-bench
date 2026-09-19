@@ -75,7 +75,7 @@ export function createVisionFetchPost(fetchImpl) {
     return impl(VISION_FETCH_DISPATCH_PATH, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ endpoint, payload: payload || {} }),
+      body: JSON.stringify({ endpoint, payload: payload ?? {} }),
       signal,
     }).then(async (res) => {
       let result

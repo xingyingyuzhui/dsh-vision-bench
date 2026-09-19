@@ -2,14 +2,13 @@
 /**
  * Shared Connection exact Fetch route for Vision UI (Web + Desktop).
  * Transport envelope mirrors rpc.handle: `{ ok: true, value }` / `{ ok: false, error }`.
+ * Body size is enforced by Connection `maxRequestBodyBytes` — do not re-cap here.
  */
 import { toLosslessJson } from '../../application/commands/lossless-json.mjs'
 import {
   isVisionRpcEndpoint,
   VISION_FETCH_DISPATCH_PATH,
 } from '../../shared/vision-rpc-contract.mjs'
-
-const BODY_CAP = 65536
 
 /**
  * @param {unknown} body
@@ -24,11 +23,13 @@ function parseDispatchBody(body) {
   if (!endpoint || !isVisionRpcEndpoint(endpoint)) {
     return { error: 'unknown or missing endpoint', status: 400 }
   }
-  const payload =
-    row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload)
-      ? /** @type {Record<string, unknown>} */ (row.payload)
-      : {}
-  return { endpoint, payload }
+  if (!Object.prototype.hasOwnProperty.call(row, 'payload') || row.payload == null) {
+    return { endpoint, payload: {} }
+  }
+  if (typeof row.payload !== 'object' || Array.isArray(row.payload)) {
+    return { error: 'payload must be a JSON object', status: 400 }
+  }
+  return { endpoint, payload: /** @type {Record<string, unknown>} */ (row.payload) }
 }
 
 /**
@@ -50,12 +51,6 @@ export function createVisionFetchDispatchHandler(router) {
     let body
     try {
       const text = await request.text()
-      if (text.length > BODY_CAP) {
-        return Response.json(
-          { ok: false, error: { code: 'payload', message: 'payload too large' } },
-          { status: 413 },
-        )
-      }
       body = text ? JSON.parse(text) : {}
     } catch {
       return Response.json({ ok: false, error: { code: 'json', message: 'invalid JSON' } }, { status: 400 })
@@ -70,20 +65,39 @@ export function createVisionFetchDispatchHandler(router) {
     try {
       const value = await router.dispatch(parsed.endpoint, parsed.payload, request.signal)
       const envelope = toLosslessJson({ ok: true, value })
-      return Response.json(envelope ?? { ok: false, error: { code: 'encode', message: 'response not JSON' } })
+      if (envelope === undefined) {
+        return Response.json(
+          { ok: false, error: { code: 'encode', message: 'response not JSON' } },
+          { status: 500 },
+        )
+      }
+      return Response.json(envelope)
     } catch (error) {
       const message = String((error && /** @type {Error} */ (error).message) || error).slice(0, 300)
       const aborted =
         request.signal?.aborted ||
         (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError')
-      return Response.json({
-        ok: false,
-        error: {
-          code: aborted ? 'cancelled' : 'internal',
-          message: aborted ? 'aborted' : message,
-          details: {},
+      if (aborted) {
+        return Response.json({
+          ok: false,
+          error: {
+            code: 'cancelled',
+            message: 'aborted',
+            details: {},
+          },
+        })
+      }
+      return Response.json(
+        {
+          ok: false,
+          error: {
+            code: 'internal',
+            message,
+            details: {},
+          },
         },
-      })
+        { status: 500 },
+      )
     }
   }
 }
