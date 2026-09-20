@@ -1,12 +1,11 @@
 // @ts-check
-import { evaluateAlarms, normalizeAlarmState } from '../../domain/modbus/alarm-model.mjs'
 import { normalizeModbus } from './modbus-migration.mjs'
 import { normalizePointV3 } from '../../domain/modbus/point-model.mjs'
 import { pickArtifact } from '../../infrastructure/files/project-fs.mjs'
 import { toEndpoint } from '../../domain/modbus/io-contract.mjs'
 import { aborted, hasRunning, originOf, signalOf } from '../../domain/modbus/journal-model.mjs'
 import { commitPollResult, commitReadResult, commitWriteResult } from './modbus-commit.mjs'
-import { notifyBenchEvent } from '../../infrastructure/host/notify.mjs'
+import { emitCommittedAlarmTransitions } from './poll-alarm-notify.mjs'
 import { requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
 import {
   clampInt,
@@ -286,111 +285,34 @@ export const modbusPoll = async (home, cwd, opts) => {
       }
     }
     const changedPointValues = [...changedById.values()]
-    const alarmEval = evaluateAlarms({
-      points: pack.points,
-      values,
-      prevState: pack.alarmState || pack.alarmActive,
-      pollingByConnection,
-      connections: pack.connections,
-      opts: { deadband: 1 },
-    })
-    const activeBool = Object.fromEntries(
-      Object.entries(alarmEval.next)
-        .filter(([, v]) => v && v.condition === 'active' && v.group === 'process')
-        .map(([k]) => [k, true]),
-    )
-    if (alarmEval.fired.length) {
-      const procFired = alarmEval.fired.filter((/** @type {any} */ f) => f.point)
-      const commFired = alarmEval.fired.filter((/** @type {any} */ f) => f.connectionId)
-      if (procFired.length) {
-        await recordBenchEvent(
-          home,
-          room.cwd,
-          {
-            action: 'alarm',
-            ok: false,
-            summary: `越限告警：${procFired
-              .slice(0, 5)
-              .map((/** @type {any} */ item) => {
-                const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
-                return `${pointLabel(item.point)}=${decodeValue(item.point, item.raw ?? item.alarm?.value)}${item.kind === 'max' ? `>${limit}` : `<${limit}`}`
-              })
-              .join('；')}`,
-          },
-          { source: 'system' },
-        )
-        void notifyBenchEvent(
-          home,
-          room.cwd,
-          `Vision 告警：${procFired
-            .slice(0, 3)
-            .map((/** @type {any} */ item) => {
-              const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
-              return `${pointLabel(item.point)}=${decodeValue(item.point, item.raw ?? item.alarm?.value)}${item.kind === 'max' ? `>${limit}` : `<${limit}`}`
-            })
-            .join('；')}`,
-        ).catch(() => {})
-      }
-      if (commFired.length) {
-        await recordBenchEvent(
-          home,
-          room.cwd,
-          {
-            action: 'alarm',
-            ok: false,
-            summary: `通信告警：${commFired
-              .slice(0, 3)
-              .map((/** @type {any} */ c) => c.label || c.connectionId)
-              .join('；')}`,
-          },
-          { source: 'system' },
-        )
-      }
-    }
-    if (alarmEval.recovered.length) {
-      const procRec = alarmEval.recovered.filter((/** @type {any} */ r) => r.point)
-      const commRec = alarmEval.recovered.filter((/** @type {any} */ r) => r.connectionId && !r.point)
-      if (procRec.length) {
-        await recordBenchEvent(
-          home,
-          room.cwd,
-          {
-            action: 'alarm-clear',
-            ok: true,
-            summary: `告警恢复：${procRec
-              .slice(0, 5)
-              .map((/** @type {any} */ item) => `${pointLabel(item.point)}=${decodeValue(item.point, item.raw ?? item.alarm?.value)}`)
-              .join('；')}`,
-          },
-          { source: 'system' },
-        )
-      }
-      if (commRec.length) {
-        await recordBenchEvent(
-          home,
-          room.cwd,
-          {
-            action: 'alarm-clear',
-            ok: true,
-            summary: `通信恢复：${commRec
-              .slice(0, 3)
-              .map((/** @type {any} */ c) => c.connectionId)
-              .join('；')}`,
-          },
-          { source: 'system' },
-        )
-      }
-    }
     // One runtime persist per tick: only touched point values + real frames +
-    // polled connection stamps. Never rewrite an untouched values snapshot
-    // (would clobber concurrent write/read and cross-wire trend samples).
+    // polled connection stamps. Alarm transitions come back from the commit so
+    // journal/notify cannot disagree with what landed on disk.
     const committed = await commitPollResult(home, room.cwd, {
       baseConfigVersion: pack.configVersion,
       pointValues: changedPointValues,
       frames: framesLog,
       pollingByConnection,
-      alarmActive: activeBool,
     })
+    if (!committed?.ok) {
+      return {
+        ok: false,
+        skipped: false,
+        partial: timedOut,
+        timedOut,
+        values: pack.values,
+        polling: pack.pollingByConnection?.[pack.activeConnectionId || ''] ||
+          pack.pollingByConnection?.[targetConns[0]?.id || ''] ||
+          pack.polling,
+        pollingByConnection: pack.pollingByConnection,
+        framesLog,
+        framesByConnection: pack.framesByConnection,
+        error: committed?.error || '轮询提交失败',
+      }
+    }
+    if (!committed.drift) {
+      await emitCommittedAlarmTransitions(home, room.cwd, committed.alarms)
+    }
     const nextMb = committed.workspace.modbus
     return {
       ok,

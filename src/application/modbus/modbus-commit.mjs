@@ -1,5 +1,6 @@
 // @ts-check
 import { evaluateAlarms } from '../../domain/modbus/alarm-model.mjs'
+import { COND_ACTIVE, PROCESS } from '../../domain/modbus/alarm-constants.mjs'
 import { normalizeModbus } from './modbus-migration.mjs'
 import { workspaceRepository } from '../../infrastructure/store/workspace-store.mjs'
 import { sampleTrendValues } from './trend-store.mjs'
@@ -46,6 +47,43 @@ const appendFrame = (map, connectionId, frame) => {
 }
 
 /**
+ * Drop process alarms whose point no longer exists (avoid ghost alarmActive).
+ * @param {Record<string, any>} [state]
+ * @param {any[]} [points]
+ * @returns {Record<string, any>}
+ */
+export const pruneAlarmStateForPoints = (state, points) => {
+  const live = new Set((Array.isArray(points) ? points : []).map((/** @type {any} */ p) => p && p.id).filter(Boolean))
+  const next = { ...(state || {}) }
+  for (const [key, alarm] of Object.entries(next)) {
+    if (!alarm || typeof alarm !== 'object') continue
+    if (String(key).startsWith('comm:')) continue
+    if (alarm.group && alarm.group !== PROCESS) continue
+    const pid = alarm.pointId || key
+    if (pid && !live.has(pid)) delete next[key]
+  }
+  return next
+}
+
+/**
+ * @param {Record<string, any>} [state]
+ * @param {any[]} [points]
+ * @returns {Record<string, true>}
+ */
+export const alarmActiveFromState = (state, points) => {
+  const live = new Set((Array.isArray(points) ? points : []).map((/** @type {any} */ p) => p && p.id).filter(Boolean))
+  return Object.fromEntries(
+    Object.entries(state || {})
+      .filter(([key, alarm]) => {
+        if (!alarm || alarm.condition !== COND_ACTIVE || alarm.group !== PROCESS) return false
+        const pid = alarm.pointId || key
+        return !!(pid && live.has(pid))
+      })
+      .map(([key]) => [key, true]),
+  )
+}
+
+/**
  * @param {any} [home]
  * @param {any} [cwd]
  * @param {any} [frame]
@@ -63,7 +101,7 @@ export const appendTransactionFrame = (home, cwd, frame) =>
  * @param {any} [cwd]
  * @param {any} [input]
  * @param {any} [kind]
- * @returns {any}
+ * @returns {Promise<any>}
  */
 const commit = (home, cwd, input, kind) =>
   workspaceRepository(home).mutateRuntime(cwd, (/** @type {any} */ ws) => {
@@ -106,54 +144,75 @@ const commit = (home, cwd, input, kind) =>
         framesByConnection = appendFrame(pack.framesByConnection, cid, frame)
       }
     }
+    const pollingByConnection =
+      (kind === 'poll' && input && input.pollingByConnection
+        ? { ...pack.pollingByConnection, ...input.pollingByConnection }
+        : pack.pollingByConnection) || pack.pollingByConnection
     const alarmEval = evaluateAlarms({
       points,
       values,
       prevState: pack.alarmState || pack.alarmActive,
-      pollingByConnection:
-        (kind === 'poll' && input && input.pollingByConnection
-          ? { ...pack.pollingByConnection, ...input.pollingByConnection }
-          : pack.pollingByConnection) || pack.pollingByConnection,
+      pollingByConnection,
       connections,
       opts: { deadband: 1 },
     })
+    const alarmState = pruneAlarmStateForPoints(alarmEval.next, points)
+    const alarmActive = alarmActiveFromState(alarmState, points)
+    const fired = (alarmEval.fired || []).filter((/** @type {any} */ item) => {
+      if (item?.point) return points.some((/** @type {any} */ p) => p.id === item.point.id)
+      return true
+    })
+    const recovered = (alarmEval.recovered || []).filter((/** @type {any} */ item) => {
+      if (item?.point) return points.some((/** @type {any} */ p) => p.id === item.point.id)
+      return true
+    })
     // Task3/0.19.3: 采样发生在提交阶段 — 与页面是否打开无关
     const pointsById = Object.fromEntries((points || []).map((/** @type {any} */ p) => [p.id, p]))
-    const trend = sampleTrendValues(pack.trend || {}, input && input.pointValues, pointsById)
+    const trend = sampleTrendValues(pack.trend || {}, !drift && input ? input.pointValues : [], pointsById)
     const patch = /** @type {Record<string, any>} */ ({
       values,
       framesByConnection,
-      alarmState: alarmEval.next,
       trend,
       version: 3,
     })
     if (kind === 'poll' && input && input.pollingByConnection) {
-      patch.pollingByConnection = { ...pack.pollingByConnection, ...input.pollingByConnection }
+      patch.pollingByConnection = pollingByConnection
     }
-    if (kind === 'poll' && input && input.alarmActive && typeof input.alarmActive === 'object') {
-      patch.alarmActive = input.alarmActive
+    // Always persist alarm maps from the committed values snapshot. On config
+    // drift we still refresh alarms from disk values (e.g. sim write already
+    // patched values), but suppress fired/recovered so callers do not notify.
+    patch.alarmState = alarmState
+    patch.alarmActive = alarmActive
+    return {
+      workspace: { ...ws, modbus: { ...ws.modbus, ...patch } },
+      drift: !!drift,
+      alarms: {
+        fired: drift ? [] : fired,
+        recovered: drift ? [] : recovered,
+        alarmState,
+        alarmActive,
+      },
     }
-    return { workspace: { ...ws, modbus: { ...ws.modbus, ...patch } } }
   })
 
 /**
  * @param {any} [home]
  * @param {any} [cwd]
  * @param {any} [result]
- * @returns {any}
+ * @returns {Promise<any>}
  */
 export const commitReadResult = (home, cwd, result) => commit(home, cwd, result, 'read')
 /**
  * @param {any} [home]
  * @param {any} [cwd]
  * @param {any} [result]
- * @returns {any}
+ * @returns {Promise<any>}
  */
 export const commitWriteResult = (home, cwd, result) => commit(home, cwd, result, 'write')
 /**
  * @param {any} [home]
  * @param {any} [cwd]
  * @param {any} [result]
- * @returns {any}
+ * @returns {Promise<any>}
  */
 export const commitPollResult = (home, cwd, result) => commit(home, cwd, result, 'poll')
