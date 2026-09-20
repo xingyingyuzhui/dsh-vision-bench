@@ -5,11 +5,22 @@ import { TREND_WINDOW_MS, UPLOT_PROTO, trendDataForComponents } from '../../../.
 import { visualizationComponentStatus } from '../../../../domain/modbus/visualization-model.mjs'
 import { getEcharts } from '../../../vendor/echarts-runtime.mjs'
 import { vendorUPlot } from '../../../vendor/vendor-bridge.mjs'
-import { VIZ_COLORS, echartsBarFromLatest, hasTrendSamples } from '../viz-helpers.mjs'
+import {
+  VIZ_COLORS,
+  chartState,
+  echartsBarFromLatest,
+  hasTrendSamples,
+  latestFingerprint,
+  optionFingerprint,
+} from '../viz-helpers.mjs'
 import { buildBarOption, buildLineOption, checkDark, darkAlpha } from './viz-chart-options.mjs'
 
 export { buildAxisOpt, buildBarOption, buildLineOption, checkDark, darkAlpha } from './viz-chart-options.mjs'
 export { renderPreviewChart } from './viz-preview-chart.mjs'
+
+function sameChartState(a, b) {
+  return a && b && a.series === b.series && a.data === b.data && a.option === b.option
+}
 
 export function useVizCharts(React, { components, points, trendStore }) {
   const useCallback = typeof React.useCallback === 'function' ? React.useCallback : (fn) => fn
@@ -107,11 +118,23 @@ export function useVizCharts(React, { components, points, trendStore }) {
         if (echartRefs.current[comp.id]) destroyChart(comp.id)
         const isDark = checkDark()
         const existing = uplotRefs.current[comp.id]
+        const state = chartState(comp, payload, isDark, trendStore)
         if (existing && existing._node === node) {
-          existing.setData(payload.data)
-          return
+          if (sameChartState(existing._state, state)) return
+          // Pure data append with stable series/options → setData only.
+          if (
+            existing._state &&
+            existing._state.series === state.series &&
+            existing._state.option === state.option
+          ) {
+            existing.setData(payload.data)
+            existing._state = state
+            return
+          }
+          destroyChart(comp.id)
+        } else if (existing) {
+          destroyChart(comp.id)
         }
-        if (existing) destroyChart(comp.id)
         const s = comp.settings || {}
         const lineType = s.xGridType || s.gridLineType || 'solid'
         const gridColor = s.xGridColor || s.gridColor || darkAlpha(isDark, '.08')
@@ -155,6 +178,7 @@ export function useVizCharts(React, { components, points, trendStore }) {
         }
         const chart = new UPlot(opts, payload.data, node)
         chart._node = node
+        chart._state = state
         if (!chart._ro && typeof ResizeObserver !== 'undefined') {
           const ro = new ResizeObserver((entries) => {
             try {
@@ -175,7 +199,7 @@ export function useVizCharts(React, { components, points, trendStore }) {
         setChartErrors((prev) => (prev[comp.id] === msg ? prev : { ...prev, [comp.id]: msg }))
       }
     },
-    [seriesOfComponent, destroyChart],
+    [seriesOfComponent, destroyChart, trendStore],
   )
 
   const ensureChart = useCallback(
@@ -205,41 +229,57 @@ export function useVizCharts(React, { components, points, trendStore }) {
           echartRefs.current[comp.id] = chart
         }
         const isDark = checkDark()
+        const state = chartState(comp, payload, isDark, trendStore)
+        if (sameChartState(chart._state, state)) return
+        // Series identity or theme/options changed → full setOption; same for data-only.
         chart.setOption(buildLineOption(comp.settings, payload, isDark), true)
         chart.resize()
+        chart._state = state
         clearErr(comp.id)
       } catch (err) {
         const msg = `曲线渲染失败: ${String(err?.message || err)}`
         setChartErrors((prev) => (prev[comp.id] === msg ? prev : { ...prev, [comp.id]: msg }))
       }
     },
-    [seriesOfComponent, destroyChart, ensureUplot],
+    [seriesOfComponent, destroyChart, ensureUplot, trendStore],
   )
 
-  const ensureBarChart = useCallback((node, comp, latest) => {
-    if (!node) return
-    const echarts = getEcharts()
-    if (!echarts) return
-    try {
-      let chart = echartRefs.current[comp.id]
-      if (!chart || chart._node !== node) {
-        if (chart) {
-          try {
-            chart.dispose()
-          } catch {}
+  const ensureBarChart = useCallback(
+    (node, comp, latest) => {
+      if (!node) return
+      const echarts = getEcharts()
+      if (!echarts) return
+      try {
+        let chart = echartRefs.current[comp.id]
+        if (!chart || chart._node !== node) {
+          if (chart) {
+            try {
+              chart.dispose()
+            } catch {}
+          }
+          chart = echarts.init(node, null, { renderer: 'canvas' })
+          chart._node = node
+          echartRefs.current[comp.id] = chart
         }
-        chart = echarts.init(node, null, { renderer: 'canvas' })
-        chart._node = node
-        echartRefs.current[comp.id] = chart
+        const isDark = checkDark()
+        const state = {
+          series: latestFingerprint(latest),
+          data: latestFingerprint(latest),
+          option: optionFingerprint(comp.settings, isDark),
+        }
+        if (sameChartState(chart._state, state)) return
+        const packBar = echartsBarFromLatest(latest, VIZ_COLORS)
+        chart.setOption(buildBarOption(comp.settings, packBar, isDark), true)
+        chart.resize()
+        chart._state = state
+        clearErr(comp.id)
+      } catch (err) {
+        const msg = `柱状图渲染失败: ${String(err?.message || err)}`
+        setChartErrors((prev) => (prev[comp.id] === msg ? prev : { ...prev, [comp.id]: msg }))
       }
-      const packBar = echartsBarFromLatest(latest, VIZ_COLORS)
-      chart.setOption(buildBarOption(comp.settings, packBar, false), true)
-      chart.resize()
-    } catch (err) {
-      const msg = `柱状图渲染失败: ${String(err?.message || err)}`
-      setChartErrors((prev) => (prev[comp.id] === msg ? prev : { ...prev, [comp.id]: msg }))
-    }
-  }, [])
+    },
+    [],
+  )
 
   return {
     chartErrors,

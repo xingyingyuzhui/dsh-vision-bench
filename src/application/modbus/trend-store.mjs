@@ -22,6 +22,7 @@ export const normalizeTrendByPoint = (input) => {
   if (!input || typeof input !== 'object') return {}
   const out = /** @type {Record<string, any>} */ ({})
   for (const [pid, list] of Object.entries(input)) {
+    if (pid === '__rev') continue
     if (!Array.isArray(list)) continue
     const clean = []
     for (const sample of list) {
@@ -32,6 +33,8 @@ export const normalizeTrendByPoint = (input) => {
     }
     if (clean.length) out[pid] = clean.slice(-TREND_KEEP)
   }
+  const rev = Number(input.__rev)
+  if (Number.isFinite(rev) && rev > 0) out.__rev = Math.trunc(rev)
   return out
 }
 
@@ -45,6 +48,7 @@ export const normalizeTrendByPoint = (input) => {
 export const sampleTrendValues = (trendIn, pointValues, pointsById) => {
   const trend = { ...(trendIn || {}) }
   const now = Date.now()
+  let touched = false
   for (const rec of Array.isArray(pointValues) ? pointValues : []) {
     const pid = rec && (rec.pointId || rec.key)
     if (!pid) continue
@@ -60,7 +64,10 @@ export const sampleTrendValues = (trendIn, pointValues, pointsById) => {
     list.push([Number(rec.at) || now, val])
     if (list.length > TREND_KEEP) list = list.slice(list.length - TREND_KEEP)
     trend[pid] = list
+    touched = true
   }
+  if (touched) trend.__rev = (Number(trendIn?.__rev) || 0) + 1
+  else if (trend.__rev == null && trendIn?.__rev != null) trend.__rev = Number(trendIn.__rev) || 0
   return trend
 }
 

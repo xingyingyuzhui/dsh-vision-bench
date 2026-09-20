@@ -296,3 +296,21 @@ test('echartsSeriesFromTrend filters interleaving nulls and enables symbols', as
   ])
 })
 
+test('echartsSeriesFromTrend keeps null breakpoints when connectNulls is false', async () => {
+  const { echartsSeriesFromTrend } = await import('../../src/ui/monitor/visualization/viz-helpers.mjs')
+  const payload = {
+    data: [
+      [100, 101, 102],
+      [10, null, 12],
+    ],
+    meta: [{ label: '点位1' }],
+  }
+  const series = echartsSeriesFromTrend(payload, { connectNulls: false })
+  assert.equal(series[0].connectNulls, false)
+  assert.deepEqual(series[0].data, [
+    [100000, 10],
+    [101000, null],
+    [102000, 12],
+  ])
+})
+

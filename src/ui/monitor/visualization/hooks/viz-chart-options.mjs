@@ -52,7 +52,19 @@ export function buildLineOption(s = {}, payload, isDark = false, isPreview = fal
   const xInterval = isCount
     ? Math.max(1, Math.round(((payload?.data?.[0]?.length || 1) - 1) / xSplitNum))
     : Math.round(windowMs / xSplitNum)
-  const now = explicitNow || Math.floor(Date.now() / xInterval) * xInterval
+  // max is the real last sample (or wall clock when empty). Do not floor/clip it —
+  // that hid the newest point when its timestamp was not on an interval boundary.
+  const xs = payload?.data?.[0]
+  const lastSampleMs =
+    !isCount && Array.isArray(xs) && xs.length && Number.isFinite(Number(xs[xs.length - 1]))
+      ? Number(xs[xs.length - 1]) * 1000
+      : null
+  const now =
+    explicitNow != null
+      ? Number(explicitNow)
+      : lastSampleMs != null
+        ? lastSampleMs
+        : Date.now()
   const showLegend = s.showLegend !== false
   const legendPos = s.legendPos || 'top'
   const yUnit = s.yUnit || ''
