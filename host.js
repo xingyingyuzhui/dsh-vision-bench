@@ -100,7 +100,12 @@ function logHostLifecycle(event, opts) {
 
 /**
  * Roll back registrations that happened before shared-lease commit.
- * @param {{ stopFetch?: (() => unknown) | null, legacyWebCompat?: { stop: () => unknown } | null }} partial
+ * @param {{
+ *   stopFetch?: (() => unknown) | null,
+ *   legacyWebCompat?: { stop: () => unknown } | null,
+ *   createdSharedRuntime?: boolean,
+ *   debugRuntime?: any,
+ * }} partial
  */
 function rollbackUncommitted(partial) {
   try {
@@ -115,6 +120,19 @@ function rollbackUncommitted(partial) {
   } catch {
     /* ignore */
   }
+  // First-load only: do not shut down a runtime still owned by a prior Host.
+  if (
+    partial.createdSharedRuntime === true &&
+    partial.debugRuntime &&
+    peekSharedDebugRuntime() === partial.debugRuntime
+  ) {
+    try {
+      if (typeof partial.debugRuntime.shutdown === 'function') partial.debugRuntime.shutdown()
+    } catch {
+      /* ignore */
+    }
+    setSharedDebugRuntime(null)
+  }
 }
 
 export function apply(ctx) {
@@ -125,7 +143,9 @@ export function apply(ctx) {
   }
 
   // Phase 1 — local construction only. Do not publish capability / Host / lease yet.
-  // Reusing an existing shared DebugRuntime is safe: we never shut it down on failed commit.
+  // Reusing an existing shared DebugRuntime is safe on failed commit; a runtime
+  // created in this attempt must be cleared if we never commit a lease.
+  const hadSharedRuntime = peekSharedDebugRuntime() != null
   const debugRuntime = getSharedDebugRuntime({
     home: dshHome,
     onJournalEvent: async (ev) => {
@@ -145,6 +165,7 @@ export function apply(ctx) {
       ).catch(() => {})
     },
   })
+  const createdSharedRuntime = !hadSharedRuntime
   const telemetryReader = createVerifyTelemetryAdapter({
     getHome: () => dshHome,
     workspaceLoader: (cwd) => loadWorkspace(dshHome, cwd),
@@ -244,7 +265,12 @@ export function apply(ctx) {
     }
     activeHostLease = lease
   } catch (error) {
-    rollbackUncommitted({ stopFetch, legacyWebCompat })
+    rollbackUncommitted({
+      stopFetch,
+      legacyWebCompat,
+      createdSharedRuntime,
+      debugRuntime,
+    })
     console.info(
       JSON.stringify({
         event: 'vision.host.apply-failed',

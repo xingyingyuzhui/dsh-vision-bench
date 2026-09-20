@@ -63,7 +63,7 @@ cd /path/to/deepseek-harness-desktop-official/apps/desktop
 pnpm exec tsx /path/to/dsh-vision-bench/scripts/probes/run-desktop-b2-identity.mts
 ```
 
-Packs the current tree, installs `file:./.dsh-local-plugins/*.tgz` into a temp profile (no source `link:`), boots `DesktopHostProcess`, loads `dsh-vision-bench/agent`, and asserts `system.ping` identity (`samePid`, `sameModuleInstance`, `dispatchPath=in-process-handle`, no `:3080`).
+Packs the current tree, installs `file:./.dsh-local-plugins/*.tgz` into a temp profile (no source `link:`), seeds `$DSH_HOME/.agent-presets/vision-b2`, boots `DesktopHostProcess`, mounts via official `agentPresets.mount`, executes `vision_bench` through `tools.execute`, asserts identity (`samePid`, `sameModuleInstance`, `dispatchPath=in-process-handle`, no `:3080`), and exercises real `/api/vision-bench/dispatch` cancel. Claim=`runtime-identity-lab`. Lab install patches `serialport` allowBuilds and uses `strict-dep-builds=false` — not official product install proof. Writes `scripts/probes/evidence/desktop-b2-identity.json` for Stage 5.
 ### Desktop lab install (local tarball)
 
 Official Desktop GUI only accepts exact `name@version` specs against npmjs; this plugin is not published there yet. Lab install mirrors `dsh-chat-tune`:

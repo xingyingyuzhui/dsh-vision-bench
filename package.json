@@ -333,6 +333,7 @@
     "src/application/modbus/write-service.mjs",
     "src/application/modbus/write-execute.mjs",
     "src/application/modbus/polling-service.mjs",
+    "src/application/modbus/poll-alarm-notify.mjs",
     "src/application/modbus/write-approval-service.mjs",
     "src/application/modbus/frame-service.mjs",
     "src/application/modbus/focus-service.mjs",

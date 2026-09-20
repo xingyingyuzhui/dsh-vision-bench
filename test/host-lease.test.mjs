@@ -139,6 +139,23 @@ test('host lease: failed B apply does not steal A capability/Host/runtime', asyn
   assert.equal(getVisionHost(), null)
 })
 
+test('host lease: first-load apply failure clears newly created DebugRuntime', async () => {
+  unregisterVisionHost()
+  setSharedDebugRuntime(null)
+
+  const connection = mockRpcHost()
+  connection.fetch.register = () => {
+    throw new Error('first-load-route-failure')
+  }
+  const host = createHostContext(connection)
+  assert.throws(() => apply(host.ctx), /first-load-route-failure/)
+
+  assert.equal(peekSharedDebugRuntime(), null, 'leaked DebugRuntime after failed first apply')
+  assert.equal(_internal.getActiveHostLease(), null)
+  assert.equal(getVisionHost(), null)
+  assert.equal(process.env.VISION_BENCH_CAPABILITY, undefined)
+})
+
 test('host lease: A dispose after B still leaves shared DebugRuntime alive until B stops', async () => {
   unregisterVisionHost()
   setSharedDebugRuntime(null)

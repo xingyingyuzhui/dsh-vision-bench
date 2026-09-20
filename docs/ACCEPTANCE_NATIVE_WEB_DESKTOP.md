@@ -13,9 +13,11 @@ Companion to plan `docs/plans/2026-09-17-003-vision-native-web-desktop-migration
 | Web compat inject fiber lifecycle | **pass** |
 | Debug idle `waitForOwnerSession` | **pass** |
 | Fetch dispatch contract (no local 64 KiB cap) | **pass** |
-| Real Desktop B2 (pack → temp profile → DesktopHostProcess) | **pass** (`run-desktop-b2-identity.mts`) |
-| Desktop Fetch smoke | **pass** (`run-desktop-dispatch-smoke.mts`) |
+| Real Desktop B2 (pack → temp profile → DesktopHostProcess → agentPresets.mount → vision_bench) | **lab pass** (`runtime-identity-lab`; not official allowBuilds product install) |
+| Desktop Vision Fetch (real tarball `/api/vision-bench/dispatch`) | **lab pass** (bundled in B2 evidence) |
+| Desktop Fetch carrier smoke (stub plugin) | **carrier pass** (`run-desktop-dispatch-smoke.mts`; not Vision integration) |
 | Stage 3 pack / Stage 4 lifecycle | **pass** |
+| Stage 5 Desktop evidence gate | **required** — evidence must match HEAD + fingerprints + identity/cancel fields; dirty trees rejected unless `VISION_STAGE5_ALLOW_DIRTY=1` |
 
 **Not claimed / deferred:**
 
@@ -29,7 +31,7 @@ Companion to plan `docs/plans/2026-09-17-003-vision-native-web-desktop-migration
 | Install / update / remove (registry `name@version`) | manual | **manual product** | manual | Desktop GUI rejects `file:`/`tgz`/`link:` |
 | Pack closure + platform `web` | **auto** | **auto** | auto | `check-stage3-pack.mjs` |
 | Fetch dispatch + uninstall 404 | **auto** (B1) | **auto** (DesktopHostProcess) | manual mirror | `run-desktop-b1.mts` / Web probe |
-| Agent Host identity / no `:3080` | **auto** | **auto** (Desktop B2 pack) | auto | `run-desktop-b2-identity.mts` + unit `run-b2-identity.mjs` |
+| Agent Host identity / no `:3080` | **auto** | **lab auto** (Desktop B2 pack + `agentPresets.mount` → `tools.execute`; serialport allowBuilds patched) | auto | `run-desktop-b2-identity.mts` + evidence JSON; claim=`runtime-identity-lab` |
 | Lifecycle dispose / idle debug | **auto** | auto (same code) | auto | `run-stage4-lifecycle.mjs` |
 | Settings / points / monitor / Debug UI | manual smoke | manual smoke | manual | same Host command service |
 | Modbus TCP / simulator | manual + unit | manual | manual | existing Modbus tests + smoke |
@@ -79,8 +81,11 @@ npm run quality
 node scripts/probes/check-stage3-pack.mjs
 node scripts/probes/run-stage4-lifecycle.mjs
 node scripts/probes/run-b2-identity.mjs
-# from deepseek-harness-desktop-official/apps/desktop:
+# from deepseek-harness-desktop-official/apps/desktop (writes scripts/probes/evidence/*.json + artifacts):
 pnpm exec tsx /path/to/dsh-vision-bench/scripts/probes/run-desktop-b2-identity.mts
 pnpm exec tsx /path/to/dsh-vision-bench/scripts/probes/run-desktop-dispatch-smoke.mts
+# or: VISION_STAGE5_RUN_DESKTOP=1 node scripts/probes/check-stage5-acceptance.mjs
 node scripts/probes/check-stage5-acceptance.mjs
 ```
+
+Stage 5 reports `labOk` (gates + evidence) and `releaseOk` (labOk ∧ clean Vision/Desktop trees). Exit code follows **`releaseOk`** only. `VISION_STAGE5_ALLOW_DIRTY=1` can make `labOk` true on dirty trees for local experiments, but `releaseOk` stays false until both repos are clean and evidence is regenerated. Desktop B2 claim is `runtime-identity-lab` only; `uiFetchTcpSim` remains `manual` until a dedicated Desktop sim/TCP smoke exists.

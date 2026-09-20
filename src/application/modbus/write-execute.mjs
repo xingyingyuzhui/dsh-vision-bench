@@ -120,13 +120,15 @@ export async function executeApprovedWrite(ctx) {
             at: extra.at || Date.now(),
           })
         : null)
-    if (_entry) {
+    if (_entry || (Array.isArray(extra.pointValues) && extra.pointValues.length)) {
       await commitWriteResult(home, roomCwd, {
-        baseConfigVersion: pack.configVersion,
+        // Sim writes persist values first (may bump configVersion). Passing the
+        // pre-save version would mark this commit as CONFIG_DRIFT and drop trend samples.
+        ...(extra.simulated ? {} : { baseConfigVersion: pack.configVersion }),
         connectionId: targetCid,
         deviceId: targetDid,
         pointValues: extra.pointValues || [],
-        frame: _entry,
+        frame: _entry || undefined,
       })
     }
     const errorCode =

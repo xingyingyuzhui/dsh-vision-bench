@@ -94,13 +94,6 @@ export default {
           "owner": "vision-bench"
         },
         {
-          "file": "src/application/modbus/polling-service.mjs",
-          "max": 431,
-          "reason": "P5-4 debt ratchet; split in later P4/P6",
-          "stage": "P6",
-          "owner": "vision-bench"
-        },
-        {
           "file": "runtime/io/connection-manager.mjs",
           "max": 422,
           "reason": "P5-4 debt ratchet; split in later P4/P6",

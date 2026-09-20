@@ -72,7 +72,4 @@ export const TYPOGRAPHY_CSS = [
     '] .dvb-page,body[' +
     ATTR +
     '] .dvb-workspace{font-family:var(--dvb-font-family);font-size:var(--dvb-font-size-base, 13px);line-height:var(--dvb-line-height-base, 1.5)}',
-  'body[' +
-    ATTR +
-    '] .dvb-text-xs{font-size:var(--dvb-font-size-xs,11px)}.dvb-text-sm{font-size:var(--dvb-font-size-sm,12px)}.dvb-text-base{font-size:var(--dvb-font-size-base,13px)}.dvb-text-md{font-size:var(--dvb-font-size-md,14px)}.dvb-text-lg{font-size:var(--dvb-font-size-lg,16px)}.dvb-text-xl{font-size:var(--dvb-font-size-xl,18px)}.dvb-text-mono{font-family:var(--dvb-font-family-mono);font-variant-numeric:tabular-nums}.dvb-font-medium{font-weight:500}.dvb-font-semibold{font-weight:600}.dvb-font-bold{font-weight:700}',
 ]

@@ -1,6 +1,3 @@
-// TaskP2/0.20.0: ECharts & uPlot 图表生命周期与渲染管理 Hook
-// 负责图表实例创建/更新、尺寸自适应、多系列时序数据聚合及组件卸载清理。
-
 import { TREND_WINDOW_MS, UPLOT_PROTO, trendDataForComponents } from '../../../../application/modbus/trend-model.mjs'
 import { visualizationComponentStatus } from '../../../../domain/modbus/visualization-model.mjs'
 import { getEcharts } from '../../../vendor/echarts-runtime.mjs'
@@ -15,11 +12,27 @@ import {
 } from '../viz-helpers.mjs'
 import { buildBarOption, buildLineOption, checkDark, darkAlpha } from './viz-chart-options.mjs'
 
-export { buildAxisOpt, buildBarOption, buildLineOption, checkDark, darkAlpha } from './viz-chart-options.mjs'
-export { renderPreviewChart } from './viz-preview-chart.mjs'
+const sameChartState = (a, b) => a && b && a.series === b.series && a.data === b.data && a.option === b.option
 
-function sameChartState(a, b) {
-  return a && b && a.series === b.series && a.data === b.data && a.option === b.option
+function bindEchart(echarts, refs, id, node) {
+  let chart = refs.current[id]
+  if (!chart || chart._node !== node) {
+    try {
+      chart?.dispose?.()
+    } catch {}
+    chart = echarts.init(node, null, { renderer: 'canvas' })
+    chart._node = node
+    refs.current[id] = chart
+  }
+  return chart
+}
+
+function uplotAxis(show, stroke, showGrid, gridColor, dash) {
+  return { show, stroke, grid: { show: showGrid, stroke: gridColor, width: 1, dash } }
+}
+
+function setChartErr(setChartErrors, id, msg) {
+  setChartErrors((prev) => (prev[id] === msg ? prev : { ...prev, [id]: msg }))
 }
 
 export function useVizCharts(React, { components, points, trendStore }) {
@@ -36,22 +49,17 @@ export function useVizCharts(React, { components, points, trendStore }) {
   const echartRefs = React.useRef({})
 
   const destroyChart = useCallback((id) => {
-    const u = uplotRefs.current[id]
-    if (u) {
-      try {
-        u._ro?.disconnect()
-        u.destroy()
-      } catch {}
+    for (const refs of [uplotRefs, echartRefs]) {
+      const c = refs.current[id]
+      if (c) {
+        try {
+          c._ro?.disconnect()
+          c.destroy?.()
+          c.dispose?.()
+        } catch {}
+      }
+      delete refs.current[id]
     }
-    delete uplotRefs.current[id]
-    const chart = echartRefs.current[id]
-    if (chart) {
-      try {
-        chart._ro?.disconnect()
-        chart.dispose()
-      } catch {}
-    }
-    delete echartRefs.current[id]
   }, [])
 
   React.useEffect(() => {
@@ -61,11 +69,10 @@ export function useVizCharts(React, { components, points, trendStore }) {
         live.add(comp.id)
       }
     }
-    for (const id of Object.keys(uplotRefs.current)) {
-      if (!live.has(id)) destroyChart(id)
-    }
-    for (const id of Object.keys(echartRefs.current)) {
-      if (!live.has(id)) destroyChart(id)
+    for (const refs of [uplotRefs, echartRefs]) {
+      for (const id of Object.keys(refs.current)) {
+        if (!live.has(id)) destroyChart(id)
+      }
     }
   }, [components, points, destroyChart])
 
@@ -94,8 +101,8 @@ export function useVizCharts(React, { components, points, trendStore }) {
 
   const seriesOfComponent = useCallback(
     (comp) => {
-      const live = trendStore?.getComponentData ? trendStore.getComponentData(comp.id) : null
-      if (live && live.data && live.data[0] && live.data[0].length > 0) return live
+      const live = trendStore?.getComponentData?.(comp.id)
+      if (live?.data?.[0]?.length > 0) return live
       return trendDataForComponents(trendStore, points, comp.pointIds, comp.settings?.windowMs || TREND_WINDOW_MS)
     },
     [points, trendStore],
@@ -111,7 +118,7 @@ export function useVizCharts(React, { components, points, trendStore }) {
       }
       const UPlot = vendorUPlot()
       if (!UPlot) {
-        setChartErrors((prev) => ({ ...prev, [comp.id]: '图表运行时不可用' }))
+        setChartErr(setChartErrors, comp.id, '图表运行时不可用')
         return
       }
       try {
@@ -121,12 +128,7 @@ export function useVizCharts(React, { components, points, trendStore }) {
         const state = chartState(comp, payload, isDark, trendStore)
         if (existing && existing._node === node) {
           if (sameChartState(existing._state, state)) return
-          // Pure data append with stable series/options → setData only.
-          if (
-            existing._state &&
-            existing._state.series === state.series &&
-            existing._state.option === state.option
-          ) {
+          if (existing._state?.series === state.series && existing._state?.option === state.option) {
             existing.setData(payload.data)
             existing._state = state
             return
@@ -137,56 +139,39 @@ export function useVizCharts(React, { components, points, trendStore }) {
         }
         const s = comp.settings || {}
         const lineType = s.xGridType || s.gridLineType || 'solid'
+        const dash = lineType === 'dashed' ? [4, 4] : lineType === 'dotted' ? [2, 2] : []
         const gridColor = s.xGridColor || s.gridColor || darkAlpha(isDark, '.08')
-        const showGrid = s.xShowGrid ?? (s.showGrid !== false)
-        const opts = {
-          ...UPLOT_PROTO,
-          width: Math.max(node.clientWidth || 0, 320),
-          height: Math.max(node.clientHeight || 0, 140),
-          axes: [
-            {
-              show: s.xShowLabel !== false,
-              stroke: s.xAxisColor || (isDark ? 'rgba(255,255,255,.5)' : 'rgba(0,0,0,.5)'),
-              grid: {
-                show: showGrid,
-                stroke: gridColor,
-                width: 1,
-                dash: lineType === 'dashed' ? [4, 4] : lineType === 'dotted' ? [2, 2] : [],
-              },
-            },
-            {
-              show: s.yShowLabel !== false,
-              stroke: s.yAxisColor || (isDark ? 'rgba(255,255,255,.5)' : 'rgba(0,0,0,.5)'),
-              grid: {
-                show: s.yShowGrid ?? (s.showGrid !== false),
-                stroke: gridColor,
-                width: 1,
-                dash: lineType === 'dashed' ? [4, 4] : lineType === 'dotted' ? [2, 2] : [],
-              },
-            },
-          ],
-          series: [{}].concat(
-            payload.meta.map((m, idx) => ({
-              label: m.label,
-              spanGaps: s.connectNulls !== false,
-              stroke: s.lineColor || VIZ_COLORS[idx % VIZ_COLORS.length],
-              width: Number(s.lineWidth) || 2,
-              points: { show: s.showSymbol !== false },
-              fill: s.area ? 'rgba(79, 142, 247, 0.12)' : undefined,
-            })),
-          ),
-        }
-        const chart = new UPlot(opts, payload.data, node)
+        const stroke = (k) => s[k] || (isDark ? 'rgba(255,255,255,.5)' : 'rgba(0,0,0,.5)')
+        const chart = new UPlot(
+          {
+            ...UPLOT_PROTO,
+            width: Math.max(node.clientWidth || 0, 320),
+            height: Math.max(node.clientHeight || 0, 140),
+            axes: [
+              uplotAxis(s.xShowLabel !== false, stroke('xAxisColor'), s.xShowGrid ?? s.showGrid !== false, gridColor, dash),
+              uplotAxis(s.yShowLabel !== false, stroke('yAxisColor'), s.yShowGrid ?? s.showGrid !== false, gridColor, dash),
+            ],
+            series: [{}].concat(
+              payload.meta.map((m, idx) => ({
+                label: m.label,
+                spanGaps: s.connectNulls !== false,
+                stroke: s.lineColor || VIZ_COLORS[idx % VIZ_COLORS.length],
+                width: Number(s.lineWidth) || 2,
+                points: { show: s.showSymbol !== false },
+                fill: s.area ? 'rgba(79, 142, 247, 0.12)' : undefined,
+              })),
+            ),
+          },
+          payload.data,
+          node,
+        )
         chart._node = node
         chart._state = state
         if (!chart._ro && typeof ResizeObserver !== 'undefined') {
           const ro = new ResizeObserver((entries) => {
             try {
-              const entry = entries[0]
-              const cr = entry?.contentRect
-              if (cr && cr.width && cr.height) {
-                chart.setSize({ width: cr.width, height: cr.height })
-              }
+              const cr = entries[0]?.contentRect
+              if (cr?.width && cr.height) chart.setSize({ width: cr.width, height: cr.height })
             } catch {}
           })
           ro.observe(node)
@@ -195,8 +180,7 @@ export function useVizCharts(React, { components, points, trendStore }) {
         uplotRefs.current[comp.id] = chart
         clearErr(comp.id)
       } catch (err) {
-        const msg = `曲线渲染失败: ${String(err?.message || err)}`
-        setChartErrors((prev) => (prev[comp.id] === msg ? prev : { ...prev, [comp.id]: msg }))
+        setChartErr(setChartErrors, comp.id, `曲线渲染失败: ${String(err?.message || err)}`)
       }
     },
     [seriesOfComponent, destroyChart, trendStore],
@@ -217,69 +201,39 @@ export function useVizCharts(React, { components, points, trendStore }) {
       }
       try {
         if (uplotRefs.current[comp.id]) destroyChart(comp.id)
-        let chart = echartRefs.current[comp.id]
-        if (!chart || chart._node !== node) {
-          if (chart) {
-            try {
-              chart.dispose()
-            } catch {}
-          }
-          chart = echarts.init(node, null, { renderer: 'canvas' })
-          chart._node = node
-          echartRefs.current[comp.id] = chart
-        }
+        const chart = bindEchart(echarts, echartRefs, comp.id, node)
         const isDark = checkDark()
         const state = chartState(comp, payload, isDark, trendStore)
         if (sameChartState(chart._state, state)) return
-        // Series identity or theme/options changed → full setOption; same for data-only.
         chart.setOption(buildLineOption(comp.settings, payload, isDark), true)
         chart.resize()
         chart._state = state
         clearErr(comp.id)
       } catch (err) {
-        const msg = `曲线渲染失败: ${String(err?.message || err)}`
-        setChartErrors((prev) => (prev[comp.id] === msg ? prev : { ...prev, [comp.id]: msg }))
+        setChartErr(setChartErrors, comp.id, `曲线渲染失败: ${String(err?.message || err)}`)
       }
     },
     [seriesOfComponent, destroyChart, ensureUplot, trendStore],
   )
 
-  const ensureBarChart = useCallback(
-    (node, comp, latest) => {
-      if (!node) return
-      const echarts = getEcharts()
-      if (!echarts) return
-      try {
-        let chart = echartRefs.current[comp.id]
-        if (!chart || chart._node !== node) {
-          if (chart) {
-            try {
-              chart.dispose()
-            } catch {}
-          }
-          chart = echarts.init(node, null, { renderer: 'canvas' })
-          chart._node = node
-          echartRefs.current[comp.id] = chart
-        }
-        const isDark = checkDark()
-        const state = {
-          series: latestFingerprint(latest),
-          data: latestFingerprint(latest),
-          option: optionFingerprint(comp.settings, isDark),
-        }
-        if (sameChartState(chart._state, state)) return
-        const packBar = echartsBarFromLatest(latest, VIZ_COLORS)
-        chart.setOption(buildBarOption(comp.settings, packBar, isDark), true)
-        chart.resize()
-        chart._state = state
-        clearErr(comp.id)
-      } catch (err) {
-        const msg = `柱状图渲染失败: ${String(err?.message || err)}`
-        setChartErrors((prev) => (prev[comp.id] === msg ? prev : { ...prev, [comp.id]: msg }))
-      }
-    },
-    [],
-  )
+  const ensureBarChart = useCallback((node, comp, latest) => {
+    if (!node) return
+    const echarts = getEcharts()
+    if (!echarts) return
+    try {
+      const chart = bindEchart(echarts, echartRefs, comp.id, node)
+      const isDark = checkDark()
+      const fp = latestFingerprint(latest)
+      const state = { series: fp, data: fp, option: optionFingerprint(comp.settings, isDark) }
+      if (sameChartState(chart._state, state)) return
+      chart.setOption(buildBarOption(comp.settings, echartsBarFromLatest(latest, VIZ_COLORS), isDark), true)
+      chart.resize()
+      chart._state = state
+      clearErr(comp.id)
+    } catch (err) {
+      setChartErr(setChartErrors, comp.id, `柱状图渲染失败: ${String(err?.message || err)}`)
+    }
+  }, [])
 
   return {
     chartErrors,

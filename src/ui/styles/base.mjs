@@ -51,18 +51,8 @@ export const BASE_CSS = [
     '] .dvb-callout{display:flex;gap:8px;align-items:center;padding:7px 10px;border-radius:6px;font-size:var(--dvb-font-size-base,13px);line-height:1.4;background:var(--dsw-alias-bg-layer-2,rgba(128,128,128,.08));border:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.2));opacity:.85;margin-bottom:4px}',
   'body[' +
     ATTR +
-    '] .dvb-runtime-line{display:flex;align-items:center;gap:6px;font-size:var(--dvb-font-size-base,13px);line-height:1.4;margin:2px 0 6px}',
-  'body[' +
-    ATTR +
     '] .dvb-dot{width:7px;height:7px;border-radius:50%;display:inline-block;background:var(--dsw-alias-label-success,#2e7d32);flex-shrink:0}',
   'body[' + ATTR + '] .dvb-dot[data-kind="missing"]{background:var(--dsw-alias-label-danger,#c62828)}',
-  'body[' +
-    ATTR +
-    '] .dvb-checkbox-row{display:flex;flex-direction:row;align-items:center;gap:8px;min-height:24px;cursor:pointer;font-size:var(--dvb-font-size-base,13px);user-select:none}',
-  'body[' +
-    ATTR +
-    '] .dvb-checkbox-row input[type="checkbox"]{margin:0;cursor:pointer;width:15px;height:15px;flex-shrink:0;accent-color:var(--dsw-alias-label-info,#4f8ef7)}',
-  'body[' + ATTR + '] .dvb-checkbox-row[data-disabled="true"]{opacity:.4;cursor:default}',
   'body[' +
     ATTR +
     '] .dvb-share-subgroup{display:flex;flex-direction:column;gap:4px;padding-left:18px;border-left:2px solid var(--dsw-alias-border-l2,rgba(128,128,128,.15));margin:4px 0 6px 4px}',
@@ -310,9 +300,6 @@ export const BASE_CSS = [
     '] .dvb-split{display:grid;grid-template-columns:minmax(240px,.92fr) minmax(0,1.2fr);gap:10px;align-items:stretch;width:100%;min-width:0}',
   'body[' + ATTR + '] .dvb-split>.dvb-panel{min-width:0}',
   'body[' + ATTR + '] .dvb-toolbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end}',
-  'body[' + ATTR + '] .dvb-devbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
-  'body[' + ATTR + '] .dvb-devbar-add{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}',
-  'body[' + ATTR + '] .dvb-devbar.is-empty .dvb-devbar-add{margin-left:0}',
   'body[' + ATTR + '] .dvb-toolbar .dvb-row{flex:0 1 12rem}',
   'body[' +
     ATTR +

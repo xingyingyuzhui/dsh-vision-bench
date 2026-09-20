@@ -203,7 +203,7 @@ test('Task5/6 guards: no hard-coded configVersion collapse and no window.uPlot r
   assert.match(live, /destroy/, 'should destroy uPlot on teardown')
   assert.match(live, /\.setData\(/, 'should update via setData, not re-create chart')
   assert.match(live, /setSize/, 'should resize via setSize')
-  assert.match(live, /spanGaps: false/, 'curve does not connect error gaps')
+  assert.match(live, /spanGaps: s\.connectNulls !== false/, 'uPlot spanGaps follows connectNulls setting')
 })
 test('Task2/0.20.1: trendDataForComponents aligned uPlot data (multi-series, seconds, null gaps)', async () => {
   const base = Date.now() - 60000

@@ -231,22 +231,12 @@ export const setPointValue = (values, point, raw, opts = {}) => {
   return list.slice(-MAX_VALUES)
 }
 
-/**
- * @param {any[]} values
- * @param {any[]} points
- * @param {any} batch
- * @param {any[]} raw
- * @param {boolean} ok
- * @param {string} error
- * @param {number} [at]
- */
+/** @param {any[]} values @param {any[]} points @param {any} batch @param {any[]} raw @param {boolean} ok @param {string} error @param {number} [at] */
 export const scatterBatch = (values, points, batch, raw, ok, error, at = Date.now()) => {
   const list = (Array.isArray(values) ? values : []).map(normalizeValueRec).filter((r) => r.key)
   const batchFc = batch ? (batch.fc !== undefined ? batch.fc : batch.function) : undefined
   const batchCid = batch ? String(batch.connectionId || batch.connId || '') : ''
   const batchDid = batch ? String(batch.deviceId || '') : ''
-  // Do not run normalizePoints() here: it strips connectionId/deviceId and
-  // dedupes by fc:address, which cross-wires same-address points across scopes.
   for (const rawPt of Array.isArray(points) ? points : []) {
     if (!rawPt || typeof rawPt !== 'object') continue
     const fn = Number(rawPt.function)
@@ -258,17 +248,15 @@ export const scatterBatch = (values, points, batch, raw, ok, error, at = Date.no
     const id = String(rawPt.id || '').trim() || pointIdOf(fn, addr)
     const idx = addr - batch.address
     const has = ok && Array.isArray(raw) && raw[idx] !== undefined
-    putValueRec(
-      list,
-      normalizeValueRec({
-        key: id,
-        raw: has ? raw[idx] : null,
-        value: has ? decodeValue(rawPt, typeof raw[idx] === 'boolean' ? (raw[idx] ? 1 : 0) : raw[idx]) : null,
-        ok: !!ok,
-        error: ok ? '' : String(error || ''),
-        at,
-      }),
-    )
+    const rawVal = has ? raw[idx] : null
+    putValueRec(list, normalizeValueRec({
+      key: id,
+      raw: rawVal,
+      value: has ? decodeValue(rawPt, typeof rawVal === 'boolean' ? (rawVal ? 1 : 0) : rawVal) : null,
+      ok: !!ok,
+      error: ok ? '' : String(error || ''),
+      at,
+    }))
   }
   return list.slice(-MAX_VALUES)
 }

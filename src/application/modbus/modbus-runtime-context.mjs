@@ -42,6 +42,7 @@ import {
  * @typedef {import('../../types/modbus.js').TransportResult} TransportResult
  * @typedef {import('../../types/workspace.js').Connection} Connection
  * @typedef {import('../../types/workspace.js').Device} Device
+ * @typedef {import('../../types/workspace.js').Point} Point
  * @typedef {import('../../types/workspace.js').PointValue} PointValue
  */
 
@@ -127,7 +128,7 @@ export const frameEntry = createTransactionFrame
 
 /**
  * @param {PointValue[]} values
- * @param {ModbusWorkspace} pack
+ * @param {{ points?: Point[] }} pack
  * @param {ReadBatch} batch
  */
 export const pointValuesOfBatch = (values, pack, batch) => {

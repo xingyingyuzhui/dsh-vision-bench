@@ -59,10 +59,11 @@ pnpm exec tsx /Users/qin/DSH/plugins/dsh-vision-suite/dsh-vision-bench/scripts/p
 | Module-unit same-process `system.ping` | **pass** | `node scripts/probes/run-b2-identity.mjs` (not Desktop product proof) |
 | Child-process negative (no handle) | **pass** | separate PID, `HOST_UNAVAILABLE`, distinct instance id |
 | Fiber names | **pass** | Host `dsh-vision-bench` / Agent `dsh-vision-bench-tools` |
-| **Real Desktop B2** (pack → temp profile → DesktopHostProcess) | **pass** | `pnpm exec tsx scripts/probes/run-desktop-b2-identity.mts` from `apps/desktop`: `hasHandle` ∧ `sameModuleInstance` ∧ `dispatchPath=in-process-handle` ∧ no `:3080` |
+| **Desktop B2 runtime-identity lab** (pack → temp profile → DesktopHostProcess → `agentPresets.mount` → `tools.execute(vision_bench)` → real `/api/vision-bench/dispatch`) | **lab pass** | `pnpm exec tsx scripts/probes/run-desktop-b2-identity.mts` from `apps/desktop`: asserts `vision.tools.start`, registered tools, `hasHandle` ∧ `sameModuleInstance` ∧ `dispatchPath=in-process-handle` ∧ no `:3080`. Claim=`runtime-identity-lab`. Writes `scripts/probes/evidence/desktop-b2-identity.json` (tarball SHA-256 + Vision/Desktop commits + dirty flags) |
+| Official Desktop product install (strictDepBuilds + default allowBuilds) | **not claimed** | probe patches `serialport` allowBuilds + `strict-dep-builds=false` for RTU deps; Stage 3 still **blocked** on official allowBuilds |
 | Source `link:` install | **rejected by probe** | Desktop B2 installs `file:./.dsh-local-plugins/*.tgz` only |
 
-Instrumentation: `VISION_HOST_CLIENT_INSTANCE_ID` in `vision-host-client.mjs`; echoed by `system.ping` as `clientInstanceId`; `pingVisionHost().identity` compares Agent vs Host.
+Instrumentation: `VISION_HOST_CLIENT_INSTANCE_ID` in `vision-host-client.mjs`; standing preset mount via `agentPresets.mount('vision-b2')` loads `dsh-vision-bench/agent` and emits `vision.tools.start`; `tools.execute({ name:'vision_bench', … })` echoes `clientInstanceId`.
 
 ## Desktop rpc control (scheme B)
 
@@ -140,7 +141,7 @@ Date: 2026-09-19
 | ADR-012 Fetch carrier | **updated** | UI product path = `/api/vision-bench/dispatch`; RPC Web-compat only |
 | ADR-014 idle + Fetch | **updated** | cursor wait; idle hangs on `waitForOwnerSession` |
 | Acceptance matrix doc | **added** | `docs/ACCEPTANCE_NATIVE_WEB_DESKTOP.md` |
-| Aggregated auto gate | **pass** | `check-stage5-acceptance.mjs` (static + stage3 + stage4) |
+| Aggregated auto gate | **requires Desktop evidence + clean trees for releaseOk** | `check-stage5-acceptance.mjs`: `labOk` vs `releaseOk`; exit=`releaseOk`; schemaVersion=2 + tarball artifact hash |
 | `SUPPORTED_DSH_CONTRACT` | **unchanged** | still `0.1.5-rc.1` pending release re-measure |
 | Registry Desktop install | **pending manual** | product `name@version` only |
 | Windows HW / RTU native | **deferred** | WINDOWS_ACCEPTANCE + allowBuilds |
@@ -152,7 +153,8 @@ Repro: `node scripts/probes/check-stage5-acceptance.mjs`
 
 - [x] B1 Web pass (register / auth fence / call / uninstall 404)
 - [x] B1 Desktop pass (register / call / uninstall 404 on Desktop Host `/api` pipe) → unlock stage 1 Host `inject=['connection']` work for both carriers
-- [x] Real Desktop B2 pass (`run-desktop-b2-identity.mts`) → in-process handle; keep deleting `127.0.0.1:3080` guess; no Desktop→Web port bridge
+- [x] Desktop B2 **runtime-identity lab** (`run-desktop-b2-identity.mts` + `agentPresets.mount` / `vision.tools.start` / real Vision Fetch cancel) → in-process handle; keep deleting `127.0.0.1:3080` guess; no Desktop→Web port bridge. **Not** official product install / RTU allowBuilds proof.
 - [x] Scheme B (`rpc.handle`) rejected on Desktop without `webServer`
 - [ ] B1 Desktop fail → keep `webServer` for Desktop; Web-only Fetch experiment allowed per B0 default
 - [ ] Product Desktop GUI install still requires registry publish (S6); not a B1 blocker for the transport decision
+- [ ] Official Desktop full-package install without serialport allowBuilds patch (optional RTU package or upstream allowBuilds)
