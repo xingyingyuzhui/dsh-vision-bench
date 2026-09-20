@@ -133,6 +133,7 @@ test('modbusPoll sim path batches contiguous points and fills values', async (t)
     const ran = await modbusPoll(home, cwd)
     assert.equal(ran.ok, true)
     assert.ok(Array.isArray(ran.framesLog))
+    assert.equal(ran.framesLog.length, 0, 'sim poll must not synthesize frames')
     const ws = await import('../../bench-store.mjs').then((m) => m.loadWorkspace(home, cwd))
     const filled = ws.modbus.values.filter((v) => v.ok).length
     assert.equal(filled, 3)

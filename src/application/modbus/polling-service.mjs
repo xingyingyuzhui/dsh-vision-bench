@@ -60,7 +60,6 @@ import {
   pendingState,
   pendingWrites,
   pickModbusPatch,
-  pointBefore,
   pointValuesOfBatch,
   pollLocks,
   prunePendingWrites,
@@ -180,8 +179,9 @@ export const modbusPoll = async (home, cwd, opts) => {
   let timedOut = false
   try {
     let values = pack.values
+    /** @type {Map<string, any>} */
+    const changedById = new Map()
     const framesLog = []
-    const framesByConnection = { ...(pack.framesByConnection || {}) }
     const pollingByConnection = { ...(pack.pollingByConnection || {}) }
     for (const connObj of targetConns) {
       const conn = connObj.conn
@@ -247,16 +247,16 @@ export const modbusPoll = async (home, cwd, opts) => {
             ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw)
               ? ran.result.details.raw
               : []
-          values = scatterBatch(values, pack.points, batch, raw, !!ran.ok, ran.ok ? '' : ran.error || '')
-          let f = ran.frames || framesOf(ran)
-          if (!f && batchConnObj && batchConnObj.conn && batchConnObj.conn.sim) {
-            f = {
-              request: `SIM TX ${batch.fc}@${batch.address}×${batch.count}`,
-              response: `SIM RX ${raw.slice(0, 3).join(',')}`,
-              trace: [],
-              frameFormat: 'rtu-adu',
-            }
+          // Scope scatter to this device/connection's points only — never pack.points.
+          values = scatterBatch(values, scope.points, batch, raw, !!ran.ok, ran.ok ? '' : ran.error || '')
+          for (const rec of pointValuesOfBatch(values, { points: scope.points }, batch)) {
+            const id = rec && (rec.pointId || rec.key)
+            if (id) changedById.set(id, rec)
           }
+          // Real-bus frames only. Sim TX/RX rings burn Host CPU (normalize +
+          // persist) without diagnostic value — Frames page already skips sim.
+          let f = ran.frames || framesOf(ran)
+          if (batchConnObj?.conn?.sim) f = null
           const entry = f
             ? createTransactionFrame(`读 ${functionTag(batch.fc)}${batch.address}×${batch.count}（监视）`, f, {
                 connectionId: scope.connectionId || connId,
@@ -272,18 +272,9 @@ export const modbusPoll = async (home, cwd, opts) => {
                 at: Date.now(),
               })
             : null
-          if (entry) {
-            framesLog.push(entry)
-            if (!framesByConnection[connId]) framesByConnection[connId] = []
-            framesByConnection[connId] = framesByConnection[connId].concat([entry]).slice(-500)
-          }
-          await commitPollResult(home, room.cwd, {
-            baseConfigVersion: pack.configVersion,
-            connectionId: scope.connectionId || connId,
-            deviceId: scope.deviceId,
-            pointValues: pointValuesOfBatch(values, pack, batch),
-            frame: entry,
-          })
+          if (entry) framesLog.push(entry)
+          // Persist once per poll tick (below), not once per Modbus batch —
+          // sparse point maps otherwise rewrite runtime.json hundreds of times.
         }
         if (!connOk) break
       }
@@ -294,6 +285,7 @@ export const modbusPoll = async (home, cwd, opts) => {
         error: timedOut ? '轮询超时' : connOk ? '' : '轮询部分失败',
       }
     }
+    const changedPointValues = [...changedById.values()]
     const alarmEval = evaluateAlarms({
       points: pack.points,
       values,
@@ -302,13 +294,6 @@ export const modbusPoll = async (home, cwd, opts) => {
       connections: pack.connections,
       opts: { deadband: 1 },
     })
-    const alarms = {
-      next: alarmEval.next,
-      fired: alarmEval.fired.filter((/** @type {any} */ f) => f.point),
-      cleared: alarmEval.recovered.filter((/** @type {any} */ r) => r.point),
-      commFired: alarmEval.fired.filter((/** @type {any} */ f) => !f.point),
-      commCleared: alarmEval.recovered.filter((/** @type {any} */ r) => !r.point),
-    }
     const activeBool = Object.fromEntries(
       Object.entries(alarmEval.next)
         .filter(([, v]) => v && v.condition === 'active' && v.group === 'process')
@@ -396,32 +381,29 @@ export const modbusPoll = async (home, cwd, opts) => {
         )
       }
     }
-    await commitPollResult(home, room.cwd, {
+    // One runtime persist per tick: only touched point values + real frames +
+    // polled connection stamps. Never rewrite an untouched values snapshot
+    // (would clobber concurrent write/read and cross-wire trend samples).
+    const committed = await commitPollResult(home, room.cwd, {
       baseConfigVersion: pack.configVersion,
+      pointValues: changedPointValues,
+      frames: framesLog,
       pollingByConnection,
+      alarmActive: activeBool,
     })
-    const saved = await saveWorkspaceAsync(home, room.cwd, {
-      modbus: {
-        alarmActive: activeBool,
-        alarmState: alarmEval.next,
-        polling:
-          pollingByConnection[pack.activeConnectionId || ''] ||
-          pollingByConnection[targetConns[0]?.id || ''] ||
-          pack.polling,
-        pollingByConnection,
-        version: 3,
-      },
-    })
+    const nextMb = committed.workspace.modbus
     return {
       ok,
       skipped: false,
       partial: timedOut,
       timedOut,
-      values: saved.workspace.modbus.values,
-      polling: saved.workspace.modbus.polling,
-      pollingByConnection: saved.workspace.modbus.pollingByConnection,
+      values: nextMb.values,
+      polling: nextMb.pollingByConnection?.[pack.activeConnectionId || ''] ||
+        nextMb.pollingByConnection?.[targetConns[0]?.id || ''] ||
+        nextMb.polling,
+      pollingByConnection: nextMb.pollingByConnection,
       framesLog,
-      framesByConnection: saved.workspace.modbus.framesByConnection,
+      framesByConnection: nextMb.framesByConnection,
       error: ok ? undefined : timedOut ? '轮询超时' : '',
     }
   } finally {

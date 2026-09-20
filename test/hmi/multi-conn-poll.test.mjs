@@ -33,8 +33,8 @@ test('多连接轮询：两条 enabled 连接并行 poll，pollingByConnection �
   assert.equal(ran.pollingByConnection['c2'].lastOk, true)
   assert.ok(ran.pollingByConnection['c1'].lastAt > 0)
   assert.ok(ran.pollingByConnection['c2'].lastAt > 0)
-  assert.ok(Array.isArray(ran.framesByConnection['c1']))
-  assert.ok(Array.isArray(ran.framesByConnection['c2']))
+  // Sim polls no longer synthesize TX/RX frame rings (Host CPU).
+  assert.deepEqual(ran.framesLog || [], [])
   assert.equal(ran.values.filter((v) => v.ok).length, 3)
   const ws = loadWorkspace(home, cwd)
   assert.equal(ws.modbus.values.filter((v) => v.ok).length, 3)
@@ -61,8 +61,14 @@ test('多连接轮询跳过 disabled 连接', async (t) => {
   })
   const ran = await modbusPoll(home, cwd)
   assert.equal(ran.ok, true)
-  assert.ok(Array.isArray(ran.framesByConnection['c1']) && ran.framesByConnection['c1'].length > 0)
-  assert.equal(ran.framesByConnection['c2'], undefined, 'disabled connection must not produce frames key')
+  assert.equal(ran.pollingByConnection['c1'].lastOk, true)
+  assert.equal(ran.values.filter((v) => v && v.ok && String(v.key || v.pointId).startsWith('p1')).length >= 1, true)
+  assert.equal(
+    (ran.values || []).some((v) => v && String(v.key || v.pointId) === 'p2' && v.ok),
+    false,
+    'disabled connection points must not be polled',
+  )
+  assert.deepEqual(ran.framesLog || [], [])
 })
 
 test('pollingByConnection 启用状态 per-connection 隔离', async (t) => {

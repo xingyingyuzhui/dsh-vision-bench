@@ -242,20 +242,28 @@ export const setPointValue = (values, point, raw, opts = {}) => {
  */
 export const scatterBatch = (values, points, batch, raw, ok, error, at = Date.now()) => {
   const list = (Array.isArray(values) ? values : []).map(normalizeValueRec).filter((r) => r.key)
-  const normalized = normalizePoints(points)
   const batchFc = batch ? (batch.fc !== undefined ? batch.fc : batch.function) : undefined
-  for (let i = 0; i < normalized.length; i++) {
-    const p = normalized[i]
-    if (p.function !== batchFc) continue
-    if (p.address < batch.address || p.address >= batch.address + batch.count) continue
-    const idx = p.address - batch.address
+  const batchCid = batch ? String(batch.connectionId || batch.connId || '') : ''
+  const batchDid = batch ? String(batch.deviceId || '') : ''
+  // Do not run normalizePoints() here: it strips connectionId/deviceId and
+  // dedupes by fc:address, which cross-wires same-address points across scopes.
+  for (const rawPt of Array.isArray(points) ? points : []) {
+    if (!rawPt || typeof rawPt !== 'object') continue
+    const fn = Number(rawPt.function)
+    const addr = Number(rawPt.address)
+    if (fn !== batchFc) continue
+    if (!Number.isFinite(addr) || addr < batch.address || addr >= batch.address + batch.count) continue
+    if (batchCid && String(rawPt.connectionId || rawPt.connId || '') !== batchCid) continue
+    if (batchDid && String(rawPt.deviceId || '') !== batchDid) continue
+    const id = String(rawPt.id || '').trim() || pointIdOf(fn, addr)
+    const idx = addr - batch.address
     const has = ok && Array.isArray(raw) && raw[idx] !== undefined
     putValueRec(
       list,
       normalizeValueRec({
-        key: p.id,
+        key: id,
         raw: has ? raw[idx] : null,
-        value: has ? decodeValue(p, typeof raw[idx] === 'boolean' ? (raw[idx] ? 1 : 0) : raw[idx]) : null,
+        value: has ? decodeValue(rawPt, typeof raw[idx] === 'boolean' ? (raw[idx] ? 1 : 0) : raw[idx]) : null,
         ok: !!ok,
         error: ok ? '' : String(error || ''),
         at,

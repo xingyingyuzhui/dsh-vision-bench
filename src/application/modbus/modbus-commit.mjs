@@ -91,7 +91,16 @@ const commit = (home, cwd, input, kind) =>
       values = mergePointValues(pack.values, incoming)
     }
     let framesByConnection = pack.framesByConnection
-    if (input && input.frame) {
+    if (input && Array.isArray(input.frames) && input.frames.length) {
+      for (const rawFrame of input.frames) {
+        if (!rawFrame) continue
+        const frameCid = String(rawFrame.connectionId || cid || '')
+        const frame = drift ? { ...rawFrame, status: 'error', error: 'CONFIG_DRIFT' } : rawFrame
+        if (!frameCid || connections.some((/** @type {any} */ c) => c.id === frameCid) || drift) {
+          framesByConnection = appendFrame(framesByConnection, frameCid, frame)
+        }
+      }
+    } else if (input && input.frame) {
       const frame = drift ? { ...input.frame, status: 'error', error: 'CONFIG_DRIFT' } : input.frame
       if (!cid || connections.some((/** @type {any} */ c) => c.id === cid) || drift) {
         framesByConnection = appendFrame(pack.framesByConnection, cid, frame)
@@ -101,7 +110,10 @@ const commit = (home, cwd, input, kind) =>
       points,
       values,
       prevState: pack.alarmState || pack.alarmActive,
-      pollingByConnection: pack.pollingByConnection,
+      pollingByConnection:
+        (kind === 'poll' && input && input.pollingByConnection
+          ? { ...pack.pollingByConnection, ...input.pollingByConnection }
+          : pack.pollingByConnection) || pack.pollingByConnection,
       connections,
       opts: { deadband: 1 },
     })
@@ -117,6 +129,9 @@ const commit = (home, cwd, input, kind) =>
     })
     if (kind === 'poll' && input && input.pollingByConnection) {
       patch.pollingByConnection = { ...pack.pollingByConnection, ...input.pollingByConnection }
+    }
+    if (kind === 'poll' && input && input.alarmActive && typeof input.alarmActive === 'object') {
+      patch.alarmActive = input.alarmActive
     }
     return { workspace: { ...ws, modbus: { ...ws.modbus, ...patch } } }
   })
