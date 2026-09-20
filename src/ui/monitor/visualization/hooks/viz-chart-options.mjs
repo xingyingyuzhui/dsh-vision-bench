@@ -178,6 +178,7 @@ export function buildBarOption(s = {}, packBar, isDark = false, isPreview = fals
   const barRadius = Number(s.barRadius) || 0
   const barWidth = Number(s.barWidth) || undefined
   const barDec = s.barLabelDecimals
+  const textColor = darkAlpha(isDark, '.72')
   const catAxis = { type: 'category', data: packBar.names, name: isPreview ? undefined : s.xTitle }
   const valAxis = {
     type: 'value',
@@ -189,7 +190,13 @@ export function buildBarOption(s = {}, packBar, isDark = false, isPreview = fals
   return {
     animation: false,
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis' },
+    textStyle: { color: textColor, fontSize: isPreview ? 10 : 12 },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: isDark ? 'rgba(20,24,32,.92)' : 'rgba(255,255,255,.96)',
+      borderColor: darkAlpha(isDark, '.12'),
+      textStyle: { color: textColor },
+    },
     grid: isPreview
       ? { left: 30, right: 12, top: 14, bottom: 22 }
       : { left: yUnit ? 50 : 38, right: 16, top: yUnit ? 24 : 14, bottom: 26 },
@@ -202,6 +209,7 @@ export function buildBarOption(s = {}, packBar, isDark = false, isPreview = fals
         label: {
           show: s.showBarLabel !== false,
           position: s.barLabelPos || (isHoriz ? 'right' : 'top'),
+          color: textColor,
           formatter: barDec != null && barDec !== '' ? (p) => Number(p.value).toFixed(Number(barDec)) : '{c}',
         },
         data: packBar.values.map((v, i) => ({

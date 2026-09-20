@@ -268,8 +268,10 @@ export function createHmiLiveActions(ctx, core) {
         version: 3,
       })
       if (nextSim) {
+        const pollingCfg = pack.pollingByConnection?.[connectionId] || {}
+        const intervalMs = Math.max(200, Number(pollingCfg.intervalMs) || 1000)
         await post('/dsh-vision-bench/connection/open', { cwd, sessionId, connectionId }, 15000).catch(() => {})
-        await post('/dsh-vision-bench/polling/start', { cwd, sessionId, connectionId, intervalMs: 1000 }, 15000).catch(() => {})
+        await post('/dsh-vision-bench/polling/start', { cwd, sessionId, connectionId, intervalMs }, 15000).catch(() => {})
       } else {
         await post('/dsh-vision-bench/polling/stop', { cwd, sessionId, connectionId }, 15000).catch(() => {})
         await post('/dsh-vision-bench/connection/close', { cwd, sessionId, connectionId }, 15000).catch(() => {})
@@ -288,7 +290,11 @@ export function createHmiLiveActions(ctx, core) {
     setLinkBusy('poll')
     setError('')
     const url = d.watchEnabled ? '/dsh-vision-bench/polling/stop' : '/dsh-vision-bench/polling/start'
-    return post(url, { cwd, sessionId, connectionId: d.activeConnId }, 15000)
+    const body = { cwd, sessionId, connectionId: d.activeConnId }
+    if (!d.watchEnabled) {
+      body.intervalMs = Math.max(200, Number(d.polling?.intervalMs) || 1000)
+    }
+    return post(url, body, 15000)
       .then(async (data) => {
         if (data?.ok === false) setError(formatErrorMessage(data.error) || t('fail'))
         try {

@@ -72,7 +72,7 @@ test('commitPollResult computes alarmActive and returns fired only after success
   assert.equal(again.alarms.alarmActive.p1, true)
 })
 
-test('config drift commit does not change alarmActive or return fired', async (t) => {
+test('config drift commit suppresses fired notifications and skips stale value merge', async (t) => {
   const bench = await createBench(t, { prefix: 'dvb-alarm-drift-' })
   const { home, cwd } = bench
   bench.save({

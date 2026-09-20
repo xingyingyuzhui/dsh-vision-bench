@@ -168,7 +168,7 @@ export function useVizCharts(React, { components, points, trendStore }) {
           series: [{}].concat(
             payload.meta.map((m, idx) => ({
               label: m.label,
-              spanGaps: false,
+              spanGaps: s.connectNulls !== false,
               stroke: s.lineColor || VIZ_COLORS[idx % VIZ_COLORS.length],
               width: Number(s.lineWidth) || 2,
               points: { show: s.showSymbol !== false },

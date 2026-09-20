@@ -44,7 +44,7 @@ export function createVizCard(React, t) {
 
     function renderCardBody() {
       if (degraded) {
-        if (comp.type === 'line' && typeof destroyChart === 'function') {
+        if ((comp.type === 'line' || comp.type === 'bar') && typeof destroyChart === 'function') {
           destroyChart(comp.id)
         }
         return el(
@@ -120,7 +120,13 @@ export function createVizCard(React, t) {
           onToggle(wantOn) {
             onToggleSwitch?.(
               comp,
-              { connectionId: pt.connectionId, deviceId: pt.deviceId, pointId: pt.id, address: pt.address },
+              {
+                connectionId: pt.connectionId,
+                deviceId: pt.deviceId,
+                pointId: pt.id,
+                address: pt.address,
+                function: pt.function,
+              },
               wantOn,
             )
           },

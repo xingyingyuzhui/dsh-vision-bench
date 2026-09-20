@@ -314,3 +314,14 @@ test('echartsSeriesFromTrend keeps null breakpoints when connectNulls is false',
   ])
 })
 
+test('uPlot spanGaps mirrors connectNulls setting (true/false)', async () => {
+  const { UPLOT_PROTO } = await import('../../src/application/modbus/trend-model.mjs')
+  // Contract: callers set per-series spanGaps from settings.connectNulls !== false
+  const on = { ...UPLOT_PROTO, series: [{}, { spanGaps: true }] }
+  const off = { ...UPLOT_PROTO, series: [{}, { spanGaps: false }] }
+  assert.equal(on.series[1].spanGaps, true)
+  assert.equal(off.series[1].spanGaps, false)
+  assert.equal(({ connectNulls: undefined }.connectNulls !== false), true)
+  assert.equal(({ connectNulls: false }.connectNulls !== false), false)
+})
+

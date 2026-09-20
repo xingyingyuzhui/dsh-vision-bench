@@ -11,6 +11,7 @@ export function renderChartStyleTab(fields, isLine) {
         rowSel('线宽', 'lineWidth', P('1:1 px,2:2 px,3:3 px,4:4 px')),
         rowColor('曲线颜色', 'lineColor', '#4D85FF'),
         rowSwitch('showSymbol', '数据点标记'),
+        rowSwitch('connectNulls', '连接空值断点', true),
         rowSwitch('area', '面积填充', false),
         sec('网格线'),
         rowSwitch('yShowGrid', '横向网格'),
