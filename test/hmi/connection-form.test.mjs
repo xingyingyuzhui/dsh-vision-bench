@@ -115,6 +115,50 @@ test('renderConnectionForm displays 采集间隔 select, openConnEdit and saveCo
   assert.equal(posts[0].body.intervalMs, 500)
 })
 
+test('addConnection stays on 全部连接 and opens the connection editor', () => {
+  let hmiTab = 'c1'
+  let connForm = { open: false }
+  let devForm = { open: false }
+  const actionCtx = {
+    cwd: '/mock',
+    post: async () => ({ ok: true }),
+    setError: () => {},
+    setFrameFilter: () => {},
+    setDevForm: (updater) => {
+      devForm = typeof updater === 'function' ? updater(devForm) : updater
+    },
+    connForm,
+    setConnForm: (updater) => {
+      connForm = typeof updater === 'function' ? updater(connForm) : updater
+    },
+    setHmiTab: (id) => {
+      hmiTab = id
+    },
+    setMoreOpen: () => {},
+    pendingDeleteId: '',
+    setPendingDeleteId: () => {},
+    lastDeviceByConn: { current: {} },
+  }
+  const pack = {
+    connections: [{ id: 'c1', name: '旧连接', role: 'client', conn: { mode: 'rtu', port: 'COM1' } }],
+    devices: [],
+    points: [],
+    pollingByConnection: {},
+    framesByConnection: {},
+  }
+  const core = {
+    normalizePack: () => pack,
+    persist: () => {},
+    activeConnIdOf: () => 'c1',
+  }
+  const actions = createHmiConnectionActions(actionCtx, core)
+  actions.addConnection()
+  assert.equal(hmiTab, 'all')
+  assert.equal(connForm.open, true)
+  assert.ok(connForm.id && connForm.id !== 'c1')
+  assert.equal(devForm.open, false)
+})
+
 test('renderConnectionForm serial select does not show 未发现串口, provides COM1-COM20 and custom input', async () => {
   const el = (type, props, ...children) => ({ type, props, children: children.flat().filter(Boolean) })
   const t = (k) =>

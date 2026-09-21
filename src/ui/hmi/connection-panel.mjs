@@ -190,7 +190,7 @@ export function renderConnectionPanel(el, t, ctx) {
                             : st === 'disconnecting'
                               ? t('connDisconnecting') || '断开中'
                               : st === 'error'
-                                ? t('connRetry') || '重试连接'
+                                ? t('connRetry') || '重试'
                                 : t('connLink') || '连接',
                       ),
                       el(

@@ -74,7 +74,7 @@ export function renderDeviceCards(el, t, ctx) {
               ? '断开仿真'
               : t('connUnlink') || '断开'
             : activeLinkSt === 'error'
-              ? t('connRetry') || '重试连接'
+              ? t('connRetry') || '重试'
               : isSimulated
                 ? '启动仿真'
                 : t('connLink') || '连接',

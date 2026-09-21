@@ -122,7 +122,8 @@ export function createSourceEditor(React) {
           '&': { height: '100%', fontSize: 'var(--dvb-font-size-sm, 12px)' },
           '.cm-scroller': {
             overflow: 'auto',
-            maxHeight: '320px',
+            maxHeight: debugMode ? 'none' : '320px',
+            height: debugMode ? '100%' : undefined,
             fontFamily: 'var(--dvb-font-family-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)',
           },
           '.dvb-cm-exec': { backgroundColor: 'var(--dvb-color-exec-line, rgba(250, 204, 21, 0.35))' },

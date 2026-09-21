@@ -252,10 +252,7 @@ export const modbusPoll = async (home, cwd, opts) => {
             const id = rec && (rec.pointId || rec.key)
             if (id) changedById.set(id, rec)
           }
-          // Real-bus frames only. Sim TX/RX rings burn Host CPU (normalize +
-          // persist) without diagnostic value — Frames page already skips sim.
-          let f = ran.frames || framesOf(ran)
-          if (batchConnObj?.conn?.sim) f = null
+          const f = ran.frames || framesOf(ran)
           const entry = f
             ? createTransactionFrame(`读 ${functionTag(batch.fc)}${batch.address}×${batch.count}（监视）`, f, {
                 connectionId: scope.connectionId || connId,

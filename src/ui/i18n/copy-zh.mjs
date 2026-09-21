@@ -292,7 +292,7 @@ export const COPY_ZH = {
     connLink: '连接',
     connConnecting: '连接中',
     connDisconnecting: '断开中',
-    connRetry: '重试连接',
+    connRetry: '重试',
     connErr: '连接异常',
     connOff: '未连接',
     connEditLocked: '连接中不可修改端点参数，请先断开',

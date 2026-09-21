@@ -45,7 +45,7 @@ test('modbusPoll sim sparse points fills all values with a single tick persist',
   const ran = await modbusPoll(home, cwd, { connectionId: 'c1' })
   const elapsed = Date.now() - started
   assert.equal(ran.ok, true, ran.error)
-  assert.equal(Array.isArray(ran.framesLog) && ran.framesLog.length, 0, 'sim must not synthesize frames')
+  assert.ok(Array.isArray(ran.framesLog) && ran.framesLog.length > 0, 'sim poll records frames for the 串口报文 page')
   const ws = loadWorkspace(home, cwd)
   const filled = (ws.modbus.values || []).filter((v) => v.ok).length
   assert.equal(filled, 40)
