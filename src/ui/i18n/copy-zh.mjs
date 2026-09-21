@@ -18,7 +18,6 @@ export const COPY_ZH = {
     shareSaved: '已更新工作区共享',
     navBehaviorTitle: '页面导航',
     preserveLastView: '返回上次离开的页面',
-    preserveLastViewHint: '开启后，从其他功能切换回上位机或监控时，保持在上次离开的连接或子页面；关闭后始终回到总览。',
     presetAppliesNextSession: '修改工具绑定后，新建会话生效。已打开的会话保持原配置。',
     python: 'Python (已不再需要)',
     uv4: 'Keil UV4',

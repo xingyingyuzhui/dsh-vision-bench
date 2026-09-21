@@ -271,7 +271,6 @@ export function createSettingsPage(React, t, post, options = {}) {
         ),
       ),
       el('div', { className: 'dvb-title', style: { marginTop: '16px' } }, t('navBehaviorTitle')),
-      el('div', { className: 'dvb-hint', style: { marginBottom: '6px' } }, t('preserveLastViewHint')),
       settingRow(
         el('span', { style: { fontWeight: 500 } }, t('preserveLastView')),
         renderSwitch(
