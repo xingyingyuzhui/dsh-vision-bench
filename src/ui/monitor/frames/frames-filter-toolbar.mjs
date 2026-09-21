@@ -118,7 +118,6 @@ export function createFramesFilterToolbar(React, t) {
       ...protoFilters,
       el('input', {
         className: 'dvb-input dvb-frames-search',
-        style: { width: '180px', flex: 'none' },
         value: search,
         placeholder: t('serialFilter') || '过滤关键字',
         onChange: (e) => setSearch(e.target.value),
