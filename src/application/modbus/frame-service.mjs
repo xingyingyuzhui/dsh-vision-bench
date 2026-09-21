@@ -131,7 +131,13 @@ export const listFrames = (home, cwd, body) => {
       errorCode: stale ? ERROR_CODES.STALE_VALUE : undefined,
     }
   }
-  const slice = enriched.slice(Math.max(0, enriched.length - limit - offset), enriched.length - offset)
+  const slice = (() => {
+    const length = enriched.length
+    if (offset >= length) return []
+    const end = Math.max(0, length - offset)
+    const start = Math.max(0, end - limit)
+    return enriched.slice(start, end)
+  })()
   // Detect stale: last frame older than 60s?
   const last = enriched[enriched.length - 1]
   const stale = last ? Date.now() - Number(last.t) > 60 * 1000 : false

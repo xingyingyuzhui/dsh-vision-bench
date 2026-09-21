@@ -269,6 +269,25 @@ test('Task2/0.20.1: 同时间戳合并去重；窗口过滤；零样本点保留
   assert.equal(narrow.data[1][0], 2)
 })
 
+test('trendDataForComponents xAutoScroll false keeps the first-sample window', () => {
+  const origin = 1_700_000_000_000
+  const store = {
+    p1: [
+      [origin, 1],
+      [origin + 10_000, 2],
+      [origin + 120_000, 9],
+    ],
+  }
+  const points = [{ id: 'p1', name: 'A' }]
+  const latest = trendDataForComponents(store, points, ['p1'], 60_000, { autoScroll: true, now: origin + 120_000 })
+  assert.equal(latest.data[1][latest.data[1].length - 1], 9)
+  assert.ok(!latest.data[1].includes(1), 'auto-scroll drops the origin once it leaves the window')
+  const fromStart = trendDataForComponents(store, points, ['p1'], 60_000, { autoScroll: false, now: origin + 120_000 })
+  assert.equal(fromStart.data[1][0], 1)
+  assert.equal(fromStart.data[1][fromStart.data[1].length - 1], 2)
+  assert.ok(!fromStart.data[1].includes(9), 'from-start window does not jump to the latest sample')
+})
+
 test('echartsSeriesFromTrend filters interleaving nulls and enables symbols', async () => {
   const { echartsSeriesFromTrend } = await import('../../src/ui/monitor/visualization/viz-helpers.mjs')
   const payload = {

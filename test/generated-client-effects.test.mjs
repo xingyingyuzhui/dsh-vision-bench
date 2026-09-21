@@ -287,7 +287,8 @@ test('Task10: generated client renders the real frames tab with 5000 rows (1–4
   )
   const rows = tree.container.querySelectorAll('.dvb-live-row')
   assert.ok(rows.length < 50, 'viewport-limited in generated client: ' + rows.length)
-  assert.equal(rows[0].getAttribute('data-frameid'), 'c1-f1', 'first row frame 1')
+  const firstId = rows[0].getAttribute('data-frameid')
+  assert.match(String(firstId), /^c1-f\d+:tx$/, 'first row is a projected wire frame')
   // scroll window changes
   const list = tree.container.querySelector('.dvb-frames-virtual')
   await act(async () => {
@@ -300,7 +301,7 @@ test('Task10: generated client renders the real frames tab with 5000 rows (1–4
       const ids = Array.from(tree.container.querySelectorAll('.dvb-live-row')).map((el) =>
         el.getAttribute('data-frameid'),
       )
-      assert.ok(!ids.includes('c1-f1'), 'scroll moved the visible window in generated client: ' + ids.slice(0, 4))
+      assert.ok(!ids.includes(firstId), 'scroll moved the visible window in generated client: ' + ids.slice(0, 4))
     },
     { timeout: 6000 },
   )

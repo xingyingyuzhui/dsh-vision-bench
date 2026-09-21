@@ -1,5 +1,6 @@
 import {
   mergeFramesDedup,
+  projectTransactionsToWireFrames,
   rawLineId,
   selectProtocolFrames,
 } from '../../../domain/modbus/frames-model.mjs'
@@ -59,9 +60,11 @@ export function buildLiveFrames(opts) {
     if (sel.kind === 'conn') {
       const persistedArray = framesByConnection[sel.connectionId]
       const mem = getFramesLog(frameScope, sel.connectionId)
-      liveFrames = mergeFramesDedup(persistedArray, mem, 500)
+      liveFrames = projectTransactionsToWireFrames(mergeFramesDedup(persistedArray, mem, 500))
     } else {
-      liveFrames = mergeFramesDedup(selectProtocolFrames(framesByConnection, 'all'), getFramesLog(frameScope), 1000)
+      liveFrames = projectTransactionsToWireFrames(
+        mergeFramesDedup(selectProtocolFrames(framesByConnection, 'all'), getFramesLog(frameScope), 1000),
+      )
     }
   } else {
     const lines = Array.isArray(serial?.lines) ? serial.lines : []

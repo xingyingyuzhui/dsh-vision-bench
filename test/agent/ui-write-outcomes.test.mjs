@@ -47,6 +47,15 @@ test('approved write reports protocol result and readback consistency (§16.5-34
   assert.equal(badRun.ok, false)
   assert.equal(badRun.errorCode, ERROR_CODES.WRITE_READBACK_MISMATCH)
   assert.match(badRun.summary || badRun.error, /回读不一致/)
+  const ws = loadWorkspace(home, cwd)
+  const frames = (ws.modbus.framesByConnection && ws.modbus.framesByConnection.c1) || []
+  const writeTx = frames.filter((f) => !String(f.transactionId || '').includes(':readback'))
+  const readbacks = frames.filter((f) => String(f.transactionId || '').includes(':readback'))
+  assert.ok(writeTx.length >= 2, 'ok write and mismatch write both persist')
+  assert.ok(readbacks.length >= 2, 'each write persists a readback frame')
+  const mismatchReadback = readbacks.find((f) => f.status === 'error')
+  assert.ok(mismatchReadback, 'mismatch readback transaction present')
+  assert.match(String(mismatchReadback.error || ''), /WRITE_READBACK_MISMATCH|不一致/)
 })
 
 test('write timeout is outcome-unknown and not retried', async (t) => {

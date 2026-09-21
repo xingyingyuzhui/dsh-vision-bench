@@ -1,3 +1,5 @@
+import { toBodyPortal } from '../../common/body-portal.mjs'
+
 /**
  * @param {any} React
  * @param {(key: string) => string} t
@@ -8,7 +10,7 @@ export function createKeilPickerDialog(React, t) {
     const { picker, busy, openPicker, chooseProject, onClose } = props
     if (!picker) return null
 
-    return el(
+    return toBodyPortal(el(
       'div',
       {
         className: 'dvb-mask',
@@ -84,6 +86,6 @@ export function createKeilPickerDialog(React, t) {
           ? el('div', { className: 'dvb-hint' }, t('pickerEmpty'))
           : null,
       ),
-    )
+    ))
   }
 }

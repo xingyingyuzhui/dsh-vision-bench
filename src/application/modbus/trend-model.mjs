@@ -226,29 +226,44 @@ export function toUplotData(cwd, opts = {}) {
  * @param {any} [points]
  * @param {any} [componentIds]
  * @param {any} [windowMs]
+ * @param {{ autoScroll?: boolean, now?: number }} [opts]
  * @returns {any}
  */
-export const trendDataForComponents = (trendStore, points, componentIds = [], windowMs = TREND_WINDOW_MS) => {
+export const trendDataForComponents = (trendStore, points, componentIds = [], windowMs = TREND_WINDOW_MS, opts = {}) => {
   const store = trendStore && typeof trendStore === 'object' ? trendStore : {}
   const byId = new Map((Array.isArray(points) ? points : []).map((/** @type {any} */ p) => [p.id, p]))
   const ids = (Array.isArray(componentIds) ? componentIds : []).slice(0, 8)
-  const now = Date.now()
-  const cutoff = now - (Number(windowMs) > 0 ? Number(windowMs) : TREND_WINDOW_MS)
-  // 收集每个点位的窗口样本与全局时间戳集合
+  const options = opts && typeof opts === 'object' ? opts : {}
+  const now = options.now != null ? Number(options.now) : Date.now()
+  const win = Number(windowMs) > 0 ? Number(windowMs) : TREND_WINDOW_MS
+  const autoScroll = options.autoScroll !== false
   const seriesByPoint = new Map()
   const timeSet = new Set()
+  let origin = Infinity
   for (const pid of ids) {
     const pt = byId.get(pid)
     const list = Array.isArray(store[pid]) ? store[pid] : []
-    const samples = []
+    const raw = []
     for (const sv of list) {
       if (!Array.isArray(sv)) continue
       const t = Number(sv[0])
-      if (!Number.isFinite(t) || t <= 0 || t < cutoff) continue
-      samples.push([t, sv[1] == null ? null : Number(sv[1])])
-      timeSet.add(t)
+      if (!Number.isFinite(t) || t <= 0) continue
+      raw.push([t, sv[1] == null ? null : Number(sv[1])])
+      if (t < origin) origin = t
     }
-    seriesByPoint.set(pid, { samples, pt })
+    seriesByPoint.set(pid, { raw, pt })
+  }
+  const cutoff = autoScroll || !Number.isFinite(origin) ? now - win : origin
+  const until = autoScroll || !Number.isFinite(origin) ? Infinity : origin + win
+  for (const pid of ids) {
+    const entry = seriesByPoint.get(pid)
+    const samples = []
+    for (const sv of entry.raw) {
+      if (sv[0] < cutoff || sv[0] > until) continue
+      samples.push(sv)
+      timeSet.add(sv[0])
+    }
+    entry.samples = samples
   }
   const times = [...timeSet].sort((a, /** @type {any} */ b) => a - b)
   const data = []

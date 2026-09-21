@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildLineOption } from '../../src/ui/monitor/visualization/hooks/viz-chart-options.mjs'
+import { buildLineOption, padLineYMax, resolveLineTimeRange } from '../../src/ui/monitor/visualization/hooks/viz-chart-options.mjs'
 import {
   chartState,
   dataFingerprint,
@@ -9,7 +9,7 @@ import {
 } from '../../src/ui/monitor/visualization/viz-helpers.mjs'
 import { sampleTrendValues } from '../../src/application/modbus/trend-store.mjs'
 
-test('buildLineOption max uses real lastSampleMs (not interval-floored)', () => {
+test('buildLineOption keeps the newest sample inside the axis (not interval-floored)', () => {
   // 90s past a minute boundary → floor would clip the newest sample out of range
   const lastSec = Math.floor(Date.UTC(2026, 0, 1, 12, 0, 90) / 1000)
   const payload = {
@@ -21,15 +21,51 @@ test('buildLineOption max uses real lastSampleMs (not interval-floored)', () => 
     meta: [{ label: 'A', unit: '℃' }],
   }
   const opt = buildLineOption({ windowMs: 300000 }, payload, false)
-  assert.equal(opt.xAxis.max, lastSec * 1000)
+  assert.ok(opt.xAxis.min <= (lastSec - 60) * 1000)
+  assert.ok(opt.xAxis.max >= lastSec * 1000)
   assert.ok(opt.xAxis.min < opt.xAxis.max)
+})
+
+test('resolveLineTimeRange starts at the first sample while the window is still filling', () => {
+  const firstSec = 1_700_000_000
+  const lastSec = firstSec + 15
+  const payload = { data: [[firstSec, lastSec], [1, 2]] }
+  const range = resolveLineTimeRange({ windowMs: 60000 }, payload)
+  assert.equal(range.min, firstSec * 1000)
+  assert.equal(range.max, firstSec * 1000 + 60000)
+  assert.ok(range.max > lastSec * 1000, 'latest point is inside the window, not on the right edge')
+  const opt = buildLineOption({ windowMs: 60000 }, payload, false)
+  assert.equal(opt.xAxis.min, range.min)
+  assert.equal(opt.xAxis.max, range.max)
+})
+
+test('resolveLineTimeRange with xAutoScroll false stays pinned to the first sample', () => {
+  const firstSec = 1_700_000_000
+  const lastSec = firstSec + 180
+  const range = resolveLineTimeRange({ windowMs: 60000, xAutoScroll: false }, { data: [[firstSec, lastSec], [1, 2]] })
+  assert.equal(range.min, firstSec * 1000)
+  assert.equal(range.max, firstSec * 1000 + 60000)
+})
+
+test('resolveLineTimeRange slides after the window is full', () => {
+  const firstSec = 1_700_000_000
+  const lastSec = firstSec + 180
+  const range = resolveLineTimeRange({ windowMs: 60000 }, { data: [[firstSec, lastSec], [1, 2]] })
+  assert.equal(range.min, lastSec * 1000 - 60000)
+  assert.ok(range.max > lastSec * 1000, 'right pad so the last symbol is not clipped')
+})
+
+test('padLineYMax leaves headroom above the latest peak', () => {
+  assert.ok(padLineYMax(0, 80) > 80)
 })
 
 test('buildLineOption falls back to wall clock when there are no samples', () => {
   const before = Date.now()
   const opt = buildLineOption({ windowMs: 300000 }, { data: [] }, false)
   const after = Date.now()
-  assert.ok(opt.xAxis.max >= before && opt.xAxis.max <= after)
+  assert.ok(opt.xAxis.min <= after)
+  assert.ok(opt.xAxis.max >= before)
+  assert.ok(opt.xAxis.max - opt.xAxis.min === 300000 + Math.max(250, Math.round(300000 * 0.02)))
 })
 
 test('chartState splits series / data / option fingerprints', () => {

@@ -42,7 +42,7 @@ export function createVizGrid(React) {
           minRow: editMinRow,
           animate: false,
           handle: '.dvb-viz-head-main, .dvb-viz-drag',
-          disableOneColumnMode: false,
+          disableOneColumnMode: true,
           staticGrid: !isEditable,
           disableDrag: !isEditable,
           disableResize: !isEditable,

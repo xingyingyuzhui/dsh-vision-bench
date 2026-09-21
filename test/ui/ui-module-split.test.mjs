@@ -138,9 +138,9 @@ test('pure models filter frames and project files without React', () => {
     viewClearedAt: 20,
   })
   assert.equal(cleared.length, 1)
-  assert.equal(cleared[0].frameId, 'new')
+  assert.equal(cleared[0].frameId, 'new:tx')
   assert.equal(pickDisplayedFrames(true, { proto: [{ frameId: 'snap' }] }, 'proto', cleared)[0].frameId, 'snap')
-  assert.equal(pickDisplayedFrames(false, { proto: [{ frameId: 'snap' }] }, 'proto', cleared)[0].frameId, 'new')
+  assert.equal(pickDisplayedFrames(false, { proto: [{ frameId: 'snap' }] }, 'proto', cleared)[0].frameId, 'new:tx')
   const file = {
     name: 'main.c',
     rel: 'src/main.c',

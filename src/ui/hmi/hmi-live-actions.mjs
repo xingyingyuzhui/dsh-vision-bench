@@ -69,7 +69,22 @@ export function createHmiLiveActions(ctx, core) {
         const isShared = Boolean(
           workspaceRef.current?.modbus?.share?.enabled && workspaceRef.current?.modbus?.share?.connections,
         )
-        pushFramesLog({ cwd, sessionId, isShared }, activeConnId, data.framesLog || data.frames || [])
+        const scope = { cwd, sessionId, isShared }
+        const log = data.framesLog || data.frames || []
+        /** @type {Map<string, any[]>} */
+        const byConn = new Map()
+        for (const entry of Array.isArray(log) ? log : []) {
+          if (!entry) continue
+          const cid = String(entry.connectionId || activeConnId || '')
+          if (!cid) continue
+          if (!byConn.has(cid)) byConn.set(cid, [])
+          byConn.get(cid).push(entry)
+        }
+        if (byConn.size === 0 && Array.isArray(log) && log.length) {
+          pushFramesLog(scope, activeConnId, log)
+        } else {
+          for (const [cid, group] of byConn) pushFramesLog(scope, cid, group)
+        }
         if (Array.isArray(data.values)) {
           setWorkspace((prev) => ({ ...prev, modbus: { ...prev.modbus, values: data.values } }))
           workspaceRef.current = {

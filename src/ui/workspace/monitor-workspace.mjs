@@ -34,30 +34,41 @@ export function createMonitorWorkspace(React, t, post, hooks) {
     [MONITOR_SECTIONS.FRAMES]: FramesPage,
     [MONITOR_SECTIONS.JOURNAL]: LogPage,
   }
-  const labels = {
-    [MONITOR_SECTIONS.VISUALIZATION]: t('liveChart'),
-    [MONITOR_SECTIONS.ALARMS]: t('liveAlarm'),
-    [MONITOR_SECTIONS.FRAMES]: t('framesTab'),
-    [MONITOR_SECTIONS.JOURNAL]: t('liveLog'),
-  }
   const sections = [
     MONITOR_SECTIONS.VISUALIZATION,
     MONITOR_SECTIONS.ALARMS,
     MONITOR_SECTIONS.FRAMES,
     MONITOR_SECTIONS.JOURNAL,
   ]
+  const localeSubscribe = hooks?.localeSubscribe
 
   return function MonitorWorkspace(props) {
     const el = React.createElement
     const sessionId = props?.sessionId || ''
     const cwd = sessionCwd(props)
     const [section, setSection] = React.useState(() => initialSection(sessionId, cwd))
+    const [localeTick, setLocaleTick] = React.useState(0)
+    React.useEffect(() => {
+      setLocaleTick((n) => n + 1)
+      if (typeof localeSubscribe !== 'function') return undefined
+      return localeSubscribe(() => setLocaleTick((n) => n + 1))
+    }, [])
+    void localeTick
+    // Resolve labels at render time — factory-time t() can freeze browser-provisional
+    // English before the host preference (zh) lands; primary tabs use label() callbacks.
+    const labels = {
+      [MONITOR_SECTIONS.VISUALIZATION]: t('liveChart'),
+      [MONITOR_SECTIONS.ALARMS]: t('liveAlarm'),
+      [MONITOR_SECTIONS.FRAMES]: t('framesTab'),
+      [MONITOR_SECTIONS.JOURNAL]: t('liveLog'),
+    }
     React.useEffect(() => {
       setSection(initialSection(sessionId, cwd))
       return subscribeNav(sessionId, cwd, (nav) => {
         if (nav && nav.viewId === VIEW_MONITOR && isMonitorSection(nav.section)) setSection(nav.section)
       })
     }, [sessionId, cwd])
+    const vizActive = section === MONITOR_SECTIONS.VISUALIZATION
     const Page = pages[section] || VizPage
     return el(
       'div',
@@ -76,7 +87,22 @@ export function createMonitorWorkspace(React, t, post, hooks) {
           }
         },
       }),
-      el('div', { className: 'dvb-ws-body' }, el(Page, props)),
+      el(
+        'div',
+        { className: 'dvb-ws-body' },
+        el(
+          'div',
+          {
+            className: 'dvb-ws-pane',
+            'data-section': MONITOR_SECTIONS.VISUALIZATION,
+            'data-active': vizActive ? 'true' : 'false',
+            'aria-hidden': vizActive ? 'false' : 'true',
+            inert: vizActive ? undefined : true,
+          },
+          el(VizPage, props),
+        ),
+        vizActive ? null : el(Page, props),
+      ),
     )
   }
 }

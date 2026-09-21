@@ -86,11 +86,25 @@ test('live source list only includes connected RTU, never unconfigured COM', asy
     },
     { timeout: 6000 },
   )
-  const sel = Array.from(tree.container.querySelectorAll('select'))[0]
-  const values = Array.from(sel.querySelectorAll('option')).map((o) => o.value)
+  // Protocol mode lists every configured connection (including disconnected).
+  let sel = Array.from(tree.container.querySelectorAll('select'))[0]
+  let values = Array.from(sel.querySelectorAll('option')).map((o) => o.value)
   assert.ok(values.includes('all'))
   assert.ok(values.includes('conn:c1'))
-  assert.ok(!values.includes('conn:c2'), 'disconnected COM4 hidden')
+  assert.ok(values.includes('conn:c2'), 'proto lists disconnected configured COM4')
+  assert.ok(!values.some((v) => String(v).startsWith('raw:')), 'unconfigured COM hidden')
+  await act(async () => {
+    const rawBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '原始数据')
+    assert.ok(rawBtn, 'raw mode button exists')
+    rawBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 40))
+  })
+  // Raw mode only lists currently connected RTU sources.
+  sel = Array.from(tree.container.querySelectorAll('select'))[0]
+  values = Array.from(sel.querySelectorAll('option')).map((o) => o.value)
+  assert.ok(values.includes('all'))
+  assert.ok(values.includes('conn:c1'))
+  assert.ok(!values.includes('conn:c2'), 'raw hides disconnected COM4')
   assert.ok(!values.some((v) => String(v).startsWith('raw:')), 'unconfigured COM hidden')
   tree.unmount()
 })

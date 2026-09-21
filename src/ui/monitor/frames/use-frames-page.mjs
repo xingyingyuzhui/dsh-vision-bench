@@ -4,8 +4,6 @@ import {
   countAddedFrameIds,
   frameStreamKey,
   framesShouldStickToBottom,
-  parseFramePortSelection,
-  rawLineId,
   resolveFrameSelection,
 } from '../../../domain/modbus/frames-model.mjs'
 import {
@@ -27,6 +25,7 @@ import {
   framesAsText,
   pickDisplayedFrames,
 } from './frames-table-model.mjs'
+import { startRawFeedPolling } from './raw-feed-polling.mjs'
 
 const ESTIMATE_SIZE = 36
 
@@ -85,6 +84,7 @@ export function useFramesPage(React, props, post) {
   const cursorRef = React.useRef(new Map())
   const lastAtBottomRef = React.useRef(true)
   const rawCursorRef = React.useRef(0)
+  const feedEpochRef = React.useRef('')
 
   React.useEffect(() => {
     setHealth({})
@@ -95,6 +95,7 @@ export function useFramesPage(React, props, post) {
     setPausedSnapshot(null)
     setPendingNew(0)
     rawCursorRef.current = 0
+    feedEpochRef.current = ''
   }, [realCwd, sessionId])
 
   React.useEffect(() => {
@@ -116,55 +117,18 @@ export function useFramesPage(React, props, post) {
   React.useEffect(() => {
     if (mode !== 'raw' || !realCwd) {
       rawCursorRef.current = 0
+      feedEpochRef.current = ''
       return undefined
     }
-    let stop = false
-    rawCursorRef.current = 0
-    setSerial((s) => ({ ...s, lines: [], lastId: 0, lastAt: 0, error: '' }))
-    const pull = () => {
-      const selNow = parseFramePortSelection(selection)
-      post(
-        '/dsh-vision-bench/serial/feed',
-        {
-          cwd: realCwd,
-          sessionId: sessionId || undefined,
-          connectionId: selNow.kind === 'conn' ? selNow.connectionId : '',
-          since: rawCursorRef.current,
-        },
-        10000,
-      )
-        .then((data) => {
-          if (stop || !data) return
-          const incoming = Array.isArray(data.lines) ? data.lines : []
-          const nextCursor = Number(data.lastId)
-          if (Number.isFinite(nextCursor) && nextCursor > 0) rawCursorRef.current = nextCursor
-          setSerial((prev) => {
-            const seen = new Set()
-            const lines = []
-            for (const l of prev.lines.concat(incoming)) {
-              const id = rawLineId(l.port, l, 0)
-              if (seen.has(id)) continue
-              seen.add(id)
-              lines.push(l)
-            }
-            const lastAt = lines.reduce((m, l) => Math.max(m, Number(l.at || l.t || 0)), prev.lastAt || 0)
-            return {
-              ...prev,
-              lastId: Number.isFinite(nextCursor) && nextCursor > 0 ? nextCursor : prev.lastId,
-              lastAt,
-              lines: lines.slice(-2000),
-              error: data.error || '',
-            }
-          })
-        })
-        .catch(() => {})
-    }
-    pull()
-    const timer = setInterval(pull, 700)
-    return () => {
-      stop = true
-      clearInterval(timer)
-    }
+    return startRawFeedPolling({
+      post,
+      realCwd,
+      sessionId,
+      selection,
+      rawCursorRef,
+      feedEpochRef,
+      setSerial,
+    })
   }, [realCwd, sessionId, mode, selection])
 
   const pack = (() => {

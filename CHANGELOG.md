@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.29.4
+
+- 编辑组件弹窗挂到 `document.body`，不再被会话区 `container-type` 和底部输入框（z-index 7）盖住。Keil 工程选择器同样处理。
+
+## 0.29.3
+
+- 折线图时间轴在窗口未填满时从第一条样本起算（从左往右长），不再把十几秒数据拉满整轴、把最新点贴在右边缘裁掉。关闭「自动滚动」会钉在起点窗口。Y 轴自动范围给峰值留出余量。
+
+## 0.29.2
+
+- 监控二级 tab 切走再回来时，可视化页保持挂载（`visibility` 隐藏，不用 `display:none`），折线图不再按 140px 占位高度重算 Y 轴。
+- 图表等到容器有真实宽高再 `init`；ECharts 与 uPlot 都跟 ResizeObserver。GridStack 关闭 one-column 折叠。
+
+## 0.29.1
+
+- 监控/调试二级 tab 在渲染时再取文案，避免 Host 中文偏好落地前被浏览器临时英文冻结成 Charts / Alarms / Serial Frames / Operation Log。
+- Client 体积上限随 locale tick 调至 1 667 000 bytes。
+
 ## 0.29.0
 
 结构与测试重构收口（计划 P0–P6）：
