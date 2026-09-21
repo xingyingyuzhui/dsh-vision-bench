@@ -46,7 +46,7 @@ export function createAlarmPage(React, t, post, hooks) {
     // Selection & details
     const [selectedId, setSelectedId] = React.useState('')
     const [checkedIds, setCheckedIds] = React.useState(new Set())
-    const [note, setNote] = React.useState('')
+
 
     React.useEffect(() => {
       setEvents([])
@@ -151,8 +151,6 @@ export function createAlarmPage(React, t, post, hooks) {
       if (next?._suggested) return
       setAlarmState(next)
       if (cwd) post('/dsh-vision-bench/workspace', { cwd, modbus: { alarmState: next, version: 3 } }).catch(() => {})
-      setNote('告警已确认')
-      setTimeout(() => setNote(''), 2000)
     }
 
     // Batch acknowledge
@@ -165,8 +163,6 @@ export function createAlarmPage(React, t, post, hooks) {
       setAlarmState(nextState)
       if (cwd) post('/dsh-vision-bench/workspace', { cwd, modbus: { alarmState: nextState, version: 3 } }).catch(() => {})
       setCheckedIds(new Set())
-      setNote(`已确认 ${checkedIds.size} 条告警`)
-      setTimeout(() => setNote(''), 2000)
     }
 
     // Acknowledge all
@@ -190,15 +186,10 @@ export function createAlarmPage(React, t, post, hooks) {
         },
         { configVersion: cv, start: row.a.firstAt || row.a.lastAt, end: row.a.lastAt },
       )
-      const res = await dispatchAgentRef(ref, agentBridge)
-      setNote(res?.status || '已复制告警引用')
-      setTimeout(() => setNote(''), 2000)
+      await dispatchAgentRef(ref, agentBridge)
       if (cwd) {
         try {
-          postEvidence(post, cwd, evidenceFromRef(ref), (reason) => {
-            setNote(reason)
-            setTimeout(() => setNote(''), 4000)
-          })
+          postEvidence(post, cwd, evidenceFromRef(ref), () => {})
         } catch {}
       }
     }
@@ -336,7 +327,6 @@ export function createAlarmPage(React, t, post, hooks) {
         onSearchChange: setSearch,
         onReset: handleReset,
       }),
-      note ? el('div', { className: 'dvb-msg', 'data-kind': 'info' }, note) : null,
       el(
         'div',
         { className: 'dvb-alarms-split' },
