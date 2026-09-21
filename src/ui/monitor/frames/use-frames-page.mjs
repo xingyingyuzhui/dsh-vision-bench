@@ -152,6 +152,7 @@ export function useFramesPage(React, props, post) {
     framesByConnection,
     frameScope,
     serial,
+    connections,
     viewClearedAt,
   })
   const displayedFrames = pickDisplayedFrames(paused, pausedSnapshot, mode, liveFrames)

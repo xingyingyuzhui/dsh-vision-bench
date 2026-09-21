@@ -65,6 +65,19 @@ test('frames identity: proto lists configured connections; raw keeps live RTU on
   assert.ok(!raw.some((o) => o.value === 'conn:c2'), 'raw hides unconnected COM4')
 })
 
+test('frames identity: raw lists connected sim sources', async () => {
+  const conns = [
+    { id: 'c1', name: '真机', conn: { mode: 'rtu', port: 'COM3' } },
+    { id: 'sim1', name: '仿真', conn: { mode: 'rtu', port: 'COM9', sim: true } },
+  ]
+  const live = [
+    { connectionId: 'c1', port: 'COM3', state: 'connected' },
+    { connectionId: 'sim1', port: 'COM9', state: 'connected' },
+  ]
+  const raw = buildFramePortOptions(conns, [], 'raw', live)
+  assert.ok(raw.some((o) => o.value === 'conn:sim1'), 'raw includes connected sim')
+})
+
 test('frames identity: selecting COM3 only shows c1 frames, COM4 only c2, all merges by time', async () => {
   const c1 = selectProtocolFrames(FBC, 'conn:c1')
   assert.deepEqual(

@@ -51,7 +51,6 @@ export function buildFramePortOptions(connections, serialPorts, mode, liveSource
     if (!src || src.state !== 'connected') continue
     const c = byId.get(src.connectionId)
     if (c && c.conn && c.conn.mode === 'tcp') continue
-    if (c && c.conn && c.conn.sim) continue
     const port = src.port || (c && c.conn && c.conn.port) || ''
     if (!port) continue
     opts.push({

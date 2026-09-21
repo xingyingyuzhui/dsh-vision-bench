@@ -49,9 +49,10 @@ test('listConnectedSerialSources only returns live connected RTU', async () => {
     const listed = await listConnectedSerialSources(home, cwd, { transport: fake })
     assert.deepEqual(
       listed.sources.map((s) => s.connectionId),
-      ['c1'],
+      ['c1', 'c4'],
     )
     assert.equal(listed.sources[0].port, 'COM3')
+    assert.equal(listed.sources[1].simulated, true)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

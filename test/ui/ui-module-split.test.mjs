@@ -148,6 +148,18 @@ test('pure models filter frames and project files without React', () => {
   })
   assert.equal(cleared.length, 1)
   assert.equal(cleared[0].frameId, 'new:tx')
+  const simRaw = buildLiveFrames({
+    mode: 'raw',
+    sel: { kind: 'all' },
+    connections: [{ id: 'sim1', conn: { sim: true, mode: 'rtu', port: 'COM9' } }],
+    framesByConnection: {
+      sim1: [{ frameId: 's1', t: 50, at: 50, request: 'SIM TX', direction: 'tx' }],
+    },
+    frameScope: { cwd: '', sessionId: '', isShared: false },
+    serial: { lines: [] },
+    viewClearedAt: 0,
+  })
+  assert.ok(simRaw.length > 0, 'sim protocol frames appear in raw mode')
   assert.equal(pickDisplayedFrames(true, { proto: [{ frameId: 'snap' }] }, 'proto', cleared)[0].frameId, 'snap')
   assert.equal(pickDisplayedFrames(false, { proto: [{ frameId: 'snap' }] }, 'proto', cleared)[0].frameId, 'new:tx')
   const file = {

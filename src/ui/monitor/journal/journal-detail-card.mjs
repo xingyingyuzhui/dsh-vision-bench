@@ -14,7 +14,7 @@ export function createJournalDetailCard(React, t) {
 
   return function JournalDetailCard(props) {
     const { item, onAddToAgent, onJumpTask } = props
-    const [rawExpanded, setRawExpanded] = React.useState(true)
+
 
     if (!item) {
       return el(
@@ -119,29 +119,8 @@ export function createJournalDetailCard(React, t) {
       el(
         'div',
         { className: 'dvb-detail-raw-section' },
-        el(
-          'button',
-          {
-            type: 'button',
-            className: 'dvb-raw-toggle',
-            onClick() {
-              setRawExpanded(!rawExpanded)
-            },
-          },
-          el('span', null, '📄 原始记录'),
-          el(
-            'span',
-            { className: `dvb-raw-chevron${rawExpanded ? ' is-open' : ''}` },
-            rawExpanded ? '⌵' : '›',
-          ),
-        ),
-        rawExpanded
-          ? el(
-              'div',
-              { className: 'dvb-raw-box' },
-              el('pre', { className: 'dvb-raw-pre' }, jsonStr),
-            )
-          : null,
+        el('div', { className: 'dvb-raw-label' }, '原始记录'),
+        el('div', { className: 'dvb-raw-box' }, el('pre', { className: 'dvb-raw-pre' }, jsonStr)),
       ),
     )
   }

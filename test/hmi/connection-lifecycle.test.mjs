@@ -40,7 +40,7 @@ test('TCP never appears in serialSources even when connected', async (t) => {
   )
 })
 
-test('sim connections report virtual connected state and are excluded from serial sources', async (t) => {
+test('sim connections report virtual connected state and appear as serial sources', async (t) => {
   const { home, cwd } = await setup(t, [connection('c4', 'rtu', 'COM7', { sim: true })])
   const transport = fakeTransport([{ connectionId: 'c4', state: 'connected', connectedAt: 1, port: 'COM7' }])
   const st = await listConnectionStates(home, cwd, { transport })
@@ -48,7 +48,9 @@ test('sim connections report virtual connected state and are excluded from seria
   assert.equal(st.connectionStates[0].status, 'connected')
   assert.equal(st.connectionStates[0].simulated, true)
   const src = await listConnectedSerialSources(home, cwd, { transport })
-  assert.equal(src.sources.length, 0, 'sim excluded from physical serial sources')
+  assert.equal(src.sources.length, 1)
+  assert.equal(src.sources[0].connectionId, 'c4')
+  assert.equal(src.sources[0].simulated, true)
 })
 
 test('frames port options: proto lists all configured connections; raw only connected RTU', async () => {
@@ -71,7 +73,7 @@ test('frames port options: proto lists all configured connections; raw only conn
   const raw = buildFramePortOptions(conns, [], 'raw', live)
   assert.deepEqual(
     raw.map((o) => o.value),
-    ['all', 'conn:c1'],
-    'raw mode keeps connected RTU-only (no TCP, no sim)',
+    ['all', 'conn:c1', 'conn:c4'],
+    'raw mode keeps connected RTU including sim, no TCP',
   )
 })
