@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.29.6
+
+- 编辑组件卡片边框不再只依赖 `--dvb-bdr` 继承：`border` 带字面 fallback，挂到 `document.body` 后类型卡 / 配置卡 / 预览 / 筛选胶囊仍有线框。
+
 ## 0.29.5
 
 - 编辑组件弹窗挂到 `document.body` 后仍继承 `--dvb-bdr`，类型卡 / 配置卡 / 预览 / 筛选胶囊线框不再消失。

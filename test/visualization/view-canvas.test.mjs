@@ -145,8 +145,8 @@ test('画布编辑模式切换：点击「编辑画布」解锁网格，点击�
 test('组件编辑：页签下只保留一条分隔线（去掉首个分组标题的顶边）', async () => {
   const { VISUALIZATION_CSS } = await import('../../src/ui/styles/visualization.mjs')
   const css = VISUALIZATION_CSS.join('')
-  assert.match(css, /\.dvb-viz-tabs-bar\{[^}]*border-bottom:1px solid var\(--dvb-bdr\)/)
-  assert.match(css, /\.dvb-viz-group-title\{[^}]*border-top:1px solid var\(--dvb-bdr\)/)
+  assert.match(css, /\.dvb-viz-tabs-bar\{[^}]*border-bottom:1px solid var\(--dvb-bdr,/)
+  assert.match(css, /\.dvb-viz-group-title\{[^}]*border-top:1px solid var\(--dvb-bdr,/)
   assert.match(css, /\.dvb-viz-group-title:first-child\{border-top:0\}/)
 })
 
@@ -165,5 +165,10 @@ test('组件编辑弹窗锁在视口内，不把整页撑出滚动', async () =>
     css,
     /\.dvb-viz,\.dvb-viz-modal-mask,\.dvb-viz-modal\{--dvb-bdr:var\(--dsw-alias-border-l2,rgba\(128,128,128,\.25\)\)\}/,
     'portaled editor inherits card borders without a .dvb-viz ancestor',
+  )
+  assert.match(
+    css,
+    /:is\(\.dvb-viz-modal,\.dvb-viz-type-card,\.dvb-viz-config-card,\.dvb-viz-preview-panel,\.dvb-viz-filter-pill\)\{border:1px solid var\(--dvb-bdr,var\(--dsw-alias-border-l2,rgba\(128,128,128,\.25\)\)\)\}/,
+    'editor card borders keep a literal fallback if --dvb-bdr is unset',
   )
 })
