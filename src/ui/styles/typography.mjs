@@ -50,6 +50,7 @@ export const TYPOGRAPHY_CSS = [
     '--dvb-color-error:var(--dsw-alias-state-error-primary,#ef4444);' +
     '--dvb-color-exec-line:rgba(250,204,21,.35);' +
     '--dvb-color-border:var(--dsw-alias-border-l2,rgba(128,128,128,.28));' +
+    '--dvb-bdr:var(--dvb-color-border);' +
     '--dvb-color-border-strong:var(--dsw-alias-border-l1,rgba(128,128,128,.4));' +
     '--dvb-bg-base:var(--dsw-alias-bg-base,#fff);' +
     '--dvb-bg-surface:var(--dsw-alias-bg-layer-1,#fff);' +

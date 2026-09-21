@@ -161,4 +161,9 @@ test('组件编辑弹窗锁在视口内，不把整页撑出滚动', async () =>
   assert.doesNotMatch(css, /dvb-viz-picker-list\)\{border:1px/)
   assert.match(css, /body:has\(\.dvb-viz-modal-mask\)\{overflow:hidden\}/)
   assert.match(css, /\.dvb-viz-drawer-body\{[^}]*overscroll-behavior:contain/)
+  assert.match(
+    css,
+    /\.dvb-viz,\.dvb-viz-modal-mask,\.dvb-viz-modal\{--dvb-bdr:var\(--dsw-alias-border-l2,rgba\(128,128,128,\.25\)\)\}/,
+    'portaled editor inherits card borders without a .dvb-viz ancestor',
+  )
 })

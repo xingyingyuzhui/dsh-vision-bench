@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.29.5
+
+- 编辑组件弹窗挂到 `document.body` 后仍继承 `--dvb-bdr`，类型卡 / 配置卡 / 预览 / 筛选胶囊线框不再消失。
+
 ## 0.29.4
 
 - 编辑组件弹窗挂到 `document.body`，不再被会话区 `container-type` 和底部输入框（z-index 7）盖住。Keil 工程选择器同样处理。

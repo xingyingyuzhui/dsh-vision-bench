@@ -13,6 +13,7 @@ test('typography declares semantic Vision tokens mapped to host aliases', () => 
     '--dvb-radius-dialog',
     '--dvb-z-modal',
     '--dvb-mask-bg',
+    '--dvb-bdr',
     '--dvb-focus-ring',
   ]) {
     assert.ok(root.includes(name), `missing ${name}`)
