@@ -169,20 +169,20 @@ export function renderConnectionPanel(el, t, ctx) {
                         'button',
                         {
                           type: 'button',
-                          className: 'dvb-btn dvb-btn-primary',
+                          className: st === 'connected' ? 'dvb-btn' : 'dvb-btn dvb-btn-primary',
                           disabled:
                             !cwd ||
                             !!linkBusy ||
-                            !!c.conn?.sim ||
                             st === 'connecting' ||
                             st === 'disconnecting' ||
-                            st === 'connected',
+                            (st !== 'connected' && !!c.conn?.sim),
                           onClick() {
-                            linkConnection(c.id)
+                            if (st === 'connected') unlinkConnection(c.id)
+                            else linkConnection(c.id)
                           },
                         },
                         st === 'connected'
-                          ? t('connLive') || '已连接'
+                          ? t('connUnlink') || '断开'
                           : st === 'connecting'
                             ? t('connConnecting') || '连接中'
                             : st === 'disconnecting'
@@ -191,20 +191,6 @@ export function renderConnectionPanel(el, t, ctx) {
                                 ? t('connRetry') || '重试连接'
                                 : t('connLink') || '连接',
                       ),
-                      st === 'connected'
-                        ? el(
-                            'button',
-                            {
-                              type: 'button',
-                              className: 'dvb-btn',
-                              disabled: !cwd || !!linkBusy,
-                              onClick() {
-                                unlinkConnection(c.id)
-                              },
-                            },
-                            t('connUnlink') || '断开',
-                          )
-                        : null,
                       el(
                         'button',
                         {
