@@ -27,6 +27,11 @@ export function filterFrameList(frames, filters, search) {
   return frames.filter((frame) => frameMatchesFilters(frame, filters, search))
 }
 
+export function sortFramesNewestFirst(frames) {
+  if (!Array.isArray(frames)) return []
+  return [...frames].sort((a, b) => (b.at || b.t || 0) - (a.at || a.t || 0))
+}
+
 /** Raw rows have no device/FC/status/source; proto filters must not hide them. */
 export function filtersForMode(mode, filters) {
   const flt = filters && typeof filters === 'object' ? filters : {}

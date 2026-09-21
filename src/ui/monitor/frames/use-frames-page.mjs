@@ -3,7 +3,7 @@ import {
   buildFramePortOptions,
   countAddedFrameIds,
   frameStreamKey,
-  framesShouldStickToBottom,
+  framesShouldStickToTop,
   resolveFrameSelection,
 } from '../../../domain/modbus/frames-model.mjs'
 import {
@@ -17,7 +17,7 @@ import {
 } from '../../common/agent-reference.mjs'
 import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
 import { subscribeState } from '../../common/state-subscription.mjs'
-import { filterFrameList } from './frames-filter-model.mjs'
+import { filterFrameList, sortFramesNewestFirst } from './frames-filter-model.mjs'
 import {
   buildLiveFrames,
   downloadFramesFile,
@@ -155,10 +155,12 @@ export function useFramesPage(React, props, post) {
     viewClearedAt,
   })
   const displayedFrames = pickDisplayedFrames(paused, pausedSnapshot, mode, liveFrames)
-  const filtered = filterFrameList(
-    displayedFrames,
-    mode === 'raw' ? { direction: filters.direction || '' } : filters,
-    search,
+  const filtered = sortFramesNewestFirst(
+    filterFrameList(
+      displayedFrames,
+      mode === 'raw' ? { direction: filters.direction || '' } : filters,
+      search,
+    ),
   )
 
   const streamKey = frameStreamKey(mode, selection)
@@ -174,11 +176,9 @@ export function useFramesPage(React, props, post) {
     const el = listRef.current
     const inst = vizerRef.current
     if (inst && typeof inst.scrollToOffset === 'function') {
-      const viewH = el?.clientHeight || 320
-      const total = typeof inst.getTotalSize === 'function' ? inst.getTotalSize() : filtered.length * ESTIMATE_SIZE
-      inst.scrollToOffset(Math.max(0, total - viewH), { align: 'start' })
+      inst.scrollToOffset(0, { align: 'start' })
     } else if (el) {
-      el.scrollTop = el.scrollHeight || filtered.length * ESTIMATE_SIZE
+      el.scrollTop = 0
     }
     if (updateRef) wasAtBottomRef.current = true
     setPendingNew(0)
@@ -358,8 +358,8 @@ export function useFramesPage(React, props, post) {
       return
     }
     if (filtered.some((row) => String(row.frameId || row.id) === String(selectedFrameId))) return
-    const last = filtered[filtered.length - 1]
-    setSelectedFrameId(String(last.frameId || last.id || ''))
+    const newest = filtered[0]
+    setSelectedFrameId(String(newest.frameId || newest.id || ''))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredIds, selectedFrameId])
 
@@ -373,15 +373,15 @@ export function useFramesPage(React, props, post) {
   function noteScrollPosition() {
     const el2 = listRef.current
     if (el2) {
-      const atBottom = framesShouldStickToBottom(el2.scrollTop, el2.scrollHeight, el2.clientHeight)
-      wasAtBottomRef.current = atBottom
-      lastAtBottomRef.current = atBottom
+      const atLatest = framesShouldStickToTop(el2.scrollTop)
+      wasAtBottomRef.current = atLatest
+      lastAtBottomRef.current = atLatest
     }
   }
 
   function onScroll() {
     const el2 = listRef.current
-    if (el2) wasAtBottomRef.current = framesShouldStickToBottom(el2.scrollTop, el2.scrollHeight, el2.clientHeight)
+    if (el2) wasAtBottomRef.current = framesShouldStickToTop(el2.scrollTop)
   }
 
   return {

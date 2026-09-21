@@ -5,6 +5,7 @@ export {
   selectProtocolFrames,
   mergeFramesDedup,
   framesShouldStickToBottom,
+  framesShouldStickToTop,
   countAddedFrameIds,
   frameStreamKey,
   rawLineId,

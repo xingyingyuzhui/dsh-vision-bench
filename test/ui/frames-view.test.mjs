@@ -5,6 +5,7 @@ import { createElement } from 'react'
 import {
   buildFramePortOptions,
   framesShouldStickToBottom,
+  framesShouldStickToTop,
   mergeFramesDedup,
   parseFramePortSelection,
   resolveFrameSelection,
@@ -113,6 +114,12 @@ test('frames auto-follow only at bottom', async () => {
   assert.equal(framesShouldStickToBottom(700, 1000, 300), true)
   assert.equal(framesShouldStickToBottom(695, 1000, 300), true)
   assert.equal(framesShouldStickToBottom(500, 1000, 300), false)
+})
+
+test('frames newest-first auto-follow only at top', async () => {
+  assert.equal(framesShouldStickToTop(0), true)
+  assert.equal(framesShouldStickToTop(4), true)
+  assert.equal(framesShouldStickToTop(20), false)
 })
 
 test('cli wiring: frames/clear endpoint exists in RPC contract', () => {
