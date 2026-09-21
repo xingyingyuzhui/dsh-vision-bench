@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.29.9
+
+- 可视化组件操作栏「让 Agent 分析」改为与上位机点位相同的紧凑 **AI** 按钮。
+
 ## 0.29.8
 
 - 折线图数据点改为实心圆（ECharts `symbol: 'circle'`，uPlot 点填充与线同色），不再用默认空心 `emptyCircle`。

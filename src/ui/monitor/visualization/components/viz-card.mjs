@@ -168,14 +168,14 @@ export function createVizCard(React, t) {
             'button',
             {
               type: 'button',
-              className: 'dvb-btn dvb-btn-sm',
+              className: 'dvb-btn dvb-btn-sm dvb-ai-btn',
               title: hasInputHarness ? '让 Agent 分析' : '复制引用',
               'aria-label': `让 Agent 分析组件 ${comp.name || comp.id}`,
               onClick() {
                 onCopyRef?.(comp)
               },
             },
-            hasInputHarness ? '让 Agent 分析' : '复制引用',
+            'AI',
           ),
           el(
             'button',

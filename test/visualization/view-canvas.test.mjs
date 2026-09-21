@@ -67,8 +67,8 @@ test('未来 schema 进入只读模式：可查看、不可改、不发写请求
     newBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
   })
   assert.equal(tree.container.textContent.includes('编辑组件'), false, '点击 disabled 不打开编辑器')
-  const agentBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '复制引用')
-  assert.ok(agentBtn && !agentBtn.disabled, '复制引用仍可用')
+  const agentBtn = tree.container.querySelector('.dvb-viz-head-actions .dvb-ai-btn')
+  assert.ok(agentBtn && agentBtn.textContent === 'AI' && !agentBtn.disabled, 'AI 引用仍可用')
   await act(async () => {
     agentBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
   })
