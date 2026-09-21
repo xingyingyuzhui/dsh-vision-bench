@@ -30,11 +30,12 @@ test('resolveLineTimeRange starts at the first sample while the window is still 
   const firstSec = 1_700_000_000
   const lastSec = firstSec + 15
   const payload = { data: [[firstSec, lastSec], [1, 2]] }
-  const range = resolveLineTimeRange({ windowMs: 60000 }, payload)
+  const liveNow = lastSec * 1000
+  const range = resolveLineTimeRange({ windowMs: 60000 }, payload, liveNow)
   assert.equal(range.min, firstSec * 1000)
   assert.equal(range.max, firstSec * 1000 + 60000)
   assert.ok(range.max > lastSec * 1000, 'latest point is inside the window, not on the right edge')
-  const opt = buildLineOption({ windowMs: 60000 }, payload, false)
+  const opt = buildLineOption({ windowMs: 60000 }, payload, false, false, liveNow)
   assert.equal(opt.xAxis.min, range.min)
   assert.equal(opt.xAxis.max, range.max)
 })
@@ -42,7 +43,8 @@ test('resolveLineTimeRange starts at the first sample while the window is still 
 test('resolveLineTimeRange with xAutoScroll false stays pinned to the first sample', () => {
   const firstSec = 1_700_000_000
   const lastSec = firstSec + 180
-  const range = resolveLineTimeRange({ windowMs: 60000, xAutoScroll: false }, { data: [[firstSec, lastSec], [1, 2]] })
+  const liveNow = lastSec * 1000
+  const range = resolveLineTimeRange({ windowMs: 60000, xAutoScroll: false }, { data: [[firstSec, lastSec], [1, 2]] }, liveNow)
   assert.equal(range.min, firstSec * 1000)
   assert.equal(range.max, firstSec * 1000 + 60000)
 })
@@ -50,9 +52,20 @@ test('resolveLineTimeRange with xAutoScroll false stays pinned to the first samp
 test('resolveLineTimeRange slides after the window is full', () => {
   const firstSec = 1_700_000_000
   const lastSec = firstSec + 180
-  const range = resolveLineTimeRange({ windowMs: 60000 }, { data: [[firstSec, lastSec], [1, 2]] })
+  const liveNow = lastSec * 1000
+  const range = resolveLineTimeRange({ windowMs: 60000 }, { data: [[firstSec, lastSec], [1, 2]] }, liveNow)
   assert.equal(range.min, lastSec * 1000 - 60000)
   assert.ok(range.max > lastSec * 1000, 'right pad so the last symbol is not clipped')
+})
+
+test('resolveLineTimeRange freezes at the last sample when the feed goes stale', () => {
+  const firstSec = 1_700_000_000
+  const lastSec = firstSec + 15
+  const payload = { data: [[firstSec, lastSec], [1, 2]] }
+  const range = resolveLineTimeRange({ windowMs: 60000 }, payload, lastSec * 1000 + 30_000)
+  assert.equal(range.min, firstSec * 1000)
+  assert.ok(range.max <= lastSec * 1000 + 2000)
+  assert.ok(range.max >= lastSec * 1000)
 })
 
 test('padLineYMax leaves headroom above the latest peak', () => {

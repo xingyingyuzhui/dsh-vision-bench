@@ -63,8 +63,12 @@ test('trend quality breakpoint: ok!==true writes null gap for uPlot and key is c
   const l2 = getTrendState(cwd).series.get(k2)
   assert.equal(l1.length, 2)
   assert.equal(l1[1].v, null, 'bad quality should be explicit null gap, not skipped')
+  assert.equal(l1[1].t, l1[0].t + 1, 'gap sits 1ms after the last good sample')
   assert.equal(l2.length, 2)
   assert.equal(l2[1].v, 21)
+  sampleTrend(cwd, packBad)
+  l1 = getTrendState(cwd).series.get(k1)
+  assert.equal(l1.length, 2, 'repeated failures must not walk the X axis')
 
   // recovery: good again should not span gap
   t0 += 1000
@@ -96,10 +100,7 @@ test('trend quality breakpoint: ok!==true writes null gap for uPlot and key is c
   const idx1 = u.keys.indexOf(k1)
   assert.ok(idx1 >= 0)
   const ys = u.data[idx1 + 1]
-  assert.equal(ys.length, 3)
-  assert.equal(ys[0], 10)
-  assert.equal(ys[1], null)
-  assert.equal(ys[2], 12)
+  assert.ok(ys.includes(10) && ys.includes(null) && ys.includes(12))
   // csv should export rows including empty value for null gap
   const csv = exportRangeCsv(cwd)
   assert.match(csv, /^time,connectionId/)

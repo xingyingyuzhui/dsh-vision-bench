@@ -69,16 +69,23 @@ export const sampleTrend = (cwd, pack) => {
       list = []
       state.series.set(key, list)
     }
-    // quality breakpoint: bad quality writes explicit null gap for uPlot spanGaps:false
+    // One null gap at the last good timestamp. Do not keep appending wall-clock
+    // nulls while disconnected — that walks the X axis into empty space.
     if (rec.ok !== true) {
-      list.push({ t: now, v: null })
-      if (list.length > TREND_CAP) list.splice(0, list.length - TREND_CAP)
+      const last = list[list.length - 1]
+      if (last && last.v !== null) {
+        list.push({ t: last.t + 1, v: null })
+        if (list.length > TREND_CAP) list.splice(0, list.length - TREND_CAP)
+      }
       continue
     }
     const rawV = rec.value !== null && rec.value !== undefined ? Number(rec.value) : Number(rec.raw)
     if (!Number.isFinite(rawV)) {
-      list.push({ t: now, v: null })
-      if (list.length > TREND_CAP) list.splice(0, list.length - TREND_CAP)
+      const last = list[list.length - 1]
+      if (last && last.v !== null) {
+        list.push({ t: last.t + 1, v: null })
+        if (list.length > TREND_CAP) list.splice(0, list.length - TREND_CAP)
+      }
       continue
     }
     list.push({ t: now, v: rawV })

@@ -56,10 +56,21 @@ export const sampleTrendValues = (trendIn, pointValues, pointsById) => {
     if (!pt || pt.monitorEnabled !== true) continue
     let list = Array.isArray(trend[pid]) ? trend[pid].slice() : []
     // 通信失败 → null 断点；成功 → 数值（回退 raw）
+    const ok = rec.ok !== false
     let val = null
-    if (rec.ok !== false) {
+    if (ok) {
       const n = Number(rec.value)
       val = Number.isFinite(n) ? n : Number.isFinite(Number(rec.raw)) ? Number(rec.raw) : null
+    }
+    const last = list[list.length - 1]
+    if (!ok || val == null) {
+      if (last && last[1] != null) {
+        list.push([last[0] + 1, null])
+        if (list.length > TREND_KEEP) list = list.slice(list.length - TREND_KEEP)
+        trend[pid] = list
+        touched = true
+      }
+      continue
     }
     list.push([Number(rec.at) || now, val])
     if (list.length > TREND_KEEP) list = list.slice(list.length - TREND_KEEP)

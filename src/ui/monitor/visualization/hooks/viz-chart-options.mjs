@@ -76,14 +76,28 @@ export function resolveLineTimeRange(s = {}, payload, explicitNow) {
   const lastSec = n && Number.isFinite(Number(xs[n - 1])) ? Number(xs[n - 1]) : null
   const firstMs = firstSec != null ? firstSec * 1000 : null
   const lastMs = lastSec != null ? lastSec * 1000 : null
-  const now = explicitNow != null ? Number(explicitNow) : lastMs != null ? lastMs : Date.now()
+  const wall = explicitNow != null ? Number(explicitNow) : Date.now()
+  const now = lastMs != null ? lastMs : wall
   if (isCount) {
     return { isCount: true, min: 1, max: n || 1, windowMs, now, firstMs, lastMs }
   }
   const autoScroll = s.xAutoScroll !== false
   const padMs = Math.max(250, Math.round(windowMs * 0.02))
+  const staleMs = Math.max(3000, Math.round(windowMs * 0.05))
   if (firstMs != null && lastMs != null && lastMs >= firstMs) {
     const span = lastMs - firstMs
+    const stale = wall - lastMs > staleMs
+    if (stale) {
+      return {
+        isCount: false,
+        min: span < windowMs ? firstMs : lastMs - windowMs,
+        max: lastMs + padMs,
+        windowMs,
+        now,
+        firstMs,
+        lastMs,
+      }
+    }
     if (!autoScroll || span < windowMs) {
       return { isCount: false, min: firstMs, max: firstMs + windowMs, windowMs, now, firstMs, lastMs }
     }

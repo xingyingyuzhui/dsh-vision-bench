@@ -1,6 +1,6 @@
 # dsh-vision-bench · Vision 模式
 
-当前版本 **0.29.23**。需要 DSH `0.1.5-rc.1` 及以上（契约钉在 `src/infrastructure/harness/dsh-contract.mjs`；本机对齐 `0.1.6-alpha.1`）。
+当前版本 **0.29.24**。需要 DSH `0.1.5-rc.1` 及以上（契约钉在 `src/infrastructure/harness/dsh-contract.mjs`；本机对齐 `0.1.6-alpha.1`）。
 
 会话区里的调试 / 上位机 / 监控工作台。跟 Claw 无关。同一份现场状态同时给界面和当前 Session 的 Agent 用。
 

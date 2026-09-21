@@ -120,10 +120,12 @@ test('通信失败写入 null 断点（曲线不断连错误区间）', async ()
     trend.p2,
     [
       [100, 10],
-      [200, null],
+      [101, null],
     ],
-    '失败样本为 null 断点',
+    '失败样本为 null 断点，时间钉在最后有效点之后 1ms',
   )
+  const again = sampleTrendValues(trend, [{ pointId: 'p2', ok: false, error: '超时', at: 300 }], byId)
+  assert.equal(again.p2.length, 2, '连续失败不再往 X 轴塞空点')
 })
 
 test('旧字段迁移：trendEnabled 点位 → monitorEnabled 语义（规范化兼容）', async () => {
