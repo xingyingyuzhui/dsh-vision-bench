@@ -37,7 +37,6 @@ export function renderValueWidget(el, spec = {}) {
   const size = Number(s.valueSize) || 48
   const radius = Number(s.cardRadius) || 8
   const status = s.showStatus === false ? '' : valueStatus(spec.value, ok, s)
-  const time = s.showUpdatedAt === false ? '' : formatClock(spec.at)
   const style = {
     textAlign: align,
     alignItems: align === 'center' ? 'center' : 'flex-start',
@@ -52,7 +51,6 @@ export function renderValueWidget(el, spec = {}) {
   return el(
     'div',
     { className: 'dvb-viz-body dvb-viz-value-card', 'data-align': align, style },
-    s.showTitle === false ? null : el('span', { className: 'dvb-viz-value-name' }, spec.name || ''),
     valueRow,
     status
       ? el(
@@ -62,7 +60,6 @@ export function renderValueWidget(el, spec = {}) {
           STATUS_LABEL[status] || status,
         )
       : null,
-    time ? el('span', { className: 'dvb-viz-value-time' }, empty ? '暂无数据' : `更新于 ${time}`) : null,
   )
 }
 

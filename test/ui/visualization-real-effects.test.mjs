@@ -113,17 +113,22 @@ test('Task4: VisualizationPage 让 Agent 分析组件 uses the input bridge, pre
     const writeSpy = () => copiedNotes.push('copied')
     if (origWrite) navigator.clipboard.writeText = writeSpy
     const tree = render(createElement(Trend, props))
+    await waitFor(() => assert.ok(tree.container.querySelector('.dvb-viz-more'), 'viz more button'), { timeout: 6000 })
+    await act(async () => {
+      tree.container.querySelector('.dvb-viz-more').dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+      await new Promise((r) => setTimeout(r, 40))
+    })
     await waitFor(
       () => {
-        const btn = Array.from(tree.container.querySelectorAll('button')).find((b) =>
+        const btn = Array.from(document.querySelectorAll('[role=menuitem]')).find((b) =>
           (b.getAttribute('aria-label') || '').includes('让 Agent 分析组件'),
         )
-        assert.ok(btn, 'visualization agent button rendered after real effect')
+        assert.ok(btn, 'visualization agent menu item after open')
       },
       { timeout: 6000 },
     )
     await act(async () => {
-      const btn = Array.from(tree.container.querySelectorAll('button')).find((b) =>
+      const btn = Array.from(document.querySelectorAll('[role=menuitem]')).find((b) =>
         (b.getAttribute('aria-label') || '').includes('让 Agent 分析组件'),
       )
       btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
@@ -197,9 +202,14 @@ test('Task4: no input writer → clipboard fallback and no crash', async () => {
   const tree = render(
     createElement(Trend, { ...alpha3PageProps({ sessionId: 's1', path: cwdB }), scope: { cwd: cwdB } }),
   )
+  await waitFor(() => assert.ok(tree.container.querySelector('.dvb-viz-more')), { timeout: 6000 })
+  await act(async () => {
+    tree.container.querySelector('.dvb-viz-more').dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 40))
+  })
   await waitFor(
     () => {
-      const btn = Array.from(tree.container.querySelectorAll('button')).find((b) =>
+      const btn = Array.from(document.querySelectorAll('[role=menuitem]')).find((b) =>
         (b.getAttribute('aria-label') || '').includes('让 Agent 分析组件'),
       )
       assert.ok(btn)
@@ -207,7 +217,7 @@ test('Task4: no input writer → clipboard fallback and no crash', async () => {
     { timeout: 6000 },
   )
   await act(async () => {
-    const btn = Array.from(tree.container.querySelectorAll('button')).find((b) =>
+    const btn = Array.from(document.querySelectorAll('[role=menuitem]')).find((b) =>
       (b.getAttribute('aria-label') || '').includes('让 Agent 分析组件'),
     )
     btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))

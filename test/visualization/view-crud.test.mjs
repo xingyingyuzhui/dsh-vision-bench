@@ -107,7 +107,13 @@ test('编辑图标恢复组件草稿；类型与关联点位回显', async () =>
     createElement(Viz, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
   )
   await waitFor(() => assert.ok(tree.container.textContent.includes('我的数值卡')), { timeout: 6000 })
-  const editBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '编辑')
+  const moreBtn = tree.container.querySelector('.dvb-viz-more')
+  assert.ok(moreBtn)
+  await act(async () => {
+    moreBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+  await waitFor(() => assert.ok(document.querySelector('[role=menu]')), { timeout: 4000 })
+  const editBtn = Array.from(document.querySelectorAll('[role=menuitem]')).find((b) => b.textContent === '编辑')
   assert.ok(editBtn)
   await act(async () => {
     editBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
@@ -180,7 +186,13 @@ test('Task8/0.20.1: 编辑保留 ID/order/windowMs/confirmWrite 且排列不变�
   await waitFor(() => assert.ok(tree.container.textContent.includes('第一')), { timeout: 6000 })
   const cards = Array.from(tree.container.querySelectorAll('.dvb-viz-card'))
   assert.equal(cards.length, 2, '两个组件')
-  const editFirst = Array.from(cards[0].querySelectorAll('button')).find((b) => b.textContent === '编辑')
+  const moreFirst = cards[0].querySelector('.dvb-viz-more')
+  assert.ok(moreFirst)
+  await act(async () => {
+    moreFirst.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+  await waitFor(() => assert.ok(document.querySelector('[role=menu]')), { timeout: 4000 })
+  const editFirst = Array.from(document.querySelectorAll('[role=menuitem]')).find((b) => b.textContent === '编辑')
   await act(async () => {
     editFirst.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
   })
