@@ -15,7 +15,6 @@ export function createJournalDetailCard(React, t) {
   return function JournalDetailCard(props) {
     const { item, onAddToAgent, onJumpTask } = props
     const [rawExpanded, setRawExpanded] = React.useState(true)
-    const [copied, setCopied] = React.useState(false)
 
     if (!item) {
       return el(
@@ -38,17 +37,6 @@ export function createJournalDetailCard(React, t) {
     const timeStr = formatFullDateTime(item.at || item.startedAt)
     const jsonStr = serializeJournalItem(item)
 
-    const handleCopy = () => {
-      try {
-        if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(jsonStr).then(() => {
-            setCopied(true)
-            setTimeout(() => setCopied(false), 2000)
-          })
-        }
-      } catch {}
-    }
-
     const taskLabel = item.taskSummary || item.taskId || (item.kind && item.kind.includes('仿真') ? item.kind : '仿真数据读取')
 
     return el(
@@ -62,26 +50,14 @@ export function createJournalDetailCard(React, t) {
           'button',
           {
             type: 'button',
-            className: 'dvb-btn dvb-btn-sm dvb-btn-copy',
-            onClick: handleCopy,
-          },
-          el(
-            'svg',
-            {
-              viewBox: '0 0 24 24',
-              width: 13,
-              height: 13,
-              fill: 'none',
-              stroke: 'currentColor',
-              strokeWidth: 2,
-              strokeLinecap: 'round',
-              strokeLinejoin: 'round',
-              style: { marginRight: 4 },
+            className: 'dvb-btn dvb-btn-sm dvb-ai-btn',
+            title: '让 Agent 分析此操作',
+            'aria-label': '让 Agent 分析操作',
+            onClick() {
+              if (typeof onAddToAgent === 'function') onAddToAgent(item)
             },
-            el('rect', { x: 9, y: 9, width: 13, height: 13, rx: 2, ry: 2 }),
-            el('path', { d: 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }),
-          ),
-          copied ? '已复制' : '复制',
+          },
+          'AI',
         ),
       ),
       el(
@@ -166,38 +142,6 @@ export function createJournalDetailCard(React, t) {
               el('pre', { className: 'dvb-raw-pre' }, jsonStr),
             )
           : null,
-      ),
-      el(
-        'div',
-        { className: 'dvb-detail-actions' },
-        el(
-          'button',
-          {
-            type: 'button',
-            className: 'dvb-btn dvb-btn-primary dvb-btn-agent-input',
-            onClick() {
-              if (typeof onAddToAgent === 'function') onAddToAgent(item)
-            },
-          },
-          el(
-            'svg',
-            {
-              viewBox: '0 0 24 24',
-              width: 14,
-              height: 14,
-              fill: 'none',
-              stroke: 'currentColor',
-              strokeWidth: 2,
-              strokeLinecap: 'round',
-              strokeLinejoin: 'round',
-              style: { marginRight: 6 },
-            },
-            el('line', { x1: 12, y1: 5, x2: 12, y2: 19 }),
-            el('line', { x1: 5, y1: 12, x2: 19, y2: 12 }),
-          ),
-          '添加到 Agent 输入',
-        ),
-        el('div', { className: 'dvb-detail-action-subtext' }, '仅填入输入框，不自动发送。'),
       ),
     )
   }
