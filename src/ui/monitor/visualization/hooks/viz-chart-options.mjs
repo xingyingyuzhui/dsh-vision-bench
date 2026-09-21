@@ -38,13 +38,28 @@ export const buildAxisOpt = (s = {}, p, isDark, extra = {}) => {
   }
 }
 
-/** Pad the live Y max so the newest peak is not clipped by a "nice" top tick. */
+/** 1 / 2 / 5 × 10^n step so the top tick is an integer-like label, not 6.6464. */
+export function niceAxisStep(span, tickCount = 5) {
+  const raw = Math.abs(Number(span)) / Math.max(1, tickCount)
+  if (!Number.isFinite(raw) || raw <= 0) return 1
+  const exp = Math.floor(Math.log10(raw))
+  const pow = 10 ** exp
+  const f = raw / pow
+  const nf = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10
+  return nf * pow
+}
+
+/** Pad the live Y max so the newest peak is not clipped, then snap up to a nice tick. */
 export function padLineYMax(min, max) {
   const hi = Number(max)
   const lo = Number(min)
   if (!Number.isFinite(hi)) return 1
-  const span = Number.isFinite(lo) ? Math.max(hi - lo, Math.abs(hi) * 0.08, 1) : Math.max(Math.abs(hi) * 0.1, 1)
-  return hi + span * 0.08
+  const baseLo = Number.isFinite(lo) ? lo : Math.min(0, hi)
+  const span = Math.max(hi - baseLo, Math.abs(hi) * 0.08, 1e-6)
+  const padded = hi + span * 0.08
+  const step = niceAxisStep(Math.max(padded - baseLo, span), 5)
+  const niceMax = Math.ceil((padded - 1e-12) / step) * step
+  return Number(niceMax.toPrecision(12))
 }
 
 /**

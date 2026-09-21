@@ -59,6 +59,13 @@ test('padLineYMax leaves headroom above the latest peak', () => {
   assert.ok(padLineYMax(0, 80) > 80)
 })
 
+test('padLineYMax snaps to a nice tick instead of a raw 8% float', () => {
+  assert.equal(padLineYMax(0, 6.154), 8)
+  assert.equal(padLineYMax(0, 52), 60)
+  assert.equal(padLineYMax(0, 80), 100)
+  assert.equal(String(padLineYMax(0, 61.54)).includes('.'), false)
+})
+
 test('buildLineOption falls back to wall clock when there are no samples', () => {
   const before = Date.now()
   const opt = buildLineOption({ windowMs: 300000 }, { data: [] }, false)
