@@ -1,6 +1,6 @@
 import { getCustomSelect } from '../../components/custom-select.mjs'
 
-const SEL = { width: '140px', minWidth: '140px', flex: 'none' }
+const SEL = { width: '112px', minWidth: '96px', flex: 'none' }
 
 /**
  * @param {any} React
