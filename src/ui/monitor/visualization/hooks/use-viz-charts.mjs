@@ -258,14 +258,17 @@ export function useVizCharts(React, { components, points, trendStore }) {
               uplotAxis(s.yShowLabel !== false, stroke('yAxisColor'), s.yShowGrid ?? s.showGrid !== false, gridColor, dash),
             ],
             series: [{}].concat(
-              payload.meta.map((m, idx) => ({
-                label: m.label,
-                spanGaps: s.connectNulls !== false,
-                stroke: s.lineColor || VIZ_COLORS[idx % VIZ_COLORS.length],
-                width: Number(s.lineWidth) || 2,
-                points: { show: s.showSymbol !== false },
-                fill: s.area ? 'rgba(79, 142, 247, 0.12)' : undefined,
-              })),
+              payload.meta.map((m, idx) => {
+                const color = s.lineColor || VIZ_COLORS[idx % VIZ_COLORS.length]
+                return {
+                  label: m.label,
+                  spanGaps: s.connectNulls !== false,
+                  stroke: color,
+                  width: Number(s.lineWidth) || 2,
+                  points: { show: s.showSymbol !== false, fill: color, stroke: color, size: 8 },
+                  fill: s.area ? 'rgba(79, 142, 247, 0.12)' : undefined,
+                }
+              }),
             ),
           },
           payload.data,

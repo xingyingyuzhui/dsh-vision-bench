@@ -302,6 +302,8 @@ test('echartsSeriesFromTrend filters interleaving nulls and enables symbols', as
   assert.equal(series.length, 2)
   assert.equal(series[0].name, '点位1')
   assert.equal(series[0].showSymbol, true)
+  assert.equal(series[0].symbol, 'circle')
+  assert.equal(series[0].itemStyle.borderWidth, 0)
   assert.equal(series[0].connectNulls, true)
   // 点位1 只保留有效点 [ [100000, 10], [102000, 12] ]
   assert.deepEqual(series[0].data, [
