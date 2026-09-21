@@ -155,7 +155,7 @@ test('renderConnectionTabs renders permanent physical connection status dot with
 })
 
 test('renderConnectionPanel renders clean connection name without trailing black dot', () => {
-  const t = (k) => ({ connBar: '全部连接' })[k] || k
+  const t = (k) => ({ connBar: '全部连接', connLive: '已连接' })[k] || k
   const ctx = {
     focusState: {},
     connections: [{ id: 'c1', name: 'PLC-1', conn: { mode: 'tcp', host: '192.168.1.10', tcpPort: 502 } }],
@@ -197,6 +197,17 @@ test('renderConnectionPanel renders clean connection name without trailing black
   assert.equal(rows.length, 1)
   const nameBtn = rows[0].children[0].children[0]
   assert.equal(nameBtn.children[0], 'PLC-1', 'Name has no trailing ● black dot')
+  const endpoint = rows[0].children[2]
+  const dots = []
+  function walkDots(node) {
+    if (!node) return
+    if (String(node.props?.className || '').includes('dvb-tab-dot')) dots.push(node)
+    if (Array.isArray(node.children)) node.children.forEach(walkDots)
+  }
+  walkDots(endpoint)
+  assert.equal(dots.length, 1, 'endpoint has a status light')
+  assert.equal(dots[0].props['data-kind'], 'live')
+  assert.equal(dots[0].props.title, '已连接')
 })
 
 test('renderConnectionPanel toolbar does not have collection buttons or interval select', () => {

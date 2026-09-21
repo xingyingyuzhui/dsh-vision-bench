@@ -127,7 +127,7 @@ export function createFramesFilterToolbar(React, t) {
         'button',
         {
           type: 'button',
-          className: 'dvb-btn',
+          className: 'dvb-btn dvb-frames-reset',
           onClick: onReset,
         },
         '重置',

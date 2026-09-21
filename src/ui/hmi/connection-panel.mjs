@@ -137,16 +137,12 @@ export function renderConnectionPanel(el, t, ctx) {
                     },
                     el(
                       'span',
-                      null,
-                      connLabel(c.conn || {}) + (occupiedPort ? ' · 已被 ' + occupiedPort + ' 占用' : ''),
-                    ),
-                    st !== 'disconnected'
-                      ? el(
-                          'span',
-                          {
-                            className: 'dvb-badge',
-                            'data-kind': st === 'connected' ? 'live' : st === 'error' ? 'err' : 'warn',
-                          },
+                      { className: 'dvb-conn-endpoint' },
+                      el('span', {
+                        className: 'dvb-tab-dot',
+                        'data-kind':
+                          st === 'connected' ? 'live' : st === 'connecting' || st === 'disconnecting' ? 'warn' : 'err',
+                        title:
                           st === 'connected'
                             ? t('connLive') || '已连接'
                             : st === 'connecting'
@@ -155,9 +151,14 @@ export function renderConnectionPanel(el, t, ctx) {
                                 ? t('connDisconnecting') || '断开中'
                                 : st === 'error'
                                   ? t('connErr') || '连接异常'
-                                  : '',
-                        )
-                      : null,
+                                  : t('connIdle') || '未连接',
+                      }),
+                      el(
+                        'span',
+                        { className: 'dvb-conn-endpoint-text' },
+                        connLabel(c.conn || {}) + (occupiedPort ? ' · 已被 ' + occupiedPort + ' 占用' : ''),
+                      ),
+                    ),
                   ),
                   el(
                     'td',
@@ -169,7 +170,8 @@ export function renderConnectionPanel(el, t, ctx) {
                         'button',
                         {
                           type: 'button',
-                          className: st === 'connected' ? 'dvb-btn' : 'dvb-btn dvb-btn-primary',
+                          className:
+                            st === 'connected' ? 'dvb-btn dvb-btn-danger' : 'dvb-btn dvb-btn-primary',
                           disabled:
                             !cwd ||
                             !!linkBusy ||
