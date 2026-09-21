@@ -23,9 +23,8 @@ export function createVizCardMenu(React) {
       const node = btnRef.current
       if (!node || typeof node.getBoundingClientRect !== 'function') return
       const r = node.getBoundingClientRect()
-      const width = 218
-      const left = Math.max(8, Math.min(r.right - width, (globalThis.innerWidth || 800) - width - 8))
-      setBox({ top: r.bottom + 4, left })
+      const vw = globalThis.innerWidth || 800
+      setBox({ top: r.bottom + 4, right: Math.max(8, vw - r.right) })
     }
 
     React.useEffect(() => {
@@ -82,7 +81,7 @@ export function createVizCardMenu(React) {
                 className: 'dvb-viz-overflow',
                 role: 'menu',
                 ref: listRef,
-                style: { top: box.top + 'px', left: box.left + 'px' },
+                style: { top: box.top + 'px', right: box.right + 'px' },
               },
               items.map((it) =>
                 el(
