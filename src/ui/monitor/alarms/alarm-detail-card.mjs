@@ -200,7 +200,6 @@ export function createAlarmDetailCard(React, t) {
           },
           isAcked ? '已确认告警' : '确认告警',
         ),
-        el('div', { className: 'dvb-detail-action-subtext' }, '确认表示已知悉，不代表故障恢复。'),
         pt
           ? el(
               'button',
