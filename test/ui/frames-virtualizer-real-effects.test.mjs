@@ -107,7 +107,8 @@ test('Task8: official Virtualizer renders viewport-limited rows (adapter level) 
   let rows = tree.container.querySelectorAll('.dvb-live-row')
   assert.ok(rows.length < 50, 'viewport-limited: ' + rows.length)
   // Ring keeps newest 500 of 5000; WireFrame projection suffixes :tx.
-  assert.equal(rows[0].getAttribute('data-frameid'), 'c1-f4501:tx', 'first visible row is oldest retained frame')
+  // Rows are newest-first (06c1c7e, matching 操作记录): the top row is the newest retained frame.
+  assert.equal(rows[0].getAttribute('data-frameid'), 'c1-f5000:tx', 'first visible row is newest retained frame')
   const list = tree.container.querySelector('.dvb-frames-virtual')
   assert.ok(list)
   await act(async () => {
@@ -120,7 +121,8 @@ test('Task8: official Virtualizer renders viewport-limited rows (adapter level) 
       const ids = Array.from(tree.container.querySelectorAll('.dvb-live-row')).map((el) =>
         el.getAttribute('data-frameid'),
       )
-      assert.ok(!ids.includes('c1-f4501:tx'), 'scroll must leave the first frame: ' + ids.slice(0, 4))
+      assert.ok(!ids.includes('c1-f5000:tx'), 'scroll must leave the newest frame: ' + ids.slice(0, 4))
+      assert.ok(ids.includes('c1-f4501:tx'), 'far scroll reaches the oldest retained frame: ' + ids.slice(-4))
     },
     { timeout: 6000 },
   )
