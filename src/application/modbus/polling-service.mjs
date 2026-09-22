@@ -175,12 +175,39 @@ export const modbusPoll = async (home, cwd, opts) => {
     return { ...t, pack: tpack, connection, points }
   })
 
-  // Only "no points" when the whole batch has none — an empty sibling must not
-  // block a target that does have collectible points.
-  const batchHasPoints = preparedTargets.some((t) => t.points.length > 0)
+  // Only "no points" when the whole EXECUTABLE batch has none — an empty sibling
+  // must not block a target that does have collectible points, and disabled
+  // connections must not manufacture a "has points" batch.
+  const targetConns = []
+  for (const t of preparedTargets) {
+    if (t.connection && t.connection.enabled !== false) {
+      targetConns.push({
+        ...t.connection,
+        __sourceSessionId: t.sourceSessionId,
+        __shared: t.shared,
+        __pack: t.pack,
+        __points: t.points,
+      })
+    }
+  }
+  if (cidArg && !targetConns.length) {
+    const requested = preparedTargets.find((t) => t.connectionId === cidArg)
+    return {
+      ok: false,
+      error: requested?.connection && requested.connection.enabled === false ? '设备已禁用' : `连接不存在: ${cidArg}`,
+    }
+  }
+  if (!targetConns.length) return { ok: false, error: '无可用连接' }
+  // Executable read set only — disabled siblings' points must not widen precheck.
+  const readTargets = targetConns.map((c) => ({
+    connectionId: c.id,
+    sourceSessionId: c.__sourceSessionId,
+    points: c.__points || [],
+  }))
+  const batchHasPoints = readTargets.some((t) => t.points.length > 0)
   if (!batchHasPoints) return { ok: false, error: '无点位，请先添加点位' }
   // Runtime pointId identity conflicts must be rejected BEFORE transport/commit.
-  const identityCheck = validatePollRuntimeIdentities(workspace, preparedTargets)
+  const identityCheck = validatePollRuntimeIdentities(workspace, readTargets)
   if (!identityCheck.ok) {
     return {
       ok: false,
@@ -203,20 +230,6 @@ export const modbusPoll = async (home, cwd, opts) => {
       values: pack.values,
     }
   }
-  const targetConns = []
-  for (const t of preparedTargets) {
-    if (t.connection && t.connection.enabled !== false) {
-      targetConns.push({
-        ...t.connection,
-        __sourceSessionId: t.sourceSessionId,
-        __shared: t.shared,
-        __pack: t.pack,
-        __points: t.points,
-      })
-    }
-  }
-  if (cidArg && !targetConns.length) return { ok: false, error: `连接不存在: ${cidArg}` }
-  if (!targetConns.length) return { ok: false, error: '无可用连接' }
   // use a global lock per cwd (legacy) plus per-conn locks for multi
   const lockKey = room.cwd + (cidArg ? `:${cidArg}` : '')
   if (pollLocks.has(lockKey) || pollLocks.has(room.cwd)) {
