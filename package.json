@@ -367,6 +367,7 @@
     "src/infrastructure/store/bindings-store.mjs",
     "src/infrastructure/store/global-share-store.mjs",
     "src/infrastructure/store/focus-store.mjs",
+    "src/infrastructure/store/workspace-keil-select.mjs",
     "src/infrastructure/store/workspace-store.mjs",
     "src/infrastructure/store/journal-store.mjs",
     "src/types/write-file-atomic.d.ts",
@@ -540,7 +541,8 @@
     "src/application/modbus/alarm-notify-authorization.mjs",
     "src/application/modbus/alarm-notify-retry.mjs",
     "src/application/modbus/poll-session-ownership.mjs",
-    "src/application/modbus/poll-runtime-identity.mjs"
+    "src/application/modbus/poll-runtime-identity.mjs",
+    "src/application/modbus/poll-target-preparation.mjs"
   ],
   "repository": {
     "type": "git",

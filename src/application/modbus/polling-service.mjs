@@ -32,6 +32,12 @@ import { compactPointRow, isStaleValue } from '../../domain/modbus/point-value.m
 import { stampPoints } from '../../domain/modbus/unit-id.mjs'
 import { resolvePollSessionOwnership, resolvePollTargets } from './poll-session-ownership.mjs'
 import { validatePollRuntimeIdentities } from './poll-runtime-identity.mjs'
+import {
+  prepareReadTargets,
+  prepareTargetViews,
+  validateDeviceRouting,
+} from './poll-target-preparation.mjs'
+import { resolvePointDevice } from '../../domain/modbus/device-identity.mjs'
 export { resolvePollSessionOwnership, resolvePollTargets }
 import {
   isScopePartitioned,
@@ -136,26 +142,6 @@ export const modbusPoll = async (home, cwd, opts) => {
   }
   const targetSessionId = sessionId || batchOwnership.targets[0]?.sourceSessionId || ''
 
-  /**
-   * Effective pack for one resolved target — never `find` the first same-id
-   * device/point from a cross-session union.
-   * @param {{ connectionId: string, sourceSessionId: string, shared: boolean }} t
-   */
-  const packForTarget = (t) => {
-    if (t.sourceSessionId) return /** @type {ModbusWorkspace} */ (modbusForSession(workspace, t.sourceSessionId))
-    if (isScopePartitioned(workspace.modbus)) {
-      const sc = normalizeSessionConfigs(workspace.modbus.sessionConfigs)
-      return /** @type {ModbusWorkspace} */ (
-        normalizeModbus({
-          ...workspace.modbus,
-          connections: unionScopedConnections(workspace.modbus.connections, sc, workspace.modbus.share),
-          devices: unionScopedDevices(workspace.modbus.devices, sc, workspace.modbus.share),
-          points: unionScopedPoints(workspace.modbus.points, sc, workspace.modbus.share),
-        })
-      )
-    }
-    return /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
-  }
 
   /** @type {ModbusWorkspace} */
   // Workspace-level runtime (values/polling/frames) — never substitute the first
@@ -163,33 +149,9 @@ export const modbusPoll = async (home, cwd, opts) => {
   const workspaceRuntimePack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
   let pack = workspaceRuntimePack
 
-  /**
-   * Prepare every target with its own effective view before any I/O.
-   * Array objects are execution snapshots — never written back to config.
-   * @type {Array<{ connectionId: string, sourceSessionId: string, shared: boolean, pack: any, connection: any, points: any[] }>}
-   */
-  const preparedTargets = batchOwnership.targets.map((t) => {
-    const tpack = packForTarget(t)
-    const connection = tpack.connections.find((/** @type {any} */ c) => c.id === t.connectionId) || null
-    const points = tpack.points.filter((/** @type {any} */ p) => (p.connectionId || p.connId) === t.connectionId)
-    return { ...t, pack: tpack, connection, points }
-  })
-
-  // Only "no points" when the whole EXECUTABLE batch has none — an empty sibling
-  // must not block a target that does have collectible points, and disabled
-  // connections must not manufacture a "has points" batch.
-  const targetConns = []
-  for (const t of preparedTargets) {
-    if (t.connection && t.connection.enabled !== false) {
-      targetConns.push({
-        ...t.connection,
-        __sourceSessionId: t.sourceSessionId,
-        __shared: t.shared,
-        __pack: t.pack,
-        __points: t.points,
-      })
-    }
-  }
+  const preparedTargets = prepareTargetViews(workspace, batchOwnership.targets)
+  const executable = prepareReadTargets(preparedTargets)
+  const targetConns = executable.map((t) => t.connObj)
   if (cidArg && !targetConns.length) {
     const requested = preparedTargets.find((t) => t.connectionId === cidArg)
     return {
@@ -198,14 +160,27 @@ export const modbusPoll = async (home, cwd, opts) => {
     }
   }
   if (!targetConns.length) return { ok: false, error: '无可用连接' }
-  // Executable read set only — disabled siblings' points must not widen precheck.
-  const readTargets = targetConns.map((c) => ({
-    connectionId: c.id,
-    sourceSessionId: c.__sourceSessionId,
-    points: c.__points || [],
+  const readTargets = executable.map((t) => ({
+    connectionId: t.connectionId,
+    sourceSessionId: t.sourceSessionId,
+    points: t.points,
   }))
   const batchHasPoints = readTargets.some((t) => t.points.length > 0)
   if (!batchHasPoints) return { ok: false, error: '无点位，请先添加点位' }
+  const routing = validateDeviceRouting(executable)
+  if (!routing.ok) {
+    return {
+      ok: false,
+      skipped: true,
+      error: routing.error,
+      errorCode: routing.errorCode,
+      reason: routing.reason,
+      conflicts: routing.conflicts,
+      polling: workspace.modbus?.polling,
+      pollingByConnection: workspace.modbus?.pollingByConnection,
+      values: workspace.modbus?.values,
+    }
+  }
   // Runtime pointId identity conflicts must be rejected BEFORE transport/commit.
   const identityCheck = validatePollRuntimeIdentities(workspace, readTargets)
   if (!identityCheck.ok) {
@@ -286,10 +261,13 @@ export const modbusPoll = async (home, cwd, opts) => {
       let connOk = true
       for (const scope of scopes) {
         const batchConnObj = tpack.connections.find((/** @type {any} */ c) => c.id === scope.connectionId) || connObj
-        const batchDevice = tpack.devices.find((/** @type {any} */ d) => d.id === scope.deviceId) || {
-          id: scope.deviceId,
-          unitId: scope.unitId,
-        }
+        const routed = resolvePointDevice(tpack, pts[0] || { deviceId: scope.deviceId }, scope.connectionId || connId)
+        const batchDevice = routed.ok
+          ? routed.device
+          : tpack.devices.find((/** @type {any} */ d) => d.id === scope.deviceId) || {
+              id: scope.deviceId,
+              unitId: scope.unitId,
+            }
         for (const batch of scope.batches) {
           if (aborted(signal)) {
             timedOut = true

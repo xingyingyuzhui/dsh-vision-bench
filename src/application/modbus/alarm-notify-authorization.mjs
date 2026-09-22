@@ -118,4 +118,3 @@ export function recipientStillAuthorized(home, cwd, item, recipient) {
 
   return false
 }
-
