@@ -33,8 +33,24 @@ test('多连接轮询：两条 enabled 连接并行 poll，pollingByConnection �
   assert.equal(ran.pollingByConnection['c2'].lastOk, true)
   assert.ok(ran.pollingByConnection['c1'].lastAt > 0)
   assert.ok(ran.pollingByConnection['c2'].lastAt > 0)
-  // Sim polls no longer synthesize TX/RX frame rings (Host CPU).
-  assert.deepEqual(ran.framesLog || [], [])
+  // 0.29.16 起仿真轮询记录 SIM TX/RX 报文（串口报文页）——按连接/设备/端口分轨。
+  const frames = ran.framesLog || []
+  assert.ok(frames.length > 0, 'sim poll records frames')
+  assert.ok(frames.every((f) => f.source === 'polling' && f.status === 'ok' && f.label.startsWith('读 ')))
+  const route = { c1: { deviceId: 'd1', port: 'COM3' }, c2: { deviceId: 'd2', port: 'COM4' } }
+  for (const f of frames) {
+    assert.ok(route[f.connectionId], `unexpected frame connection ${f.connectionId}`)
+    assert.equal(f.deviceId, route[f.connectionId].deviceId, 'frame device must match its connection')
+    assert.equal(f.port, route[f.connectionId].port, 'frame port must match its connection')
+  }
+  assert.ok(frames.some((f) => f.connectionId === 'c1'), 'c1 frames recorded')
+  assert.ok(frames.some((f) => f.connectionId === 'c2'), 'c2 frames recorded')
+  assert.equal(new Set(frames.map((f) => f.transactionId)).size, frames.length, 'frame transaction ids unique')
+  // framesByConnection 分轨持久化，互不串扰。
+  assert.ok((ran.framesByConnection?.['c1'] || []).length > 0)
+  assert.ok((ran.framesByConnection?.['c2'] || []).length > 0)
+  assert.ok(ran.framesByConnection['c1'].every((f) => f.connectionId === 'c1'))
+  assert.ok(ran.framesByConnection['c2'].every((f) => f.connectionId === 'c2'))
   assert.equal(ran.values.filter((v) => v.ok).length, 3)
   const ws = loadWorkspace(home, cwd)
   assert.equal(ws.modbus.values.filter((v) => v.ok).length, 3)
@@ -68,7 +84,15 @@ test('多连接轮询跳过 disabled 连接', async (t) => {
     false,
     'disabled connection points must not be polled',
   )
-  assert.deepEqual(ran.framesLog || [], [])
+  // 0.29.16 起仿真轮询记录报文；disabled 连接不得产生任何帧或帧环。
+  const frames = ran.framesLog || []
+  assert.ok(frames.length > 0, 'sim poll records frames')
+  assert.ok(
+    frames.every((f) => f.connectionId === 'c1' && f.deviceId === 'd1'),
+    'disabled connection must not produce frames',
+  )
+  assert.equal(ran.framesByConnection?.['c2'], undefined, 'disabled connection must not produce frames key')
+  assert.ok((ran.framesByConnection?.['c1'] || []).length > 0)
 })
 
 test('pollingByConnection 启用状态 per-connection 隔离', async (t) => {
