@@ -13,6 +13,8 @@ import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace
 import {
   cancelAlarmNotifyRetries,
   clearAgentAlarmWatch,
+  getAgentAlarmWatch,
+  revokeAgentAlarmSubscription,
   setAgentAlarmWatch,
 } from '../../modbus/poll-alarm-notify.mjs'
 
@@ -250,12 +252,30 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
           error: 'watch 与 followup 语义不一致',
         }
       }
-      clearAgentAlarmWatch(room.cwd, origin.sessionId)
-      cancelAlarmNotifyRetries({ sessionId: origin.sessionId || undefined, cwd: room.cwd })
+      const sid = String(origin.sessionId || '')
+      if (!sid) {
+        return {
+          ok: false,
+          action,
+          errorCode: 'SESSION_REQUIRED',
+          error: '退订必须携带非空 sessionId',
+        }
+      }
+      // Revoke identity first, then cancel tasks bound to that subscription.
+      const prev = revokeAgentAlarmSubscription(room.cwd, sid)
+      cancelAlarmNotifyRetries({
+        sessionId: sid,
+        cwd: room.cwd,
+        subscriptionId: prev?.subscriptionId,
+      })
       return {
         ok: true,
         action,
-        subscription: { cleared: true, sessionId: origin.sessionId || '' },
+        subscription: {
+          cleared: true,
+          sessionId: sid,
+          subscriptionId: prev?.subscriptionId,
+        },
       }
     }
     if (args.watch !== undefined && args.followup !== undefined && Boolean(args.watch) !== Boolean(args.followup)) {
@@ -298,6 +318,9 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
     // Explicit Agent opt-in to receive process-alarm followups for this session+cwd.
     if (origin.source === 'agent') {
       if (args.watch === true || args.followup === true) {
+        const sid = String(origin.sessionId || '')
+        // Target change mints a new subscriptionId — drop tasks bound to the old one.
+        const prev = sid ? getAgentAlarmWatch(room.cwd, sid) : null
         subscription = setAgentAlarmWatch(room.cwd, {
           followup: true,
           sessionId: origin.sessionId,
@@ -305,6 +328,13 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
           connectionId: resolvedConnectionId,
           ttlMs: Number(args.ttlMs) > 0 ? Number(args.ttlMs) : undefined,
         })
+        if (prev?.subscriptionId && subscription?.subscriptionId !== prev.subscriptionId) {
+          cancelAlarmNotifyRetries({
+            sessionId: sid,
+            cwd: room.cwd,
+            subscriptionId: prev.subscriptionId,
+          })
+        }
       }
     }
     /** @type {any} */

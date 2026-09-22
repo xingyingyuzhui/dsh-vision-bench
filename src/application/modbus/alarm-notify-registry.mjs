@@ -1,4 +1,5 @@
 // @ts-check
+import { randomUUID } from 'node:crypto'
 import { notifyBenchEvent } from '../../infrastructure/host/notify.mjs'
 
 export const WATCH_TTL_MS = 30 * 60 * 1000
@@ -22,6 +23,7 @@ export const MAX_DELIVERY_ATTEMPTS = 3
  *   pointIds: Set<string>,
  *   connectionId: string,
  *   testRunId: string,
+ *   subscriptionId: string,
  *   createdAt: number,
  *   expiresAt: number,
  * }>}
@@ -113,6 +115,24 @@ export function pruneDeliveryLedger() {
 }
 
 /**
+ * @param {Iterable<string> | undefined} ids
+ * @returns {string[]}
+ */
+export function normalizePointIdList(ids) {
+  return [...new Set((Array.isArray(ids) ? ids : []).filter(Boolean).map(String))].sort()
+}
+
+/**
+ * @param {{ connectionId?: string, pointIds?: Set<string> | string[] }} a
+ * @param {{ connectionId?: string, pointIds?: Set<string> | string[] }} b
+ */
+function watchTargetsEqual(a, b) {
+  const ap = normalizePointIdList(a.pointIds instanceof Set ? [...a.pointIds] : a.pointIds)
+  const bp = normalizePointIdList(b.pointIds instanceof Set ? [...b.pointIds] : b.pointIds)
+  return String(a.connectionId || '') === String(b.connectionId || '') && ap.join(',') === bp.join(',')
+}
+
+/**
  * @param {string} cwd
  * @param {{
  *   followup?: boolean,
@@ -136,12 +156,20 @@ export function setAgentAlarmWatch(cwd, spec = {}) {
       ? Number(spec.expiresAt)
       : now + (Number.isFinite(ttl) && ttl > 0 ? Math.trunc(ttl) : WATCH_TTL_MS)
   const createdAt = Number(spec.createdAt) > 0 ? Number(spec.createdAt) : now
+  const pointIds = new Set(normalizePointIdList(spec.pointIds))
+  const connectionId = typeof spec.connectionId === 'string' ? spec.connectionId : ''
+  const prev = agentAlarmWatchByKey.get(watchKey(keyCwd, sessionId))
+  // Pure renewal of the same target set keeps identity; any target change mints a new id.
+  const keepIdentity =
+    !!prev && prev.followup !== false && spec.followup !== false && watchTargetsEqual(prev, { connectionId, pointIds })
+  const subscriptionId = keepIdentity ? prev.subscriptionId : randomUUID()
   const entry = {
     followup: spec.followup !== false,
     sessionId,
-    pointIds: new Set(Array.isArray(spec.pointIds) ? spec.pointIds.filter(Boolean).map(String) : []),
-    connectionId: typeof spec.connectionId === 'string' ? spec.connectionId : '',
+    pointIds,
+    connectionId,
     testRunId: typeof spec.testRunId === 'string' ? spec.testRunId : '',
+    subscriptionId,
     createdAt,
     expiresAt,
   }
@@ -151,26 +179,43 @@ export function setAgentAlarmWatch(cwd, spec = {}) {
     connectionId: entry.connectionId,
     pointIds: [...entry.pointIds],
     followup: entry.followup,
+    subscriptionId: entry.subscriptionId,
     createdAt: entry.createdAt,
     expiresAt: entry.expiresAt,
   }
 }
 
 /**
+ * Clear ONE session's watch. Callers that mean "unsubscribe this session" must
+ * pass a non-empty sessionId — never fall through to clear-all.
  * @param {string} cwd
- * @param {string} [sessionId]
+ * @param {string} [sessionId] omit only for dispose/tests that wipe a cwd
  */
 export function clearAgentAlarmWatch(cwd, sessionId) {
   const keyCwd = String(cwd || '')
   if (!keyCwd) return
-  if (typeof sessionId === 'string') {
+  if (typeof sessionId === 'string' && sessionId) {
     agentAlarmWatchByKey.delete(watchKey(keyCwd, sessionId))
     return
   }
+  if (typeof sessionId === 'string' && !sessionId) return
   const prefix = `${keyCwd}::`
   for (const key of [...agentAlarmWatchByKey.keys()]) {
     if (key.startsWith(prefix)) agentAlarmWatchByKey.delete(key)
   }
+}
+
+/**
+ * @param {string} cwd
+ * @param {string} sessionId
+ */
+export function revokeAgentAlarmSubscription(cwd, sessionId) {
+  const sid = String(sessionId || '')
+  if (!sid) return null
+  const key = watchKey(cwd, sid)
+  const prev = agentAlarmWatchByKey.get(key) || null
+  agentAlarmWatchByKey.delete(key)
+  return prev
 }
 
 /**

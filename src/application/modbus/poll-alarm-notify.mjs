@@ -26,7 +26,7 @@ import {
   setAgentAlarmWatch,
   setAlarmNotifyTestHooks,
 } from './alarm-notify-registry.mjs'
-import { matchingAlarmRecipients, resolveAlarmEventOwnership } from './alarm-notify-match.mjs'
+import { matchingAlarmRecipients, recipientStillAuthorized, resolveAlarmEventOwnership } from './alarm-notify-match.mjs'
 import {
   cancelAlarmNotifyRetries,
   clearAlarmNotifyRetryRuntime,
@@ -34,6 +34,7 @@ import {
   resetAlarmNotifyRetryTestHooks,
   setAlarmNotifyRetryTestHooks,
 } from './alarm-notify-retry.mjs'
+import { revokeAgentAlarmSubscription } from './alarm-notify-registry.mjs'
 
 export {
   cancelAlarmNotifyRetries,
@@ -42,9 +43,11 @@ export {
   clearAlarmNotifyRetryRuntime,
   getAgentAlarmWatch,
   matchingAlarmRecipients,
+  recipientStillAuthorized,
   resetAlarmNotifyRetryTestHooks,
   resetAlarmNotifyTestHooks,
   resolveAlarmEventOwnership,
+  revokeAgentAlarmSubscription,
   setAgentAlarmWatch,
   setAlarmNotifyRetryTestHooks,
   setAlarmNotifyTestHooks,
@@ -277,6 +280,8 @@ export async function emitCommittedAlarmTransitions(home, cwd, alarms, opts = {}
               opts: notifyOpts,
               attempts: attempt.entry?.attempts || 1,
               item,
+              recipient,
+              sourceSessionId: sourceOf(item),
               recheck: recheckAlarmCurrent,
             })
             if (enq.queued) queued += 1

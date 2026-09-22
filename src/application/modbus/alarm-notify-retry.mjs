@@ -7,13 +7,12 @@
 import {
   MAX_DELIVERY_ATTEMPTS,
   beginDeliveryAttempt,
-  clockNow,
   deliverNotify,
-  getAgentAlarmWatch,
   markDelivered,
   markExhausted,
   markQueued,
 } from './alarm-notify-registry.mjs'
+import { recipientStillAuthorized } from './alarm-notify-match.mjs'
 
 export const RETRY_DELAYS_MS = [1_000, 3_000, 10_000]
 
@@ -30,6 +29,9 @@ export const RETRY_DELAYS_MS = [1_000, 3_000, 10_000]
  *   enqueuedAt: number,
  *   dueAt: number,
  *   timer: any,
+ *   recipient: any,
+ *   item: any,
+ *   sourceSessionId?: string,
  * }} NotifyRetryTask
  */
 
@@ -77,8 +79,8 @@ function retryKey(eventId, sessionId) {
 }
 
 /**
- * Re-validate before spending another attempt: watch still present, session
- * still known, point/alarm still active. Caller supplies recheck.
+ * Re-validate before spending another attempt: the ORIGINAL authorization
+ * reason still holds, the event target still matches, and the alarm is live.
  *
  * @param {NotifyRetryTask} task
  * @param {{
@@ -87,12 +89,13 @@ function retryKey(eventId, sessionId) {
  * }} guards
  */
 function guardsPass(task, guards) {
-  const watch = getAgentAlarmWatch(task.cwd, task.sessionId)
-  if (!watch || !watch.followup) return false
-  if (Number(watch.expiresAt) > 0 && Number(watch.expiresAt) <= nowFn()) return false
+  const item = task.item || guards?.item
+  // 1+2. Original auth reason (watch subscriptionId / focus / command id) still covers the event.
+  if (!recipientStillAuthorized(task.home, task.cwd, item, task.recipient)) return false
+  // 3. Alarm still valid (not recovered / deleted / disabled).
   if (!guards || typeof guards.recheck !== 'function') return true
   try {
-    const live = guards.recheck(task.home, task.cwd, guards.item, task.sessionId)
+    const live = guards.recheck(task.home, task.cwd, item, task.sessionId)
     return !!(live && live.current)
   } catch {
     return false
@@ -169,6 +172,8 @@ async function runRetryTask(task, guards) {
  *   opts: any,
  *   attempts: number,
  *   item: any,
+ *   recipient: any,
+ *   sourceSessionId?: string,
  *   recheck: (home: any, cwd: string, item: any, sessionId?: string) => any,
  * }} input
  * @returns {{ queued: boolean, attempts: number, dueAt?: number }}
@@ -198,6 +203,9 @@ export function enqueueAlarmNotifyRetry(input) {
     enqueuedAt: nowFn(),
     dueAt: nowFn() + RETRY_DELAYS_MS[Math.min(attempts - 1, RETRY_DELAYS_MS.length - 1)],
     timer: null,
+    recipient: input.recipient,
+    item: input.item,
+    sourceSessionId: input.sourceSessionId,
   }
   markQueued(eventId, sessionId)
   scheduleNext(key, task, { recheck: input.recheck, item: input.item })
@@ -205,14 +213,15 @@ export function enqueueAlarmNotifyRetry(input) {
 }
 
 /**
- * Cancel queued retries (e.g. watch cleared / session gone).
- * @param {{ sessionId?: string, eventId?: string, cwd?: string }} [filter]
+ * Cancel queued retries (e.g. watch cleared / subscription identity changed).
+ * @param {{ sessionId?: string, eventId?: string, cwd?: string, subscriptionId?: string }} [filter]
  */
 export function cancelAlarmNotifyRetries(filter = {}) {
   for (const [key, task] of [...retryByKey.entries()]) {
     if (filter.sessionId && task.sessionId !== filter.sessionId) continue
     if (filter.eventId && task.eventId !== filter.eventId) continue
     if (filter.cwd && task.cwd !== filter.cwd) continue
+    if (filter.subscriptionId && task.recipient?.subscriptionId !== filter.subscriptionId) continue
     if (task.timer) clearTimer(task.timer)
     retryByKey.delete(key)
     markExhausted(task.eventId, task.sessionId)

@@ -9,7 +9,12 @@ import { loadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
 import { normalizeModbus } from './modbus-migration.mjs'
 import { modbusForSession } from './workspace-session-view.mjs'
 import { pendingWrites, prunePendingWrites } from './modbus-runtime-context.mjs'
-import { agentAlarmWatchByKey, clockNow, pruneExpiredWatches } from './alarm-notify-registry.mjs'
+import {
+  agentAlarmWatchByKey,
+  clockNow,
+  getAgentAlarmWatch,
+  pruneExpiredWatches,
+} from './alarm-notify-registry.mjs'
 
 /**
  * @typedef {{
@@ -18,6 +23,8 @@ import { agentAlarmWatchByKey, clockNow, pruneExpiredWatches } from './alarm-not
  *   testRunId: string,
  *   reason: string,
  *   explicitWatch: boolean,
+ *   subscriptionId?: string,
+ *   authId?: string,
  * }} AlarmRecipient
  */
 
@@ -183,6 +190,8 @@ export function matchingAlarmRecipients(home, cwd, item, sourceSessionId) {
       testRunId: watch.testRunId,
       reason: 'agent-watch',
       explicitWatch: true,
+      subscriptionId: watch.subscriptionId,
+      authId: watch.subscriptionId,
     })
   }
 
@@ -201,6 +210,7 @@ export function matchingAlarmRecipients(home, cwd, item, sourceSessionId) {
         testRunId: '',
         reason: 'agent-focus',
         explicitWatch: false,
+        authId: `focus:${req.alarmId || req.pointId || req.connectionId || ''}`,
       })
     }
   }
@@ -222,6 +232,7 @@ export function matchingAlarmRecipients(home, cwd, item, sourceSessionId) {
       testRunId: '',
       reason: 'pending-write',
       explicitWatch: false,
+      authId: entry.id || params.commandId || '',
     })
   }
 
@@ -241,6 +252,7 @@ export function matchingAlarmRecipients(home, cwd, item, sourceSessionId) {
       testRunId: '',
       reason: 'pending-agent-task',
       explicitWatch: false,
+      authId: task.id || '',
     })
   }
 
@@ -260,6 +272,7 @@ export function matchingAlarmRecipients(home, cwd, item, sourceSessionId) {
       testRunId: '',
       reason: 'pending-manual',
       explicitWatch: false,
+      authId: req.id || '',
     })
   }
 
@@ -292,6 +305,66 @@ export function matchingAlarmRecipients(home, cwd, item, sourceSessionId) {
 export function recipientStillLive(home, cwd, item, recipient, recheckAlarmCurrent) {
   const live = recheckAlarmCurrent(home, cwd, item, recipient.sessionId)
   return !!(live && live.current)
+}
+
+/**
+ * Re-validate the ORIGINAL authorization reason. A retry must not silently
+ * switch to another reason for the same session after the old watch/command dies.
+ *
+ * @param {string} home
+ * @param {string} cwd
+ * @param {any} item
+ * @param {AlarmRecipient} recipient
+ * @returns {boolean}
+ */
+export function recipientStillAuthorized(home, cwd, item, recipient) {
+  if (!recipient?.sessionId) return false
+  const workspace = loadWorkspace(home, cwd)
+  const pointId = String(item?.point?.id || item?.pointId || item?.alarm?.pointId || '')
+  const connectionId = String(
+    item?.point?.connectionId || item?.connectionId || item?.alarm?.connectionId || '',
+  )
+
+  if (recipient.reason === 'agent-watch') {
+    const watch = getAgentAlarmWatch(cwd, recipient.sessionId)
+    if (!watch || !watch.followup) return false
+    if (Number(watch.expiresAt) > 0 && Number(watch.expiresAt) <= clockNow()) return false
+    if (recipient.subscriptionId && watch.subscriptionId !== recipient.subscriptionId) return false
+    const pointOk = !watch.pointIds.size || watch.pointIds.has(pointId)
+    const connOk = !watch.connectionId || watch.connectionId === connectionId
+    return pointOk && connOk
+  }
+
+  if (recipient.reason === 'agent-focus') {
+    const req = workspace?.focus?.request
+    if (!req || req.by !== 'agent') return false
+    return !!(
+      (req.alarmId && (req.alarmId === pointId || req.alarmId === item?.alarm?.id)) ||
+      (req.pointId && req.pointId === pointId) ||
+      (req.connectionId && req.connectionId === connectionId && req.kind === 'alarm')
+    )
+  }
+
+  if (
+    recipient.reason === 'pending-write' ||
+    recipient.reason === 'pending-agent-task' ||
+    recipient.reason === 'pending-manual'
+  ) {
+    const authId = String(recipient.authId || recipient.commandId || '')
+    if (!authId) return false
+    if (recipient.reason === 'pending-write') {
+      return (
+        pendingWrites.has(authId) ||
+        [...pendingWrites.values()].some((e) => (e.id || e.params?.commandId) === authId)
+      )
+    }
+    if (recipient.reason === 'pending-agent-task') {
+      return runningTasks(workspace?.tasks).some((/** @type {any} */ t) => t.id === authId)
+    }
+    return (workspace?.manualRequests || []).some((/** @type {any} */ r) => r.id === authId)
+  }
+
+  return false
 }
 
 export const _internal = {
