@@ -83,6 +83,13 @@ test('live source list only includes connected RTU, never unconfigured COM', asy
       assert.ok(sel, 'select exists')
       const values = Array.from(sel.querySelectorAll('option')).map((o) => o.value)
       assert.ok(values.includes('conn:c1'))
+      // Readiness sentinel must be payload-only state: the empty normalized
+      // topology synthesizes a placeholder connection `c1` (connection-model),
+      // so `conn:c1` is already in the DOM before any /state payload lands and
+      // `calls.state` only counts the POST. `conn:c2` can only come from the
+      // delivered payload — waiting for it keeps the assertions below from
+      // racing the async state delivery/re-render on slow CI.
+      assert.ok(values.includes('conn:c2'), 'state payload applied: proto lists disconnected configured COM4')
     },
     { timeout: 6000 },
   )
