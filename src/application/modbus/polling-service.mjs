@@ -157,10 +157,27 @@ export const modbusPoll = async (home, cwd, opts) => {
   }
 
   /** @type {ModbusWorkspace} */
-  let pack = packForTarget(batchOwnership.targets[0])
+  // Workspace-level runtime (values/polling/frames) — never substitute the first
+  // session pack for the whole batch.
+  const workspaceRuntimePack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
+  let pack = workspaceRuntimePack
 
-  // support per-connection polling; if no points, report
-  if (!pack.points.length) return { ok: false, error: '无点位，请先添加点位' }
+  /**
+   * Prepare every target with its own effective view before any I/O.
+   * Array objects are execution snapshots — never written back to config.
+   * @type {Array<{ connectionId: string, sourceSessionId: string, shared: boolean, pack: any, connection: any, points: any[] }>}
+   */
+  const preparedTargets = batchOwnership.targets.map((t) => {
+    const tpack = packForTarget(t)
+    const connection = tpack.connections.find((/** @type {any} */ c) => c.id === t.connectionId) || null
+    const points = tpack.points.filter((/** @type {any} */ p) => (p.connectionId || p.connId) === t.connectionId)
+    return { ...t, pack: tpack, connection, points }
+  })
+
+  // Only "no points" when the whole batch has none — an empty sibling must not
+  // block a target that does have collectible points.
+  const batchHasPoints = preparedTargets.some((t) => t.points.length > 0)
+  if (!batchHasPoints) return { ok: false, error: '无点位，请先添加点位' }
   if (hasRunning(workspace, 'read')) {
     return {
       ok: true,
@@ -171,11 +188,15 @@ export const modbusPoll = async (home, cwd, opts) => {
     }
   }
   const targetConns = []
-  for (const t of batchOwnership.targets) {
-    const tpack = packForTarget(t)
-    const found = tpack.connections.find((/** @type {any} */ c) => c.id === t.connectionId)
-    if (found && found.enabled !== false) {
-      targetConns.push({ ...found, __sourceSessionId: t.sourceSessionId, __shared: t.shared, __pack: tpack })
+  for (const t of preparedTargets) {
+    if (t.connection && t.connection.enabled !== false) {
+      targetConns.push({
+        ...t.connection,
+        __sourceSessionId: t.sourceSessionId,
+        __shared: t.shared,
+        __pack: t.pack,
+        __points: t.points,
+      })
     }
   }
   if (cidArg && !targetConns.length) return { ok: false, error: `连接不存在: ${cidArg}` }
@@ -211,7 +232,9 @@ export const modbusPoll = async (home, cwd, opts) => {
       const conn = connObj.conn
       const connId = connObj.id
       const tpack = connObj.__pack || pack
-      const pts = tpack.points.filter((/** @type {any} */ p) => (p.connectionId || p.connId) === connId)
+      const pts = Array.isArray(connObj.__points)
+        ? connObj.__points
+        : tpack.points.filter((/** @type {any} */ p) => (p.connectionId || p.connId) === connId)
       if (!pts.length) {
         // still update polling timestamp for empty but enabled connection?
         pollingByConnection[connId] = {
