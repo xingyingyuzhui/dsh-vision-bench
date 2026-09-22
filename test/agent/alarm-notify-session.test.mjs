@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   clearAgentAlarmWatch,
   disposeAlarmNotifyRuntime,
+  startAlarmNotifyRuntime,
   emitCommittedAlarmTransitions,
   matchingAlarmRecipients,
   recheckAlarmCurrent,
@@ -25,6 +26,7 @@ function resetAlarmInternals() {
   resetAlarmNotifyTestHooks()
   resetAlarmNotifyRetryTestHooks()
   disposeAlarmNotifyRuntime()
+  startAlarmNotifyRuntime()
   alarmInternal.deliveryLedger.clear()
   alarmInternal.agentAlarmWatchByKey.clear()
 }

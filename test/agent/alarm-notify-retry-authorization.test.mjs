@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   disposeAlarmNotifyRuntime,
+  startAlarmNotifyRuntime,
   emitCommittedAlarmTransitions,
   getAgentAlarmWatch,
   recheckAlarmCurrent,
@@ -22,6 +23,7 @@ function resetAlarmInternals() {
   resetAlarmNotifyTestHooks()
   resetAlarmNotifyRetryTestHooks()
   disposeAlarmNotifyRuntime()
+  startAlarmNotifyRuntime()
   alarmInternal.deliveryLedger.clear()
   alarmInternal.agentAlarmWatchByKey.clear()
 }

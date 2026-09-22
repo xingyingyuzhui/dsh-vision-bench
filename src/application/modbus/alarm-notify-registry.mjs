@@ -5,7 +5,35 @@ import { notifyBenchEvent } from '../../infrastructure/host/notify.mjs'
 export const WATCH_TTL_MS = 30 * 60 * 1000
 const LEDGER_TTL_MS = 60 * 60 * 1000
 const LEDGER_MAX = 4000
+/** 3 total deliveries: first attempt + 2 retries (delays 1s / 3s). */
 export const MAX_DELIVERY_ATTEMPTS = 3
+
+/** Monotonic runtime epoch. Dispose invalidates the current token before cleanup. */
+let runtimeEpoch = 0
+let runtimeActive = true
+
+/** @returns {number} */
+export function captureAlarmRuntimeToken() {
+  return runtimeEpoch
+}
+
+/** @param {number} token */
+export function isAlarmRuntimeCurrent(token) {
+  return runtimeActive && Number(token) === runtimeEpoch
+}
+
+/** Host lease start: allow deliveries again and bump the epoch. */
+export function startAlarmNotifyRuntime() {
+  runtimeActive = true
+  runtimeEpoch += 1
+  return runtimeEpoch
+}
+
+/** Invalidate the current epoch FIRST so in-flight promises cannot resurrect state. */
+export function invalidateAlarmNotifyRuntime() {
+  runtimeActive = false
+  runtimeEpoch += 1
+}
 
 /**
  * Delivery ledger entry states.

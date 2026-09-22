@@ -10,6 +10,7 @@ import {
 } from '../../src/application/modbus/poll-session-ownership.mjs'
 import {
   disposeAlarmNotifyRuntime,
+  startAlarmNotifyRuntime,
   resetAlarmNotifyRetryTestHooks,
   resetAlarmNotifyTestHooks,
   setAgentAlarmWatch,
@@ -22,6 +23,7 @@ function resetAlarmInternals() {
   resetAlarmNotifyTestHooks()
   resetAlarmNotifyRetryTestHooks()
   disposeAlarmNotifyRuntime()
+  startAlarmNotifyRuntime()
   alarmInternal.deliveryLedger.clear()
   alarmInternal.agentAlarmWatchByKey.clear()
 }

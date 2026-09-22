@@ -1,22 +1,28 @@
 // @ts-check
 /**
  * Bounded in-memory retry queue for failed alarm followups.
- * Delays 1s / 3s / 10s, at most 3 attempts, same eventId per recipient.
- * Process restart drops the queue (documented); dispose clears timers.
+ * Total deliveries: 3 (first + 2 retries). Retry delays: 1s, 3s.
+ * Process restart drops the queue (documented); dispose invalidates the
+ * runtime epoch first so in-flight promises cannot resurrect tasks.
  */
 import {
   MAX_DELIVERY_ATTEMPTS,
   beginDeliveryAttempt,
+  captureAlarmRuntimeToken,
   deliverNotify,
+  isAlarmRuntimeCurrent,
   markDelivered,
   markExhausted,
   markQueued,
 } from './alarm-notify-registry.mjs'
 import { recipientStillAuthorized } from './alarm-notify-match.mjs'
 
-export const RETRY_DELAYS_MS = [1_000, 3_000, 10_000]
+/** Retry delays after the first failed attempt. */
+export const RETRY_DELAYS_MS = [1_000, 3_000]
 
 /**
+ * @typedef {'queued' | 'pending' | 'delivered' | 'exhausted' | 'cancelled'} NotifyRetryState
+ *
  * @typedef {{
  *   eventId: string,
  *   sessionId: string,
@@ -32,6 +38,10 @@ export const RETRY_DELAYS_MS = [1_000, 3_000, 10_000]
  *   recipient: any,
  *   item: any,
  *   sourceSessionId?: string,
+ *   runtimeEpoch: number,
+ *   cancelled: boolean,
+ *   state: NotifyRetryState,
+ *   guards: { recheck: (home: any, cwd: string, item: any, sessionId?: string) => any },
  * }} NotifyRetryTask
  */
 
@@ -79,23 +89,16 @@ function retryKey(eventId, sessionId) {
 }
 
 /**
- * Re-validate before spending another attempt: the ORIGINAL authorization
- * reason still holds, the event target still matches, and the alarm is live.
- *
  * @param {NotifyRetryTask} task
- * @param {{
- *   recheck: (home: any, cwd: string, item: any, sessionId?: string) => any,
- *   item: any,
- * }} guards
+ * @param {any} item
  */
-function guardsPass(task, guards) {
-  const item = task.item || guards?.item
-  // 1+2. Original auth reason (watch subscriptionId / focus / command id) still covers the event.
+function guardsPass(task, item) {
+  if (task.cancelled) return false
+  if (!isAlarmRuntimeCurrent(task.runtimeEpoch)) return false
   if (!recipientStillAuthorized(task.home, task.cwd, item, task.recipient)) return false
-  // 3. Alarm still valid (not recovered / deleted / disabled).
-  if (!guards || typeof guards.recheck !== 'function') return true
+  if (!task.guards || typeof task.guards.recheck !== 'function') return true
   try {
-    const live = guards.recheck(task.home, task.cwd, item, task.sessionId)
+    const live = task.guards.recheck(task.home, task.cwd, item, task.sessionId)
     return !!(live && live.current)
   } catch {
     return false
@@ -103,65 +106,85 @@ function guardsPass(task, guards) {
 }
 
 /**
- * @param {string} key
+ * Unified execute entry used by timers and manual due-run. Cancels the
+ * corresponding timer first so concurrent triggers execute once.
  * @param {NotifyRetryTask} task
- * @param {{ recheck: (home: any, cwd: string, item: any, sessionId?: string) => any, item: any }} guards
  */
-function scheduleNext(key, task, guards) {
-  const delay = RETRY_DELAYS_MS[Math.min(task.attempts, RETRY_DELAYS_MS.length - 1)]
-  task.dueAt = nowFn() + delay
-  if (task.timer) clearTimer(task.timer)
-  task.timer = setTimer(() => {
-    retryByKey.delete(key)
-    return runRetryTask(task, guards)
-  }, delay)
-  retryByKey.set(key, task)
-}
-
-/**
- * @param {NotifyRetryTask} task
- * @param {{ recheck: (home: any, cwd: string, item: any, sessionId?: string) => any, item: any }} guards
- */
-async function runRetryTask(task, guards) {
+async function runRetryTask(task) {
   const key = retryKey(task.eventId, task.sessionId)
-  if (!guardsPass(task, guards)) {
+  if (task.timer) {
+    clearTimer(task.timer)
+    task.timer = null
+  }
+  if (task.cancelled || task.state === 'delivered' || task.state === 'exhausted' || task.state === 'cancelled') {
+    return
+  }
+  const token = captureAlarmRuntimeToken()
+  if (!isAlarmRuntimeCurrent(token) || !isAlarmRuntimeCurrent(task.runtimeEpoch)) return
+
+  const item = task.item
+  if (!guardsPass(task, item)) {
+    if (!isAlarmRuntimeCurrent(token) || task.cancelled) return
+    task.state = 'exhausted'
     markExhausted(task.eventId, task.sessionId)
+    if (retryByKey.get(key) === task) retryByKey.delete(key)
     onRetryOutcome?.({ eventId: task.eventId, sessionId: task.sessionId, attempts: task.attempts, ok: false })
     return
   }
+
   const attempt = beginDeliveryAttempt(task.eventId, task.sessionId)
   if (!attempt.proceed) {
     if (attempt.entry?.state === 'delivered' || attempt.entry?.state === 'exhausted') {
-      retryByKey.delete(key)
+      task.state = attempt.entry.state === 'delivered' ? 'delivered' : 'exhausted'
+      if (retryByKey.get(key) === task) retryByKey.delete(key)
     }
     return
   }
+
+  task.state = 'pending'
   let delivered
   try {
     delivered = await deliverNotify(task.home, task.cwd, task.summary, task.detail, task.opts)
   } catch {
     delivered = { ok: false }
   }
+  if (!isAlarmRuntimeCurrent(token) || task.cancelled) return
+
   if (delivered && delivered.ok === true) {
+    task.state = 'delivered'
     markDelivered(task.eventId, task.sessionId)
-    retryByKey.delete(key)
+    if (retryByKey.get(key) === task) retryByKey.delete(key)
     onRetryOutcome?.({ eventId: task.eventId, sessionId: task.sessionId, attempts: task.attempts, ok: true })
     return
   }
   task.attempts += 1
   if (task.attempts >= MAX_DELIVERY_ATTEMPTS) {
+    task.state = 'exhausted'
     markExhausted(task.eventId, task.sessionId)
-    retryByKey.delete(key)
+    if (retryByKey.get(key) === task) retryByKey.delete(key)
     onRetryOutcome?.({ eventId: task.eventId, sessionId: task.sessionId, attempts: task.attempts, ok: false })
     return
   }
+  task.state = 'queued'
   markQueued(task.eventId, task.sessionId)
-  scheduleNext(key, task, guards)
+  scheduleNext(key, task)
 }
 
 /**
- * Queue one failed recipient delivery. Same eventId is reused across retries.
- *
+ * @param {string} key
+ * @param {NotifyRetryTask} task
+ */
+function scheduleNext(key, task) {
+  if (task.cancelled || !isAlarmRuntimeCurrent(task.runtimeEpoch)) return
+  const delay = RETRY_DELAYS_MS[Math.min(task.attempts - 1, RETRY_DELAYS_MS.length - 1)]
+  task.dueAt = nowFn() + delay
+  if (task.timer) clearTimer(task.timer)
+  task.state = 'queued'
+  task.timer = setTimer(() => runRetryTask(task), delay)
+  retryByKey.set(key, task)
+}
+
+/**
  * @param {{
  *   eventId: string,
  *   sessionId: string,
@@ -179,6 +202,8 @@ async function runRetryTask(task, guards) {
  * @returns {{ queued: boolean, attempts: number, dueAt?: number }}
  */
 export function enqueueAlarmNotifyRetry(input) {
+  const token = captureAlarmRuntimeToken()
+  if (!isAlarmRuntimeCurrent(token)) return { queued: false, attempts: input.attempts || 0 }
   const eventId = String(input.eventId || '')
   const sessionId = String(input.sessionId || '')
   if (!eventId) return { queued: false, attempts: input.attempts || 0 }
@@ -189,7 +214,9 @@ export function enqueueAlarmNotifyRetry(input) {
   }
   const key = retryKey(eventId, sessionId)
   const existing = retryByKey.get(key)
-  if (existing) return { queued: true, attempts: existing.attempts, dueAt: existing.dueAt }
+  if (existing && !existing.cancelled) {
+    return { queued: true, attempts: existing.attempts, dueAt: existing.dueAt }
+  }
   /** @type {NotifyRetryTask} */
   const task = {
     eventId,
@@ -206,14 +233,17 @@ export function enqueueAlarmNotifyRetry(input) {
     recipient: input.recipient,
     item: input.item,
     sourceSessionId: input.sourceSessionId,
+    runtimeEpoch: token,
+    cancelled: false,
+    state: 'queued',
+    guards: { recheck: input.recheck },
   }
   markQueued(eventId, sessionId)
-  scheduleNext(key, task, { recheck: input.recheck, item: input.item })
+  scheduleNext(key, task)
   return { queued: true, attempts: task.attempts, dueAt: task.dueAt }
 }
 
 /**
- * Cancel queued retries (e.g. watch cleared / subscription identity changed).
  * @param {{ sessionId?: string, eventId?: string, cwd?: string, subscriptionId?: string }} [filter]
  */
 export function cancelAlarmNotifyRetries(filter = {}) {
@@ -222,30 +252,33 @@ export function cancelAlarmNotifyRetries(filter = {}) {
     if (filter.eventId && task.eventId !== filter.eventId) continue
     if (filter.cwd && task.cwd !== filter.cwd) continue
     if (filter.subscriptionId && task.recipient?.subscriptionId !== filter.subscriptionId) continue
-    if (task.timer) clearTimer(task.timer)
-    retryByKey.delete(key)
-    markExhausted(task.eventId, task.sessionId)
+    task.cancelled = true
+    task.state = 'cancelled'
+    if (task.timer) {
+      clearTimer(task.timer)
+      task.timer = null
+    }
+    if (retryByKey.get(key) === task) retryByKey.delete(key)
   }
 }
 
-/** Host dispose: drop every timer + queued task. */
 export function clearAlarmNotifyRetryRuntime() {
   for (const task of retryByKey.values()) {
-    if (task.timer) clearTimer(task.timer)
+    task.cancelled = true
+    task.state = 'cancelled'
+    if (task.timer) {
+      clearTimer(task.timer)
+      task.timer = null
+    }
   }
   retryByKey.clear()
 }
 
-/**
- * @param {{
- *   recheck: (home: any, cwd: string, item: any, sessionId?: string) => any,
- *   item: any,
- * }} guards
- */
-export function runDueAlarmNotifyRetries(guards) {
+/** Test helper: run due tasks with their OWN carried guards. */
+export function runDueAlarmNotifyRetries() {
   const now = nowFn()
-  const due = [...retryByKey.values()].filter((t) => t.dueAt <= now)
-  return Promise.all(due.map((task) => runRetryTask(task, guards)))
+  const due = [...retryByKey.values()].filter((t) => t.dueAt <= now && !t.cancelled)
+  return Promise.all(due.map((task) => runRetryTask(task)))
 }
 
 export const _internal = {

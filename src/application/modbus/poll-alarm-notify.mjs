@@ -13,18 +13,23 @@ import {
   WATCH_TTL_MS,
   agentAlarmWatchByKey,
   beginDeliveryAttempt,
+  captureAlarmRuntimeToken,
   clearAgentAlarmWatch,
   clearAlarmNotifyRegistryRuntime,
   deliverNotify,
   deliveryLedger,
   getAgentAlarmWatch,
   getDeliveryEntry,
+  invalidateAlarmNotifyRuntime,
+  isAlarmRuntimeCurrent,
   markDelivered,
   markExhausted,
   markQueued,
   resetAlarmNotifyTestHooks,
   setAgentAlarmWatch,
   setAlarmNotifyTestHooks,
+  revokeAgentAlarmSubscription,
+  startAlarmNotifyRuntime,
 } from './alarm-notify-registry.mjs'
 import { matchingAlarmRecipients, recipientStillAuthorized, resolveAlarmEventOwnership } from './alarm-notify-match.mjs'
 import {
@@ -34,14 +39,16 @@ import {
   resetAlarmNotifyRetryTestHooks,
   setAlarmNotifyRetryTestHooks,
 } from './alarm-notify-retry.mjs'
-import { revokeAgentAlarmSubscription } from './alarm-notify-registry.mjs'
 
 export {
   cancelAlarmNotifyRetries,
+  captureAlarmRuntimeToken,
   clearAgentAlarmWatch,
   clearAlarmNotifyRegistryRuntime,
   clearAlarmNotifyRetryRuntime,
   getAgentAlarmWatch,
+  invalidateAlarmNotifyRuntime,
+  isAlarmRuntimeCurrent,
   matchingAlarmRecipients,
   recipientStillAuthorized,
   resetAlarmNotifyRetryTestHooks,
@@ -51,6 +58,7 @@ export {
   setAgentAlarmWatch,
   setAlarmNotifyRetryTestHooks,
   setAlarmNotifyTestHooks,
+  startAlarmNotifyRuntime,
 }
 
 /**
@@ -181,6 +189,10 @@ export function shouldNotifyAgentOfProcessAlarm(home, cwd, item) {
  */
 export async function emitCommittedAlarmTransitions(home, cwd, alarms, opts = {}) {
   if (!alarms) return { notified: 0, recorded: 0, failed: 0, queued: 0, ambiguousOwner: false }
+  const runtimeToken = captureAlarmRuntimeToken()
+  if (!isAlarmRuntimeCurrent(runtimeToken)) {
+    return { notified: 0, recorded: 0, failed: 0, queued: 0, ambiguousOwner: false }
+  }
   const fired = Array.isArray(alarms.fired) ? alarms.fired : []
   const recovered = Array.isArray(alarms.recovered) ? alarms.recovered : []
   const sourceSessionId = opts.sourceSessionId
@@ -227,6 +239,7 @@ export async function emitCommittedAlarmTransitions(home, cwd, alarms, opts = {}
       recorded += 1
 
       for (const item of procFired) {
+        if (!isAlarmRuntimeCurrent(runtimeToken)) return { notified, recorded, failed, queued, ambiguousOwner }
         const match = matchingAlarmRecipients(home, cwd, item, sourceOf(item))
         if (match.ambiguousOwner) {
           ambiguousOwner = true
@@ -244,6 +257,7 @@ export async function emitCommittedAlarmTransitions(home, cwd, alarms, opts = {}
           continue
         }
         for (const recipient of match.recipients) {
+          if (!isAlarmRuntimeCurrent(runtimeToken)) return { notified, recorded, failed, queued, ambiguousOwner }
           const meta = alarmEventMeta(item, { cwd, sessionId: recipient.sessionId })
           const live = recheckAlarmCurrent(home, cwd, item, recipient.sessionId)
           // Historical (deleted/cleared) events stay in the journal only — not current faults.
@@ -265,11 +279,18 @@ export async function emitCommittedAlarmTransitions(home, cwd, alarms, opts = {}
           const summary = `Vision 告警：${head}`
           const notifyOpts = { sessionId: recipient.sessionId }
           const delivered = await deliverNotify(home, cwd, summary, detail, notifyOpts)
+          // Dispose while awaiting: do not mark ledger or create a new retry.
+          if (!isAlarmRuntimeCurrent(runtimeToken)) return { notified, recorded, failed, queued, ambiguousOwner }
           if (delivered && delivered.ok === true) {
             markDelivered(meta.eventId, recipient.sessionId)
             notified += 1
           } else {
             failed += 1
+            // Unsubscribed / retargeted while in-flight: do not reschedule.
+            if (!recipientStillAuthorized(home, cwd, item, recipient)) {
+              markExhausted(meta.eventId, recipient.sessionId)
+              continue
+            }
             const enq = enqueueAlarmNotifyRetry({
               eventId: meta.eventId,
               sessionId: recipient.sessionId,
@@ -348,8 +369,9 @@ export async function emitCommittedAlarmTransitions(home, cwd, alarms, opts = {}
   return { notified, recorded, failed, queued, ambiguousOwner }
 }
 
-/** Host dispose: cancel retries and drop in-memory notify state. */
+/** Host dispose: invalidate epoch first so in-flight promises cannot resurrect state. */
 export function disposeAlarmNotifyRuntime() {
+  invalidateAlarmNotifyRuntime()
   cancelAlarmNotifyRetries()
   clearAlarmNotifyRetryRuntime()
   clearAlarmNotifyRegistryRuntime()
