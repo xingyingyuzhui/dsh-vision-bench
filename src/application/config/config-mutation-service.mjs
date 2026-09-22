@@ -266,6 +266,11 @@ function stampTimeline(workspace, source, sessionId, summary, extra = {}) {
  */
 async function applyOperation(home, cwd, current, ctx, listStates) {
   const { scope, op, target, value, source, sessionId } = ctx
+  // share.* must see raw layered topology — normalizeModbus would hide twins.
+  if (scope === 'share') {
+    const workspace = normalizeWorkspace(current)
+    return applyShare({ ...workspace, modbus: { ...current.modbus } }, op, value, sessionId)
+  }
   const pack = normalizeModbus(current.modbus)
   const workspace = normalizeWorkspace(current)
   workspace.modbus = { ...pack }
@@ -275,7 +280,6 @@ async function applyOperation(home, cwd, current, ctx, listStates) {
   if (scope === 'connection') return applyConnection(home, cwd, workspace, op, target, value, listStates)
   if (scope === 'device') return applyDevice(workspace, op, target, value)
   if (scope === 'flags') return applyFlags(workspace, op, target, value)
-  if (scope === 'share') return applyShare(workspace, op, value, sessionId)
   void source
   return { ok: false, errorCode: 'UNKNOWN_OP', error: `未知配置操作: ${ctx.raw}` }
 }

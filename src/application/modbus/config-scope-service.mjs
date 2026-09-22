@@ -312,9 +312,19 @@ function mergeValues(projectedValues, baseValues) {
  *   | { ok: false, errorCode: string, error: string, needsConfirm?: boolean, revoked?: ShareCategory[], conflicts?: any[] }}
  */
 export function applyShareFlags(modbus, sessionId, nextShare, opts = {}) {
-  const base = ensureScopeFields(modbus)
   const sid = normalizeScopeSessionId(sessionId)
   if (!sid) return { ok: false, errorCode: SHARE_SESSION_REQUIRED, error: '共享设置必须携带 sessionId' }
+  // RAW candidate rows first — ensureScopeFields/normalizeSessionConfigs would
+  // hide same-layer deviceId twins before we can reject them.
+  const rawSrc = modbus && typeof modbus === 'object' ? modbus : {}
+  const rawSharedDevices = Array.isArray(rawSrc.devices) ? rawSrc.devices : []
+  const rawSc = rawSrc.sessionConfigs && typeof rawSrc.sessionConfigs === 'object' ? rawSrc.sessionConfigs : {}
+  const rawPriv = rawSc[sid] && typeof rawSc[sid] === 'object' ? rawSc[sid] : null
+  const rawPrivDevices = Array.isArray(rawPriv?.devices) ? rawPriv.devices : []
+  const rawTopConnections = Array.isArray(rawSrc.connections) ? rawSrc.connections : []
+  const rawPrivConnections = Array.isArray(rawPriv?.connections) ? rawPriv.connections : []
+
+  const base = ensureScopeFields(rawSrc)
   const prev = base.share
   const next = normalizeShareFlags(nextShare)
   /** @type {ShareCategory[]} */
@@ -344,28 +354,20 @@ export function applyShareFlags(modbus, sessionId, nextShare, opts = {}) {
     priv = withCategory(priv, shared, category)
     shared = withCategory(shared, empty, category)
   }
-  // Publish/merge can form a layer with duplicate deviceIds — reject before save.
-  // Do not change share replace/publish semantics; only judge the resulting layer.
-  const mergedLayerCheck = validateLayerDeviceIds(shared.devices, {
-    layer: published.includes('connections') ? 'shared' : 'top',
-  })
-  if (!mergedLayerCheck.ok) {
-    return {
-      ok: false,
-      errorCode: mergedLayerCheck.errorCode,
-      error: mergedLayerCheck.error,
-      conflicts: mergedLayerCheck.conflicts,
-    }
+
+  // Judge the RESULTING candidate layer from RAW rows (not yet deduped).
+  // Publish replaces the category with this session's slice — twins inside that
+  // raw slice are duplicates; a legal replacement of one shared d1 by one
+  // private d1 is not.
+  if (published.includes('connections')) {
+    const deviceCheck = validateLayerDeviceIds(rawPrivDevices, { layer: 'private', sessionId: sid })
+    if (!deviceCheck.ok) return deviceCheck
+  } else if (revoked.includes('connections')) {
+    // Revoke copies shared into this session's private layer.
+    const deviceCheck = validateLayerDeviceIds(rawSharedDevices, { layer: 'private', sessionId: sid })
+    if (!deviceCheck.ok) return deviceCheck
   }
-  const privLayerCheck = validateLayerDeviceIds(priv.devices, { layer: 'private', sessionId: sid })
-  if (!privLayerCheck.ok) {
-    return {
-      ok: false,
-      errorCode: privLayerCheck.errorCode,
-      error: privLayerCheck.error,
-      conflicts: privLayerCheck.conflicts,
-    }
-  }
+
   const sessionConfigs = { ...base.sessionConfigs, [sid]: normalizeSessionConfig(priv) }
   const nextModbus = normalizeModbus({
     ...base,
