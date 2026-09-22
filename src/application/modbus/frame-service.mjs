@@ -108,7 +108,8 @@ export const listFrames = (home, cwd, body) => {
   }
   // Resolve target connection: explicit else active
   const targetCid = cidArg || pack.activeConnectionId || pack.connections[0]?.id || ''
-  const limit = Math.max(1, Math.min(200, Number(body?.limit) || 50))
+  const hardCap = origin?.source === 'agent' ? 100 : 200
+  const limit = Math.max(1, Math.min(hardCap, Number(body?.limit) || 50))
   const offset = Math.max(0, Number(body?.offset) || 0)
   const srcFrames = pack.framesByConnection?.[targetCid] || []
   // Enrich frames with stable id if missing

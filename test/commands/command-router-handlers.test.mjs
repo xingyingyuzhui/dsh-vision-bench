@@ -58,6 +58,7 @@ test('project/config/visualization handlers cover happy and mismatch paths', asy
       cwd,
       action: 'points',
       source: 'agent',
+      sessionId: 's1',
       payload: {
         action: 'points',
         op: 'update',
@@ -71,11 +72,30 @@ test('project/config/visualization handlers cover happy and mismatch paths', asy
     assert.equal(mismatch.ok, false)
     assert.equal(mismatch.errorCode, 'TARGET_MISMATCH')
 
+    const missingSession = await executeVisionCommand({
+      home,
+      cwd,
+      action: 'points',
+      source: 'agent',
+      payload: {
+        action: 'points',
+        op: 'update',
+        connectionId: 'c1',
+        deviceId: 'd1',
+        pointId: 'p1',
+        expectedConfigVersion: loadWorkspace(home, cwd).modbus.configVersion,
+        point: { id: 'p1', name: 'Nope' },
+      },
+    })
+    assert.equal(missingSession.ok, false)
+    assert.equal(missingSession.errorCode, 'SESSION_REQUIRED')
+
     const drift = await executeVisionCommand({
       home,
       cwd,
       action: 'points',
       source: 'agent',
+      sessionId: 's1',
       payload: {
         action: 'points',
         op: 'add',
@@ -93,6 +113,7 @@ test('project/config/visualization handlers cover happy and mismatch paths', asy
       cwd,
       action: 'visualization',
       source: 'agent',
+      sessionId: 's1',
       payload: {
         action: 'visualization',
         op: 'add',

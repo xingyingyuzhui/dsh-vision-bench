@@ -202,6 +202,8 @@ export const modbusRead = async (home, cwd, body, opts = {}) => {
   let lastError = ''
   let lastFrames = null
   const results = []
+  /** @type {any[]} */
+  const readings = []
   const framesLog = []
   const framesByConnection = { ...(pack.framesByConnection || {}) }
 
@@ -221,6 +223,7 @@ export const modbusRead = async (home, cwd, body, opts = {}) => {
         taskId: task.id,
         source: origin.source,
         values,
+        readings,
         framesLog,
         framesByConnection,
       }
@@ -245,6 +248,7 @@ export const modbusRead = async (home, cwd, body, opts = {}) => {
         taskId: task.id,
         source: origin.source,
         values,
+        readings,
         framesLog,
         framesByConnection,
       }
@@ -291,6 +295,18 @@ export const modbusRead = async (home, cwd, body, opts = {}) => {
       if (!framesByConnection[batchCid]) framesByConnection[batchCid] = []
       framesByConnection[batchCid] = framesByConnection[batchCid].concat([entry]).slice(-500)
     }
+    if (ran.ok) {
+      readings.push({
+        connectionId: batchCid,
+        deviceId: batchDid,
+        function: batch.fc,
+        address: batch.address,
+        count: batch.count,
+        raw: raw.slice(0, batch.count),
+        frameId: entry?.id || entry?.frameId || '',
+        transactionId: ran.transactionId || '',
+      })
+    }
     await commitReadResult(home, room.cwd, {
       baseConfigVersion: pack.configVersion,
       connectionId: batchCid,
@@ -318,16 +334,26 @@ export const modbusRead = async (home, cwd, body, opts = {}) => {
       : `读取 ${okCount}/${batches.length} 批成功${lastError ? `：${lastError}` : ''}`)
   await finishTask(home, room.cwd, task.id, { ok: okAll, summary, frames: lastFrames })
   const latest = normalizeModbus(loadWorkspace(home, room.cwd).modbus)
+  const scratchFc = body?.function != null ? Number(body.function) : undefined
+  const scratchAddress = body?.address != null ? Number(body.address) : undefined
+  const scratchCount = body?.count != null ? Number(body.count) : undefined
   return {
     ok: okAll,
     taskId: task.id,
     source: origin.source,
     summary,
     results,
+    readings,
     values: latest.values,
     framesLog,
     framesByConnection: latest.framesByConnection,
     simulated: sim,
+    connectionId: targetCid,
+    deviceId: targetDid,
+    pointId: body?.pointId ? String(body.pointId) : undefined,
+    function: Number.isFinite(scratchFc) ? scratchFc : undefined,
+    address: Number.isFinite(scratchAddress) ? scratchAddress : undefined,
+    count: Number.isFinite(scratchCount) ? scratchCount : undefined,
     error: okAll ? undefined : lastError,
   }
 }

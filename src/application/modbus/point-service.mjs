@@ -24,6 +24,7 @@ import { findPointV3, fnOfPoint } from '../../domain/modbus/function-code.mjs'
 import { compactPointRow, isStaleValue } from '../../domain/modbus/point-value.mjs'
 import { stampPoints } from '../../domain/modbus/unit-id.mjs'
 import { connReady, deviceDisabledOf, pickConnPatch, targetRequired } from '../../domain/modbus/validation.mjs'
+import { applyPointPatch, validateMonitorAlias } from '../../domain/modbus/point-patch.mjs'
 import {
   changedConnectionIds,
   createModbusTransport,
@@ -85,26 +86,27 @@ export const pointsOp = async (home, cwd, body) => {
   if (op === 'add' || op === 'update') {
     const inputs = Array.isArray(body.points) ? body.points : body.point ? [body.point] : []
     if (!inputs.length) return { ok: false, error: '缺少 points 或 point' }
-    let points = pack.points
+    /** @type {any[]} */
+    const pending = []
+    let planned = pack.points.slice()
     for (const input of inputs) {
-      const raw = { ...(input || {}) }
-      const inCid = raw.connectionId || raw.connId ? String(raw.connectionId || raw.connId).trim() : ''
-      const inDid = raw.deviceId ? String(raw.deviceId).trim() : ''
-      const connForPoint = inCid || targetConnId
-      const devForPoint = inDid || targetDevId
-      raw.connectionId = connForPoint
-      raw.deviceId = devForPoint
-      // normalize via v3 helper to ensure area/function/address correct
-      const next = normalizePointV3(raw)
-      // fix refs if invalid due to normalizePointV3 fallback logic
-      if (!pack.connections.some((c) => c.id === next.connectionId)) next.connectionId = targetConnId
-      if (!pack.devices.some((d) => d.id === next.deviceId)) next.deviceId = targetDevId
+      const rawIn = input && typeof input === 'object' ? input : {}
+      const alias = validateMonitorAlias(rawIn)
+      if (!alias.ok) return alias
+      const inCid = rawIn.connectionId || rawIn.connId ? String(rawIn.connectionId || rawIn.connId).trim() : ''
+      const inDid = rawIn.deviceId ? String(rawIn.deviceId).trim() : ''
       if (op === 'add') {
-        if (points.some((p) => p.id === next.id)) {
+        const raw = { ...rawIn }
+        raw.connectionId = inCid || targetConnId
+        raw.deviceId = inDid || targetDevId
+        const next = normalizePointV3(raw)
+        if (!pack.connections.some((c) => c.id === next.connectionId)) next.connectionId = targetConnId
+        if (!pack.devices.some((d) => d.id === next.deviceId)) next.deviceId = targetDevId
+        if (planned.some((p) => p.id === next.id)) {
           return { ok: false, error: `点位已存在: ${pointLabel(next)}（可用 update 修改）` }
         }
         if (
-          points.some(
+          planned.some(
             (p) =>
               p.connectionId === next.connectionId &&
               p.deviceId === next.deviceId &&
@@ -114,40 +116,38 @@ export const pointsOp = async (home, cwd, body) => {
         ) {
           return { ok: false, error: `点位已存在: ${pointLabel(next)}（可用 update 修改）` }
         }
-        points = points.concat([next])
+        pending.push({ kind: 'add', next })
+        planned = planned.concat([next])
       } else {
-        const idx = points.findIndex((p) => p.id === next.id)
-        if (idx < 0) return { ok: false, error: `要更新的点位不存在: ${next.id}` }
-        // Task1/0.19.3 (P1 修复): 编辑不得改变归属 — 未显式给出 deviceId/connectionId 时
-        // 保留原归属，绝不回落全局 activeDeviceId（会把设备2的点位移到设备1）
-        const existing = points[idx]
-        if (!inDid && !didArg) next.deviceId = existing.deviceId
-        if (!inCid && !cidArg) next.connectionId = existing.connectionId
-        // 未声明的新字段保留原值（监视/告警开关与上下限），显式值才修改
-        if (raw.monitorEnabled === undefined && raw.trendEnabled === undefined)
-          next.monitorEnabled = existing.monitorEnabled === true
-        if (raw.alarmEnabled === undefined && raw.alarmMin === undefined && raw.alarmMax === undefined) {
-          next.alarmEnabled = existing.alarmEnabled === true
-          next.alarmMin = existing.alarmMin != null ? existing.alarmMin : null
-          next.alarmMax = existing.alarmMax != null ? existing.alarmMax : null
-        } else {
-          if (raw.alarmMin === undefined) next.alarmMin = existing.alarmMin != null ? existing.alarmMin : null
-          if (raw.alarmMax === undefined) next.alarmMax = existing.alarmMax != null ? existing.alarmMax : null
-        }
+        const pid = rawIn.id ? String(rawIn.id).trim() : ''
+        if (!pid) return { ok: false, error: '要更新的点位不存在: ' }
+        const idx = planned.findIndex((p) => p.id === pid)
+        if (idx < 0) return { ok: false, error: `要更新的点位不存在: ${pid}` }
+        const existing = planned[idx]
+        // Do not inject active connection/device into the patch — that falsely trips FROZEN checks.
+        const patched = applyPointPatch(existing, rawIn)
+        if (!patched.ok) return patched
+        const merged = { ...existing, ...patched.point, id: existing.id }
         if (
-          points.some(
+          planned.some(
             (p, i) =>
               i !== idx &&
-              p.connectionId === next.connectionId &&
-              p.deviceId === next.deviceId &&
-              p.function === next.function &&
-              p.address === next.address,
+              p.connectionId === merged.connectionId &&
+              p.deviceId === merged.deviceId &&
+              p.function === merged.function &&
+              p.address === merged.address,
           )
         ) {
-          return { ok: false, error: `地址冲突: ${pointLabel(next)}` }
+          return { ok: false, error: `地址冲突: ${pointLabel(merged)}` }
         }
-        points = points.map((p, i) => (i === idx ? { ...p, ...next, id: points[idx].id } : p))
+        pending.push({ kind: 'update', idx, point: merged })
+        planned[idx] = merged
       }
+    }
+    let points = pack.points.slice()
+    for (const step of pending) {
+      if (step.kind === 'add') points = points.concat([step.next])
+      else points[step.idx] = step.point
     }
     const saved = await saveSessionModbusPatch(home, room.cwd, sessionId, { modbus: { points, version: 3 } })
     if (!saved.ok) return saved

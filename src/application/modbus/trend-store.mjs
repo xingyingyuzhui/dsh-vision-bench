@@ -13,6 +13,8 @@ import { functionTag } from '../../domain/modbus/point-model.mjs'
 import { loadWorkspace, saveWorkspaceAsync } from '../../infrastructure/store/workspace-store.mjs'
 
 export const TREND_KEEP = 600
+/** Default samples-per-series window for Agent-facing trend queries when limit omitted. */
+export const AGENT_TREND_DEFAULT_LIMIT = 60
 
 /**
  * @param {any} [input]
@@ -100,17 +102,26 @@ export const readTrendSeries = (home, cwd, opts = {}) => {
           .map((/** @type {any} */ p) => p.id)
   const from = Number(opts.start) || 0
   const to = Number(opts.end) || Date.now()
+  // limit = max samples per series (not total across series)
+  const rawLimit = Number(opts.limit)
+  const perSeriesLimit =
+    Number.isFinite(rawLimit) && rawLimit > 0 ? Math.trunc(rawLimit) : TREND_KEEP
   return ids.map((/** @type {any} */ pid) => {
     const pt = pack.points.find((/** @type {any} */ p) => p.id === pid)
     const list = Array.isArray(trend[pid]) ? trend[pid] : []
+    const windowed = list.filter(
+      (/** @type {any} */ sv) => (!from || sv[0] >= from) && (!to || sv[0] <= to),
+    )
+    const samples = windowed.slice(-perSeriesLimit)
     return {
       pointId: pid,
       name: pt ? pt.name || functionTag(pt.function) + pt.address : pid,
       connectionId: pt ? pt.connectionId : '',
       deviceId: pt ? pt.deviceId : '',
       unit: pt ? pt.unit : '',
-      count: list.length,
-      samples: list.filter((/** @type {any} */ sv) => (!from || sv[0] >= from) && (!to || sv[0] <= to)).slice(-TREND_KEEP),
+      count: windowed.length,
+      returned: samples.length,
+      samples,
     }
   })
 }

@@ -302,6 +302,11 @@
     "src/application/commands/command-contract.mjs",
     "src/application/commands/lossless-json.mjs",
     "src/application/commands/command-idempotency-cache.mjs",
+    "src/application/commands/agent-result-projection.mjs",
+    "src/application/commands/agent-result-project-rest.mjs",
+    "src/application/commands/agent-result-project-status-read.mjs",
+    "src/application/commands/agent-result-caps.mjs",
+    "src/application/commands/config-drift-refresh.mjs",
     "src/application/commands/vision-command-service.mjs",
     "src/application/commands/host-command-service.mjs",
     "src/application/commands/vision-command-router.mjs",
@@ -404,6 +409,7 @@
     "scripts/report-client-vendors.mjs",
     "src/ui/monitor/visualization/visualization-page.mjs",
     "src/ui/monitor/visualization/components/viz-card.mjs",
+    "src/ui/monitor/visualization/components/viz-card-menu.mjs",
     "src/ui/monitor/visualization/components/viz-point-picker.mjs",
     "src/ui/monitor/visualization/components/viz-editor-panel.mjs",
     "src/ui/monitor/visualization/components/viz-editor-constants.mjs",
@@ -526,7 +532,9 @@
     "src/domain/prompt/prompt-log.mjs",
     "src/infrastructure/modbus/serial-ports.mjs",
     "src/interfaces/agent/vision-bench-tool.mjs",
-    "src/infrastructure/modbus/modbus-slave.mjs"
+    "src/interfaces/agent/agent-tool-preflight.mjs",
+    "src/infrastructure/modbus/modbus-slave.mjs",
+    "src/application/modbus/alarm-notify-registry.mjs"
   ],
   "repository": {
     "type": "git",

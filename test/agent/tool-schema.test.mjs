@@ -7,7 +7,14 @@ import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
 import { runVisionBench, visionBenchTool } from '../../bench-tool.mjs'
 import { apply as applyAgent } from '../../tools.js'
 import { LEGACY_PERSONA_A, LEGACY_PERSONA_B } from '../helpers/preset-fixtures.mjs'
-import { createBench } from '../helpers/workspace-factory.mjs'
+import { ERROR_CODES } from '../../src/domain/modbus/errors.mjs'
+import { connection, createBench, pointSeries } from '../helpers/workspace-factory.mjs'
+import {
+  registerVisionHost,
+  unregisterVisionHost,
+} from '../../src/infrastructure/host/vision-host-client.mjs'
+import { createVisionCommandDispatcher } from '../../src/interfaces/http/vision-command-routes.mjs'
+import { validateAgentToolArgs } from '../../src/interfaces/agent/agent-tool-preflight.mjs'
 
 test('agent role registers vision_bench and skips HTTP routes', async () => {
   const tools = []
@@ -170,4 +177,200 @@ test('Task3/0.20.1: status 点位含 runtimeStatus（复用 pointRuntimeStatus�
     ['正常', '未读取', '告警', '通信异常', '已断开', '连接异常'].includes(pt.runtimeStatus),
     '状态值合法: ' + pt.runtimeStatus,
   )
+})
+
+test('status and points list agree after claim; other session stays isolated', async (t) => {
+  const bench = await createBench(t, { prefix: 'dvb-status-scope-' })
+  const { home, cwd } = bench
+  const conn = connection('real-c1', 'tcp', '', { sim: true })
+  const points = pointSeries('hr', 16, { connectionId: 'real-c1', deviceId: 'real-d1' }).map((p, i) => ({
+    ...p,
+    id: `p${i}`,
+  }))
+  saveWorkspace(home, cwd, {
+    modbus: {
+      version: 3,
+      configVersion: 7,
+      connections: [conn],
+      devices: [{ id: 'real-d1', connectionId: 'real-c1', name: 'D1', unitId: 1 }],
+      points,
+    },
+  })
+
+  const originA = { source: 'agent', sessionId: 'session-a' }
+  const statusA = await runVisionBench(home, { action: 'status' }, cwd, originA)
+  assert.equal(statusA.ok, true, statusA.error)
+  assert.equal(statusA.configVersion, 7)
+  assert.equal(statusA.modbus.configVersion, 7)
+  assert.equal(statusA.modbus.points.length, 16)
+
+  const listA = await runVisionBench(home, { action: 'points', op: 'list' }, cwd, originA)
+  assert.equal(listA.ok, true, listA.error)
+  assert.equal(listA.configVersion, statusA.configVersion)
+  assert.deepEqual(
+    listA.points.map((/** @type {any} */ p) => p.id).sort(),
+    statusA.modbus.points.map((/** @type {any} */ p) => p.id).sort(),
+  )
+  assert.deepEqual(
+    statusA.modbus.connections.map((/** @type {any} */ c) => c.id).sort(),
+    ['real-c1'],
+  )
+  assert.deepEqual(
+    statusA.modbus.devices.map((/** @type {any} */ d) => d.id).sort(),
+    ['real-d1'],
+  )
+  assert.equal(loadWorkspace(home, cwd).modbus.points?.length || 0, 0, 'claimed topology leaves flat layer empty')
+
+  const statusB = await runVisionBench(home, { action: 'status' }, cwd, {
+    source: 'agent',
+    sessionId: 'session-b',
+  })
+  assert.equal(statusB.ok, true, statusB.error)
+  assert.deepEqual(statusB.modbus.points, [])
+  assert.ok(
+    !statusB.modbus.connections.some((/** @type {any} */ c) => c.id === 'real-c1'),
+    'other session must not see claimed private connection',
+  )
+  assert.ok(!statusB.modbus.devices.some((/** @type {any} */ d) => d.id === 'real-d1'))
+
+  const listB = await runVisionBench(home, { action: 'points', op: 'list' }, cwd, {
+    source: 'agent',
+    sessionId: 'session-b',
+  })
+  assert.equal(listB.ok, true, listB.error)
+  assert.deepEqual(listB.points, [])
+
+  const anon = await runVisionBench(home, { action: 'status' }, cwd, { source: 'agent' })
+  assert.equal(anon.ok, false)
+  assert.equal(anon.errorCode, ERROR_CODES.SESSION_REQUIRED)
+})
+
+test('Agent tool schema marks preferred fields and aliases; focus/evidence are not read-only', () => {
+  const tool = visionBenchTool('/tmp')
+  const props = tool.parameters.properties
+  assert.match(props.connectionId.description, /规范/)
+  assert.match(props.connId.description, /别名/)
+  assert.match(props.expectedConfigVersion.description, /规范/)
+  assert.match(props.configVersion.description, /别名/)
+  assert.match(props.point.properties.monitorEnabled.description, /规范/)
+  assert.match(props.point.properties.trendEnabled.description, /别名/)
+  assert.match(tool.description, /focus 会改变 UI/)
+  assert.match(tool.description, /evidence\[\] 会追加日志/)
+  assert.match(tool.description, /get 必须带 visualizationId/)
+  assert.match(props.limit.description, /每条序列的样本数/)
+})
+
+test('Agent execute preflight returns missingFields once for read/frames', async () => {
+  unregisterVisionHost()
+  const stop = registerVisionHost({
+    dispatch() {
+      throw new Error('host must not run when preflight fails')
+    },
+  })
+  try {
+    const tool = visionBenchTool('/tmp')
+    const read = await tool.execute(
+      { action: 'read', pointId: 'p1' },
+      { agent: { session: { header: { cwd: '/tmp', id: 's1' } } } },
+    )
+    assert.equal(read.ok, false)
+    assert.equal(read.errorCode, 'TARGET_REQUIRED')
+    assert.deepEqual(read.missingFields, ['connectionId', 'deviceId'])
+    assert.match(String(read.hint || ''), /connectionId/)
+
+    const frames = await tool.execute(
+      { action: 'frames' },
+      { agent: { session: { header: { cwd: '/tmp', id: 's1' } } } },
+    )
+    assert.equal(frames.ok, false)
+    assert.deepEqual(frames.missingFields, ['connectionId'])
+  } finally {
+    stop()
+    unregisterVisionHost()
+  }
+})
+
+test('Agent preflight alarmId without unique connection matches Host TARGET_REQUIRED', () => {
+  const pack = {
+    connections: [
+      { id: 'c1', enabled: true },
+      { id: 'c2', enabled: true },
+    ],
+    devices: [
+      { id: 'd1', connectionId: 'c1' },
+      { id: 'd2', connectionId: 'c2' },
+    ],
+    points: [],
+    alarmState: {
+      // alarm without connectionId and no unique single-conn fallback
+      shared: { condition: 'active', pointId: 'px' },
+    },
+  }
+  const miss = validateAgentToolArgs({ action: 'alarm', alarmId: 'shared' }, { pack })
+  assert.ok(miss)
+  assert.equal(miss.errorCode, 'TARGET_REQUIRED')
+  assert.ok(miss.missingFields.includes('connectionId'))
+
+  const ok = validateAgentToolArgs(
+    { action: 'alarm', alarmId: 'shared', connectionId: 'c1' },
+    {
+      pack: {
+        ...pack,
+        alarmState: { shared: { condition: 'active', pointId: 'px', connectionId: 'c1' } },
+      },
+    },
+  )
+  assert.equal(ok, null)
+})
+
+test('Agent execute projects status/read; Host runVisionBench keeps full status points', async (t) => {
+  const bench = await createBench(t, { prefix: 'dvb-proj-' })
+  const { home, cwd } = bench
+  const conn = connection('c1', 'tcp', '', { sim: true })
+  const points = pointSeries('hr', 16, { connectionId: 'c1', deviceId: 'd1' }).map((p, i) => ({
+    ...p,
+    id: `p${i}`,
+    monitorEnabled: true,
+    alarmEnabled: false,
+  }))
+  saveWorkspace(home, cwd, {
+    modbus: {
+      version: 3,
+      configVersion: 3,
+      connections: [conn],
+      devices: [{ id: 'd1', connectionId: 'c1', name: 'D1', unitId: 1 }],
+      points,
+      values: points.map((p) => ({ pointId: p.id, key: p.id, raw: 1, value: 1, ok: true, at: 1 })),
+      framesByConnection: {
+        c1: Array.from({ length: 40 }, (_, i) => ({ id: `f${i}`, frameId: `f${i}`, transactionId: `tx${i}` })),
+      },
+      alarmState: { p0: { condition: 'normal', pointId: 'p0' } },
+    },
+  })
+  unregisterVisionHost()
+  const stop = registerVisionHost(createVisionCommandDispatcher(home))
+  try {
+    const tool = visionBenchTool(home)
+    const agent = { session: { header: { cwd, id: 's1' } } }
+    const status = await tool.execute({ action: 'status' }, { agent })
+    assert.equal(status.ok, true, status.error)
+    assert.equal(status.modbus.counts.points, 16)
+    assert.equal('framesByConnection' in status.modbus, false)
+    assert.equal('points' in status.modbus, false)
+
+    const full = await runVisionBench(home, { action: 'status' }, cwd, { source: 'agent', sessionId: 's1' })
+    assert.equal(full.modbus.points.length, 16, 'runVisionBench keeps full Host status')
+
+    const read = await tool.execute(
+      { action: 'read', connectionId: 'c1', deviceId: 'd1', pointId: 'p0' },
+      { agent },
+    )
+    assert.equal(read.ok, true, read.error)
+    assert.equal('framesByConnection' in read, false)
+    assert.ok(Array.isArray(read.values))
+    assert.ok(read.values.every((/** @type {any} */ v) => v.pointId === 'p0' || v.key === 'p0'))
+  } finally {
+    stop()
+    unregisterVisionHost()
+  }
 })

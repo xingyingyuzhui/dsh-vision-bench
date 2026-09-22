@@ -129,9 +129,9 @@ export default {
           "owner": "vision-bench"
         },
         {
-          "file": "src/ui/monitor/alarms/alarm-page.mjs",
+          "file": "src/interfaces/agent/vision-bench-tool.mjs",
           "max": 407,
-          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "reason": "Agent tool schema+execute; split schema later",
           "stage": "P6",
           "owner": "vision-bench"
         },
@@ -190,9 +190,23 @@ export default {
       "error": 500,
       "allow": [
         {
+          "file": "test/commands/lossless-json.test.mjs",
+          "max": 629,
+          "reason": "Agent projection + lossless JSON coverage; split later",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
           "file": "test/ui/project-workspace-isolation.test.mjs",
           "max": 441,
           "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/config/point-patch-semantics.test.mjs",
+          "max": 413,
+          "reason": "Point patch + batch atomicity coverage",
           "stage": "P4",
           "owner": "vision-bench"
         },
@@ -211,6 +225,20 @@ export default {
           "owner": "vision-bench"
         },
         {
+          "file": "test/config/scope-wiring.test.mjs",
+          "max": 382,
+          "reason": "Session scope wiring coverage",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/agent/tool-schema.test.mjs",
+          "max": 376,
+          "reason": "Agent tool schema contract coverage",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
           "file": "test/debug/keil-simulator-backend.test.mjs",
           "max": 368,
           "reason": "P5-4 debt ratchet; split in later P4/P6",
@@ -221,6 +249,13 @@ export default {
           "file": "test/visualization/model.test.mjs",
           "max": 368,
           "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/hmi/connection-presentation.test.mjs",
+          "max": 356,
+          "reason": "Connection presentation coverage",
           "stage": "P4",
           "owner": "vision-bench"
         }

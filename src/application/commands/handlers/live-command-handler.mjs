@@ -3,8 +3,16 @@ import { connectOp, modbusRead, modbusWrite } from '../../modbus/index.mjs'
 import { buildEvidenceRefs } from '../../modbus/index.mjs'
 import { createManualRequest } from '../../../infrastructure/store/journal-store.mjs'
 import { resolveTarget } from '../../modbus/target-resolver-service.mjs'
-import { readTrendSeries } from '../../modbus/trend-store.mjs'
+import {
+  AGENT_TREND_DEFAULT_LIMIT,
+  TREND_KEEP,
+  readTrendSeries,
+} from '../../modbus/trend-store.mjs'
 import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
+import {
+  clearAgentAlarmWatch,
+  setAgentAlarmWatch,
+} from '../../modbus/poll-alarm-notify.mjs'
 
 /** @param {any} args */
 function connectionIdOf(args) {
@@ -162,7 +170,19 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
           .filter((/** @type {any} */ p) => p.trendEnabled === true)
           .slice(0, 8)
           .map((/** @type {any} */ p) => p.id)
-    const series = readTrendSeries(home, room.cwd, { pointIds: scopeIds, start, end })
+    const rawLimit = Number(args.limit)
+    const limit =
+      Number.isFinite(rawLimit) && rawLimit > 0
+        ? Math.trunc(rawLimit)
+        : origin.source === 'agent'
+          ? AGENT_TREND_DEFAULT_LIMIT
+          : TREND_KEEP
+    const series = readTrendSeries(home, room.cwd, { pointIds: scopeIds, start, end, limit })
+    const total = series.reduce((/** @type {number} */ n, /** @type {any} */ s) => n + (Number(s.count) || 0), 0)
+    const returned = series.reduce(
+      (/** @type {number} */ n, /** @type {any} */ s) => n + (Number(s.returned) || (s.samples || []).length),
+      0,
+    )
     return {
       ok: true,
       action,
@@ -172,6 +192,9 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
         start,
         end,
         configVersion: pack.configVersion || 1,
+        limit,
+        total,
+        returned,
         series,
       },
     }
@@ -184,24 +207,57 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
     const deviceId = did || ''
     const pointId = typeof args.pointId === 'string' ? args.pointId : ''
     const alarmId = typeof args.alarmId === 'string' ? args.alarmId : ''
+    let resolvedConnectionId = connectionId
     if (alarmId || connectionId || deviceId || pointId) {
       const rt = resolveTarget(pack, {
-        connectionId: connectionId || (alarmId ? undefined : pack.activeConnectionId),
+        connectionId: connectionId || undefined,
         deviceId,
         pointId,
         alarmId,
       })
       if (!rt.ok) return { ok: false, action, error: rt.error, errorCode: rt.errorCode }
-    } else if (alarmId && !pack.alarmState[alarmId]) {
-      return { ok: false, action, error: `告警不存在: ${alarmId}`, errorCode: 'POINT_NOT_FOUND' }
+      if (rt.connectionId) resolvedConnectionId = rt.connectionId
+    }
+    if (alarmId) {
+      const hit =
+        pack.alarmState?.[alarmId] ||
+        Object.values(pack.alarmState || {}).find(
+          (/** @type {any} */ a) => a && (a.id === alarmId || a.pointId === alarmId),
+        )
+      if (!hit) {
+        return { ok: false, action, error: `告警不存在: ${alarmId}`, errorCode: 'POINT_NOT_FOUND' }
+      }
+    }
+    /** @type {any} */
+    let subscription = undefined
+    // Explicit Agent opt-in to receive process-alarm followups for this session+cwd.
+    if (origin.source === 'agent') {
+      if (args.watch === true || args.followup === true) {
+        subscription = setAgentAlarmWatch(room.cwd, {
+          followup: true,
+          sessionId: origin.sessionId,
+          pointIds: pointId ? [pointId] : alarmId ? [alarmId] : [],
+          connectionId: resolvedConnectionId,
+          ttlMs: Number(args.ttlMs) > 0 ? Number(args.ttlMs) : undefined,
+        })
+      } else if (args.watch === false || args.followup === false) {
+        clearAgentAlarmWatch(room.cwd, origin.sessionId)
+        subscription = { cleared: true, sessionId: origin.sessionId || '' }
+      }
+    }
+    /** @type {any} */
+    let alarmsOut = pack.alarmState
+    if (alarmId && pack.alarmState && typeof pack.alarmState === 'object') {
+      alarmsOut = pack.alarmState[alarmId] != null ? { [alarmId]: pack.alarmState[alarmId] } : {}
     }
     return {
       ok: true,
       action,
-      alarms: pack.alarmState,
-      connectionId: connectionId || pack.activeConnectionId,
+      alarms: alarmsOut,
+      connectionId: resolvedConnectionId || pack.activeConnectionId,
       configVersion: pack.configVersion || 1,
       evidence: buildEvidenceRefs(home, room.cwd),
+      subscription,
     }
   }
 

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
+import { runVisionBench } from '../../bench-tool.mjs'
 import { _internal } from '../../host.js'
 import { mutateConfig } from '../../src/application/config/config-mutation-service.mjs'
 import { ERROR_CODES } from '../../src/domain/modbus/errors.mjs'
@@ -334,6 +335,47 @@ test('mutateConfig on a session-private point via RPC points/flags resolves insi
       AbortSignal.timeout(5000),
     )
     assert.equal(foreign.ok, false, 'B cannot see (or flip) A private point')
+  } finally {
+    await rm(board.home, { recursive: true, force: true })
+  }
+})
+
+test('agent status and points list share the claimed session view', async () => {
+  const board = await setupBoard('dvb-scope-status-agent-')
+  try {
+    const origin = { source: 'agent', sessionId: SESSION_A }
+    const status = await runVisionBench(board.home, { action: 'status' }, board.cwd, origin)
+    assert.equal(status.ok, true, status.error)
+    assert.ok(status.modbus.points.some((/** @type {any} */ p) => p.id === 'legacy-p1'))
+    assert.equal(status.configVersion, status.modbus.configVersion)
+
+    const listed = await runVisionBench(board.home, { action: 'points', op: 'list' }, board.cwd, origin)
+    assert.equal(listed.ok, true, listed.error)
+    assert.equal(listed.configVersion, status.configVersion)
+    assert.deepEqual(
+      listed.points.map((/** @type {any} */ p) => p.id).sort(),
+      status.modbus.points.map((/** @type {any} */ p) => p.id).sort(),
+    )
+    assert.deepEqual(
+      status.modbus.connections.map((/** @type {any} */ c) => c.id).sort(),
+      ['legacy-c1'],
+    )
+    assert.deepEqual(
+      status.modbus.devices.map((/** @type {any} */ d) => d.id).sort(),
+      ['legacy-d1'],
+    )
+
+    const other = await runVisionBench(board.home, { action: 'status' }, board.cwd, {
+      source: 'agent',
+      sessionId: SESSION_B,
+    })
+    assert.equal(other.ok, true, other.error)
+    assert.deepEqual(other.modbus.points, [])
+    assert.ok(!other.modbus.connections.some((/** @type {any} */ c) => c.id === 'legacy-c1'))
+
+    const anon = await runVisionBench(board.home, { action: 'status' }, board.cwd, { source: 'agent' })
+    assert.equal(anon.ok, false)
+    assert.equal(anon.errorCode, ERROR_CODES.SESSION_REQUIRED)
   } finally {
     await rm(board.home, { recursive: true, force: true })
   }

@@ -187,3 +187,34 @@ test('readTrendSeries 直接读取存储并限窗', async () => {
   assert.deepEqual(series[0].samples, [[2000, 2]], '窗口过滤生效')
   await rm(home, { recursive: true, force: true })
 })
+
+test('readTrendSeries limit is samples per series; trend(limit=5) ≤5', async () => {
+  const { home, cwd } = await setup()
+  const samples = Array.from({ length: 20 }, (_, i) => [1000 + i * 100, i])
+  saveWorkspace(home, cwd, {
+    modbus: {
+      ...baseModbus,
+      trend: { p2: samples, p1: samples },
+    },
+  })
+  const series = readTrendSeries(home, cwd, { pointIds: ['p1', 'p2'], limit: 5 })
+  assert.equal(series.length, 2)
+  for (const s of series) {
+    assert.equal(s.count, 20)
+    assert.equal(s.returned, 5)
+    assert.ok(s.samples.length <= 5)
+    assert.equal(s.samples.length, 5)
+  }
+  const ran = await runVisionBench(
+    home,
+    { action: 'trend', connectionId: 'c1', pointIds: ['p2'], limit: 5, start: 0, end: Date.now() + 1 },
+    cwd,
+    { source: 'agent', sessionId: 's1' },
+  )
+  assert.equal(ran.ok, true, ran.error)
+  const s2 = ran.trend.series.find((/** @type {any} */ s) => s.pointId === 'p2')
+  assert.ok(s2)
+  assert.ok(s2.samples.length <= 5)
+  assert.equal(ran.trend.limit, 5)
+  await rm(home, { recursive: true, force: true })
+})

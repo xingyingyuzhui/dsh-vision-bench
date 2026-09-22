@@ -1,7 +1,12 @@
 // @ts-check
 import { finalizeAgentCommandResult } from '../../application/commands/lossless-json.mjs'
+import { projectAgentResult } from '../../application/commands/agent-result-projection.mjs'
+import { attachConfigDriftRefresh } from '../../application/commands/config-drift-refresh.mjs'
 import { executeHostCommand } from '../../application/commands/host-command-service.mjs'
 import { dispatchVisionCommand } from '../../infrastructure/host/vision-host-client.mjs'
+import { loadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
+import { modbusForSession } from '../../application/modbus/workspace-session-view.mjs'
+import { validateAgentToolArgs } from './agent-tool-preflight.mjs'
 
 export const ACTIONS = new Set([
   'status',
@@ -62,6 +67,7 @@ const originFrom = (input) => ({
  * Test / app-service helper: calls the Host application layer directly.
  * Production Agent tools must use `visionBenchTool` → `dispatchVisionCommand({ requireHost: true })`
  * so missing Host never falls back to a second local writer.
+ * Keeps full Host results (no Agent projection) for business tests.
  * @param {any} [home]
  * @param {any} [args]
  * @param {any} [cwd]
@@ -97,14 +103,16 @@ export function visionBenchTool(home) {
     name: 'vision_bench',
     description:
       'Vision 调试与上位机快速接口。查询或操作当前会话工作区的调试/上位机现场。' +
-      'status：已选工程、Target、多连接与任务时间线；' +
+      'status：已选工程、Target、多连接摘要与任务时间线（不含历史帧/全量值）；' +
       'ls/select/build/map：工程与编译；' +
-      'read/write：读点与受控写点（Agent 写点需界面批准）；' +
+      'read/write：读点与受控写点（必须带 connectionId+deviceId；Agent 写点需界面批准）；' +
       'connect：仅打开或断开已保存连接（close=true 断开）。修改端点用 configureConnection，打开用 openConnection；' +
-      'points：op=list|add|update|remove|clear。一次调用可以批量：op=add 用 points[{name,function,address,connectionId,deviceId,...}] 数组一次写入多个点；op=update 同样用 points[]；op=remove 用 ids[] 或 pointId。不要逐个 add。address 是协议地址（保持寄存器 0 = 40001），不要填 40001。clear 必须带 connectionId+deviceId。' +
-      'visualization：op=list|get|add|update|remove|layout，直接修改组件。layout 必须携带 expectedConfigVersion 与 items[{id,x,y,w,h}]；CONFIG_DRIFT 后重新 list/get 再提交。当前 Session 可视化页面会实时同步布局。proposeAdd/proposeUpdate/proposeRemove 已移除（OP_REMOVED）。' +
-      '所有配置修改必须携带最近一次 status/list/get 返回的 configVersion。CONFIG_DRIFT 后必须重新读取配置，再基于新版本重试；不得盲目重复旧修改。适用 config、configureConnection、points add/update/remove/clear、visualization add/update/remove/layout。status、points list、visualization list/get 不要求版本。' +
-      'frames/focus/trend/alarm/evidence：现场只读与定位；' +
+      'points：op=list|add|update|remove|clear。一次调用可以批量：op=add 用 points[{name,function,address,connectionId,deviceId,...}] 数组一次写入多个点；op=update 同样用 points[]；op=remove 用 ids[] 或 pointId。不要逐个 add。address 是协议地址（保持寄存器 0 = 40001），不要填 40001。clear 必须带 connectionId+deviceId。监视开关用 monitorEnabled；trendEnabled 只是旧别名，同请求传相反值会 FIELD_CONFLICT。' +
+      'visualization：op=list|get|add|update|remove|layout。get 必须带 visualizationId（缺 ID 不会默认取第一个组件）。layout 必须携带 expectedConfigVersion 与 items[{id,x,y,w,h}]；CONFIG_DRIFT 后按 refresh 提示重新 list/get 再提交。' +
+      '所有配置修改必须携带最近一次 status/list/get 返回的 configVersion（字段名 expectedConfigVersion；configVersion 为别名）。CONFIG_DRIFT 后必须重新读取配置，再基于新版本重试；不得把 actualVersion 当重试凭证。适用 config、configureConnection、points add/update/remove/clear、visualization add/update/remove/layout。status、points list、visualization list/get 不要求版本。' +
+      'frames/trend/alarm：需要 connectionId（alarm 仅有 alarmId、trend 仅有 trendKey 时可例外）；trend 的 limit 是每条序列的样本数。' +
+      'focus 会改变 UI 焦点；evidence[] 会追加日志——二者不是纯只读。' +
+      'alarm 带 watch/followup=true 才订阅过程量告警跟进；默认过程告警只记事件不唤醒 Agent。' +
       'manual：请求用户完成现场操作；' +
       'system.ping：无副作用探活 Host（不读写串口、不启动采集）。' +
       '配置修改立即生效并记入操作记录；向真实设备写值、烧录、复位仍需用户批准。',
@@ -126,9 +134,18 @@ export function visionBenchTool(home) {
         host: { type: 'string' },
         slave: { type: 'number' },
         unitId: { type: 'number' },
-        connectionId: { type: 'string' },
-        connId: { type: 'string' },
-        deviceId: { type: 'string' },
+        connectionId: {
+          type: 'string',
+          description: '规范字段。frames/trend/alarm 必填；read/write 与 deviceId 一起必填',
+        },
+        connId: {
+          type: 'string',
+          description: 'connectionId 的兼容别名；优先使用 connectionId',
+        },
+        deviceId: {
+          type: 'string',
+          description: '规范字段。read/write 与 connectionId 一起必填',
+        },
         pointId: { type: 'string' },
         function: { type: 'number' },
         address: { type: 'number' },
@@ -175,9 +192,15 @@ export function visionBenchTool(home) {
             name: { type: 'string' },
             function: { type: 'number' },
             address: { type: 'number' },
-            monitorEnabled: { type: 'boolean' },
+            monitorEnabled: {
+              type: 'boolean',
+              description: '规范监视开关（可视化数据源）',
+            },
             alarmEnabled: { type: 'boolean' },
-            trendEnabled: { type: 'boolean' },
+            trendEnabled: {
+              type: 'boolean',
+              description: 'monitorEnabled 的旧别名；同请求传相反值返回 FIELD_CONFLICT',
+            },
             connectionId: { type: 'string' },
             deviceId: { type: 'string' },
           },
@@ -198,9 +221,15 @@ export function visionBenchTool(home) {
               unit: { type: 'string' },
               alarmMin: { type: 'number' },
               alarmMax: { type: 'number' },
-              monitorEnabled: { type: 'boolean' },
+              monitorEnabled: {
+                type: 'boolean',
+                description: '规范监视开关',
+              },
               alarmEnabled: { type: 'boolean' },
-              trendEnabled: { type: 'boolean' },
+              trendEnabled: {
+                type: 'boolean',
+                description: 'monitorEnabled 的旧别名；冲突时 FIELD_CONFLICT，批量原子失败',
+              },
               connectionId: { type: 'string' },
               deviceId: { type: 'string' },
             },
@@ -213,12 +242,18 @@ export function visionBenchTool(home) {
         trendKey: { type: 'string' },
         alarmId: { type: 'string' },
         kind: { type: 'string' },
-        limit: { type: 'number' },
+        limit: {
+          type: 'number',
+          description: 'frames 条数，或 trend 每条序列的样本数（不是跨序列总数）',
+        },
         offset: { type: 'number' },
         start: { type: 'number' },
         end: { type: 'number' },
         pointIds: { type: 'array', items: { type: 'string' } },
-        visualizationId: { type: 'string' },
+        visualizationId: {
+          type: 'string',
+          description: 'visualization get/update/remove 的组件 ID；get 缺省不会默认首个组件',
+        },
         component: {
           type: 'object',
           additionalProperties: true,
@@ -252,6 +287,7 @@ export function visionBenchTool(home) {
         tempWatch: { type: 'array', items: { type: 'string' } },
         evidence: {
           type: 'array',
+          description: '追加证据日志（有副作用，非纯只读）',
           items: {
             type: 'object',
             additionalProperties: true,
@@ -263,7 +299,11 @@ export function visionBenchTool(home) {
             },
           },
         },
-        focus: { type: 'object', additionalProperties: true },
+        focus: {
+          type: 'object',
+          description: '改变 UI 焦点（有副作用，非纯只读）',
+          additionalProperties: true,
+        },
         target: {
           type: 'object',
           description: 'action=config 的操作目标，如 { connectionId, deviceId, pointId, visualizationId }',
@@ -281,12 +321,31 @@ export function visionBenchTool(home) {
         expectedConfigVersion: {
           type: 'number',
           description:
-            '配置修改必须携带最近一次 status/list/get 返回的 configVersion；不一致时返回 CONFIG_DRIFT，缺失时返回 CONFIG_VERSION_REQUIRED',
+            '规范字段。配置修改必须携带最近一次 status/list/get 返回的 configVersion；不一致时返回 CONFIG_DRIFT（含 refresh 提示），缺失时返回 CONFIG_VERSION_REQUIRED',
         },
-        configVersion: { type: 'number', description: 'expectedConfigVersion 别名' },
+        configVersion: {
+          type: 'number',
+          description: 'expectedConfigVersion 的兼容别名；优先使用 expectedConfigVersion',
+        },
         commandId: { type: 'string', description: '幂等键' },
         name: { type: 'string' },
         close: { type: 'boolean' },
+        watch: {
+          type: 'boolean',
+          description: 'action=alarm 时：true 订阅过程量告警 Agent 跟进；false 取消订阅',
+        },
+        followup: {
+          type: 'boolean',
+          description: 'action=alarm 时与 watch 同义：显式要求 Agent 接收告警跟进',
+        },
+        monitorEnabled: {
+          type: 'boolean',
+          description: '规范监视开关（也可写在 point/points 内）',
+        },
+        trendEnabled: {
+          type: 'boolean',
+          description: 'monitorEnabled 旧别名（也可写在 point/points 内）',
+        },
       },
     },
     output: {
@@ -301,21 +360,46 @@ export function visionBenchTool(home) {
       const signal = exec && exec.signal
       if (signal && signal.aborted)
         return finalizeAgentCommandResult({ ok: false, cancelled: true, error: '已取消' }, 'agent')
-      return finalizeAgentCommandResult(
-        await dispatchVisionCommand({
-          home,
-          cwd: cwdOf(agent),
-          action: args && args.action,
-          payload: args || {},
-          source: 'agent',
-          sessionId: sessionIdOf(agent),
-          signal,
-          commandId: args && args.commandId,
-          expectedConfigVersion: args && (args.expectedConfigVersion ?? args.configVersion),
-          requireHost: true,
-        }),
-        'agent',
-      )
+      const cwd = cwdOf(agent)
+      const sessionId = sessionIdOf(agent)
+      /** @type {any} */
+      let pack = null
+      const action = args && args.action
+      if ((action === 'alarm' || action === 'trend') && cwd) {
+        try {
+          const ws = loadWorkspace(home, cwd)
+          pack = modbusForSession(ws, sessionId)
+        } catch {
+          pack = null
+        }
+      }
+      const preflight = validateAgentToolArgs(args, { pack })
+      if (preflight) return finalizeAgentCommandResult(preflight, 'agent')
+      const dispatched = await dispatchVisionCommand({
+        home,
+        cwd,
+        action: args && args.action,
+        payload: args || {},
+        source: 'agent',
+        sessionId,
+        signal,
+        commandId: args && args.commandId,
+        expectedConfigVersion: args && (args.expectedConfigVersion ?? args.configVersion),
+        requireHost: true,
+      })
+      const withRefresh = attachConfigDriftRefresh(dispatched, {
+        action: args && args.action,
+        op: args && args.op,
+        operation: args && args.operation,
+        target: {
+          visualizationId: args && (args.visualizationId || args.id),
+          connectionId: args && (args.connectionId || args.connId),
+          deviceId: args && args.deviceId,
+          pointId: args && (args.pointId || args.id),
+        },
+      })
+      const projected = projectAgentResult(args || {}, withRefresh)
+      return finalizeAgentCommandResult(projected, 'agent')
     },
   }
 }

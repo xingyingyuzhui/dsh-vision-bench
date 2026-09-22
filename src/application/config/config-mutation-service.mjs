@@ -15,6 +15,7 @@ import { applyFlags, applyPoints } from './config-point-mutations.mjs'
 import { applyShare } from './config-share-mutations.mjs'
 import { validateWorkspaceConfig } from './config-validation-service.mjs'
 import { applyVisualization } from './config-visualization-mutations.mjs'
+import { attachConfigDriftRefresh } from '../commands/config-drift-refresh.mjs'
 
 const TIMELINE_WINDOW = 360
 
@@ -93,7 +94,14 @@ export function createConfigMutationService(deps = {}) {
       }
       return { ok: true, workspace: applied.workspace }
     })
-    if (!saved.ok) return saved
+    if (!saved.ok) {
+      return attachConfigDriftRefresh(saved, {
+        operation: spec.operation,
+        action: scope,
+        op,
+        target: spec.target || {},
+      })
+    }
     /** @type {PostCommitWarning[]} */
     const postCommitWarnings = []
     const ids = postCommit.releaseConnectionIds || []

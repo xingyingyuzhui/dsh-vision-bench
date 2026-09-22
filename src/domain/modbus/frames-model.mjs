@@ -194,7 +194,11 @@ export function projectTransactionsToWireFrames(list) {
 export const framesShouldStickToBottom = (scrollTop, scrollHeight, clientHeight, threshold = 5) =>
   scrollHeight - scrollTop - clientHeight <= threshold
 
-/** Newest-first list: auto-follow while the viewport is near the top. */
+/** Newest-first list: auto-follow while the viewport is near the top.
+ * @param {any} scrollTop
+ * @param {any} [threshold]
+ * @returns {boolean}
+ */
 export const framesShouldStickToTop = (scrollTop, threshold = 5) => Number(scrollTop) <= threshold
 
 /**
