@@ -242,7 +242,12 @@ export function foldModbusFromSession(baseModbus, projectedModbus, sessionId) {
   let priv = pickTopology(sid ? base.sessionConfigs[sid] : null)
   for (const category of SHARE_CATEGORIES) {
     if (isCategoryShared(share, category)) shared = withCategory(shared, view, category)
-    else if (sid) priv = withCategory(priv, view, category)
+    else if (sid) {
+      priv = withCategory(priv, view, category)
+      // Private category must not leave a stale top-level twin (it would win
+      // later unions and silently revert unit/connection edits).
+      shared = withCategory(shared, emptySessionConfig(), category)
+    }
   }
   /** @type {Record<string, SessionConfig>} */
   const sessionConfigs = { ...base.sessionConfigs }

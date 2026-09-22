@@ -14,10 +14,27 @@ import { applyConnection, applyDevice } from './config-connection-mutations.mjs'
 import { applyFlags, applyPoints } from './config-point-mutations.mjs'
 import { applyShare } from './config-share-mutations.mjs'
 import { validateWorkspaceConfig } from './config-validation-service.mjs'
+import { validateLayerDeviceIds } from '../../domain/modbus/device-identity.mjs'
 import { applyVisualization } from './config-visualization-mutations.mjs'
 import { attachConfigDriftRefresh } from '../commands/config-drift-refresh.mjs'
 
 const TIMELINE_WINDOW = 360
+
+/**
+ * Validate the mutated candidate device array before fold/normalize.
+ * Projected session views already isolate shared vs this session's private
+ * devices — check `applied.workspace.modbus.devices` (the post-op array),
+ * never a pre-op sessionConfigs snapshot (that misses the un-folded append).
+ *
+ * @param {any} workspace
+ * @param {{ scope: string, sessionId: string }} ctx
+ */
+function validateMutatedDeviceLayer(workspace, ctx) {
+  const devices = workspace?.modbus?.devices
+  if (!Array.isArray(devices)) return { ok: true }
+  const layer = ctx.scope === 'share' ? 'top' : ctx.sessionId ? 'private' : 'top'
+  return validateLayerDeviceIds(devices, { layer, sessionId: ctx.sessionId || '' })
+}
 
 /**
  * @typedef {import('../../types/http-api.js').PostCommitWarning} PostCommitWarning
@@ -77,6 +94,9 @@ export function createConfigMutationService(deps = {}) {
         listStates,
       )
       if (!applied.ok) return applied
+      // Raw operation result — BEFORE fold/normalize can dedupe device ids.
+      const identity = validateMutatedDeviceLayer(applied.workspace, { scope, sessionId })
+      if (!identity.ok) return identity
       const errors = validateWorkspaceConfig(applied.workspace)
       if (errors.length) {
         return { ok: false, errorCode: 'CONFIG_INVALID', error: errors.join('；') }
