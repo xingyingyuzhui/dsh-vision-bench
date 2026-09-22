@@ -162,7 +162,7 @@ function buildSeriesPage(series, keep) {
 
 /**
  * @param {any[]} projectedSeries
- * @param {number} limit
+ * @param {number | undefined} limit
  * @param {any} trend
  * @param {any} result
  */
@@ -178,7 +178,7 @@ function assembleTrendResult(projectedSeries, limit, trend, result) {
       returned,
       // Not a Host-parsed cursor: agents page with pointIds + end=oldestReturnedAt-1.
       nextCursor: null,
-      limit: Number.isFinite(limit) && limit > 0 ? Math.trunc(limit) : undefined,
+      limit: Number.isFinite(limit) && Number(limit) > 0 ? Math.trunc(Number(limit)) : undefined,
     },
   }
 }
@@ -191,7 +191,13 @@ export function projectTrend(args, result) {
   const trend = result.trend && typeof result.trend === 'object' ? { ...result.trend } : {}
   /** @type {any[]} */
   const series = Array.isArray(trend.series) ? trend.series : []
-  const limit = Number(args?.limit)
+  const argsLimit = Number(args?.limit)
+  const hostLimit = Number(trend.limit)
+  const effectiveLimit = Number.isFinite(argsLimit) && argsLimit > 0
+    ? Math.trunc(argsLimit)
+    : Number.isFinite(hostLimit) && hostLimit > 0
+      ? Math.trunc(hostLimit)
+      : undefined
   const cap = AGENT_TEXT_CAPS.trendBytes
   // Full candidate page first (newest continuous window as provided).
   const full = series.map((/** @type {any} */ s) => {
@@ -199,23 +205,24 @@ export function projectTrend(args, result) {
     const samples = Array.isArray(s?.samples) ? s.samples : []
     return { ...s, count, samples }
   })
-  let keep = full.reduce((m, s) => Math.max(m, s.samples.length), 0)
-  for (; keep >= 0; keep--) {
+  const maxKeep = Math.max(0, ...full.map((s) => s.samples.length))
+  // Non-empty input must keep at least one newest sample per non-empty series —
+  // keep=0 is only legal when the source data is truly empty.
+  const minKeep = maxKeep > 0 ? 1 : 0
+  for (let keep = maxKeep; keep >= minKeep; keep--) {
     const projectedSeries = full.map((s) => buildSeriesPage(s, keep))
-    const projected = assembleTrendResult(projectedSeries, limit, trend, result)
-    if (utf8ByteLength(projected) <= cap) {
-      const shrunk = projectedSeries.some((s) => s.hasMore)
-      return shrunk ? { ...projected, truncated: true } : projected
-    }
-    if (keep === 0) break
+    const page = assembleTrendResult(projectedSeries, effectiveLimit, trend, result)
+    const candidate = projectedSeries.some((s) => s.hasMore) ? { ...page, truncated: true } : page
+    if (utf8ByteLength(candidate) <= cap) return candidate
   }
-  // Even one sample per series does not fit: explicit overrun, never a fake empty ok page.
+  // Metadata + one newest sample per non-empty series still does not fit:
+  // degraded overrun result (allowed to exceed normal cap) — never a fake empty ok page.
   const one = full.map((s) => buildSeriesPage(s, s.samples.length ? 1 : 0))
   return {
-    ...assembleTrendResult(one, limit, trend, result),
+    ...assembleTrendResult(one, effectiveLimit, trend, result),
     truncated: true,
     overrun: true,
-    hint: 'trend 超预算：缩小 pointIds 或降低 limit',
+    hint: 'trend 超预算：缩小 pointIds 或精简元数据（至少保留每条序列最新样本）',
   }
 }
 

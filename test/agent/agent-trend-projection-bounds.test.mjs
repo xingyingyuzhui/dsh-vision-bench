@@ -228,3 +228,59 @@ test('real handler + projection: trendKey path keeps newest samples and consiste
   }
   void loadWorkspace
 })
+
+test('projectTrend keep>=1 under pressure: never empty ok page; final object fits cap', () => {
+  // One series with 1 huge-name sample: metadata+sample may exceed a tiny mental model,
+  // but with normal cap it must return the sample, not empty ok.
+  const one = project([
+    {
+      pointId: 'p1',
+      name: 'P'.repeat(2000),
+      connectionId: 'c1',
+      deviceId: 'd1',
+      unit: 'x'.repeat(400),
+      count: 3,
+      samples: [
+        [1000, 1],
+        [1001, 2],
+        [1002, 3],
+      ],
+    },
+  ])
+  assertReturnedMatchesSamples(one)
+  if (one.overrun) {
+    assert.equal(one.truncated, true)
+    assert.ok(one.trend.series[0].samples.length >= 1)
+  } else {
+    assert.ok(one.trend.returned >= 1)
+    assert.ok(utf8ByteLength(one) <= AGENT_TEXT_CAPS.trendBytes)
+  }
+
+  // Empty source may legitimately return 0 samples.
+  const empty = project([
+    { pointId: 'z', name: 'Z', connectionId: 'c1', deviceId: 'd1', unit: '', count: 0, samples: [] },
+  ])
+  assert.equal(empty.trend.returned, 0)
+  assert.equal(empty.overrun, undefined)
+
+  // truncated is part of the measured object for normal pages.
+  const series = synthSeries(8, 600)
+  const projected = project(series, { action: 'trend', limit: 600 })
+  assertReturnedMatchesSamples(projected)
+  assert.ok(utf8ByteLength(projected) <= AGENT_TEXT_CAPS.trendBytes)
+  assert.equal(typeof projected.truncated, 'boolean')
+})
+
+test('projectTrend keeps Host trend.limit when args.limit omitted', () => {
+  const series = synthSeries(2, 4)
+  const projected = projectAgentResult(
+    { action: 'trend' },
+    { ok: true, action: 'trend', trend: { series, limit: 3 } },
+  )
+  assert.equal(projected.trend.limit, 3)
+  const forced = projectAgentResult(
+    { action: 'trend', limit: 2 },
+    { ok: true, action: 'trend', trend: { series, limit: 3 } },
+  )
+  assert.equal(forced.trend.limit, 2)
+})
