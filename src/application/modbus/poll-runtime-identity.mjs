@@ -2,16 +2,34 @@
 /**
  * Runtime identity pre-check for poll batches.
  *
+ * Three distinct sets:
+ *  1. RAW config rows (shared + each private layer) — discover duplicates, never pre-union.
+ *  2. EFFECTIVE identities — after share/projection semantics; a private row that
+ *     is shadowed by the shared definition of the same pointId is NOT effective.
+ *  3. THIS read set — executable targets' points only.
+ *
  * Connection ownership unique does NOT imply a unique runtime slot: values,
- * trend, alarmState and commit merge by pointId. Two different private
- * definitions writing the same pointId would clobber each other, so the whole
- * batch is rejected BEFORE any transport / frame / runtime commit.
+ * trend, alarmState and commit merge by pointId. Two different EFFECTIVE private
+ * definitions writing the same pointId clobber each other, so the batch is
+ * rejected BEFORE any transport / frame / runtime commit.
  *
  * Explicit sessionId resolves target ownership — it cannot repair a shared
  * runtime key collision this round (no key migration).
  */
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
-import { isCategoryShared, normalizeScopeSessionId } from '../../domain/modbus/config-scope.mjs'
+import { isCategoryShared } from '../../domain/modbus/config-scope.mjs'
+
+/**
+ * @typedef {{
+ *   layer: 'shared' | 'private' | 'toplevel',
+ *   sessionId: string,
+ *   connectionId: string,
+ *   deviceId: string,
+ *   pointId: string,
+ *   function: number,
+ *   address: number,
+ * }} PointIdentity
+ */
 
 /**
  * @typedef {{
@@ -23,105 +41,155 @@ import { isCategoryShared, normalizeScopeSessionId } from '../../domain/modbus/c
  */
 
 /**
- * Identity of one raw point definition. Two private defs with the same
- * address/endpoint are still distinct identities.
+ * Structured identity — no JSON string surgery on owner prefixes.
  * @param {any} p
- * @param {string} owner
- * @param {string} connectionId
+ * @param {'shared' | 'private' | 'toplevel'} layer
+ * @param {string} sessionId
+ * @returns {PointIdentity}
  */
-function pointIdentity(p, owner, connectionId) {
-  return JSON.stringify([
-    owner,
-    connectionId,
-    String(p?.deviceId || ''),
-    String(p?.id || ''),
-    Number(p?.function) || 0,
-    Number(p?.address) || 0,
-  ])
+function toPointIdentity(p, layer, sessionId) {
+  return {
+    layer,
+    sessionId,
+    connectionId: String(p?.connectionId || p?.connId || ''),
+    deviceId: String(p?.deviceId || ''),
+    pointId: String(p?.id || ''),
+    function: Number(p?.function) || 0,
+    address: Number(p?.address) || 0,
+  }
 }
 
 /**
- * Enumerate raw point identities from shared + every private layer.
- * Never union first — union hides same-id twins.
+ * Same logical definition ⇒ same geometry regardless of which view sees it.
+ * Owner/session is NOT part of geometry — a shared row seen twice is one object.
+ * Two private rows with the same geometry are STILL distinct objects (layer+session).
+ * @param {PointIdentity} a
+ * @param {PointIdentity} b
+ */
+function sameGeometry(a, b) {
+  return (
+    a.connectionId === b.connectionId &&
+    a.deviceId === b.deviceId &&
+    a.pointId === b.pointId &&
+    a.function === b.function &&
+    a.address === b.address
+  )
+}
+
+/**
+ * @param {PointIdentity} a
+ * @param {PointIdentity} b
+ */
+function sameObject(a, b) {
+  return a.layer === b.layer && a.sessionId === b.sessionId && sameGeometry(a, b)
+}
+
+/**
+ * Effective identity rows for one pointId.
+ * When points are shared, the shared definition owns the slot — private backups
+ * of the same id are shadowed (kept on disk, excluded from this judgment).
  *
  * @param {any} modbus
- * @returns {Map<string, Array<{ owner: string, connectionId: string, identity: string }>>}
+ * @param {string} pointId
+ * @returns {{ effective: PointIdentity[], raw: PointIdentity[] }}
  */
-function enumerateRawPointIdentities(modbus) {
+function identitiesForPoint(modbus, pointId) {
   const scMap = modbus.sessionConfigs && typeof modbus.sessionConfigs === 'object' ? modbus.sessionConfigs : {}
   const pointsShared = isCategoryShared(modbus.share, 'points')
-  /** @type {Map<string, Array<{ owner: string, connectionId: string, identity: string }>>} */
-  const byPointId = new Map()
-
-  /**
-   * @param {any} p
-   * @param {string} owner
-   */
-  const add = (p, owner) => {
-    if (!p || !p.id) return
-    const pid = String(p.id)
-    const cid = String(p.connectionId || p.connId || '')
-    const list = byPointId.get(pid) || []
-    list.push({ owner, connectionId: cid, identity: pointIdentity(p, owner, cid) })
-    byPointId.set(pid, list)
-  }
+  const partitioned = Object.keys(scMap).length > 0
+  /** @type {PointIdentity[]} */
+  const raw = []
 
   for (const p of Array.isArray(modbus.points) ? modbus.points : []) {
-    add(p, pointsShared ? '__shared__' : '__toplevel__')
+    if (!p || String(p.id) !== pointId) continue
+    raw.push(toPointIdentity(p, pointsShared ? 'shared' : 'toplevel', ''))
   }
   for (const sid of Object.keys(scMap)) {
     const sc = scMap[sid]
     if (!sc || typeof sc !== 'object') continue
     for (const p of Array.isArray(sc.points) ? sc.points : []) {
-      add(p, sid)
+      if (!p || String(p.id) !== pointId) continue
+      raw.push(toPointIdentity(p, 'private', sid))
     }
   }
-  return byPointId
+
+  /** @type {PointIdentity[]} */
+  const effective = []
+  const sharedRows = raw.filter((r) => r.layer === 'shared')
+  const privateRows = raw.filter((r) => r.layer === 'private')
+  const topRows = raw.filter((r) => r.layer === 'toplevel')
+
+  // One shared object — de-dupe identical shared geometry (multiple views).
+  for (const s of sharedRows) {
+    if (!effective.some((e) => sameObject(e, s) || (e.layer === 'shared' && sameGeometry(e, s)))) {
+      effective.push(s)
+    }
+  }
+
+  if (pointsShared) {
+    // Shared definition wins. Private backups of this id are shadowed — not effective.
+    // If there is NO shared row, private defs remain effective (points not actually shared).
+    if (sharedRows.length) return { effective, raw }
+  }
+
+  if (!partitioned) {
+    // Legacy unpartitioned workspace: top-level is the effective definition.
+    for (const t of topRows) {
+      if (!effective.some((e) => sameObject(e, t))) effective.push(t)
+    }
+    return { effective, raw }
+  }
+
+  // Partitioned + not shared: each private definition is an effective object.
+  // Distinct sessions are distinct objects even with identical geometry.
+  for (const pr of privateRows) {
+    if (!effective.some((e) => sameObject(e, pr))) effective.push(pr)
+  }
+  // Unshared top-level leftovers in a partitioned workspace are not extra owners
+  // for the slot when private layers own the id — but if ONLY top-level has it
+  // (legacy claim in progress), keep it.
+  if (!privateRows.length) {
+    for (const t of topRows) {
+      if (!effective.some((e) => sameObject(e, t))) effective.push(t)
+    }
+  }
+  return { effective, raw }
 }
 
 /**
- * Same shared definition seen from multiple effective views collapses to one.
- * Private twins with equal addresses stay distinct identities.
- *
- * @param {Array<{ owner: string, connectionId: string, identity: string }>} rows
- * @returns {boolean} true when rows represent more than one logical definition
+ * Effective rows conflict when they are more than one logical object and are not
+ * merely the same shared object seen twice.
+ * @param {PointIdentity[]} effective
+ * @returns {boolean}
  */
-function hasConflictingDefinitions(rows) {
-  const sharedRows = rows.filter((r) => r.owner === '__shared__')
-  const privateRows = rows.filter((r) => r.owner !== '__shared__' && r.owner !== '__toplevel__')
-  // Shared def is one object regardless of how many views see it.
-  const sharedIdentities = new Set(sharedRows.map((r) => r.identity.replace('"__shared__"', '"__ANY__"')))
-  // Private defs: owner is part of identity — twins never merge.
-  const privateIdentities = new Set(
-    privateRows.map((r) => {
-      // Normalize owner out only for comparing geometry? No — plan: two private
-      // definitions with the same address are still not the same shared object.
-      // Distinct owners ⇒ distinct identities even if the rest matches.
-      return r.identity
-    }),
-  )
-  // Collapse identical private geometry under the SAME owner (dup rows).
-  const byOwnerGeom = new Set(
-    privateRows.map((r) => r.identity.replace(/^"\[[^,]+"/, '"[__GEOM__"')),
-  )
-  const owners = new Set(privateRows.map((r) => r.owner))
-  // More than one private owner for this pointId ⇒ conflict (runtime slot is global).
-  if (owners.size > 1) return true
-  // Shared + private defining the same pointId ⇒ conflict unless they are the
-  // exact same geometry AND only one side is active. Conservative: mixed = conflict.
-  if (sharedRows.length && privateRows.length) {
-    // If shared and the single private owner disagree on connection/geometry → conflict.
-    const sGeom = sharedRows[0].identity.replace(/^"\[[^,]+"/, '"[__GEOM__"')
-    for (const r of privateRows) {
-      const pGeom = r.identity.replace(/^"\[[^,]+"/, '"[__GEOM__"')
-      if (sGeom !== pGeom) return true
-    }
+function effectiveRowsConflict(effective) {
+  if (effective.length <= 1) return false
+  const shared = effective.filter((r) => r.layer === 'shared')
+  const others = effective.filter((r) => r.layer !== 'shared')
+  // More than one shared geometry is already a raw-config oddity → conflict.
+  if (shared.length > 1) {
+    const geoms = new Set(shared.map((r) => JSON.stringify([r.connectionId, r.deviceId, r.function, r.address])))
+    if (geoms.size > 1) return true
+    if (others.length) return true
   }
-  // Multiple distinct geometries under one owner (should not happen) → conflict.
-  if (byOwnerGeom.size > 1) return true
-  if (sharedIdentities.size > 1) return true
-  void privateIdentities
+  // Any non-shared pair (private×private or private×shared) is multiple owners
+  // of one runtime slot.
+  if (others.length > 1) return true
+  if (shared.length && others.length) return true
   return false
+}
+
+/**
+ * @param {PointIdentity[]} rows
+ * @returns {PollRuntimeConflict}
+ */
+function conflictFromRows(rows) {
+  return {
+    entityType: 'point',
+    entityId: rows[0]?.pointId || '',
+    owners: [...new Set(rows.map((r) => (r.layer === 'private' ? r.sessionId || r.layer : r.layer)))],
+    connectionIds: [...new Set(rows.map((r) => r.connectionId).filter(Boolean))],
+  }
 }
 
 /**
@@ -129,19 +197,18 @@ function hasConflictingDefinitions(rows) {
  * Unrelated conflicting pointIds do not block the call.
  *
  * @param {any} workspace
- * @param {Array<{ connectionId: string, sourceSessionId: string, points: any[] }>} preparedTargets
+ * @param {Array<{ connectionId: string, sourceSessionId: string, points: any[] }>} readTargets
  * @returns {{ ok: true } | { ok: false, errorCode: string, reason: string, error: string, conflicts: PollRuntimeConflict[] }}
  */
-export function validatePollRuntimeIdentities(workspace, preparedTargets) {
+export function validatePollRuntimeIdentities(workspace, readTargets) {
   const modbus = workspace?.modbus || {}
-  const byPointId = enumerateRawPointIdentities(modbus)
   /** @type {PollRuntimeConflict[]} */
   const conflicts = []
 
   /** Point ids this batch will read. */
   /** @type {Set<string>} */
   const readPointIds = new Set()
-  for (const t of preparedTargets || []) {
+  for (const t of readTargets || []) {
     for (const p of Array.isArray(t.points) ? t.points : []) {
       if (p?.id) readPointIds.add(String(p.id))
     }
@@ -150,7 +217,7 @@ export function validatePollRuntimeIdentities(workspace, preparedTargets) {
   // Batch-internal duplicates: same pointId prepared for two connections/sessions.
   /** @type {Map<string, Set<string>>} */
   const batchOwnersByPoint = new Map()
-  for (const t of preparedTargets || []) {
+  for (const t of readTargets || []) {
     for (const p of Array.isArray(t.points) ? t.points : []) {
       if (!p?.id) continue
       const pid = String(p.id)
@@ -162,13 +229,11 @@ export function validatePollRuntimeIdentities(workspace, preparedTargets) {
   }
   for (const [pid, keys] of batchOwnersByPoint) {
     if (keys.size > 1) {
-      const connectionIds = [...keys].map((k) => k.split('|')[1])
-      const owners = [...keys].map((k) => k.split('|')[0])
       conflicts.push({
         entityType: 'point',
         entityId: pid,
-        owners,
-        connectionIds,
+        owners: [...keys].map((k) => k.split('|')[0]),
+        connectionIds: [...keys].map((k) => k.split('|')[1]),
       })
     }
   }
@@ -176,22 +241,10 @@ export function validatePollRuntimeIdentities(workspace, preparedTargets) {
   // Cross-layer definition conflicts for points this batch touches.
   for (const pid of readPointIds) {
     if (conflicts.some((c) => c.entityType === 'point' && c.entityId === pid)) continue
-    const rows = byPointId.get(pid) || []
-    if (rows.length <= 1) continue
-    if (!hasConflictingDefinitions(rows)) continue
-    conflicts.push({
-      entityType: 'point',
-      entityId: pid,
-      owners: [...new Set(rows.map((r) => r.owner))],
-      connectionIds: [...new Set(rows.map((r) => r.connectionId).filter(Boolean))],
-    })
+    const { effective } = identitiesForPoint(modbus, pid)
+    if (!effectiveRowsConflict(effective)) continue
+    conflicts.push(conflictFromRows(effective))
   }
-
-  // Device ids: only conflict when the actual lookup/commit chain would mix
-  // different device definitions under one runtime/query key AND this batch
-  // touches them. Empirical rule: same deviceId on different connections is
-  // safe when every read path is scoped by connectionId (see regression test).
-  // No device conflict is raised for that case.
 
   if (conflicts.length) {
     const detail = conflicts
@@ -207,14 +260,3 @@ export function validatePollRuntimeIdentities(workspace, preparedTargets) {
   }
   return { ok: true }
 }
-
-/**
- * @param {any} workspace
- * @param {Array<{ connectionId: string, sourceSessionId: string, points: any[] }>} preparedTargets
- */
-export function _internalHasConflict(workspace, preparedTargets) {
-  const r = validatePollRuntimeIdentities(workspace, preparedTargets)
-  return !r.ok
-}
-
-export { normalizeScopeSessionId }
