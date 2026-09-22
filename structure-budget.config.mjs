@@ -239,6 +239,21 @@ export default {
           "owner": "vision-bench"
         },
         {
+          "file": "test/agent/agent-result-projection-bounds.test.mjs",
+          "max": 420,
+          "reason": "Agent projection pagination + budget coverage; split later",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/agent/alarm-notify-gate.test.mjs",
+          "max": 400,
+          "reason": "Alarm notify gate coverage; split later",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+
+        {
           "file": "test/debug/keil-simulator-backend.test.mjs",
           "max": 368,
           "reason": "P5-4 debt ratchet; split in later P4/P6",

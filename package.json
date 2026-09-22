@@ -536,7 +536,8 @@
     "src/infrastructure/modbus/modbus-slave.mjs",
     "src/application/modbus/alarm-notify-registry.mjs",
     "src/application/modbus/alarm-notify-match.mjs",
-    "src/application/modbus/alarm-notify-retry.mjs"
+    "src/application/modbus/alarm-notify-retry.mjs",
+    "src/application/modbus/poll-session-ownership.mjs"
   ],
   "repository": {
     "type": "git",
