@@ -91,6 +91,26 @@ export function validateAgentToolArgs(args, opts = {}) {
     }
   }
 
+  // Unsubscribe (alarm watch/followup false) only needs a valid session+cwd —
+  // clear this session's watch first; no connectionId / alarmId required.
+  const isAlarmUnsubscribe =
+    action === 'alarm' && (args?.watch === false || args?.followup === false)
+  if (action === 'alarm' && args?.watch !== undefined && args?.followup !== undefined) {
+    if (Boolean(args.watch) !== Boolean(args.followup)) {
+      return {
+        ok: false,
+        action,
+        errorCode: 'FIELD_CONFLICT',
+        error: 'watch 与 followup 语义不一致',
+        missingFields: ['watch', 'followup'],
+        hint: '二者同义：同为 true 订阅，同为 false 退订；不要同时传相反布尔值',
+      }
+    }
+  }
+  if (isAlarmUnsubscribe) {
+    return null
+  }
+
   /** @type {string[]} */
   const missing = []
   const cid = connectionIdOf(args)
