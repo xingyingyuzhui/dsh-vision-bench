@@ -9,7 +9,8 @@ import { SESSION_SCOPED_SCOPES, parseOperation } from '../../domain/config/confi
 import { isScopePartitioned, omitSessionConfigs } from '../../domain/modbus/config-scope.mjs'
 import { ERROR_CODES, fail } from '../../domain/modbus/errors.mjs'
 import { createWorkspaceRepository } from '../../infrastructure/persistence/workspace-repository.mjs'
-import { claimLegacyPrivate, foldModbusFromSession, projectModbusForSession } from '../modbus/config-scope-service.mjs'
+import { claimLegacyPrivate, ensureScopeFields, foldModbusFromSession, projectModbusForSession } from '../modbus/config-scope-service.mjs'
+import { prepareRawShareMutation } from '../modbus/config-scope-claim.mjs'
 import { applyConnection, applyDevice } from './config-connection-mutations.mjs'
 import { applyFlags, applyPoints } from './config-point-mutations.mjs'
 import { applyShare } from './config-share-mutations.mjs'
@@ -184,7 +185,12 @@ export async function mutateConfig(spec) {
 /**
  * Decide which modbus layer an operation runs against.
  *
- * - `share.*` edits the layered store directly (publish / revoke move slices between layers).
+ * - `share.*` edits the layered store directly (publish / revoke move slices
+ *   between layers) and runs its own RAW candidate checks in `applyShareFlags` —
+ *   it must split off BEFORE `claimLegacyPrivate`, whose ensureScopeFields step
+ *   would dedupe same-layer deviceId twins before validation (review7 R1).
+ *   `prepareRawShareMutation` applies the same legacy-claim eligibility without
+ *   normalizing the raw rows.
  * - With a sessionId: claim legacy flat topology for that session if still unclaimed,
  *   then run the op on the session's projected flat view (folded back afterwards).
  * - Without a sessionId: allowed only while the workspace is still unpartitioned
@@ -197,6 +203,27 @@ export async function mutateConfig(spec) {
  * @returns {{ ok: true, workspace: any, base: any, projected: boolean } | { ok: false, errorCode: string, error: string, retryable: boolean, details: Record<string, unknown> }}
  */
 function resolveMutationScope(current, sessionId, scope) {
+  if (scope === 'share') {
+    if (!sessionId) {
+      if (SESSION_SCOPED_SCOPES.has(scope) && isScopePartitioned(ensureScopeFields(current.modbus))) {
+        return {
+          ok: false,
+          errorCode: ERROR_CODES.SESSION_REQUIRED,
+          error: '该工作区已按会话隔离，配置修改必须携带 sessionId',
+          retryable: false,
+          details: {},
+        }
+      }
+      return { ok: true, workspace: current, base: ensureScopeFields(current.modbus), projected: false }
+    }
+    const prepared = prepareRawShareMutation(current.modbus, sessionId)
+    return {
+      ok: true,
+      workspace: { ...current, modbus: prepared.modbus },
+      base: prepared.modbus,
+      projected: false,
+    }
+  }
   const claimed = claimLegacyPrivate(current.modbus, sessionId)
   const base = claimed.modbus
   if (!sessionId) {
@@ -210,9 +237,6 @@ function resolveMutationScope(current, sessionId, scope) {
       }
     }
     return { ok: true, workspace: current, base, projected: false }
-  }
-  if (scope === 'share') {
-    return { ok: true, workspace: { ...current, modbus: base }, base, projected: false }
   }
   return {
     ok: true,
