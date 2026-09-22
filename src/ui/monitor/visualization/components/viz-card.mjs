@@ -9,9 +9,11 @@ import { renderLineRenderer } from '../renderers/line-renderer.mjs'
 import { renderSwitchRenderer } from '../renderers/switch-renderer.mjs'
 import { renderValueRenderer } from '../renderers/value-renderer.mjs'
 import { vizTypeLabel } from '../viz-helpers.mjs'
+import { createVizCardMenu } from './viz-card-menu.mjs'
 
 export function createVizCard(React, t) {
   const el = React.createElement
+  const VizCardMenu = createVizCardMenu(React)
 
   return function VizCard({
     comp,
@@ -44,7 +46,7 @@ export function createVizCard(React, t) {
 
     function renderCardBody() {
       if (degraded) {
-        if (comp.type === 'line' && typeof destroyChart === 'function') {
+        if ((comp.type === 'line' || comp.type === 'bar') && typeof destroyChart === 'function') {
           destroyChart(comp.id)
         }
         return el(
@@ -120,7 +122,13 @@ export function createVizCard(React, t) {
           onToggle(wantOn) {
             onToggleSwitch?.(
               comp,
-              { connectionId: pt.connectionId, deviceId: pt.deviceId, pointId: pt.id, address: pt.address },
+              {
+                connectionId: pt.connectionId,
+                deviceId: pt.deviceId,
+                pointId: pt.id,
+                address: pt.address,
+                function: pt.function,
+              },
               wantOn,
             )
           },
@@ -155,78 +163,55 @@ export function createVizCard(React, t) {
             degraded ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, '数据源不可用') : null,
           ),
         ),
-        el(
-          'div',
-          { className: 'dvb-viz-head-actions' },
-          el(
-            'button',
+        el(VizCardMenu, {
+          label: `组件操作 ${comp.name || comp.id}`,
+          items: [
             {
-              type: 'button',
-              className: 'dvb-btn dvb-btn-sm',
-              title: hasInputHarness ? '让 Agent 分析' : '复制引用',
-              'aria-label': `让 Agent 分析组件 ${comp.name || comp.id}`,
-              onClick() {
+              id: 'ai',
+              label: 'AI',
+              ariaLabel: `让 Agent 分析组件 ${comp.name || comp.id}`,
+              onSelect() {
                 onCopyRef?.(comp)
               },
             },
-            hasInputHarness ? '让 Agent 分析' : '复制引用',
-          ),
-          el(
-            'button',
             {
-              type: 'button',
-              className: 'dvb-btn dvb-btn-sm',
+              id: 'edit',
+              label: '编辑',
               disabled: vizReadOnly,
-              title: vizReadOnly ? t('vizReadOnlyAction') : undefined,
-              onClick() {
+              onSelect() {
                 onOpenEditor?.(comp)
               },
             },
-            '编辑',
-          ),
-          deleteId === comp.id
-            ? el(
-                'span',
-                { className: 'dvb-actions' },
-                el(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'dvb-btn dvb-btn-sm dvb-btn-danger',
-                    disabled: vizReadOnly,
-                    title: vizReadOnly ? t('vizReadOnlyAction') : undefined,
-                    onClick() {
-                      onConfirmDelete?.(comp.id)
-                    },
-                  },
-                  '确认删除',
-                ),
-                el(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'dvb-btn dvb-btn-sm',
-                    onClick() {
-                      onCancelDelete?.()
-                    },
-                  },
-                  t('csvCancel') || '取消',
-                ),
-              )
-            : el(
-                'button',
-                {
-                  type: 'button',
-                  className: 'dvb-btn dvb-btn-sm dvb-btn-danger',
+            deleteId === comp.id
+              ? {
+                  id: 'confirm-delete',
+                  label: '确认删除',
+                  danger: true,
                   disabled: vizReadOnly,
-                  title: vizReadOnly ? t('vizReadOnlyAction') : undefined,
-                  onClick() {
+                  onSelect() {
+                    onConfirmDelete?.(comp.id)
+                  },
+                }
+              : {
+                  id: 'delete',
+                  label: '删除',
+                  danger: true,
+                  disabled: vizReadOnly,
+                  onSelect() {
                     onRequestDelete?.(comp.id)
                   },
                 },
-                '删除',
-              ),
-        ),
+            deleteId === comp.id
+              ? {
+                  id: 'cancel-delete',
+                  label: t('csvCancel') || '取消',
+                  onSelect() {
+                    onCancelDelete?.()
+                  },
+                }
+              : null,
+          ].filter(Boolean),
+        }),
       ),
       el('div', { className: 'dvb-viz-body-wrap' }, renderCardBody()),
     )

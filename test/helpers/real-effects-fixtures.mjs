@@ -1,5 +1,9 @@
-import assert from 'node:assert/strict'
 // Shared fixtures for Frames/Visualization real React lifecycle tests (P2-2).
+export const RTU_C1 = { id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3' } }
+export const RTU_C2 = { id: 'c2', name: 'C2', conn: { mode: 'rtu', port: 'COM4' } }
+export const SOURCE_C1 = { connectionId: 'c1', port: 'COM3', state: 'connected', name: 'C1' }
+export const SOURCE_C2 = { connectionId: 'c2', port: 'COM4', state: 'connected', name: 'C2' }
+
 export const makeFrames = (connId, n, startAt = 1000) =>
   Array.from({ length: n }, (_, i) => ({
     frameId: connId + '-f' + (startAt + i),
@@ -13,6 +17,43 @@ export const makeFrames = (connId, n, startAt = 1000) =>
     status: 'ok',
     functionCode: 3,
   }))
+
+/** Minimal `/state` payload shared by frames-feed and frames-real effect suites. */
+export function framesStatePayload(opts = {}) {
+  const { frames = {}, connections = [RTU_C1], configVersion = 1, health = {} } = opts
+  const payload = {
+    ok: true,
+    workspace: {
+      modbus: {
+        version: 3,
+        connections,
+        devices: [],
+        points: [],
+        framesByConnection: frames,
+        configVersion,
+      },
+    },
+    health,
+  }
+  // Pass `serialSources: undefined` to omit the key (matches several pause/COM suites).
+  if ('serialSources' in opts) {
+    if (opts.serialSources !== undefined) payload.serialSources = opts.serialSources
+  } else {
+    payload.serialSources = [SOURCE_C1]
+  }
+  return payload
+}
+
+/** Force the fallback (non-vendor) Frames row path for deterministic HappyDOM rows. */
+export async function withNullVendor(fn) {
+  const saved = globalThis.DvbVendor
+  globalThis.DvbVendor = null
+  try {
+    return await fn()
+  } finally {
+    globalThis.DvbVendor = saved
+  }
+}
 
 export function makePost({ frames = {}, openCalls = [], closeCalls = [], serialSources, connections, stateFn } = {}) {
   const calls = { state: 0, open: 0, close: 0, evidence: 0, clear: 0, feed: 0 }

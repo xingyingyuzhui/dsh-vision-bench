@@ -119,6 +119,129 @@ test('applyPointPatch: monitor syncs trend; alarm-only leaves monitor/trend; ids
   assert.equal(frozen.errorCode, 'TARGET_MISMATCH')
 })
 
+test('applyPointPatch: trendEnabled alias alone; same-value dual ok; conflict → FIELD_CONFLICT', () => {
+  const base = {
+    id: 'p1',
+    connectionId: 'c1',
+    deviceId: 'd1',
+    name: 'T',
+    monitorEnabled: false,
+    trendEnabled: false,
+    alarmEnabled: false,
+  }
+  const alias = applyPointPatch(base, { trendEnabled: true })
+  assert.equal(alias.ok, true)
+  assert.equal(alias.point.monitorEnabled, true)
+  assert.equal(alias.point.trendEnabled, true)
+
+  const same = applyPointPatch(base, { monitorEnabled: true, trendEnabled: true })
+  assert.equal(same.ok, true)
+  assert.equal(same.point.monitorEnabled, true)
+  assert.equal(same.point.trendEnabled, true)
+
+  const conflict = applyPointPatch(base, { monitorEnabled: true, trendEnabled: false })
+  assert.equal(conflict.ok, false)
+  assert.equal(conflict.errorCode, 'FIELD_CONFLICT')
+  assert.equal(base.monitorEnabled, false, 'conflict must not mutate input')
+})
+
+test('batch points.update fails atomically on FIELD_CONFLICT and leaves version unchanged', async () => {
+  await withWs(async (home, cwd) => {
+    const before = loadWorkspace(home, cwd)
+    const cv = before.modbus.configVersion
+    const ran = await mutateConfig({
+      home,
+      cwd,
+      expectedConfigVersion: cv,
+      operation: 'points.update',
+      target: { connectionId: 'c1', deviceId: 'd1', pointId: 'p1' },
+      value: {
+        points: [{ id: 'p1', monitorEnabled: true, trendEnabled: false }],
+      },
+    })
+    assert.equal(ran.ok, false)
+    assert.equal(ran.errorCode, 'FIELD_CONFLICT')
+    const after = loadWorkspace(home, cwd)
+    assert.equal(after.modbus.configVersion, cv)
+    assert.equal(after.modbus.points[0].monitorEnabled, true)
+  })
+})
+
+test('points.add rejects FIELD_CONFLICT dual fields; version and table unchanged', async () => {
+  await withWs(async (home, cwd) => {
+    const before = loadWorkspace(home, cwd)
+    const cv = before.modbus.configVersion
+    const ran = await mutateConfig({
+      home,
+      cwd,
+      expectedConfigVersion: cv,
+      operation: 'points.add',
+      target: { connectionId: 'c1', deviceId: 'd1' },
+      value: {
+        points: [{ name: 'X', function: 3, address: 99, monitorEnabled: true, trendEnabled: false }],
+      },
+    })
+    assert.equal(ran.ok, false)
+    assert.equal(ran.errorCode, 'FIELD_CONFLICT')
+    const after = loadWorkspace(home, cwd)
+    assert.equal(after.modbus.configVersion, cv)
+    assert.equal(after.modbus.points.length, before.modbus.points.length)
+  })
+})
+
+test('batch points.add is atomic: one FIELD_CONFLICT aborts entire batch', async () => {
+  await withWs(async (home, cwd) => {
+    const before = loadWorkspace(home, cwd)
+    const cv = before.modbus.configVersion
+    const ran = await mutateConfig({
+      home,
+      cwd,
+      expectedConfigVersion: cv,
+      operation: 'points.add',
+      target: { connectionId: 'c1', deviceId: 'd1' },
+      value: {
+        points: [
+          { name: 'A', function: 3, address: 20, monitorEnabled: true },
+          { name: 'B', function: 3, address: 21, monitorEnabled: true, trendEnabled: false },
+          { name: 'C', function: 3, address: 22, monitorEnabled: true },
+        ],
+      },
+    })
+    assert.equal(ran.ok, false)
+    assert.equal(ran.errorCode, 'FIELD_CONFLICT')
+    const after = loadWorkspace(home, cwd)
+    assert.equal(after.modbus.configVersion, cv)
+    assert.equal(after.modbus.points.length, before.modbus.points.length)
+    assert.equal(
+      after.modbus.points.some((p) => p.address === 20 || p.address === 22),
+      false,
+      'no partial adds',
+    )
+  })
+})
+
+test('CONFIG_DRIFT includes machine-readable refresh hint', async () => {
+  await withWs(async (home, cwd) => {
+    const cv = loadWorkspace(home, cwd).modbus.configVersion
+    const drift = await mutateConfig({
+      home,
+      cwd,
+      expectedConfigVersion: cv + 9,
+      operation: 'points.update',
+      target: { connectionId: 'c1', deviceId: 'd1', pointId: 'p1' },
+      value: { point: { id: 'p1', name: 'nope' } },
+    })
+    assert.equal(drift.ok, false)
+    assert.equal(drift.errorCode, 'CONFIG_DRIFT')
+    assert.deepEqual(drift.refresh, { action: 'points', op: 'list' })
+    assert.deepEqual(drift.details.refresh, { action: 'points', op: 'list' })
+    assert.equal(typeof drift.details.actualVersion, 'number')
+    // actualVersion is diagnostic only — Agent must follow refresh (re-list), not treat it as a retry ticket.
+    assert.notEqual(drift.refresh, drift.details.actualVersion)
+    assert.equal('expectedConfigVersion' in (drift.refresh || {}), false)
+  })
+})
+
 test('name-only update does not reset address/function/scale/flags', async () => {
   await withWs(async (home, cwd) => {
     const before = snapshotPoint(loadWorkspace(home, cwd))

@@ -158,18 +158,35 @@ export function checkBudget(projectRoot = root, budget = config) {
       if (lines > group.error) {
         overError.push({ file, lines })
         if (!entry) {
-          violations.push(`${group.name}: ${file} is ${lines} lines, over the ${group.error}-line limit, and is not allowlisted`)
+          violations.push(
+            `${group.name}: ${file} is ${lines} lines, over the ${group.error}-line limit, and is not allowlisted`,
+          )
         } else if (lines > entry.max) {
-          violations.push(`${group.name}: ${file} grew to ${lines} lines (allowlisted max ${entry.max}); split it instead of raising the budget`)
+          violations.push(
+            `${group.name}: ${file} grew to ${lines} lines (allowlisted max ${entry.max}); split it instead of raising the budget`,
+          )
         } else {
           allowlisted.push({ file, lines, max: entry.max, stage: entry.stage, reason: entry.reason })
         }
-      } else {
-        if (lines > group.warn) overWarn.push({ file, lines })
-        if (entry) {
-          stale.push({ file, lines })
-          violations.push(`${group.name}: ${file} is back under the ${group.error}-line limit (${lines}); remove it from the allowlist`)
+      } else if (lines > group.warn) {
+        // P5-4: warn band is a non-growing debt budget — must be allowlisted with a max ratchet.
+        overWarn.push({ file, lines })
+        if (!entry) {
+          violations.push(
+            `${group.name}: ${file} is ${lines} lines (above ${group.warn}-line debt budget) and is not allowlisted`,
+          )
+        } else if (lines > entry.max) {
+          violations.push(
+            `${group.name}: ${file} grew to ${lines} lines (allowlisted max ${entry.max}); split it instead of raising the budget`,
+          )
+        } else {
+          allowlisted.push({ file, lines, max: entry.max, stage: entry.stage, reason: entry.reason })
         }
+      } else if (entry) {
+        stale.push({ file, lines })
+        violations.push(
+          `${group.name}: ${file} is back under the ${group.warn}-line debt budget (${lines}); remove it from the allowlist`,
+        )
       }
     }
 

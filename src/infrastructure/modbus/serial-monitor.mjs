@@ -38,6 +38,23 @@ export const listConnectedSerialSources = async (home, cwd, extra = {}) => {
       connectedAt: row.connectedAt || 0,
     })
   }
+  for (const c of pack.connections || []) {
+    if (!c || !c.id || !c.conn) continue
+    if (!(c.conn.sim === true || c.sim === true)) continue
+    if (c.enabled === false) continue
+    if ((c.conn.mode || 'rtu') !== 'rtu') continue
+    const simSt = getSimConnectionState(cwd, c.id)
+    const connected = simSt ? simSt.status === 'connected' : true
+    if (!connected) continue
+    sources.push({
+      connectionId: c.id,
+      port: c.conn.port || 'SIM',
+      name: c.name || c.id,
+      state: 'connected',
+      connectedAt: (simSt && simSt.connectedAt) || Date.now(),
+      simulated: true,
+    })
+  }
   return { ok: true, sources }
 }
 

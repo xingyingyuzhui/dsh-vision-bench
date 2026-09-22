@@ -30,12 +30,13 @@ export function renderSaveButton(el, t, props = {}) {
 }
 
 export function renderSaveCancelGroup(el, t, options = {}) {
-  const { onCancel, onSave, cancelText, saveText, saving, loading, disabled, saveDisabled, cancelDisabled, size = 'normal', reverseDomOrder, className, style, gap = 10, justifyContent = 'flex-end' } = options
+  const { onCancel, onSave, cancelText, saveText, saving, loading, disabled, saveDisabled, cancelDisabled, size = 'normal', reverseDomOrder, className, style, gap = 'var(--dvb-space-control, 10px)', justifyContent = 'flex-end' } = options
   const cBtn = renderCancelButton(el, t, { onClick: onCancel, disabled: disabled || cancelDisabled, text: cancelText, size })
   const sBtn = renderSaveButton(el, t, { onClick: onSave, disabled: disabled || saveDisabled, saving, loading, text: saveText, savingText: options.savingText, size })
+  const gapCss = typeof gap === 'number' ? `${gap}px` : gap
   const s = reverseDomOrder
-    ? { display: 'flex', flexDirection: 'row-reverse', justifyContent: 'flex-start', gap: `${gap}px`, ...style }
-    : { display: 'flex', alignItems: 'center', justifyContent, gap: `${gap}px`, ...style }
+    ? { display: 'flex', flexDirection: 'row-reverse', justifyContent: 'flex-start', gap: gapCss, ...style }
+    : { display: 'flex', alignItems: 'center', justifyContent, gap: gapCss, ...style }
   return el('div', { className: `dvb-actions${className ? ` ${className}` : ''}`, style: s }, reverseDomOrder ? sBtn : cBtn, reverseDomOrder ? cBtn : sBtn)
 }
 

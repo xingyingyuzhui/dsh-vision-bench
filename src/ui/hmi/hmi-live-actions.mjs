@@ -69,7 +69,22 @@ export function createHmiLiveActions(ctx, core) {
         const isShared = Boolean(
           workspaceRef.current?.modbus?.share?.enabled && workspaceRef.current?.modbus?.share?.connections,
         )
-        pushFramesLog({ cwd, sessionId, isShared }, activeConnId, data.framesLog || data.frames || [])
+        const scope = { cwd, sessionId, isShared }
+        const log = data.framesLog || data.frames || []
+        /** @type {Map<string, any[]>} */
+        const byConn = new Map()
+        for (const entry of Array.isArray(log) ? log : []) {
+          if (!entry) continue
+          const cid = String(entry.connectionId || activeConnId || '')
+          if (!cid) continue
+          if (!byConn.has(cid)) byConn.set(cid, [])
+          byConn.get(cid).push(entry)
+        }
+        if (byConn.size === 0 && Array.isArray(log) && log.length) {
+          pushFramesLog(scope, activeConnId, log)
+        } else {
+          for (const [cid, group] of byConn) pushFramesLog(scope, cid, group)
+        }
         if (Array.isArray(data.values)) {
           setWorkspace((prev) => ({ ...prev, modbus: { ...prev.modbus, values: data.values } }))
           workspaceRef.current = {
@@ -268,8 +283,10 @@ export function createHmiLiveActions(ctx, core) {
         version: 3,
       })
       if (nextSim) {
+        const pollingCfg = pack.pollingByConnection?.[connectionId] || {}
+        const intervalMs = Math.max(200, Number(pollingCfg.intervalMs) || 1000)
         await post('/dsh-vision-bench/connection/open', { cwd, sessionId, connectionId }, 15000).catch(() => {})
-        await post('/dsh-vision-bench/polling/start', { cwd, sessionId, connectionId, intervalMs: 1000 }, 15000).catch(() => {})
+        await post('/dsh-vision-bench/polling/start', { cwd, sessionId, connectionId, intervalMs }, 15000).catch(() => {})
       } else {
         await post('/dsh-vision-bench/polling/stop', { cwd, sessionId, connectionId }, 15000).catch(() => {})
         await post('/dsh-vision-bench/connection/close', { cwd, sessionId, connectionId }, 15000).catch(() => {})
@@ -288,7 +305,11 @@ export function createHmiLiveActions(ctx, core) {
     setLinkBusy('poll')
     setError('')
     const url = d.watchEnabled ? '/dsh-vision-bench/polling/stop' : '/dsh-vision-bench/polling/start'
-    return post(url, { cwd, sessionId, connectionId: d.activeConnId }, 15000)
+    const body = { cwd, sessionId, connectionId: d.activeConnId }
+    if (!d.watchEnabled) {
+      body.intervalMs = Math.max(200, Number(d.polling?.intervalMs) || 1000)
+    }
+    return post(url, body, 15000)
       .then(async (data) => {
         if (data?.ok === false) setError(formatErrorMessage(data.error) || t('fail'))
         try {

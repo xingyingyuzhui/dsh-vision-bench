@@ -351,19 +351,19 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
           oldestCursor: fed.oldestCursor,
           latestCursor: fed.latestCursor,
           bufferCount: fed.bufferCount,
-          // back-compat aliases
           lines: fed.items,
           lastId: fed.cursor,
           total: slot.capture.all().length,
         }
       }
-      // Task1.2/0.19.2: 全部连接 — strictly ordered by the global capture seq.
       const after = Number(since) > 0 ? Number(since) : 0
       const rows = []
       let oldestSeq = Infinity
       let latestSeq = 0
+      const epochs = []
       for (const slot of connections.values()) {
         if (String(slot.cwd) !== String(cwd)) continue
+        epochs.push(String(slot.capture?.epoch || ''))
         for (const item of slot.capture.all()) {
           const s = Number(item.seq) || item.id
           oldestSeq = Math.min(oldestSeq, s)
@@ -372,10 +372,10 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
         }
       }
       rows.sort((a, b) => a._seq - b._seq || String(a.connectionId).localeCompare(String(b.connectionId)))
-      let dropped = 0
-      if (after > 0 && after < oldestSeq && oldestSeq !== Infinity && oldestSeq > 1) {
-        dropped = Math.max(0, oldestSeq - 1 - after)
-      }
+      const dropped =
+        after > 0 && after < oldestSeq && oldestSeq !== Infinity && oldestSeq > 1
+          ? Math.max(0, oldestSeq - 1 - after)
+          : 0
       const items = rows.filter((r) => r._seq > after).slice(0, cap)
       const lastReturned = items.length ? items[items.length - 1]._seq : after
       return {
@@ -387,7 +387,7 @@ export function createConnectionManager({ ModbusRTU, now = () => Date.now() } = 
         oldestCursor: oldestSeq === Infinity ? 0 : oldestSeq,
         latestCursor: latestSeq,
         bufferCount: rows.length,
-        // back-compat aliases
+        epoch: epochs.sort().join('|') || '0',
         lines: items,
         lastId: lastReturned,
         total: rows.length,

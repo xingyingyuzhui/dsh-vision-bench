@@ -10,6 +10,9 @@ import { pageWindow as win, useReactPageRuntime } from '../helpers/react-runtime
 
 useReactPageRuntime({ profile: 'page' })
 
+const dialogHost = () => document.body
+const dialogText = () => dialogHost().textContent || ''
+
 test('挂载无错误；默认不展开已监视点位列表（空状态只提示新建）', async () => {
   const { post } = makePost()
   const errors = []
@@ -46,9 +49,9 @@ test('新建组件：编辑器勾选监视点位（限定路径）→ 保存后�
   await act(async () => {
     newBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
   })
-  await waitFor(() => assert.ok(tree.container.textContent.includes('组件名称')), { timeout: 6000 })
+  await waitFor(() => assert.ok(dialogText().includes('组件名称')), { timeout: 6000 })
   // 只列出监视点位（p1/p2），p3 不出现；路径包含 连接/设备/点位
-  const picker = tree.container.querySelector('.dvb-viz-picker-list')
+  const picker = dialogHost().querySelector('.dvb-viz-picker-list')
   assert.ok(picker, '点位选择器存在')
   const pickerText = picker.textContent
   assert.ok(pickerText.includes('温度') && pickerText.includes('压力'), '只列监视点位')
@@ -65,9 +68,9 @@ test('新建组件：编辑器勾选监视点位（限定路径）→ 保存后�
     p1box.checked = true
     p1box.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
   })
-  await waitFor(() => assert.ok(tree.container.textContent.includes('已选 1 个点位')), { timeout: 6000 })
+  await waitFor(() => assert.ok(dialogText().includes('已选 1 个点位')), { timeout: 6000 })
   // 保存
-  const saveBtn = Array.from(tree.container.querySelectorAll('button')).find(
+  const saveBtn = Array.from(dialogHost().querySelectorAll('button')).find(
     (b) => b.textContent === '创建组件' || b.textContent === '保存修改' || b.textContent === '保存',
   )
   assert.ok(saveBtn, '保存/创建按钮存在')
@@ -104,18 +107,25 @@ test('编辑图标恢复组件草稿；类型与关联点位回显', async () =>
     createElement(Viz, { ...alpha3PageProps({ sessionId: 's1', path: '/ws' }), scope: { cwd: '/ws' } }),
   )
   await waitFor(() => assert.ok(tree.container.textContent.includes('我的数值卡')), { timeout: 6000 })
-  const editBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '编辑')
+  const moreBtn = tree.container.querySelector('.dvb-viz-more')
+  assert.ok(moreBtn)
+  await act(async () => {
+    moreBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+  await waitFor(() => assert.ok(document.querySelector('[role=menu]')), { timeout: 4000 })
+  const editBtn = Array.from(document.querySelectorAll('[role=menuitem]')).find((b) => b.textContent === '编辑')
   assert.ok(editBtn)
   await act(async () => {
     editBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
   })
-  await waitFor(() => assert.ok(tree.container.textContent.includes('编辑组件')), { timeout: 6000 })
-  const nameInput = Array.from(tree.container.querySelectorAll('input')).find((i) => i.value === '我的数值卡')
+  await waitFor(() => assert.ok(dialogHost().querySelector('.dvb-viz-modal-mask')), { timeout: 6000 })
+  assert.ok(dialogText().includes('编辑组件'), '编辑弹窗标题')
+  const nameInput = Array.from(dialogHost().querySelectorAll('input')).find((i) => i.value === '我的数值卡')
   assert.ok(nameInput, '组件名称回显')
-  const typeSel = Array.from(tree.container.querySelectorAll('select')).find((s) => s.value === 'value')
+  const typeSel = Array.from(dialogHost().querySelectorAll('select')).find((s) => s.value === 'value')
   assert.ok(typeSel, '组件类型回显 value')
-  assert.ok(tree.container.textContent.includes('显示'), '数值卡配置含显示页签')
-  assert.ok(tree.container.textContent.includes('实时预览'), '数值卡配置含预览')
+  assert.ok(dialogText().includes('显示'), '数值卡配置含显示页签')
+  assert.ok(dialogText().includes('实时预览'), '数值卡配置含预览')
   tree.unmount()
 })
 
@@ -136,7 +146,8 @@ test('degraded 组件显示修复入口；关闭监视/删除点位不删除组�
   await act(async () => {
     fixBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
   })
-  await waitFor(() => assert.ok(tree.container.textContent.includes('编辑组件')), { timeout: 6000 })
+  await waitFor(() => assert.ok(dialogHost().querySelector('.dvb-viz-modal-mask')), { timeout: 6000 })
+  assert.ok(dialogText().includes('编辑组件'), '修复入口打开编辑弹窗')
   tree.unmount()
 })
 
@@ -175,13 +186,19 @@ test('Task8/0.20.1: 编辑保留 ID/order/windowMs/confirmWrite 且排列不变�
   await waitFor(() => assert.ok(tree.container.textContent.includes('第一')), { timeout: 6000 })
   const cards = Array.from(tree.container.querySelectorAll('.dvb-viz-card'))
   assert.equal(cards.length, 2, '两个组件')
-  const editFirst = Array.from(cards[0].querySelectorAll('button')).find((b) => b.textContent === '编辑')
+  const moreFirst = cards[0].querySelector('.dvb-viz-more')
+  assert.ok(moreFirst)
+  await act(async () => {
+    moreFirst.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+  await waitFor(() => assert.ok(document.querySelector('[role=menu]')), { timeout: 4000 })
+  const editFirst = Array.from(document.querySelectorAll('[role=menuitem]')).find((b) => b.textContent === '编辑')
   await act(async () => {
     editFirst.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
   })
-  await waitFor(() => assert.ok(tree.container.textContent.includes('编辑组件')), { timeout: 6000 })
+  await waitFor(() => assert.ok(dialogHost().querySelector('.dvb-viz-modal-mask')), { timeout: 6000 })
   // 保存（名称空不变更时，norm 后同值）→ 索引替换
-  const saveBtn = Array.from(tree.container.querySelectorAll('button')).find(
+  const saveBtn = Array.from(dialogHost().querySelectorAll('button')).find(
     (b) => b.textContent === '保存修改' || b.textContent === '创建组件' || b.textContent === '保存',
   )
   assert.ok(saveBtn, '保存修改按钮存在')

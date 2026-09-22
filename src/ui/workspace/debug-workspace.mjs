@@ -19,23 +19,32 @@ function initialSection(sessionId, cwd) {
   return DEBUG_SECTIONS.WORKBENCH
 }
 
-export function createDebugWorkspace(React, t, post) {
+export function createDebugWorkspace(React, t, post, hooks) {
   const openProjectRef = { current: () => {} }
   const WorkbenchPage = createDebugView(React, t, post, (target) => openProjectRef.current(target))
   const ProjectPage = createMapView(React, t, post)
   const RuntimePage = createRuntimePage(React, t, post)
-  const labels = {
-    [DEBUG_SECTIONS.WORKBENCH]: t('sectionWorkbench') || t('tabDebug'),
-    [DEBUG_SECTIONS.PROJECT]: t('projectMap'),
-    [DEBUG_SECTIONS.RUNTIME]: t('sectionRuntime') || '运行调试',
-  }
   const sections = [DEBUG_SECTIONS.WORKBENCH, DEBUG_SECTIONS.PROJECT, DEBUG_SECTIONS.RUNTIME]
+  const localeSubscribe = hooks?.localeSubscribe
 
   return function DebugWorkspace(props) {
     const el = React.createElement
     const sessionId = props?.sessionId || ''
     const cwd = sessionCwd(props)
     const [section, setSection] = React.useState(() => initialSection(sessionId, cwd))
+    const [localeTick, setLocaleTick] = React.useState(0)
+    React.useEffect(() => {
+      setLocaleTick((n) => n + 1)
+      if (typeof localeSubscribe !== 'function') return undefined
+      return localeSubscribe(() => setLocaleTick((n) => n + 1))
+    }, [])
+    void localeTick
+    // Resolve at render time so host zh preference is not frozen out by provisional en.
+    const labels = {
+      [DEBUG_SECTIONS.WORKBENCH]: t('sectionWorkbench') || t('tabDebug'),
+      [DEBUG_SECTIONS.PROJECT]: t('projectMap'),
+      [DEBUG_SECTIONS.RUNTIME]: t('sectionRuntime') || '运行调试',
+    }
     openProjectRef.current = (target) => {
       const next = {
         viewId: VIEW_DEBUG,

@@ -10,7 +10,7 @@ import {
   filePassesFilter,
   languageForPath,
 } from '../../src/ui/debug/project/project-tree-model.mjs'
-import { filterFrameList, filtersForMode } from '../../src/ui/monitor/frames/frames-filter-model.mjs'
+import { filterFrameList, filtersForMode, sortFramesNewestFirst } from '../../src/ui/monitor/frames/frames-filter-model.mjs'
 import { buildLiveFrames, pickDisplayedFrames } from '../../src/ui/monitor/frames/frames-table-model.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -124,6 +124,15 @@ test('pure models filter frames and project files without React', () => {
   const rawRow = { deviceId: '', functionCode: 0, status: 'ok', source: 'polling', direction: 'tx', hex: '0103' }
   assert.equal(filterFrameList([rawRow], protoFlt, '').length, 0, 'stale proto device filter would hide raw')
   assert.equal(filterFrameList([rawRow], filtersForMode('raw', protoFlt), '').length, 1)
+  const newestFirst = sortFramesNewestFirst([
+    { id: 'old', at: 100 },
+    { id: 'new', t: 300 },
+    { id: 'mid', at: 200 },
+  ])
+  assert.deepEqual(
+    newestFirst.map((f) => f.id),
+    ['new', 'mid', 'old'],
+  )
   const cleared = buildLiveFrames({
     mode: 'proto',
     sel: { kind: 'all' },
@@ -138,9 +147,21 @@ test('pure models filter frames and project files without React', () => {
     viewClearedAt: 20,
   })
   assert.equal(cleared.length, 1)
-  assert.equal(cleared[0].frameId, 'new')
+  assert.equal(cleared[0].frameId, 'new:tx')
+  const simRaw = buildLiveFrames({
+    mode: 'raw',
+    sel: { kind: 'all' },
+    connections: [{ id: 'sim1', conn: { sim: true, mode: 'rtu', port: 'COM9' } }],
+    framesByConnection: {
+      sim1: [{ frameId: 's1', t: 50, at: 50, request: 'SIM TX', direction: 'tx' }],
+    },
+    frameScope: { cwd: '', sessionId: '', isShared: false },
+    serial: { lines: [] },
+    viewClearedAt: 0,
+  })
+  assert.ok(simRaw.length > 0, 'sim protocol frames appear in raw mode')
   assert.equal(pickDisplayedFrames(true, { proto: [{ frameId: 'snap' }] }, 'proto', cleared)[0].frameId, 'snap')
-  assert.equal(pickDisplayedFrames(false, { proto: [{ frameId: 'snap' }] }, 'proto', cleared)[0].frameId, 'new')
+  assert.equal(pickDisplayedFrames(false, { proto: [{ frameId: 'snap' }] }, 'proto', cleared)[0].frameId, 'new:tx')
   const file = {
     name: 'main.c',
     rel: 'src/main.c',

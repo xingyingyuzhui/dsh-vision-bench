@@ -18,7 +18,7 @@ import { createBench } from './helpers/workspace-factory.mjs'
 
 test('host named exports', async () => {
   assert.equal(name, 'dsh-vision-bench')
-  assert.deepEqual(inject, ['connection', 'webServer'])
+  assert.deepEqual(inject, ['connection'])
   const pkg = JSON.parse(
     await (await import('node:fs/promises')).readFile(new URL('../package.json', import.meta.url), 'utf8'),
   )
@@ -27,25 +27,27 @@ test('host named exports', async () => {
   assert.equal(pkg.exports['./scan-guard'], undefined)
 })
 
-test('host apply does not inject agentPresets or bind tools', async () => {
+test('host apply optionally injects webServer for Web compat only', async () => {
   const connection = mockRpcHost()
   const injected = []
   let toolRegs = 0
-  const { ctx } = createHostContext(connection)
+  const { ctx, stop } = createHostContext(connection)
   ctx.tools = {
     register() {
       toolRegs += 1
       return () => {}
     },
   }
-  ctx.inject = (deps) => {
+  const baseInject = ctx.inject.bind(ctx)
+  ctx.inject = (deps, fn) => {
     injected.push(deps)
+    return baseInject(deps, fn)
   }
   apply(ctx)
   apply(ctx)
-  assert.deepEqual(injected, [])
+  assert.deepEqual(injected, [['webServer'], ['webServer']])
   assert.equal(toolRegs, 0)
-  if (ctx._stop) ctx._stop()
+  await stop()
 })
 
 test('state returns idle ioRuntime without starting a Worker', async (t) => {
@@ -67,28 +69,20 @@ test('state returns idle ioRuntime without starting a Worker', async (t) => {
   assert.equal(snap.ioRuntime.capabilities.modbusTcp, 'unknown')
 })
 
-test('apply registers only agent command bridge and disposes RPC', async () => {
+test('apply registers Fetch dispatch, Web command bridge, and disposes RPC', async () => {
   const disposed = []
   const connection = mockRpcHost()
-  const ctx = {
-    connection,
-    webServer: {
-      register(entry) {
-        disposed.push(entry.path)
-        return () => {}
-      },
-    },
-    tools: {
-      register() {
-        return () => {}
-      },
-    },
-    effect(factory) {
-      ctx._stop = factory()
+  const { ctx, routes, stop } = createHostContext(connection)
+  ctx.webServer = {
+    register(entry) {
+      disposed.push(entry.path)
+      routes.push(entry)
+      return () => {}
     },
   }
   apply(ctx)
   assert.deepEqual(disposed, ['/dsh-vision-bench/command'])
+  assert.ok(connection.hasFetchHandler)
   assert.ok(connection.hasHandler)
   const hostSrc = await (await import('node:fs/promises')).readFile(new URL('../host.js', import.meta.url), 'utf8')
   assert.doesNotMatch(hostSrc, /schedulePresetSeed\(/)
@@ -101,7 +95,8 @@ test('apply registers only agent command bridge and disposes RPC', async () => {
   assert.doesNotMatch(hostSrc, /roster copy is best-effort/)
   assert.doesNotMatch(hostSrc, /const browser = origin/)
   assert.doesNotMatch(hostSrc, /route\('\/dsh-vision-bench\/state'/)
-  await ctx._stop()
+  assert.doesNotMatch(hostSrc, /connection\.register\(/)
+  await stop()
   assert.equal(connection.disposed, true)
 })
 
@@ -111,24 +106,15 @@ test('late RPC disposer still runs after the host fiber has disposed', async () 
   const registration = new Promise((resolve) => {
     resolveReg = resolve
   })
-  const ctx = {
-    connection: {
-      rpc: { handle() {} },
-      register(_ctx, _channel, _handler) {
-        return registration
-      },
-    },
-    webServer: {
-      register() {
-        return () => {}
-      },
-    },
-    effect(factory) {
-      ctx._stop = factory()
-    },
+  const connection = mockRpcHost()
+  const baseHandle = connection.rpc.handle.bind(connection.rpc)
+  connection.rpc.handle = (channel, fn) => {
+    baseHandle(channel, fn)
+    return registration
   }
+  const { ctx, stop } = createHostContext(connection)
   apply(ctx)
-  const stopping = ctx._stop()
+  const stopping = Promise.resolve(stop())
   resolveReg(() => {
     disposeCalls += 1
   })
@@ -142,24 +128,15 @@ test('host dispose waits until the late RPC disposer finishes', async () => {
     resolveReg = resolve
   })
   let disposeFinished = false
-  const ctx = {
-    connection: {
-      rpc: { handle() {} },
-      register() {
-        return registration
-      },
-    },
-    webServer: {
-      register() {
-        return () => {}
-      },
-    },
-    effect(factory) {
-      ctx._stop = factory()
-    },
+  const connection = mockRpcHost()
+  const baseHandle = connection.rpc.handle.bind(connection.rpc)
+  connection.rpc.handle = (channel, fn) => {
+    baseHandle(channel, fn)
+    return registration
   }
+  const { ctx, stop } = createHostContext(connection)
   apply(ctx)
-  const stopping = Promise.resolve(ctx._stop())
+  const stopping = Promise.resolve(stop())
   let stopDone = false
   stopping.then(() => {
     stopDone = true
@@ -182,7 +159,7 @@ test('host dispose waits until the late RPC disposer finishes', async () => {
 
 test('plugin dispose 清空刷写审批仓库', async () => {
   const connection = mockRpcHost()
-  const ctx = createHostContext(connection).ctx
+  const { ctx, stop } = createHostContext(connection)
   clearFlashApprovals()
   apply(ctx)
   defaultFlashApprovals.create({
@@ -196,7 +173,7 @@ test('plugin dispose 清空刷写审批仓库', async () => {
     target: 'stm32f1x',
   })
   assert.ok(defaultFlashApprovals.size() > 0)
-  ctx._stop()
+  await stop()
   assert.equal(defaultFlashApprovals.size(), 0)
 })
 

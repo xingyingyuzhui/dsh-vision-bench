@@ -1,4 +1,4 @@
-import { createVisionRpcPost } from '../../infrastructure/host/vision-rpc-client.mjs'
+import { createVisionFetchPost } from '../../infrastructure/host/vision-rpc-client.mjs'
 import { subscribeFocus } from '../common/focus-store.mjs'
 import { getActiveScope } from '../common/session-scope.mjs'
 import { createHmiView } from '../hmi/hmi-page.mjs'
@@ -15,8 +15,8 @@ import { createMonitorWorkspace } from '../workspace/monitor-workspace.mjs'
 import { registerView } from './register-view.mjs'
 
 export function apply(ctx) {
-  if (!ctx.connection?.rpc?.call || typeof ctx.connection.rpc.call !== 'function') {
-    throw new Error('dsh-vision-bench: Client requires ctx.connection.rpc.call')
+  if (!ctx.connection) {
+    throw new Error('dsh-vision-bench: Client requires ctx.connection')
   }
 
   const React = require('react')
@@ -45,10 +45,11 @@ export function apply(ctx) {
   function t(key, params) {
     return interpolate(tWith(ctx, key, params), params)
   }
+  const localeSubscribe =
+    ctx.locale && typeof ctx.locale.subscribe === 'function' ? (fn) => ctx.locale.subscribe(fn) : null
 
-  function post(path, payload, timeoutMs) {
-    return createVisionRpcPost(ctx.connection)(path, payload, timeoutMs)
-  }
+  // Stage 1: shared Connection Fetch (Web + Desktop). Relative /api path; no localhost.
+  const post = createVisionFetchPost()
 
   function openHmi(target) {
     requestOpenViewFromScope(VIEW_HMI, { section: '', target: target || {}, source: 'manual' })
@@ -61,12 +62,13 @@ export function apply(ctx) {
     })
   }
 
+  const localeHooks = { localeSubscribe }
   const SettingsPage = createSettingsPage(React, t, post, { getScope: getActiveScope })
-  const DebugWorkspace = wrapVisionPage(React, createDebugWorkspace(React, t, post), 'debug', t)
+  const DebugWorkspace = wrapVisionPage(React, createDebugWorkspace(React, t, post, localeHooks), 'debug', t)
   const HmiView = wrapVisionPage(React, createHmiView(React, t, post), 'hmi', t)
   const MonitorWorkspace = wrapVisionPage(
     React,
-    createMonitorWorkspace(React, t, post, { openHmi, openFrames }),
+    createMonitorWorkspace(React, t, post, { openHmi, openFrames, ...localeHooks }),
     'monitor',
     t,
   )

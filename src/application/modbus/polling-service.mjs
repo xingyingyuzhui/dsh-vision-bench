@@ -1,12 +1,11 @@
 // @ts-check
-import { evaluateAlarms, normalizeAlarmState } from '../../domain/modbus/alarm-model.mjs'
 import { normalizeModbus } from './modbus-migration.mjs'
 import { normalizePointV3 } from '../../domain/modbus/point-model.mjs'
 import { pickArtifact } from '../../infrastructure/files/project-fs.mjs'
 import { toEndpoint } from '../../domain/modbus/io-contract.mjs'
 import { aborted, hasRunning, originOf, signalOf } from '../../domain/modbus/journal-model.mjs'
 import { commitPollResult, commitReadResult, commitWriteResult } from './modbus-commit.mjs'
-import { notifyBenchEvent } from '../../infrastructure/host/notify.mjs'
+import { emitCommittedAlarmTransitions } from './poll-alarm-notify.mjs'
 import { requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
 import {
   clampInt,
@@ -31,6 +30,14 @@ import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { findPointV3, fnOfPoint } from '../../domain/modbus/function-code.mjs'
 import { compactPointRow, isStaleValue } from '../../domain/modbus/point-value.mjs'
 import { stampPoints } from '../../domain/modbus/unit-id.mjs'
+import { resolvePollSessionOwnership, resolvePollTargets } from './poll-session-ownership.mjs'
+import { validatePollRuntimeIdentities } from './poll-runtime-identity.mjs'
+import {
+  preparePollReadPlan,
+  prepareReadTargets,
+  prepareTargetViews,
+} from './poll-target-preparation.mjs'
+export { resolvePollSessionOwnership, resolvePollTargets }
 import {
   isScopePartitioned,
   normalizeSessionConfigs,
@@ -60,7 +67,6 @@ import {
   pendingState,
   pendingWrites,
   pickModbusPatch,
-  pointBefore,
   pointValuesOfBatch,
   pollLocks,
   prunePendingWrites,
@@ -112,37 +118,83 @@ export const modbusPoll = async (home, cwd, opts) => {
   const workspace = loadWorkspace(home, room.cwd)
   const cidArg = opts && (opts.connectionId || opts.connId) ? String(opts.connectionId || opts.connId).trim() : ''
   const sessionId = String(opts?.sessionId || '')
-  let targetSessionId = sessionId
-  const scMap = workspace.modbus?.sessionConfigs || {}
-  if (!targetSessionId && cidArg) {
-    targetSessionId =
-      Object.keys(scMap).find((/** @type {any} */ sid) => scMap[sid]?.connections?.some((/** @type {any} */ c) => c && c.id === cidArg)) ||
-      ''
+  // Full batch ownership pre-check BEFORE any transport / frames / runtime commit.
+  const batchOwnership = resolvePollTargets(workspace, { sessionId, connectionId: cidArg })
+  if (!batchOwnership.ok) {
+    return {
+      ok: false,
+      skipped: true,
+      error: batchOwnership.error,
+      errorCode: batchOwnership.errorCode,
+      reason: batchOwnership.reason,
+      conflicts: batchOwnership.conflicts,
+      owners: batchOwnership.conflicts[0]?.owners,
+      polling: workspace.modbus?.polling,
+      pollingByConnection: workspace.modbus?.pollingByConnection,
+      values: workspace.modbus?.values,
+    }
   }
-  if (!targetSessionId && workspace.session?.boundId && scMap[workspace.session.boundId]) {
-    targetSessionId = workspace.session.boundId
+  /** @type {Record<string, string>} */
+  const sourceSessionByConnection = {}
+  for (const t of batchOwnership.targets) {
+    sourceSessionByConnection[t.connectionId] = t.sourceSessionId
   }
+  const targetSessionId = sessionId || batchOwnership.targets[0]?.sourceSessionId || ''
+
 
   /** @type {ModbusWorkspace} */
-  let pack
-  if (targetSessionId) {
-    pack = /** @type {ModbusWorkspace} */ (modbusForSession(workspace, targetSessionId))
-  } else if (isScopePartitioned(workspace.modbus)) {
-    const sc = normalizeSessionConfigs(scMap)
-    pack = /** @type {ModbusWorkspace} */ (
-      normalizeModbus({
-        ...workspace.modbus,
-        connections: unionScopedConnections(workspace.modbus.connections, sc, workspace.modbus.share),
-        devices: unionScopedDevices(workspace.modbus.devices, sc, workspace.modbus.share),
-        points: unionScopedPoints(workspace.modbus.points, sc, workspace.modbus.share),
-      })
-    )
-  } else {
-    pack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
-  }
+  // Workspace-level runtime (values/polling/frames) — never substitute the first
+  // session pack for the whole batch.
+  const workspaceRuntimePack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
+  let pack = workspaceRuntimePack
 
-  // support per-connection polling; if no points, report
-  if (!pack.points.length) return { ok: false, error: '无点位，请先添加点位' }
+  const preparedTargets = prepareTargetViews(workspace, batchOwnership.targets)
+  const executable = prepareReadTargets(preparedTargets)
+  const targetConns = executable.map((t) => t.connObj)
+  if (cidArg && !targetConns.length) {
+    const requested = preparedTargets.find((t) => t.connectionId === cidArg)
+    return {
+      ok: false,
+      error: requested?.connection && requested.connection.enabled === false ? '设备已禁用' : `连接不存在: ${cidArg}`,
+    }
+  }
+  if (!targetConns.length) return { ok: false, error: '无可用连接' }
+  const readTargets = executable.map((t) => ({
+    connectionId: t.connectionId,
+    sourceSessionId: t.sourceSessionId,
+    points: t.points,
+  }))
+  const batchHasPoints = readTargets.some((t) => t.points.length > 0)
+  if (!batchHasPoints) return { ok: false, error: '无点位，请先添加点位' }
+  const plan = preparePollReadPlan(executable)
+  if (!plan.ok) {
+    return {
+      ok: false,
+      skipped: true,
+      error: plan.error,
+      errorCode: plan.errorCode,
+      reason: plan.reason,
+      conflicts: plan.conflicts,
+      polling: workspace.modbus?.polling,
+      pollingByConnection: workspace.modbus?.pollingByConnection,
+      values: workspace.modbus?.values,
+    }
+  }
+  // Runtime pointId identity conflicts must be rejected BEFORE transport/commit.
+  const identityCheck = validatePollRuntimeIdentities(workspace, readTargets)
+  if (!identityCheck.ok) {
+    return {
+      ok: false,
+      skipped: true,
+      error: identityCheck.error,
+      errorCode: identityCheck.errorCode,
+      reason: identityCheck.reason,
+      conflicts: identityCheck.conflicts,
+      polling: workspace.modbus?.polling,
+      pollingByConnection: workspace.modbus?.pollingByConnection,
+      values: workspace.modbus?.values,
+    }
+  }
   if (hasRunning(workspace, 'read')) {
     return {
       ok: true,
@@ -152,11 +204,6 @@ export const modbusPoll = async (home, cwd, opts) => {
       values: pack.values,
     }
   }
-  const targetConns = cidArg
-    ? pack.connections.filter((/** @type {any} */ c) => c.id === cidArg)
-    : pack.connections.filter((/** @type {any} */ c) => c.enabled !== false)
-  if (cidArg && !targetConns.length) return { ok: false, error: `连接不存在: ${cidArg}` }
-  if (!targetConns.length) return { ok: false, error: '无可用连接' }
   // use a global lock per cwd (legacy) plus per-conn locks for multi
   const lockKey = room.cwd + (cidArg ? `:${cidArg}` : '')
   if (pollLocks.has(lockKey) || pollLocks.has(room.cwd)) {
@@ -180,13 +227,17 @@ export const modbusPoll = async (home, cwd, opts) => {
   let timedOut = false
   try {
     let values = pack.values
+    /** @type {Map<string, any>} */
+    const changedById = new Map()
     const framesLog = []
-    const framesByConnection = { ...(pack.framesByConnection || {}) }
     const pollingByConnection = { ...(pack.pollingByConnection || {}) }
     for (const connObj of targetConns) {
       const conn = connObj.conn
       const connId = connObj.id
-      const pts = pack.points.filter((/** @type {any} */ p) => (p.connectionId || p.connId) === connId)
+      const tpack = connObj.__pack || pack
+      const pts = Array.isArray(connObj.__points)
+        ? connObj.__points
+        : tpack.points.filter((/** @type {any} */ p) => (p.connectionId || p.connId) === connId)
       if (!pts.length) {
         // still update polling timestamp for empty but enabled connection?
         pollingByConnection[connId] = {
@@ -198,7 +249,6 @@ export const modbusPoll = async (home, cwd, opts) => {
         continue
       }
       const transport = transportOf(opts)
-      const scopes = planScopedReadBatches(stampPoints({ ...pack, points: pts }))
       const interval = pollingByConnection[connId] || {
         enabled: false,
         intervalMs: 1000,
@@ -207,12 +257,13 @@ export const modbusPoll = async (home, cwd, opts) => {
         error: '',
       }
       let connOk = true
+      const planned = (plan.targets || []).find(
+        (t) => t.connectionId === connId && (t.sourceSessionId || '') === (connObj.__sourceSessionId || ''),
+      )
+      const scopes = planned?.scopes || []
       for (const scope of scopes) {
-        const batchConnObj = pack.connections.find((/** @type {any} */ c) => c.id === scope.connectionId) || connObj
-        const batchDevice = pack.devices.find((/** @type {any} */ d) => d.id === scope.deviceId) || {
-          id: scope.deviceId,
-          unitId: scope.unitId,
-        }
+        const batchConnObj = scope.connection || connObj
+        const batchDevice = scope.device
         for (const batch of scope.batches) {
           if (aborted(signal)) {
             timedOut = true
@@ -224,7 +275,7 @@ export const modbusPoll = async (home, cwd, opts) => {
           // the in-flight read and close the COM (runModbusOp abort → client.close).
           const ran = await runReadTx(
             transport,
-            pack,
+            tpack,
             batchConnObj,
             batchDevice,
             batch,
@@ -247,16 +298,13 @@ export const modbusPoll = async (home, cwd, opts) => {
             ran.ok && ran.result && ran.result.details && Array.isArray(ran.result.details.raw)
               ? ran.result.details.raw
               : []
-          values = scatterBatch(values, pack.points, batch, raw, !!ran.ok, ran.ok ? '' : ran.error || '')
-          let f = ran.frames || framesOf(ran)
-          if (!f && batchConnObj && batchConnObj.conn && batchConnObj.conn.sim) {
-            f = {
-              request: `SIM TX ${batch.fc}@${batch.address}×${batch.count}`,
-              response: `SIM RX ${raw.slice(0, 3).join(',')}`,
-              trace: [],
-              frameFormat: 'rtu-adu',
-            }
+          // Scope scatter to this device/connection's points only — never pack.points.
+          values = scatterBatch(values, scope.points, batch, raw, !!ran.ok, ran.ok ? '' : ran.error || '')
+          for (const rec of pointValuesOfBatch(values, { points: scope.points }, batch)) {
+            const id = rec && (rec.pointId || rec.key)
+            if (id) changedById.set(id, rec)
           }
+          const f = ran.frames || framesOf(ran)
           const entry = f
             ? createTransactionFrame(`读 ${functionTag(batch.fc)}${batch.address}×${batch.count}（监视）`, f, {
                 connectionId: scope.connectionId || connId,
@@ -272,18 +320,9 @@ export const modbusPoll = async (home, cwd, opts) => {
                 at: Date.now(),
               })
             : null
-          if (entry) {
-            framesLog.push(entry)
-            if (!framesByConnection[connId]) framesByConnection[connId] = []
-            framesByConnection[connId] = framesByConnection[connId].concat([entry]).slice(-500)
-          }
-          await commitPollResult(home, room.cwd, {
-            baseConfigVersion: pack.configVersion,
-            connectionId: scope.connectionId || connId,
-            deviceId: scope.deviceId,
-            pointValues: pointValuesOfBatch(values, pack, batch),
-            frame: entry,
-          })
+          if (entry) framesLog.push(entry)
+          // Persist once per poll tick (below), not once per Modbus batch —
+          // sparse point maps otherwise rewrite runtime.json hundreds of times.
         }
         if (!connOk) break
       }
@@ -294,134 +333,51 @@ export const modbusPoll = async (home, cwd, opts) => {
         error: timedOut ? '轮询超时' : connOk ? '' : '轮询部分失败',
       }
     }
-    const alarmEval = evaluateAlarms({
-      points: pack.points,
-      values,
-      prevState: pack.alarmState || pack.alarmActive,
-      pollingByConnection,
-      connections: pack.connections,
-      opts: { deadband: 1 },
-    })
-    const alarms = {
-      next: alarmEval.next,
-      fired: alarmEval.fired.filter((/** @type {any} */ f) => f.point),
-      cleared: alarmEval.recovered.filter((/** @type {any} */ r) => r.point),
-      commFired: alarmEval.fired.filter((/** @type {any} */ f) => !f.point),
-      commCleared: alarmEval.recovered.filter((/** @type {any} */ r) => !r.point),
-    }
-    const activeBool = Object.fromEntries(
-      Object.entries(alarmEval.next)
-        .filter(([, v]) => v && v.condition === 'active' && v.group === 'process')
-        .map(([k]) => [k, true]),
-    )
-    if (alarmEval.fired.length) {
-      const procFired = alarmEval.fired.filter((/** @type {any} */ f) => f.point)
-      const commFired = alarmEval.fired.filter((/** @type {any} */ f) => f.connectionId)
-      if (procFired.length) {
-        await recordBenchEvent(
-          home,
-          room.cwd,
-          {
-            action: 'alarm',
-            ok: false,
-            summary: `越限告警：${procFired
-              .slice(0, 5)
-              .map((/** @type {any} */ item) => {
-                const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
-                return `${pointLabel(item.point)}=${decodeValue(item.point, item.raw ?? item.alarm?.value)}${item.kind === 'max' ? `>${limit}` : `<${limit}`}`
-              })
-              .join('；')}`,
-          },
-          { source: 'system' },
-        )
-        void notifyBenchEvent(
-          home,
-          room.cwd,
-          `Vision 告警：${procFired
-            .slice(0, 3)
-            .map((/** @type {any} */ item) => {
-              const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
-              return `${pointLabel(item.point)}=${decodeValue(item.point, item.raw ?? item.alarm?.value)}${item.kind === 'max' ? `>${limit}` : `<${limit}`}`
-            })
-            .join('；')}`,
-        ).catch(() => {})
-      }
-      if (commFired.length) {
-        await recordBenchEvent(
-          home,
-          room.cwd,
-          {
-            action: 'alarm',
-            ok: false,
-            summary: `通信告警：${commFired
-              .slice(0, 3)
-              .map((/** @type {any} */ c) => c.label || c.connectionId)
-              .join('；')}`,
-          },
-          { source: 'system' },
-        )
-      }
-    }
-    if (alarmEval.recovered.length) {
-      const procRec = alarmEval.recovered.filter((/** @type {any} */ r) => r.point)
-      const commRec = alarmEval.recovered.filter((/** @type {any} */ r) => r.connectionId && !r.point)
-      if (procRec.length) {
-        await recordBenchEvent(
-          home,
-          room.cwd,
-          {
-            action: 'alarm-clear',
-            ok: true,
-            summary: `告警恢复：${procRec
-              .slice(0, 5)
-              .map((/** @type {any} */ item) => `${pointLabel(item.point)}=${decodeValue(item.point, item.raw ?? item.alarm?.value)}`)
-              .join('；')}`,
-          },
-          { source: 'system' },
-        )
-      }
-      if (commRec.length) {
-        await recordBenchEvent(
-          home,
-          room.cwd,
-          {
-            action: 'alarm-clear',
-            ok: true,
-            summary: `通信恢复：${commRec
-              .slice(0, 3)
-              .map((/** @type {any} */ c) => c.connectionId)
-              .join('；')}`,
-          },
-          { source: 'system' },
-        )
-      }
-    }
-    await commitPollResult(home, room.cwd, {
+    const changedPointValues = [...changedById.values()]
+    // One runtime persist per tick: only touched point values + real frames +
+    // polled connection stamps. Alarm transitions come back from the commit so
+    // journal/notify cannot disagree with what landed on disk.
+    const committed = await commitPollResult(home, room.cwd, {
       baseConfigVersion: pack.configVersion,
+      pointValues: changedPointValues,
+      frames: framesLog,
       pollingByConnection,
     })
-    const saved = await saveWorkspaceAsync(home, room.cwd, {
-      modbus: {
-        alarmActive: activeBool,
-        alarmState: alarmEval.next,
-        polling:
-          pollingByConnection[pack.activeConnectionId || ''] ||
-          pollingByConnection[targetConns[0]?.id || ''] ||
+    if (!committed?.ok) {
+      return {
+        ok: false,
+        skipped: false,
+        partial: timedOut,
+        timedOut,
+        values: pack.values,
+        polling: pack.pollingByConnection?.[pack.activeConnectionId || ''] ||
+          pack.pollingByConnection?.[targetConns[0]?.id || ''] ||
           pack.polling,
-        pollingByConnection,
-        version: 3,
-      },
-    })
+        pollingByConnection: pack.pollingByConnection,
+        framesLog,
+        framesByConnection: pack.framesByConnection,
+        error: committed?.error || '轮询提交失败',
+      }
+    }
+    if (!committed.drift) {
+      await emitCommittedAlarmTransitions(home, room.cwd, committed.alarms, {
+        sourceSessionId: targetSessionId || undefined,
+        sourceSessionByConnection,
+      })
+    }
+    const nextMb = committed.workspace.modbus
     return {
       ok,
       skipped: false,
       partial: timedOut,
       timedOut,
-      values: saved.workspace.modbus.values,
-      polling: saved.workspace.modbus.polling,
-      pollingByConnection: saved.workspace.modbus.pollingByConnection,
+      values: nextMb.values,
+      polling: nextMb.pollingByConnection?.[pack.activeConnectionId || ''] ||
+        nextMb.pollingByConnection?.[targetConns[0]?.id || ''] ||
+        nextMb.polling,
+      pollingByConnection: nextMb.pollingByConnection,
       framesLog,
-      framesByConnection: saved.workspace.modbus.framesByConnection,
+      framesByConnection: nextMb.framesByConnection,
       error: ok ? undefined : timedOut ? '轮询超时' : '',
     }
   } finally {

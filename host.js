@@ -2,6 +2,7 @@ import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { stopVisionIoBroker } from './bench-io-broker.mjs'
 import { setAgentsRegistry } from './bench-notify.mjs'
 import { resetPollingService, stopAllPolling } from './bench-polling-service.mjs'
+import { disposeAlarmNotifyRuntime, startAlarmNotifyRuntime } from './src/application/modbus/poll-alarm-notify.mjs'
 
 import { clearSerialMonitorState } from './bench-serial-monitor.mjs'
 import { modbusRead } from './bench-actions.mjs'
@@ -14,10 +15,9 @@ import {
   touchServiceSession,
 } from './bench-store.mjs'
 import { cwdOf } from './bench-tool.mjs'
-import { toLosslessJson } from './src/application/commands/lossless-json.mjs'
 import {
-  createDebugRuntime,
   getSharedDebugRuntime,
+  peekSharedDebugRuntime,
   setSharedDebugRuntime,
 } from './src/application/debug/debug-runtime.mjs'
 import { clearDebugApprovals } from './src/application/debug/debug-approval-service.mjs'
@@ -25,63 +25,46 @@ import { clearFlashApprovals } from './src/application/flash/flash-approval-serv
 import { createVerifyCommandService } from './src/application/verify/verify-command-service.mjs'
 import { registerVisionHost } from './src/infrastructure/host/vision-host-client.mjs'
 import { createVerifyTelemetryAdapter } from './src/infrastructure/modbus/verify-telemetry-adapter.mjs'
-import { createVisionCommandDispatcher, handleCommand } from './src/interfaces/http/vision-command-routes.mjs'
+import { registerVisionFetchDispatch } from './src/interfaces/fetch/vision-fetch-route.mjs'
+import { createVisionCommandDispatcher } from './src/interfaces/http/vision-command-routes.mjs'
 import { createVisionRpcRouter } from './src/interfaces/rpc/vision-rpc-router.mjs'
-import { VISION_RPC_CHANNEL } from './src/shared/vision-rpc-contract.mjs'
+import { mountVisionWebCompat } from './src/interfaces/web/vision-web-compat.mjs'
 
 export const name = 'dsh-vision-bench'
-// Host fiber only: connection + webServer. Agent tools live in tools.js
-// under a different loader name so session preset mount does not dirty this
-// package's 1.5MB client bundle.
-export const inject = ['connection', 'webServer']
+// Host fiber: connection only. Web RPC + Agent HTTP bridge mount under optional webServer.
+// Agent tools live in tools.js under a different loader name.
+export const inject = ['connection']
 
-const BODY_CAP = 65536
-const LOOPBACK_ORIGIN = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/
-const CAPABILITY_HEADER = 'x-dsh-vision-capability'
 let bridgeCapability = ''
-
 let dshHome = defaultDshHome()
 
-const writeJson = (res, status, body) => {
-  const payload = toLosslessJson(body)
-  const safe = payload === undefined ? { ok: false, error: '响应无法序列化为 JSON' } : payload
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
-  res.end(JSON.stringify(safe))
-}
-
-const readJsonBody = (req, cap = BODY_CAP) =>
-  new Promise((resolveBody, reject) => {
-    let size = 0
-    const chunks = []
-    req.on('data', (chunk) => {
-      size += chunk.length
-      if (size > cap) {
-        reject(new Error('payload too large'))
-        req.destroy()
-        return
-      }
-      chunks.push(chunk)
-    })
-    req.on('end', () => {
-      try {
-        const text = Buffer.concat(chunks).toString('utf8')
-        resolveBody(text ? JSON.parse(text) : {})
-      } catch (err) {
-        reject(err)
-      }
-    })
-    req.on('error', reject)
-  })
+/** @type {{ epoch: string, capability: string, debugRuntime: any } | null} */
+let activeHostLease = null
 
 const issueBridgeCapability = () => {
+  startAlarmNotifyRuntime()
   bridgeCapability = randomUUID()
   process.env.VISION_BENCH_CAPABILITY = bridgeCapability
   return bridgeCapability
 }
 
-const clearBridgeCapability = () => {
+/**
+ * Clear the process-wide bridge capability only when this Host still owns it.
+ * @param {string} [expectedCapability]
+ * @returns {boolean}
+ */
+const clearBridgeCapability = (expectedCapability) => {
+  if (
+    expectedCapability != null &&
+    expectedCapability !== '' &&
+    bridgeCapability !== '' &&
+    bridgeCapability !== expectedCapability
+  ) {
+    return false
+  }
   bridgeCapability = ''
   delete process.env.VISION_BENCH_CAPABILITY
+  return true
 }
 
 const capabilityMatches = (provided) => {
@@ -92,90 +75,79 @@ const capabilityMatches = (provided) => {
   return timingSafeEqual(a, b)
 }
 
-const readBodyAndTouchSession = async (req) => {
-  const body = await readJsonBody(req)
-  const sessionId = body && typeof body === 'object' && body.sessionId ? String(body.sessionId) : ''
-  if (sessionId) {
-    touchServiceSession(sessionId, dshHome)
-  }
-  return body
+/**
+ * @param {object} opts
+ * @param {string} opts.epoch
+ * @param {number} opts.pid
+ * @param {boolean} opts.fetch
+ * @param {boolean} opts.web
+ * @param {boolean} opts.agentBridge
+ * @param {boolean} [opts.stale]
+ */
+function logHostLifecycle(event, opts) {
+  console.info(
+    JSON.stringify({
+      event,
+      fiber: name,
+      epoch: opts.epoch,
+      pid: opts.pid,
+      fetch: opts.fetch === true,
+      web: opts.web === true,
+      agentBridge: opts.agentBridge === true,
+      stale: opts.stale === true,
+      at: Date.now(),
+    }),
+  )
 }
 
-function isLoopbackAddress(addr) {
-  const a = String(addr || '').replace(/^::ffff:/, '')
-  return a === '127.0.0.1' || a === '::1' || a === 'localhost'
-}
-
-function socketAddress(req) {
-  return req?.socket?.remoteAddress || req?.connection?.remoteAddress || ''
-}
-
-const guard = (req, res) => {
-  if (req.method !== 'POST') {
-    writeJson(res, 405, { ok: false, error: 'method not allowed' })
-    return false
-  }
-  if (!isLoopbackAddress(socketAddress(req))) {
-    writeJson(res, 403, { ok: false, error: 'loopback only' })
-    return false
-  }
-  const headers = (req && req.headers) || {}
-  const origin = headers.origin || headers.Origin
-  if (origin && !LOOPBACK_ORIGIN.test(origin)) {
-    writeJson(res, 403, { ok: false, error: 'forbidden origin' })
-    return false
-  }
-  const ctype = String(headers['content-type'] || headers['Content-Type'] || '')
-  if (ctype && !/^application\/json\b/i.test(ctype)) {
-    writeJson(res, 415, { ok: false, error: 'content-type must be application/json' })
-    return false
-  }
-  const cap = headers[CAPABILITY_HEADER] || headers['X-DSH-Vision-Capability'] || ''
-  if (!cap) {
-    writeJson(res, 403, { ok: false, error: 'missing capability' })
-    return false
-  }
-  if (!capabilityMatches(cap)) {
-    writeJson(res, 403, { ok: false, error: 'invalid capability' })
-    return false
-  }
-  return true
-}
-
-const respond = async (req, res, fn) => {
+/**
+ * Roll back registrations that happened before shared-lease commit.
+ * @param {{
+ *   stopFetch?: (() => unknown) | null,
+ *   legacyWebCompat?: { stop: () => unknown } | null,
+ *   createdSharedRuntime?: boolean,
+ *   debugRuntime?: any,
+ * }} partial
+ */
+function rollbackUncommitted(partial) {
   try {
-    const body = await fn()
-    writeJson(res, 200, body)
-  } catch (error) {
-    writeJson(res, 200, { ok: false, error: String((error && error.message) || error).slice(0, 300) })
+    if (typeof partial.stopFetch === 'function') partial.stopFetch()
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (partial.legacyWebCompat && typeof partial.legacyWebCompat.stop === 'function') {
+      partial.legacyWebCompat.stop()
+    }
+  } catch {
+    /* ignore */
+  }
+  // First-load only: do not shut down a runtime still owned by a prior Host.
+  if (
+    partial.createdSharedRuntime === true &&
+    partial.debugRuntime &&
+    peekSharedDebugRuntime() === partial.debugRuntime
+  ) {
+    try {
+      if (typeof partial.debugRuntime.shutdown === 'function') partial.debugRuntime.shutdown()
+    } catch {
+      /* ignore */
+    }
+    setSharedDebugRuntime(null)
   }
 }
-
-const commandRoute = (path, fn) => ({
-  kind: 'exact',
-  path,
-  handler: (req, res) => {
-    if (!guard(req, res)) return
-    respond(req, res, () => fn(req))
-  },
-})
 
 export function apply(ctx) {
   dshHome = defaultDshHome()
 
-  if (!ctx.connection?.rpc?.handle || typeof ctx.connection.rpc.handle !== 'function') {
-    throw new Error('dsh-vision-bench: Host requires ctx.connection.rpc.handle')
+  if (!ctx.connection?.fetch?.register || typeof ctx.connection.fetch.register !== 'function') {
+    throw new Error('dsh-vision-bench: Host requires ctx.connection.fetch.register')
   }
 
-  issueBridgeCapability()
-  resetPollingService()
-  void sweepStaleTasks(dshHome).catch(() => {})
-  try {
-    setAgentsRegistry(() => (ctx.get ? ctx.get('agents') : null))
-  } catch {
-    /* agent registry is optional */
-  }
-
+  // Phase 1 — local construction only. Do not publish capability / Host / lease yet.
+  // Reusing an existing shared DebugRuntime is safe on failed commit; a runtime
+  // created in this attempt must be cleared if we never commit a lease.
+  const hadSharedRuntime = peekSharedDebugRuntime() != null
   const debugRuntime = getSharedDebugRuntime({
     home: dshHome,
     onJournalEvent: async (ev) => {
@@ -195,6 +167,7 @@ export function apply(ctx) {
       ).catch(() => {})
     },
   })
+  const createdSharedRuntime = !hadSharedRuntime
   const telemetryReader = createVerifyTelemetryAdapter({
     getHome: () => dshHome,
     workspaceLoader: (cwd) => loadWorkspace(dshHome, cwd),
@@ -223,93 +196,170 @@ export function apply(ctx) {
   })
   const router = createVisionRpcRouter({ getHome: () => dshHome, debugRuntime, verifyCommandService })
   const commandDispatcher = createVisionCommandDispatcher(dshHome, { debugRuntime, verifyCommandService })
-  const stopHost = registerVisionHost(commandDispatcher)
 
-  const hostEpoch = { id: randomUUID(), disposed: false }
+  /** @type {(() => void | Promise<void>) | null} */
+  let stopFetch = null
+  /** @type {{ stop: () => unknown, httpPaths: string[] } | null} */
+  let legacyWebCompat = null
+  let webMounted = false
+  /** @type {(() => void) | null} */
+  let stopHost = null
+  /** @type {{ epoch: string, capability: string, debugRuntime: any } | null} */
+  let lease = null
 
-  // Pass the plugin context explicitly so RPC routes retain its webServer injection.
-  const registerRpc =
-    typeof ctx.connection.register === 'function'
-      ? (channel, handler) => ctx.connection.register(ctx, channel, handler)
-      : (channel, handler) => ctx.connection.rpc.handle(channel, handler)
-
-  const stopRpcRegistration = registerRpc(VISION_RPC_CHANNEL, async (endpoint, payload, signal) => {
-    try {
-      const value = await router.dispatch(endpoint, payload, signal)
-      return { ok: true, value }
-    } catch (error) {
-      return {
-        ok: false,
-        error: {
-          code: 'internal',
-          message: String((error && error.message) || error).slice(0, 300),
-          details: {},
-        },
+  /**
+   * Bind Web compat to the injected webServer fiber so leave/re-enter remounts cleanly.
+   * @param {any} webCtx
+   */
+  const attachWebCompat = (webCtx) => {
+    const effectHost = typeof webCtx?.effect === 'function' ? webCtx : ctx
+    effectHost.effect(() => {
+      const compat = mountVisionWebCompat({
+        connection: webCtx.connection || ctx.connection,
+        webServer: webCtx.webServer,
+        router,
+        dshHome,
+        touchSession: (sessionId) => touchServiceSession(sessionId, dshHome),
+        capabilityMatches,
+        commandDeps: { debugRuntime, verifyCommandService },
+      })
+      webMounted = true
+      return () => {
+        webMounted = false
+        return compat.stop()
       }
-    }
-  })
-  const rpcRegistration = Promise.resolve(
-    typeof stopRpcRegistration === 'function'
-      ? stopRpcRegistration
-      : stopRpcRegistration && typeof stopRpcRegistration.then === 'function'
-        ? stopRpcRegistration
-        : () => Promise.resolve(),
-  )
-  let rpcStopPromise = null
-  const safeStopRpc = () => {
-    if (!rpcStopPromise) {
-      rpcStopPromise = rpcRegistration
-        .then((dispose) => (typeof dispose === 'function' ? dispose() : undefined))
-        .catch(() => {})
-    }
-    return rpcStopPromise
+    })
   }
-  rpcRegistration.then(() => {
-    if (hostEpoch.disposed) safeStopRpc()
-  })
 
-  const rows = [
-    commandRoute('/dsh-vision-bench/command', async (req) =>
-      handleCommand(dshHome, req, readBodyAndTouchSession, { debugRuntime, verifyCommandService }),
-    ),
-  ]
-  const disposers = rows.map((entry) => ctx.webServer.register(entry))
+  try {
+    // Fallible registrations first — must not steal the active lease on throw.
+    stopFetch = registerVisionFetchDispatch(ctx.connection, router)
 
-  let routesDisposed = false
-  const safeStopRoutes = () => {
-    if (routesDisposed) return
-    routesDisposed = true
-    for (const dispose of disposers) {
-      try {
-        if (typeof dispose === 'function') dispose()
-      } catch (_) {}
+    if (typeof ctx.inject === 'function') {
+      ctx.inject(['webServer'], attachWebCompat)
+    } else if (ctx.webServer) {
+      legacyWebCompat = mountVisionWebCompat({
+        connection: ctx.connection,
+        webServer: ctx.webServer,
+        router,
+        dshHome,
+        touchSession: (sessionId) => touchServiceSession(sessionId, dshHome),
+        capabilityMatches,
+        commandDeps: { debugRuntime, verifyCommandService },
+      })
+      webMounted = true
     }
+
+    // Phase 2 — commit shared ownership only after fallible mounts succeed.
+    const capability = issueBridgeCapability()
+    resetPollingService()
+    void sweepStaleTasks(dshHome).catch(() => {})
+    try {
+      setAgentsRegistry(() => (ctx.get ? ctx.get('agents') : null))
+    } catch {
+      /* agent registry is optional */
+    }
+    stopHost = registerVisionHost(commandDispatcher)
+    lease = {
+      epoch: randomUUID(),
+      capability,
+      debugRuntime,
+    }
+    activeHostLease = lease
+  } catch (error) {
+    rollbackUncommitted({
+      stopFetch,
+      legacyWebCompat,
+      createdSharedRuntime,
+      debugRuntime,
+    })
+    console.info(
+      JSON.stringify({
+        event: 'vision.host.apply-failed',
+        fiber: name,
+        pid: process.pid,
+        error: String(error && /** @type {Error} */ (error).message ? error.message : error).slice(0, 300),
+        activeEpoch: activeHostLease?.epoch ?? null,
+        at: Date.now(),
+      }),
+    )
+    throw error
   }
+
+  logHostLifecycle('vision.host.start', {
+    epoch: lease.epoch,
+    pid: process.pid,
+    fetch: true,
+    web: webMounted,
+    agentBridge: webMounted,
+  })
 
   let isHostDisposed = false
+  let loggedStaleDispose = false
   ctx.effect(() => () => {
     if (isHostDisposed) return
     isHostDisposed = true
-    hostEpoch.disposed = true
-    safeStopRoutes()
-    const rpcStop = safeStopRpc()
+
+    const isCurrentLease = activeHostLease?.epoch === lease.epoch
+    const stale = !isCurrentLease
+
+    logHostLifecycle('vision.host.stop', {
+      epoch: lease.epoch,
+      pid: process.pid,
+      fetch: true,
+      web: webMounted,
+      agentBridge: webMounted,
+      stale,
+    })
+
+    const fetchStop =
+      typeof stopFetch === 'function'
+        ? Promise.resolve()
+            .then(() => stopFetch())
+            .catch(() => {})
+        : Promise.resolve()
+    const webStop = legacyWebCompat ? legacyWebCompat.stop() : Promise.resolve()
     try {
-      stopHost()
-    } catch (_) {}
-    clearBridgeCapability()
+      if (typeof stopHost === 'function') stopHost()
+    } catch {
+      /* ignore */
+    }
+
+    if (stale) {
+      if (!loggedStaleDispose) {
+        loggedStaleDispose = true
+        console.info(
+          JSON.stringify({
+            event: 'vision.host.stale-dispose',
+            fiber: name,
+            epoch: lease.epoch,
+            activeEpoch: activeHostLease?.epoch ?? null,
+            pid: process.pid,
+            at: Date.now(),
+          }),
+        )
+      }
+      return Promise.allSettled([fetchStop, Promise.resolve(webStop)])
+    }
+
+    clearBridgeCapability(lease.capability)
     clearSerialMonitorState()
     stopAllPolling()
     clearFlashApprovals()
     clearDebugApprovals()
+    disposeAlarmNotifyRuntime()
     const brokerStop = stopVisionIoBroker('plugin-dispose')
     const runtimeStop =
-      getSharedDebugRuntime() === debugRuntime
-        ? debugRuntime.shutdown('plugin-dispose').catch(() => {})
+      peekSharedDebugRuntime() === lease.debugRuntime
+        ? lease.debugRuntime.shutdown('plugin-dispose').catch(() => {})
         : Promise.resolve()
-    if (getSharedDebugRuntime() === debugRuntime) {
+    if (peekSharedDebugRuntime() === lease.debugRuntime) {
       setSharedDebugRuntime(null)
     }
-    return Promise.allSettled([rpcStop, brokerStop, runtimeStop])
+    if (activeHostLease?.epoch === lease.epoch) {
+      activeHostLease = null
+    }
+    return Promise.allSettled([fetchStop, Promise.resolve(webStop), brokerStop, runtimeStop])
   })
 }
 
@@ -320,10 +370,10 @@ export const _internal = {
   getDshHome() {
     return dshHome
   },
-
-  guard,
   issueBridgeCapability,
   clearBridgeCapability,
+  capabilityMatches,
+  getActiveHostLease: () => activeHostLease,
   snapshot: (cwd) => createVisionRpcRouter({ getHome: () => dshHome }).snapshot(cwd),
   dispatchRpc: (endpoint, payload, signal) =>
     createVisionRpcRouter({ getHome: () => dshHome }).dispatch(endpoint, payload, signal),

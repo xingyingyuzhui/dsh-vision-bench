@@ -108,7 +108,8 @@ export const listFrames = (home, cwd, body) => {
   }
   // Resolve target connection: explicit else active
   const targetCid = cidArg || pack.activeConnectionId || pack.connections[0]?.id || ''
-  const limit = Math.max(1, Math.min(200, Number(body?.limit) || 50))
+  const hardCap = origin?.source === 'agent' ? 100 : 200
+  const limit = Math.max(1, Math.min(hardCap, Number(body?.limit) || 50))
   const offset = Math.max(0, Number(body?.offset) || 0)
   const srcFrames = pack.framesByConnection?.[targetCid] || []
   // Enrich frames with stable id if missing
@@ -131,7 +132,13 @@ export const listFrames = (home, cwd, body) => {
       errorCode: stale ? ERROR_CODES.STALE_VALUE : undefined,
     }
   }
-  const slice = enriched.slice(Math.max(0, enriched.length - limit - offset), enriched.length - offset)
+  const slice = (() => {
+    const length = enriched.length
+    if (offset >= length) return []
+    const end = Math.max(0, length - offset)
+    const start = Math.max(0, end - limit)
+    return enriched.slice(start, end)
+  })()
   // Detect stale: last frame older than 60s?
   const last = enriched[enriched.length - 1]
   const stale = last ? Date.now() - Number(last.t) > 60 * 1000 : false

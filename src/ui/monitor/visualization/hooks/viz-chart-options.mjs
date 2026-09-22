@@ -38,9 +38,78 @@ export const buildAxisOpt = (s = {}, p, isDark, extra = {}) => {
   }
 }
 
-export function buildLineOption(s = {}, payload, isDark = false, isPreview = false, explicitNow) {
-  const windowMs = Number(s.windowMs) || TREND_WINDOW_MS
+/** 1 / 2 / 5 × 10^n step so the top tick is an integer-like label, not 6.6464. */
+export function niceAxisStep(span, tickCount = 5) {
+  const raw = Math.abs(Number(span)) / Math.max(1, tickCount)
+  if (!Number.isFinite(raw) || raw <= 0) return 1
+  const exp = Math.floor(Math.log10(raw))
+  const pow = 10 ** exp
+  const f = raw / pow
+  const nf = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10
+  return nf * pow
+}
+
+/** Pad the live Y max so the newest peak is not clipped, then snap up to a nice tick. */
+export function padLineYMax(min, max) {
+  const hi = Number(max)
+  const lo = Number(min)
+  if (!Number.isFinite(hi)) return 1
+  const baseLo = Number.isFinite(lo) ? lo : Math.min(0, hi)
+  const span = Math.max(hi - baseLo, Math.abs(hi) * 0.08, 1e-6)
+  const padded = hi + span * 0.08
+  const step = niceAxisStep(Math.max(padded - baseLo, span), 5)
+  const niceMax = Math.ceil((padded - 1e-12) / step) * step
+  return Number(niceMax.toPrecision(12))
+}
+
+/**
+ * Live line X range. Data shorter than the window starts at the first sample
+ * (left of the plot) and keeps the configured window ahead — it does not hug
+ * the latest points or park them on the right edge.
+ */
+export function resolveLineTimeRange(s = {}, payload, explicitNow) {
+  const windowMs = Number(s.windowMs) > 0 ? Number(s.windowMs) : TREND_WINDOW_MS
   const isCount = s.xScaleType === 'count'
+  const xs = payload?.data?.[0]
+  const n = xs?.length || 0
+  const firstSec = n && Number.isFinite(Number(xs[0])) ? Number(xs[0]) : null
+  const lastSec = n && Number.isFinite(Number(xs[n - 1])) ? Number(xs[n - 1]) : null
+  const firstMs = firstSec != null ? firstSec * 1000 : null
+  const lastMs = lastSec != null ? lastSec * 1000 : null
+  const wall = explicitNow != null ? Number(explicitNow) : Date.now()
+  const now = lastMs != null ? lastMs : wall
+  if (isCount) {
+    return { isCount: true, min: 1, max: n || 1, windowMs, now, firstMs, lastMs }
+  }
+  const autoScroll = s.xAutoScroll !== false
+  const padMs = Math.max(250, Math.round(windowMs * 0.02))
+  const staleMs = Math.max(3000, Math.round(windowMs * 0.05))
+  if (firstMs != null && lastMs != null && lastMs >= firstMs) {
+    const span = lastMs - firstMs
+    const stale = wall - lastMs > staleMs
+    if (stale) {
+      return {
+        isCount: false,
+        min: span < windowMs ? firstMs : lastMs - windowMs,
+        max: lastMs + padMs,
+        windowMs,
+        now,
+        firstMs,
+        lastMs,
+      }
+    }
+    if (!autoScroll || span < windowMs) {
+      return { isCount: false, min: firstMs, max: firstMs + windowMs, windowMs, now, firstMs, lastMs }
+    }
+    return { isCount: false, min: lastMs - windowMs, max: lastMs + padMs, windowMs, now, firstMs, lastMs }
+  }
+  return { isCount: false, min: now - windowMs, max: now + padMs, windowMs, now, firstMs, lastMs }
+}
+
+export function buildLineOption(s = {}, payload, isDark = false, isPreview = false, explicitNow) {
+  const range = resolveLineTimeRange(s, payload, explicitNow)
+  const windowMs = range.windowMs
+  const isCount = range.isCount
   const isCustomX = s.xSplitMode === 'custom' && Number(s.xSplitNumber) > 0
   const xSplitNum = isCustomX
     ? Number(s.xSplitNumber)
@@ -52,7 +121,6 @@ export function buildLineOption(s = {}, payload, isDark = false, isPreview = fal
   const xInterval = isCount
     ? Math.max(1, Math.round(((payload?.data?.[0]?.length || 1) - 1) / xSplitNum))
     : Math.round(windowMs / xSplitNum)
-  const now = explicitNow || Math.floor(Date.now() / xInterval) * xInterval
   const showLegend = s.showLegend !== false
   const legendPos = s.legendPos || 'top'
   const yUnit = s.yUnit || ''
@@ -66,8 +134,8 @@ export function buildLineOption(s = {}, payload, isDark = false, isPreview = fal
   const xAxisExtra = {
     type: 'value',
     name: isPreview ? undefined : s.xTitle || (isCount ? '点数' : undefined),
-    min: isCount ? 1 : now - windowMs,
-    max: isCount ? payload?.data?.[0]?.length || 1 : now,
+    min: range.min,
+    max: range.max,
     splitNumber: xSplitNum,
     interval: xInterval,
     minInterval: xInterval,
@@ -89,7 +157,7 @@ export function buildLineOption(s = {}, payload, isDark = false, isPreview = fal
     position: s.yPosition || 'left',
     name: isPreview ? undefined : s.yTitle || yUnit || undefined,
     min: s.yMin ? Number(s.yMin) : undefined,
-    max: s.yMax ? Number(s.yMax) : undefined,
+    max: s.yMax ? Number(s.yMax) : (extent) => padLineYMax(extent?.min, extent?.max),
     interval: s.yInterval ? Number(s.yInterval) : undefined,
     axisLabel:
       yDec != null && yDec !== ''
@@ -150,7 +218,7 @@ export function buildLineOption(s = {}, payload, isDark = false, isPreview = fal
       ? { left: 34, right: 14, top: 16, bottom: 24 }
       : {
           left: s.yPosition === 'right' ? 20 : yUnit ? 52 : 44,
-          right: s.yPosition === 'right' ? (yUnit ? 52 : 44) : 16,
+          right: s.yPosition === 'right' ? (yUnit ? 52 : 44) : 22,
           top: showLegend && legendPos === 'top' ? 28 : 16,
           bottom: (showLegend && legendPos === 'bottom' ? 32 : 24) + (Number(s.xLabelRotate) ? 14 : 0),
         },
@@ -166,6 +234,7 @@ export function buildBarOption(s = {}, packBar, isDark = false, isPreview = fals
   const barRadius = Number(s.barRadius) || 0
   const barWidth = Number(s.barWidth) || undefined
   const barDec = s.barLabelDecimals
+  const textColor = darkAlpha(isDark, '.72')
   const catAxis = { type: 'category', data: packBar.names, name: isPreview ? undefined : s.xTitle }
   const valAxis = {
     type: 'value',
@@ -177,7 +246,13 @@ export function buildBarOption(s = {}, packBar, isDark = false, isPreview = fals
   return {
     animation: false,
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis' },
+    textStyle: { color: textColor, fontSize: isPreview ? 10 : 12 },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: isDark ? 'rgba(20,24,32,.92)' : 'rgba(255,255,255,.96)',
+      borderColor: darkAlpha(isDark, '.12'),
+      textStyle: { color: textColor },
+    },
     grid: isPreview
       ? { left: 30, right: 12, top: 14, bottom: 22 }
       : { left: yUnit ? 50 : 38, right: 16, top: yUnit ? 24 : 14, bottom: 26 },
@@ -190,6 +265,7 @@ export function buildBarOption(s = {}, packBar, isDark = false, isPreview = fals
         label: {
           show: s.showBarLabel !== false,
           position: s.barLabelPos || (isHoriz ? 'right' : 'top'),
+          color: textColor,
           formatter: barDec != null && barDec !== '' ? (p) => Number(p.value).toFixed(Number(barDec)) : '{c}',
         },
         data: packBar.values.map((v, i) => ({

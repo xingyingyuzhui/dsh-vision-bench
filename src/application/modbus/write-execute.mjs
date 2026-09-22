@@ -120,13 +120,22 @@ export async function executeApprovedWrite(ctx) {
             at: extra.at || Date.now(),
           })
         : null)
-    if (_entry) {
+    const logFrames =
+      Array.isArray(extra.transactionFrames) && extra.transactionFrames.length
+        ? extra.transactionFrames.filter(Boolean)
+        : _entry
+          ? [_entry]
+          : []
+    if (logFrames.length || (Array.isArray(extra.pointValues) && extra.pointValues.length)) {
       await commitWriteResult(home, roomCwd, {
-        baseConfigVersion: pack.configVersion,
+        // Sim writes persist values first (may bump configVersion). Passing the
+        // pre-save version would mark this commit as CONFIG_DRIFT and drop trend samples.
+        ...(extra.simulated ? {} : { baseConfigVersion: pack.configVersion }),
         connectionId: targetCid,
         deviceId: targetDid,
         pointValues: extra.pointValues || [],
-        frame: _entry,
+        frames: logFrames,
+        frame: logFrames[0],
       })
     }
     const errorCode =
@@ -153,7 +162,7 @@ export async function executeApprovedWrite(ctx) {
       target: writeValues,
       readback: extra.readback || [],
       frames: extra.frames || null,
-      framesLog: _entry ? [_entry] : [],
+      framesLog: logFrames,
       framesByConnection: extra.framesByConnection || undefined,
       values: extra.values || pack.values,
       simulated: !!extra.simulated,
@@ -317,10 +326,30 @@ export async function executeApprovedWrite(ctx) {
         ? `，回读不一致：${JSON.stringify(raw)}`
         : '，回读一致'
       : `，回读失败 ${readbackRan.error || ''}`)
+  const readbackStatus = !readbackOk ? 'error' : mismatch ? 'error' : 'ok'
+  const readbackError = !readbackOk
+    ? String(readbackRan.error || '回读失败')
+    : mismatch
+      ? `WRITE_READBACK_MISMATCH expected=${JSON.stringify(writeValues)} got=${JSON.stringify(raw)}`
+      : ''
+  const readbackFrame = createTransactionFrame(`回读 ${label}`, readbackRan.frames || {}, {
+    connectionId: targetCid,
+    deviceId: targetDid,
+    taskId: task.id,
+    source: origin.source,
+    unitId: writeReq.unitId,
+    functionCode: fn,
+    durationMs: readbackRan.durationMs || 0,
+    transactionId: `${writeFrame.transactionId}:readback`,
+    status: readbackStatus,
+    error: readbackError,
+    at: Date.now(),
+  })
   return done(readbackOk && !mismatch, summary, {
     values: vals,
     readback: readbackOk ? raw : [],
     frame: writeFrame,
+    transactionFrames: [writeFrame, readbackFrame],
     frames: ran.frames || readbackRan.frames,
     transactionId: writeFrame.transactionId,
     durationMs: writeFrame.durationMs,

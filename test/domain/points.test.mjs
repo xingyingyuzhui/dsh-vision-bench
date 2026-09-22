@@ -86,6 +86,30 @@ test('scatterBatch distributes raw values to covered points only', async () => {
   assert.match(failed.find((v) => v.key === 'a').error, /timeout/)
 })
 
+test('scatterBatch respects connectionId/deviceId and keeps same-address peers apart', async () => {
+  const points = [
+    { id: 'c1p', connectionId: 'c1', deviceId: 'd1', function: 3, address: 0 },
+    { id: 'c2p', connectionId: 'c2', deviceId: 'd2', function: 3, address: 0 },
+    { id: 'c1d2', connectionId: 'c1', deviceId: 'd2', function: 3, address: 0 },
+  ]
+  const onlyC2 = scatterBatch([], points, { fc: 3, address: 0, count: 1, connectionId: 'c2', deviceId: 'd2' }, [42], true, '')
+  assert.equal(onlyC2.find((v) => v.key === 'c2p')?.raw, 42)
+  assert.equal(onlyC2.find((v) => v.key === 'c1p'), undefined)
+  assert.equal(onlyC2.find((v) => v.key === 'c1d2'), undefined)
+
+  const onlyC1d1 = scatterBatch(
+    onlyC2,
+    points,
+    { fc: 3, address: 0, count: 1, connectionId: 'c1', deviceId: 'd1' },
+    [7],
+    true,
+    '',
+  )
+  assert.equal(onlyC1d1.find((v) => v.key === 'c1p')?.raw, 7)
+  assert.equal(onlyC1d1.find((v) => v.key === 'c2p')?.raw, 42)
+  assert.equal(onlyC1d1.find((v) => v.key === 'c1d2'), undefined)
+})
+
 test('setPointValue decodes with the point config', async () => {
   const p = { id: 'x', function: 3, address: 1, scale: 0.1, offset: 2 }
   const values = setPointValue([], p, 255, { ok: true })

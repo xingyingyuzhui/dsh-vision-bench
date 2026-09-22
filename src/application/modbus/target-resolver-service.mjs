@@ -98,8 +98,31 @@ export function resolveTarget(pack, target) {
   if (connectionId) {
     connection = cOf(p, connectionId)
     if (!connection) return { ok: false, error: '连接不存在: ' + connectionId, errorCode: TARGET_CODES.TARGET_MISMATCH }
+  } else if (alarmId) {
+    // alarmId alone: resolve uniquely via alarmState / point table (same rule as Agent preflight).
+    const s = p.alarmState || p.alarmActive || {}
+    const alarmHit = s[alarmId]
+    if (!alarmHit) return { ok: false, error: '告警不存在: ' + alarmId, errorCode: TARGET_CODES.TARGET_MISMATCH }
+    let inferredCid = t(alarmHit.connectionId)
+    if (!inferredCid && alarmHit.pointId) {
+      const pt = pOf(p, alarmHit.pointId)
+      if (pt) inferredCid = t(pt.connectionId)
+    }
+    if (!inferredCid) {
+      const pt = pOf(p, alarmId)
+      if (pt) inferredCid = t(pt.connectionId)
+    }
+    if (!inferredCid) {
+      const enabled = (p.connections || []).filter((/** @type {any} */ c) => c.enabled !== false)
+      if (enabled.length === 1) inferredCid = enabled[0].id
+    }
+    if (!inferredCid) {
+      return { ok: false, error: '缺少 connectionId', errorCode: TARGET_CODES.TARGET_REQUIRED }
+    }
+    connection = cOf(p, inferredCid)
+    if (!connection) return { ok: false, error: '连接不存在: ' + inferredCid, errorCode: TARGET_CODES.TARGET_MISMATCH }
   } else {
-    if (deviceId || pointId || frameId || alarmId)
+    if (deviceId || pointId || frameId)
       return { ok: false, error: '缺少 connectionId', errorCode: TARGET_CODES.TARGET_REQUIRED }
     return { ok: false, error: '缺少 connectionId', errorCode: TARGET_CODES.TARGET_REQUIRED }
   }

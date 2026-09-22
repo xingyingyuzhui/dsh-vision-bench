@@ -1,6 +1,6 @@
 import { getCustomSelect } from '../../components/custom-select.mjs'
 
-const SEL = { width: '140px', minWidth: '140px', flex: 'none' }
+const SEL = { width: '112px', minWidth: '96px', flex: 'none' }
 
 /**
  * @param {any} React
@@ -118,7 +118,6 @@ export function createFramesFilterToolbar(React, t) {
       ...protoFilters,
       el('input', {
         className: 'dvb-input dvb-frames-search',
-        style: { width: '180px', flex: 'none' },
         value: search,
         placeholder: t('serialFilter') || '过滤关键字',
         onChange: (e) => setSearch(e.target.value),
@@ -127,7 +126,7 @@ export function createFramesFilterToolbar(React, t) {
         'button',
         {
           type: 'button',
-          className: 'dvb-btn',
+          className: 'dvb-btn dvb-frames-reset',
           onClick: onReset,
         },
         '重置',

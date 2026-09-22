@@ -239,7 +239,16 @@ export function createWorkspaceRepository(deps) {
         error: error instanceof Error ? error.message : String(error),
       }
     }
-    return { ok: true, workspace, previousConfigVersion, nextConfigVersion: previousConfigVersion, prev: current }
+    const { workspace: _ignored, ok: _ok, ...passthrough } = next && typeof next === 'object' ? next : {}
+    return {
+      ok: true,
+      workspace,
+      previousConfigVersion,
+      nextConfigVersion: previousConfigVersion,
+      prev: current,
+      ...(passthrough.alarms ? { alarms: passthrough.alarms } : {}),
+      ...(passthrough.drift != null ? { drift: passthrough.drift } : {}),
+    }
   }
 
   /** @param {any} key @param {any} mutator */

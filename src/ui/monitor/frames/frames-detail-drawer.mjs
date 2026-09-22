@@ -7,6 +7,7 @@ import {
   framePayloadHex,
   hexToUtf8Preview,
 } from './frames-format.mjs'
+import { renderEmptyState } from '../../components/empty-state.mjs'
 
 function copyText(text) {
   const v = String(text || '')
@@ -30,8 +31,7 @@ function kv(el, label, value) {
  */
 export function createFramesDetailDrawer(React) {
   const el = React.createElement
-  return function FramesDetailDrawer({ frame, connections, copied, sendToAgent, hasInput }) {
-    const [aiOpen, setAiOpen] = React.useState(true)
+  return function FramesDetailDrawer({ frame, connections, sendToAgent }) {
     if (!frame) {
       return el(
         'div',
@@ -41,7 +41,11 @@ export function createFramesDetailDrawer(React) {
           { className: 'dvb-frames-detail-head' },
           el('span', { className: 'dvb-frames-detail-title' }, '报文详情'),
         ),
-        el('div', { className: 'dvb-hint dvb-frames-detail-empty' }, '选择一条报文查看详情'),
+        renderEmptyState(el, {
+          kind: 'empty',
+          detail: '选择一条报文查看详情',
+          className: 'dvb-frames-detail-empty',
+        }),
       )
     }
     const hex = framePayloadHex(frame)
@@ -49,17 +53,6 @@ export function createFramesDetailDrawer(React) {
     const textView = hexToUtf8Preview(hex)
     const dir = frameDirection(frame)
     const rx = dir === 'rx'
-    const copyAll = () => {
-      copyText(
-        [
-          `time: ${formatFrameClock(frame.t || frame.at)}`,
-          `port: ${formatPortName(frame, connections)}`,
-          `dir: ${dir}`,
-          `hex: ${hexView}`,
-          `text: ${textView}`,
-        ].join('\n'),
-      )
-    }
     return el(
       'div',
       { className: 'dvb-frames-detail' },
@@ -67,7 +60,19 @@ export function createFramesDetailDrawer(React) {
         'div',
         { className: 'dvb-frames-detail-head' },
         el('span', { className: 'dvb-frames-detail-title' }, '报文详情'),
-        el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: copyAll }, '复制'),
+        el(
+          'button',
+          {
+            type: 'button',
+            className: 'dvb-btn dvb-btn-sm dvb-ai-btn',
+            title: '让 Agent 分析此报文',
+            'aria-label': '让 Agent 分析报文',
+            onClick() {
+              sendToAgent?.(frame)
+            },
+          },
+          'AI',
+        ),
       ),
       kv(el, '时间', formatFrameClock(frame.t || frame.at)),
       kv(el, '端口', formatPortName(frame, connections)),
@@ -92,31 +97,6 @@ export function createFramesDetailDrawer(React) {
         el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: () => copyText(textView) }, '复制'),
       ),
       el('div', { className: 'dvb-hint' }, 'Text 为容错预览，原始字节以 HEX 为准。'),
-      el(
-        'button',
-        {
-          type: 'button',
-          className: 'dvb-frames-ai-toggle',
-          onClick: () => setAiOpen((v) => !v),
-        },
-        'AI 辅助分析',
-        el('span', { className: 'dvb-hint' }, aiOpen ? '▾' : '▸'),
-      ),
-      aiOpen
-        ? el(
-            'div',
-            { className: 'dvb-frames-ai-body' },
-            el(
-              'button',
-              {
-                type: 'button',
-                className: 'dvb-btn',
-                onClick: () => sendToAgent?.(frame),
-              },
-              copied && copied !== 'copy' && copied !== 'export' ? copied : hasInput ? '发给 Agent' : '复制给 Agent',
-            ),
-          )
-        : null,
     )
   }
 }

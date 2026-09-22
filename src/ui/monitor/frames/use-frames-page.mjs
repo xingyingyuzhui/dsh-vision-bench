@@ -3,9 +3,7 @@ import {
   buildFramePortOptions,
   countAddedFrameIds,
   frameStreamKey,
-  framesShouldStickToBottom,
-  parseFramePortSelection,
-  rawLineId,
+  framesShouldStickToTop,
   resolveFrameSelection,
 } from '../../../domain/modbus/frames-model.mjs'
 import {
@@ -19,7 +17,7 @@ import {
 } from '../../common/agent-reference.mjs'
 import { pageSessionId, sessionCwd } from '../../common/session-scope.mjs'
 import { subscribeState } from '../../common/state-subscription.mjs'
-import { filterFrameList } from './frames-filter-model.mjs'
+import { filterFrameList, sortFramesNewestFirst } from './frames-filter-model.mjs'
 import {
   buildLiveFrames,
   downloadFramesFile,
@@ -27,6 +25,7 @@ import {
   framesAsText,
   pickDisplayedFrames,
 } from './frames-table-model.mjs'
+import { startRawFeedPolling } from './raw-feed-polling.mjs'
 
 const ESTIMATE_SIZE = 36
 
@@ -85,6 +84,7 @@ export function useFramesPage(React, props, post) {
   const cursorRef = React.useRef(new Map())
   const lastAtBottomRef = React.useRef(true)
   const rawCursorRef = React.useRef(0)
+  const feedEpochRef = React.useRef('')
 
   React.useEffect(() => {
     setHealth({})
@@ -95,6 +95,7 @@ export function useFramesPage(React, props, post) {
     setPausedSnapshot(null)
     setPendingNew(0)
     rawCursorRef.current = 0
+    feedEpochRef.current = ''
   }, [realCwd, sessionId])
 
   React.useEffect(() => {
@@ -116,55 +117,18 @@ export function useFramesPage(React, props, post) {
   React.useEffect(() => {
     if (mode !== 'raw' || !realCwd) {
       rawCursorRef.current = 0
+      feedEpochRef.current = ''
       return undefined
     }
-    let stop = false
-    rawCursorRef.current = 0
-    setSerial((s) => ({ ...s, lines: [], lastId: 0, lastAt: 0, error: '' }))
-    const pull = () => {
-      const selNow = parseFramePortSelection(selection)
-      post(
-        '/dsh-vision-bench/serial/feed',
-        {
-          cwd: realCwd,
-          sessionId: sessionId || undefined,
-          connectionId: selNow.kind === 'conn' ? selNow.connectionId : '',
-          since: rawCursorRef.current,
-        },
-        10000,
-      )
-        .then((data) => {
-          if (stop || !data) return
-          const incoming = Array.isArray(data.lines) ? data.lines : []
-          const nextCursor = Number(data.lastId)
-          if (Number.isFinite(nextCursor) && nextCursor > 0) rawCursorRef.current = nextCursor
-          setSerial((prev) => {
-            const seen = new Set()
-            const lines = []
-            for (const l of prev.lines.concat(incoming)) {
-              const id = rawLineId(l.port, l, 0)
-              if (seen.has(id)) continue
-              seen.add(id)
-              lines.push(l)
-            }
-            const lastAt = lines.reduce((m, l) => Math.max(m, Number(l.at || l.t || 0)), prev.lastAt || 0)
-            return {
-              ...prev,
-              lastId: Number.isFinite(nextCursor) && nextCursor > 0 ? nextCursor : prev.lastId,
-              lastAt,
-              lines: lines.slice(-2000),
-              error: data.error || '',
-            }
-          })
-        })
-        .catch(() => {})
-    }
-    pull()
-    const timer = setInterval(pull, 700)
-    return () => {
-      stop = true
-      clearInterval(timer)
-    }
+    return startRawFeedPolling({
+      post,
+      realCwd,
+      sessionId,
+      selection,
+      rawCursorRef,
+      feedEpochRef,
+      setSerial,
+    })
   }, [realCwd, sessionId, mode, selection])
 
   const pack = (() => {
@@ -188,13 +152,16 @@ export function useFramesPage(React, props, post) {
     framesByConnection,
     frameScope,
     serial,
+    connections,
     viewClearedAt,
   })
   const displayedFrames = pickDisplayedFrames(paused, pausedSnapshot, mode, liveFrames)
-  const filtered = filterFrameList(
-    displayedFrames,
-    mode === 'raw' ? { direction: filters.direction || '' } : filters,
-    search,
+  const filtered = sortFramesNewestFirst(
+    filterFrameList(
+      displayedFrames,
+      mode === 'raw' ? { direction: filters.direction || '' } : filters,
+      search,
+    ),
   )
 
   const streamKey = frameStreamKey(mode, selection)
@@ -210,11 +177,9 @@ export function useFramesPage(React, props, post) {
     const el = listRef.current
     const inst = vizerRef.current
     if (inst && typeof inst.scrollToOffset === 'function') {
-      const viewH = el?.clientHeight || 320
-      const total = typeof inst.getTotalSize === 'function' ? inst.getTotalSize() : filtered.length * ESTIMATE_SIZE
-      inst.scrollToOffset(Math.max(0, total - viewH), { align: 'start' })
+      inst.scrollToOffset(0, { align: 'start' })
     } else if (el) {
-      el.scrollTop = el.scrollHeight || filtered.length * ESTIMATE_SIZE
+      el.scrollTop = 0
     }
     if (updateRef) wasAtBottomRef.current = true
     setPendingNew(0)
@@ -394,8 +359,8 @@ export function useFramesPage(React, props, post) {
       return
     }
     if (filtered.some((row) => String(row.frameId || row.id) === String(selectedFrameId))) return
-    const last = filtered[filtered.length - 1]
-    setSelectedFrameId(String(last.frameId || last.id || ''))
+    const newest = filtered[0]
+    setSelectedFrameId(String(newest.frameId || newest.id || ''))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredIds, selectedFrameId])
 
@@ -409,15 +374,15 @@ export function useFramesPage(React, props, post) {
   function noteScrollPosition() {
     const el2 = listRef.current
     if (el2) {
-      const atBottom = framesShouldStickToBottom(el2.scrollTop, el2.scrollHeight, el2.clientHeight)
-      wasAtBottomRef.current = atBottom
-      lastAtBottomRef.current = atBottom
+      const atLatest = framesShouldStickToTop(el2.scrollTop)
+      wasAtBottomRef.current = atLatest
+      lastAtBottomRef.current = atLatest
     }
   }
 
   function onScroll() {
     const el2 = listRef.current
-    if (el2) wasAtBottomRef.current = framesShouldStickToBottom(el2.scrollTop, el2.scrollHeight, el2.clientHeight)
+    if (el2) wasAtBottomRef.current = framesShouldStickToTop(el2.scrollTop)
   }
 
   return {

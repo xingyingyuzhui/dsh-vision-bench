@@ -274,6 +274,7 @@ export function createVisualizationPage(React, t, post, hooks) {
               'gs-h': String(lay.h),
               style: {
                 '--dvb-w': String(lay.w),
+                '--dvb-h': String(lay.h),
               },
             },
             el(

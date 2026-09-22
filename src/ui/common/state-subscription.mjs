@@ -57,6 +57,7 @@ function scheduleNextPull(e) {
 }
 
 function busPull(e) {
+  if (!STATE_BUSES.has(e.key) || e.subs.size === 0) return
   if (e.inFlight) return
   const post = e.post
   if (typeof post !== 'function') {

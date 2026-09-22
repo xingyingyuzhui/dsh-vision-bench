@@ -1,24 +1,82 @@
 # dsh-vision-bench · Vision 模式
 
-Requires DSH 0.1.5-rc.1. Install from an `npm pack` tarball, not a `link:` checkout. Supported contract is pinned in `src/infrastructure/harness/dsh-contract.mjs`.
+当前版本 **0.29.25**。需要 DSH `0.1.5-rc.1` 及以上（契约钉在 `src/infrastructure/harness/dsh-contract.mjs`；本机对齐 `0.1.6-alpha.1`）。
 
-日常开发用的会话工作台。跟 Claw 无关。
+会话区里的调试 / 上位机 / 监控工作台。跟 Claw 无关。同一份现场状态同时给界面和当前 Session 的 Agent 用。
 
-- 会话区标签：**调试**、**上位机**、**监控**。监控内：可视化、告警、串口报文、操作记录；调试内另有工程结构
-- 设置页 **Vision**：Keil 绑定 UV4（无需 Python）；Modbus/串口使用内置 Node 运行时；OpenOCD 仍是外部兼容绑定。一键 **运行自检**
-- 安装后写入用户预设 **Vision模式**（从官方 `standard` 复制，再挂上 `vision_bench`，提示规则由插件 `vision-bench:guidance` 区段提供）
-- Agent 需要时自己调用 `vision_bench`，不把现场状态塞进每一轮系统提示
-- 编译 / 读点 / 写点 / 烧录进入共享任务与「操作记录」；Agent 发起的操作实时可见
-- 连接状态只看真实链路：未连接 / 连接中 / 已连接 / 断开中 / 连接异常
-- 只使用绑定路径，不在磁盘上搜索
+| 面 | 现在能做什么 |
+|---|---|
+| **Web** | 完整工作台。Host 走 Connection Fetch；有 `webServer` 时额外挂旧 RPC 与 Agent HTTP 桥。 |
+| **Desktop** | 同一套 UI / Agent / TCP / 仿真，无 Vision 监听端口。实验室用本地 tarball 安装。 |
+| **尚未宣称** | 官方 Desktop 产品安装（npm `name@version` 尚未发布）；官方 Desktop 完整 Modbus RTU（`serialport` 不在 Desktop `allowBuilds`）；Windows + STM32 / Keil 真机。 |
+
+验收矩阵：[`docs/ACCEPTANCE_NATIVE_WEB_DESKTOP.md`](docs/ACCEPTANCE_NATIVE_WEB_DESKTOP.md)。
+
+## 0.29.5 相对 0.29.0
+
+- 监控 / 调试二级 tab 在渲染时再取文案，不再被浏览器临时英文冻成 Charts / Alarms / Serial Frames。
+- 切走监控二级 tab 时可视化页保持挂载；折线图等容器有真实宽高再 `init`，时间轴从第一条样本往右长。
+- 编辑组件弹窗和 Keil 工程选择器挂到 `document.body`，不再被会话区 `container-type` 和底部输入框盖住；弹窗内类型卡 / 配置卡 / 预览线框仍在。
+- 写点回读进入同一条事务报文；串口原始流按 feed epoch 复位游标。
+
+更早的 0.29.0 是结构与测试重构收口。完整条目见 [CHANGELOG.md](CHANGELOG.md)。
+
+## 安装
+
+### Web
+
+```sh
+dsh plugin --profile web add github:xingyingyuzhui/dsh-vision-bench
+```
+
+本机开发请 `npm pack` 再 add 那个 `.tgz`，不要 `link:` 源码树（会把 `node_modules/`、`coverage/` 整棵链进 profile）：
+
+```sh
+npm pack
+dsh plugin --profile web add ./dsh-vision-bench-*.tgz
+```
+
+装完重启 `dsh web`。打开 **调试** / **上位机** / **监控**，或 **设置 → Vision**。新会话选 **Vision模式**。
+
+### Desktop
+
+官方产品安装只认打包应用里的 **应用 → 桌面插件…**，填 npm 包名 `dsh-vision-bench` 或 `dsh-vision-bench@0.29.4`。当前包还没上 npmjs.org，这条路径还不可用。
+
+本机实验室（先 **Cmd+Q** 完全退出 DeepSeek Harness）：
+
+```sh
+node scripts/probes/install-desktop-local.mjs
+```
+
+不要执行 `dsh plugin --profile desktop`。Desktop profile 由 Electron 独占。`file:` / `link:` / `github:` / 本地 tgz 都会被桌面插件窗口拒绝；实验室脚本走 profile 内 `file:` tarball，只算 lab 证据，不算官方产品安装。
+
+## 卸载
+
+```sh
+dsh plugin --profile web remove dsh-vision-bench
+```
+
+Desktop 在 **桌面插件…** 里移除。绑定写在 `$DSH_HOME/vision-bench/bindings.json`。用户预设 **Vision模式** 不会随卸载删除。
+
+## 三个工作区
+
+会话区标签：**调试**、**上位机**、**监控**。
+
+- **调试**：选 `.uvprojx`（暂不支持 `.uvmpw`）、Target、编译、烧录；右侧工程结构；运行调试（GDB/MI + OpenOCD）。
+- **上位机**：连接 / 设备 / 点位。RTU 扫描本机 COM；真实读写走内置 Node Modbus（仿真不启动 Worker）。
+- **监控**：可视化、告警、串口报文、操作记录。点表值 / 可视化 / 告警 / 报文共享同一实时来源。
+
+设置页 **Vision**：绑定 Keil UV4（纯 Node，不需要 Python）、OpenOCD（外部兼容绑定）、Modbus/串口运行时。一键 **运行自检**。
+
+连接状态只看真实链路：未连接 / 连接中 / 已连接 / 断开中 / 连接异常。只使用绑定路径，不在磁盘上搜索。
 
 ## Vision模式
 
-宿主插件 `dsh-vision-bench` 只挂 `connection` / `webServer`。Agent 工具是另一条 loader：`dsh-vision-bench/agent`（`export name` 为 `dsh-vision-bench-tools`），由 **Vision模式** 预设插入，不和宿主同名。
+宿主 `dsh-vision-bench` 顶层只注入 `connection`，UI 发 `POST /api/vision-bench/dispatch`。旧 `/vision-bench` RPC 与 Agent HTTP 命令桥仅在有 `webServer` 时挂载。Agent 工具是另一条 loader：`dsh-vision-bench/agent`（`export name` 为 `dsh-vision-bench-tools`），由 **Vision模式** 预设插入，不和宿主同名。
 
 预设是安装物，不在宿主 `apply()` 里 seed。首次安装或升级后执行 `node scripts/seed-preset.mjs`（或设置页重建），写入 `$DSH_HOME/.agent-presets/vision-bench/`。**新建 Session 后生效**。
 
-`vision_bench` 只出现在这个预设里，避免每个 Agent 都多带一套工具。
+`vision_bench` 只出现在这个预设里。Agent 需要时自己调用，不把现场状态塞进每一轮系统提示。
 
 | action | 作用 |
 |---|---|
@@ -28,63 +86,35 @@ Requires DSH 0.1.5-rc.1. Install from an `npm pack` tarball, not a `link:` check
 | `build` | 编译 |
 | `map` | 当前 Target 的组、源文件、包含关系和函数名；超出上限时带 `truncated` |
 | `read` | 不传 address 则读点表全部段；传入则单次读 |
-| `write` | 写线圈 / 保持寄存器：`values` 长度 1 走 FC05/06，大于 1 走 FC15/16；写入后自动回读并报告一致性。**Agent 发起的写点需要用户在界面上批准**（上位机页确认卡，5 分钟内有效），结果以通知回到会话 |
-| `manual` | 请求用户完成现场人工操作（上电、接线、按复位等），`text` 必填；用户在调试页点击完成后以通知回到会话 |
-| `visualization` | `op=list\|get\|add\|update\|remove\|layout`。`layout` 必须携带 `expectedConfigVersion` 与 `items[{id,x,y,w,h}]`；`CONFIG_DRIFT` 后重新 list/get 再提交 |
+| `write` | 写线圈 / 保持寄存器：`values` 长度 1 走 FC05/06，大于 1 走 FC15/16；写入后自动回读。**Agent 写点需界面批准**（上位机确认卡，5 分钟内有效） |
+| `manual` | 请求用户完成现场人工操作；`text` 必填 |
+| `visualization` | `op=list\|get\|add\|update\|remove\|layout`。`layout` 必须带 `expectedConfigVersion` 与 `items[{id,x,y,w,h}]`；`CONFIG_DRIFT` 后重新 list/get 再提交 |
 
-## 当前能用
+另有 `vision_debug`（与 `vision_bench` 隔离）和 `debug_snapshot`。
 
-- 设置页绑定 UV4（Keil 编译与工程解析已完全纯 Node 实现，不再需要 Python）。上位机、点表、可视化、告警和串口报文不要求 Python。OpenOCD 烧录仍是外部兼容绑定
-- **调试**：工作区资源管理器选 `.uvprojx`（暂不支持 `.uvmpw` 多工程），选 Target 和输出格式，再编译。失败时编译输出给出错误数、前几条错误原文、阶段和日志路径；「查看完整日志」在应用内打开日志（尾部 256KB，支持搜索）。Agent 失败编译会把 `logFile` / `phase` / `errors` 写入共享任务。右侧「工程」页跟随当前 Session 的工程和 Target；只解析工作区内的 C/H，映射过大时标明截断。`vision_bench map` 返回同一份结构
-- **烧录下载**：绑定 OpenOCD 后选调试器（cmsis-dap/stlink/jlink…）和目标芯片（stm32f1x/stm32f4x/nrf52…），一键烧录走 **确认卡**：显示目标、固件、大小和 sha256，批准后才执行 `program verify reset exit`。下载进入 `download` 任务与「操作记录」
-- **看总线报文**：每次 Modbus 读/写记录事务报文（hex）。RTU 为 ADU（含 CRC）；TCP 显示协议归一化报文，不是原始 MBAP。「串口报文」只展示当前或曾经使用过的 **RTU** 通道（TCP 与仿真连接不出现），负责选择串口与筛选查看（设备/方向/功能码/状态/关键字、暂停滚动、清空、复制 Hex、导出 JSONL），**不再负责打开串口**。串口由上位机连接持有，Windows 下 COM 独占，Worker owner 表按物理口互斥；占用返回 `PORT_IN_USE`
+## 能力说明
 
-- **上位机**：设备 / 连接 / 点位。RTU 串口扫描本机已连接 COM 口。真实读写走插件内置 Node Modbus 运行时（仿真不启动 Worker）。功能码 01/03 可写（FC05/06 单点、FC15/16 批量），02/04 只读。写入后显示 **写前值 → 目标值 → 回读值**。写入超时返回 `WRITE_OUTCOME_UNKNOWN`（结果未知），不要直接重试，先读回再由用户决定。操作流程：创建连接 → 配置 COM/TCP → 连接 → 添加设备（名称 + 连接内唯一 Unit ID）→ 设备卡片内添加点位（唯一键 = 连接+设备+功能码+地址，不同设备可用同地址）→ 开始采集 → 查看点表 / 可视化 / 告警 → 在「串口报文」选当前 RTU 串口查看报文。**连接 / 断开中不可修改端点参数，先断开再改**；采集由 Host 后台服务运行，点表/可视化/告警/报文共享同一实时值来源
-- **Windows 无 Python 安装**：从发布 `.tgz` 安装后，未安装 Python 即可完整使用 Keil 工程扫描、Target 枚举、工程结构映射与编译，以及 Modbus RTU/TCP 主机读写与轮询。Keil 仍需要本机 UV4；烧录仍需要外部 OpenOCD。macOS 自动测试不能代替 Windows 10/11 实机验收（见 `docs/WINDOWS_ACCEPTANCE_0.27.md`，**尚未真机验收**）
-- **0.22 写入边界**：Host 是工作区唯一写者。配置走 `mutateConfig`（成功才递增 `configVersion`），实时值/趋势/告警/报文走同一把 `runExclusive` 队列上的 `mutateRuntime`。配置已落盘但连接释放/事件通知失败时返回 `ok: true` 与 `postCommitWarnings`，不回滚。Agent 改配置无需确认卡；真实线圈/寄存器写入、烧录、复位仍需界面批准。Agent 与 Host 分进程时走 HTTP 命令桥；`system.ping` 是无副作用探活。失败会返回 `HOST_UNAVAILABLE` / `HOST_TIMEOUT` / `HOST_UNAUTHORIZED` / `HOST_FORBIDDEN` / `HOST_INVALID_RESPONSE` 等，而不是静默降级。
-- **点表元数据**：每段可带倍率 / 偏移 / 单位 / 告警上下限；CSV 导入导出（剪贴板往返）批量编辑
-- **阈值告警**：采集时评估越限，越限/恢复写入「操作记录」并通知当前会话；监控「告警」回看记录
-- **监视与可视化**：点位“监视”开关决定是否成为可视化数据源（读取/采集/写后回读在提交阶段写入每工作区每点位 600 样本环形缓存；关闭监视仍可读取但停止新增历史样本，也不删除已关联组件）。“告警”开关是真正的总开关：关闭后不再判断并立即把已有激活告警转为恢复状态，阈值保留可再次开启；两者相互独立，按工程值阈值判断。**监控→可视化**以组件为中心：GridStack 拖拽缩放；曲线/柱状图优先 ECharts（无运行时则 uPlot / CSS fallback）；数值卡/开关（FC01 确认写+读回）。组件可新建/编辑/删除；关联点位只列已监视且符合类型约束的点位；数据源失效时组件保留并提示修复，不自动删除
-- **从机连接支持**：支持配置与创建 Modbus 从机（Slave / Server）连接，支持从机监听状态管理与点表寄存器映射；从机连接下被动响应外部主站请求，不启动主动轮询采集
-- **会话协作**：Vision 自动服务当前 Session，不再提供手动绑定/解绑；后台 Session 的操作只记录，不抢当前页面焦点。Agent 定位目标时目标短时高亮并在右下角轻提示「Agent 已定位到 …」，可一次性返回原位置
-- **三个原生工作区**：Harness `conversation.view` 上的 **调试** / **上位机** / **监控**。调试内是工作台（编译烧录与构建日志）和工程结构；监控内是可视化、告警、串口报文、操作记录。不再注册 Vision 侧栏页面，也不再要求安装 `dsh-better-sidebar`。点表值 / 可视化 / 告警共享同一实时值来源，一次采集同时驱动，不重复占串口
-- **Agent 联动**：`vision_bench` 支持 `visualization` 动作（list/get/add/update/remove/layout）——组件读取实时回显，修改直接保存（所有配置修改必须携带最近一次 status/list/get 返回的 `configVersion`；`CONFIG_DRIFT` 后必须重新 list/get 再基于新版本重试；`layout` 必须携带 `items[{id,x,y,w,h}]`；`propose*` 返回 `OP_REMOVED`；ID 冲突返回 `VIZ_TARGET_MISMATCH`）。Agent 可以直接修改连接、设备、点位和可视化配置，调整布局后当前 Session 可视化页面实时同步。Host 校验后原子保存并记入操作记录。真实设备写入和烧录仍需用户批准：烧录走服务端 `requestId` 批准卡，OpenOCD 只烧录哈希校验后的固件快照。`focus` 支持仅凭 `visualizationId` 聚焦组件；`points` 返回 `monitorEnabled/alarmEnabled/trendEnabled/runtimeStatus` 与阈值；组件右侧 Agent 图标把结构化引用追加到当前 Session 输入框
-- **运行调试与硬件后端**：已实现 GDB/MI + OpenOCD 调试链与自动化测试；`DebugRuntime` 作为唯一状态权威，真实验证异步单步/暂停语义，消除假同步完成事件；支持动态端口分配（`allocateLoopbackPort`）与物理探针（`probeSerial`）级别的 `TargetLease` 互斥保护；通过不可变 `ResolvedDebugLaunchSpec` 和显式审批票据（`approvalRequestId`）启动会话，杜绝 Agent 伪造路径或通过布尔值绕过审批。提供 Agent 专属工具 `vision_debug`（与 `vision_bench` 严格隔离）及 `debug_snapshot` 诊断证据；Windows + STM32 物理验收尚未完成（标记为 DEFERRED_WINDOWS_ACCEPTANCE）。
-- **Keil 仿真器 (实验性)**：UVSOCK protocol implementation experimental; 协议层按官方 ARM Keil `UVSOCK.h` 32 字节报文结构完全重构，由插件管理临时后台 `UV4.exe` 核心进程；提供语义化客户端 `UvSockClient` 与能力协商 `capabilities()`；自动化 fake server 测试已全覆盖，但 Windows µVision 真机实机验收尚未完成（标记为 DEFERRED_WINDOWS_ACCEPTANCE）。
-- **程序模型 (ProgramModel) 与 AST 分析**：引入基于 CodeMirror Lezer C/C++ AST 的高保真源码分析器（`confidence: 'ast'`），原有正则分析器重命名并降级为启发式分析器（`confidence: 'heuristic'`）；通用图分析算法（`findUpstream` / `findDownstream` / `findCausalPath`）彻底解耦至领域模块；新增 `runtime-correlation-service` 实现调试器现场位置与 ProgramModel 节点、调用者、被调函数、关联变量及条件分支的精准映射。
-- **闭环验证 (Verify)**：支持场景化断言测试（Debug 表达式、Host Modbus 实时遥测点位、无异常、无告警、非钳制持续时间稳定度 `stable-for-duration`）；通过注入 Host 实时源 `VerifyTelemetryAdapter` 接入真实遥测流与新鲜度时效校验，移除 2 秒硬编码截断；支持硬超时控制与 AbortSignal 取消，自动绑定不可变固件哈希、采样序列与调试快照证据链；在 `vision_debug` 工具中直接暴露 `verify` 动作闭环执行。
-- **实机验收状态**：Windows + STM32 硬件验收规范详见 `docs/WINDOWS_ACCEPTANCE_0.27.md`（当前状态为 `DEFERRED_WINDOWS_ACCEPTANCE`，包含专用 smoke 固件与测试检查项）。
+**编译与烧录。** 失败编译给出错误数、前几条原文、阶段和日志路径；「查看完整日志」在应用内打开（尾部 256KB，可搜索）。烧录走确认卡：目标、固件、大小、sha256，批准后才 `program verify reset exit`。OpenOCD 只烧录哈希校验后的固件快照。
+
+**上位机。** 流程：创建连接 → 配置 COM/TCP → 连接 → 添加设备（名称 + 连接内唯一 Unit ID）→ 设备卡片内加点位（唯一键 = 连接+设备+功能码+地址）→ 开始采集。功能码 01/03 可写（FC05/06 单点、FC15/16 批量），02/04 只读。写入后显示 **写前值 → 目标值 → 回读值**。超时返回 `WRITE_OUTCOME_UNKNOWN`，不要直接重试，先读回再决定。连接 / 断开中不可改端点参数。也支持从机（Slave）监听，不启动主动轮询。
+
+**串口报文。** RTU 记 ADU（含 CRC）；TCP 显示协议归一化报文。该页只展示用过的 RTU 通道，负责筛选查看，不负责打开串口。串口由上位机连接持有；Windows 下 COM 独占，占用返回 `PORT_IN_USE`。
+
+**点表 / 告警 / 可视化。** 点位可带倍率、偏移、单位、告警上下限；CSV 导入导出。监视开关决定是否进入可视化数据源（每点 600 样本环形缓存）。告警开关关闭后立即把已激活告警转为恢复。可视化以组件为中心：GridStack；曲线/柱状图优先 ECharts（无运行时则 uPlot / CSS）；数值卡/开关。关联点位只列已监视且类型匹配的点；数据源失效时组件保留并提示修复。
+
+**写入边界。** Host 是工作区唯一写者。配置走 `mutateConfig`（成功才递增 `configVersion`）；实时值/趋势/告警/报文走同一把 `runExclusive` 队列上的 `mutateRuntime`。Agent 改配置无需确认卡；真实线圈/寄存器写入、烧录、复位仍需界面批准。Agent 与 Host 分进程时走 HTTP 命令桥；`system.ping` 无副作用。失败返回 `HOST_UNAVAILABLE` / `HOST_TIMEOUT` / `HOST_UNAUTHORIZED` / `HOST_FORBIDDEN` / `HOST_INVALID_RESPONSE`，不静默降级。缺 Host 句柄时不猜 `127.0.0.1:3080`。
+
+**会话。** Vision 自动服务当前 Session。后台 Session 的操作只记录，不抢焦点。Agent 定位目标时短时高亮，右下角提示「Agent 已定位到 …」。
+
+**运行调试（实验性能力已落地，真机暂缓）。** `DebugRuntime` 是唯一状态权威。GDB/MI + OpenOCD；`TargetLease` 互斥；启动必须带不可变 `ResolvedDebugLaunchSpec` 和 `approvalRequestId`。Keil UVSOCK 仿真器有 fake server 测试，Windows µVision 真机未做。ProgramModel 用 Lezer C/C++ AST（`confidence: 'ast'`），启发式分析器降级为 `heuristic`。`vision_debug` 的 `verify` 做场景化断言（表达式、遥测、无告警、`stable-for-duration`）。
+
+Windows 无 Python 时，从 `.tgz` 安装即可用 Keil 工程扫描 / 编译和 Modbus 主机读写。Keil 仍要本机 UV4；烧录仍要外部 OpenOCD。macOS 自动测试不能代替 Windows 10/11 实机，见 `docs/WINDOWS_ACCEPTANCE_0.27.md`（状态 `DEFERRED_WINDOWS_ACCEPTANCE`）。
 
 还没做：CAN 监视。
 
-## 安装
-
-前置：本机已能运行 `dsh web`。安装本插件后即可使用调试、上位机、监控三个工作区。
-
-```sh
-dsh plugin --profile web add github:xingyingyuzhui/dsh-vision-bench
-```
-
-本机开发请先 `npm pack` 再 add 那个 `.tgz`，不要 `link:` 源码树（会把 `node_modules/`、`coverage/` 整棵链进 profile）。
-
-```sh
-npm pack
-dsh plugin --profile web add ./dsh-vision-bench-*.tgz
-```
-
-装完重启 `dsh web`。打开 **调试** / **上位机** / **监控**，或 **设置 → Vision**。新会话选 **Vision模式**。
-
-## 卸载
-
-```sh
-dsh plugin --profile web remove dsh-vision-bench
-```
-
-绑定写在 `$DSH_HOME/vision-bench/bindings.json`。用户预设 `Vision模式` 不会随卸载删除。
-
 ## 开发
 
-实现优先改 `src/{domain,application,infrastructure,interfaces,ui}`；根目录 `bench-*.mjs` 仅为兼容 re-export。架构决策见 `docs/architecture/`（含 ADR-024 客户端原语与门面退役、ADR-025 公共 UI 组件 API 契约）。然后在**插件源码目录**执行：
+实现优先改 `src/{domain,application,infrastructure,interfaces,ui}`；根目录 `bench-*.mjs` 仅为兼容 re-export。架构决策见 `docs/architecture/`（ADR-024 客户端原语、ADR-025 公共 UI 组件契约）。
 
 ```sh
 npm install
@@ -93,7 +123,7 @@ npm run quality
 npm run build
 ```
 
-`npm test` / `npm run quality` 需要 `devDependencies`（TypeScript、Biome、dependency-cruiser、Testing Library）。`dsh plugin add` 装到运行时后只有生产依赖，不要在那个安装目录跑测试。不要手改生成的 `client.js`。
+`npm test` 含 `build:check`。不要手改生成的 `client.js`。`dsh plugin add` 装到运行时后只有生产依赖，不要在那个安装目录跑测试。
 
 ## License
 

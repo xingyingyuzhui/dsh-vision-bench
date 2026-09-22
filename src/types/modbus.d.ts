@@ -133,6 +133,8 @@ export type TransactionFrameExtra = {
 export type WriteCompletionExtra = {
   frames?: CapturedFrames | null
   frame?: Record<string, any> | null
+  /** Full transaction list to persist (write + readback). Prefer over single frame. */
+  transactionFrames?: Record<string, any>[]
   simulated?: boolean
   readback?: unknown[]
   durationMs?: number

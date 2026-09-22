@@ -86,8 +86,14 @@ export function pushFramesLog(cwd, connId, logArray, options) {
       label: String(entry.label || ''),
       request: String(entry.request || ''),
       response: String(entry.response || ''),
-      requestHex: String(entry.requestHex || entry.request || '').slice(0, 400),
-      responseHex: String(entry.responseHex || entry.response || '').slice(0, 400),
+      requestHex: String(entry.requestHex || entry.request || '')
+        .replace(/[^0-9a-f]/gi, '')
+        .toUpperCase()
+        .slice(0, 1024),
+      responseHex: String(entry.responseHex || entry.response || '')
+        .replace(/[^0-9a-f]/gi, '')
+        .toUpperCase()
+        .slice(0, 1024),
       trace: Array.isArray(entry.trace) ? entry.trace.map((s) => String(s).slice(0, 200)).slice(0, 8) : [],
       connectionId: cidNorm,
       deviceId: String(entry.deviceId || ''),

@@ -134,7 +134,10 @@ export function createPost(handler) {
 export function mockRpcHost() {
   /** @type {((endpoint: string, payload: any, signal?: AbortSignal) => any) | null} */
   let handler = null
+  /** @type {((request: Request) => Promise<Response>) | null} */
+  let fetchHandler = null
   let disposed = false
+  let fetchDisposed = false
   return {
     rpc: {
       handle(channel, fn) {
@@ -151,15 +154,46 @@ export function mockRpcHost() {
         return handler(endpoint, payload, signal)
       },
     },
+    fetch: {
+      register(route) {
+        if (!route || typeof route.fetch !== 'function') throw new Error('invalid fetch route')
+        fetchHandler = route.fetch
+        return () => {
+          fetchDisposed = true
+          fetchHandler = null
+        }
+      },
+    },
     get disposed() {
       return disposed
+    },
+    get fetchDisposed() {
+      return fetchDisposed
     },
     get hasHandler() {
       return handler != null
     },
+    get hasFetchHandler() {
+      return fetchHandler != null
+    },
     invoke(endpoint, payload, signal) {
       if (!handler) throw new Error('rpc handler missing')
       return handler(endpoint, payload, signal)
+    },
+    /**
+     * @param {string} endpoint
+     * @param {any} [payload]
+     * @param {AbortSignal} [signal]
+     */
+    async invokeFetch(endpoint, payload = {}, signal) {
+      if (!fetchHandler) throw new Error('fetch handler missing')
+      const request = new Request('http://host/api/vision-bench/dispatch', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ endpoint, payload }),
+        signal,
+      })
+      return fetchHandler(request)
     },
   }
 }
@@ -175,12 +209,32 @@ export function mockRpcHost() {
 export function createHostContext(connection, overrides = {}) {
   const routes = []
   const tools = []
+  /** @type {Array<() => unknown>} */
+  const childStops = []
+  /** @type {(() => unknown) | null} */
+  let hostStop = null
+
+  const runAllStops = async () => {
+    const children = childStops.splice(0)
+    const results = []
+    for (const child of children) {
+      results.push(await Promise.resolve(typeof child === 'function' ? child() : undefined))
+    }
+    if (typeof hostStop === 'function') {
+      results.push(await Promise.resolve(hostStop()))
+    }
+    return results
+  }
+
   const ctx = {
     connection,
     webServer: {
       register(entry) {
         routes.push(entry)
-        return () => {}
+        return () => {
+          const i = routes.indexOf(entry)
+          if (i >= 0) routes.splice(i, 1)
+        }
       },
     },
     tools: {
@@ -190,11 +244,45 @@ export function createHostContext(connection, overrides = {}) {
       },
     },
     effect(factory) {
-      ctx._stop = factory()
+      hostStop = factory()
+      ctx._stop = runAllStops
+    },
+    /**
+     * Cordis-like optional inject: call fn when deps are present on ctx.
+     * Child scopes get their own effect list so webServer leave can unmount compat
+     * without disposing the Host fiber.
+     * @param {string[]} deps
+     * @param {(scope: any) => void} fn
+     */
+    inject(deps, fn) {
+      if (!Array.isArray(deps) || typeof fn !== 'function') return
+      if (!deps.every((name) => ctx[name] != null)) return
+      const child = {
+        ...ctx,
+        effect(childFactory) {
+          const stop = childFactory()
+          if (typeof stop === 'function') childStops.push(stop)
+        },
+      }
+      fn(child)
     },
     ...overrides,
   }
-  return { ctx, routes, tools, stop: () => (typeof ctx._stop === 'function' ? ctx._stop() : undefined) }
+  return {
+    ctx,
+    routes,
+    tools,
+    stop: () => {
+      if (typeof ctx._stop === 'function') return ctx._stop()
+      if (childStops.length === 0 && hostStop == null) return undefined
+      return runAllStops()
+    },
+    /** Simulate webServer fiber leaving while Host stays alive. */
+    stopWebInjects: async () => {
+      const children = childStops.splice(0)
+      await Promise.all(children.map((child) => Promise.resolve(child())))
+    },
+  }
 }
 
 // ---------------------------------------------------------------------------

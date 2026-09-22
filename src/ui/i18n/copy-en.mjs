@@ -19,8 +19,6 @@ export const COPY_EN = {
     shareSaved: 'Workspace sharing updated',
     navBehaviorTitle: 'Navigation behavior',
     preserveLastView: 'Remember last visited view',
-    preserveLastViewHint:
-      'When enabled, returning to HMI or Monitor keeps the last active connection or sub-page; when disabled, returns to overview.',
     presetAppliesNextSession: 'Tool changes apply to new sessions. Active sessions keep their current generation.',
     python: 'Python (no longer required)',
     uv4: 'Keil UV4',

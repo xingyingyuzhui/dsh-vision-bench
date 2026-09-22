@@ -1,5 +1,11 @@
-/** Authenticated Connection RPC channel for Vision browser operations. */
+/** Authenticated Connection RPC channel for Vision browser operations (Web compat). */
 export const VISION_RPC_CHANNEL = '/vision-bench'
+
+/**
+ * Shared Connection exact Fetch route (Web + Desktop).
+ * Body: `{ endpoint: string, payload?: object }`.
+ */
+export const VISION_FETCH_DISPATCH_PATH = '/api/vision-bench/dispatch'
 
 /** Stable HTTP path → RPC endpoint mapping consumed by `post()`. */
 export const VISION_HTTP_TO_RPC = Object.freeze({

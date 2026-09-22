@@ -19,6 +19,8 @@
  */
 import { normalizeModbus } from './modbus-migration.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
+import { validateLayerDeviceIds } from '../../domain/modbus/device-identity.mjs'
+import { hasTopology, isLegacyClaimable, pickTopology, topologyFingerprint } from './config-scope-claim.mjs'
 import {
   SHARE_CATEGORIES,
   emptySessionConfig,
@@ -40,6 +42,9 @@ export {
   normalizeShareFlags,
 }
 
+/** Compat re-exports (moved to config-scope-claim.mjs together with the raw claim helpers). */
+export { hasTopology, topologyFingerprint }
+
 /** @typedef {import('../../domain/modbus/config-scope.mjs').ShareFlags} ShareFlags */
 /** @typedef {import('../../domain/modbus/config-scope.mjs').ShareCategory} ShareCategory */
 /** @typedef {import('../../domain/modbus/config-scope.mjs').SessionConfig} SessionConfig */
@@ -57,23 +62,6 @@ const RUNTIME_KEYS = /** @type {const} */ ([
   'framesByConnection',
   'pollingByConnection',
 ])
-
-/**
- * Pick the topology slice out of a flat modbus or a stored SessionConfig.
- * @param {any} source
- * @returns {SessionConfig}
- */
-function pickTopology(source) {
-  const src = source && typeof source === 'object' ? source : {}
-  return {
-    connections: Array.isArray(src.connections) ? src.connections : [],
-    devices: Array.isArray(src.devices) ? src.devices : [],
-    points: Array.isArray(src.points) ? src.points : [],
-    visualization: src.visualization && typeof src.visualization === 'object' ? src.visualization : null,
-    activeConnectionId: typeof src.activeConnectionId === 'string' ? src.activeConnectionId : '',
-    activeDeviceId: typeof src.activeDeviceId === 'string' ? src.activeDeviceId : '',
-  }
-}
 
 /**
  * Copy one share category from `from` into `to` (returns a new SessionConfig).
@@ -106,36 +94,6 @@ function withCategory(to, from, category) {
 }
 
 /**
- * Fingerprint of the normalized topology (connections, devices, points, visualization
- * components). Used to detect whether a workspace carries any real config vs. the
- * defaults normalizeModbus synthesizes for an empty store (c1 / d1 / no points).
- * @param {any} modbus flat or layered modbus; only top-level topology is fingerprinted
- * @returns {string}
- */
-export function topologyFingerprint(modbus) {
-  const topo = pickTopology(modbus)
-  const norm = normalizeModbus({ version: 3, ...topo })
-  const viz = norm.visualization && typeof norm.visualization === 'object' ? norm.visualization : {}
-  return JSON.stringify({
-    connections: norm.connections,
-    devices: norm.devices,
-    points: norm.points,
-    visualization: Array.isArray(viz.components) ? viz.components : [],
-  })
-}
-
-const EMPTY_TOPOLOGY_FINGERPRINT = topologyFingerprint({})
-
-/**
- * True when the top-level topology differs from the synthesized empty defaults.
- * @param {any} modbus
- * @returns {boolean}
- */
-export function hasTopology(modbus) {
-  return topologyFingerprint(modbus) !== EMPTY_TOPOLOGY_FINGERPRINT
-}
-
-/**
  * Ensure `share`, `sessionConfigs` and `privateClaimSessionId` exist and are
  * normalized. Returns a new object (input is not mutated). Does NOT run
  * normalizeModbus so callers can chain it cheaply.
@@ -156,8 +114,9 @@ export function ensureScopeFields(modbus) {
  * Migration: the first session to open a legacy flat workspace claims the whole
  * top-level topology as its private config.
  *
- * Claims only when ALL hold: no claim yet, no session slices yet, and the top-level
- * carries real topology. An empty workspace stays unclaimed until the first writer
+ * Eligibility is shared with `prepareRawShareMutation` (`isLegacyClaimable`):
+ * no claim yet, no session slices yet, real top-level topology, non-empty
+ * sessionId. An empty workspace stays unclaimed until the first writer
  * (foldModbusFromSession / applyShareFlags) stamps `privateClaimSessionId`, so a
  * later session can never "steal" an empty claim either.
  *
@@ -167,11 +126,8 @@ export function ensureScopeFields(modbus) {
  */
 export function claimLegacyPrivate(modbus, sessionId) {
   const base = ensureScopeFields(modbus)
+  if (!isLegacyClaimable(base, sessionId)) return { modbus: base, claimed: false }
   const sid = normalizeScopeSessionId(sessionId)
-  if (!sid) return { modbus: base, claimed: false }
-  if (base.privateClaimSessionId) return { modbus: base, claimed: false }
-  if (Object.keys(base.sessionConfigs).length) return { modbus: base, claimed: false }
-  if (!hasTopology(base)) return { modbus: base, claimed: false }
   const claimedTopology = normalizeSessionConfig(pickTopology(base))
   const next = normalizeModbus({
     ...base,
@@ -241,7 +197,12 @@ export function foldModbusFromSession(baseModbus, projectedModbus, sessionId) {
   let priv = pickTopology(sid ? base.sessionConfigs[sid] : null)
   for (const category of SHARE_CATEGORIES) {
     if (isCategoryShared(share, category)) shared = withCategory(shared, view, category)
-    else if (sid) priv = withCategory(priv, view, category)
+    else if (sid) {
+      priv = withCategory(priv, view, category)
+      // Private category must not leave a stale top-level twin (it would win
+      // later unions and silently revert unit/connection edits).
+      shared = withCategory(shared, emptySessionConfig(), category)
+    }
   }
   /** @type {Record<string, SessionConfig>} */
   const sessionConfigs = { ...base.sessionConfigs }
@@ -303,12 +264,22 @@ function mergeValues(projectedValues, baseValues) {
  * @param {Partial<ShareFlags> | any} nextShare
  * @param {{ confirmed?: boolean }} [opts]
  * @returns {{ ok: true, modbus: any, published: ShareCategory[], revoked: ShareCategory[] }
- *   | { ok: false, errorCode: string, error: string, needsConfirm?: boolean, revoked?: ShareCategory[] }}
+ *   | { ok: false, errorCode: string, error: string, needsConfirm?: boolean, revoked?: ShareCategory[], conflicts?: any[] }}
  */
 export function applyShareFlags(modbus, sessionId, nextShare, opts = {}) {
-  const base = ensureScopeFields(modbus)
   const sid = normalizeScopeSessionId(sessionId)
   if (!sid) return { ok: false, errorCode: SHARE_SESSION_REQUIRED, error: '共享设置必须携带 sessionId' }
+  // RAW candidate rows first — ensureScopeFields/normalizeSessionConfigs would
+  // hide same-layer deviceId twins before we can reject them.
+  const rawSrc = modbus && typeof modbus === 'object' ? modbus : {}
+  const rawSharedDevices = Array.isArray(rawSrc.devices) ? rawSrc.devices : []
+  const rawSc = rawSrc.sessionConfigs && typeof rawSrc.sessionConfigs === 'object' ? rawSrc.sessionConfigs : {}
+  const rawPriv = rawSc[sid] && typeof rawSc[sid] === 'object' ? rawSc[sid] : null
+  const rawPrivDevices = Array.isArray(rawPriv?.devices) ? rawPriv.devices : []
+  const rawTopConnections = Array.isArray(rawSrc.connections) ? rawSrc.connections : []
+  const rawPrivConnections = Array.isArray(rawPriv?.connections) ? rawPriv.connections : []
+
+  const base = ensureScopeFields(rawSrc)
   const prev = base.share
   const next = normalizeShareFlags(nextShare)
   /** @type {ShareCategory[]} */
@@ -338,6 +309,22 @@ export function applyShareFlags(modbus, sessionId, nextShare, opts = {}) {
     priv = withCategory(priv, shared, category)
     shared = withCategory(shared, empty, category)
   }
+
+  // Judge the RESULTING candidate layer from RAW rows (not yet deduped).
+  // Publish replaces the category with this session's slice — twins inside that
+  // raw slice are duplicates; a legal replacement of one shared d1 by one
+  // private d1 is not. Conflicts describe the layer the candidate would be
+  // saved into: publish lands in the shared layer (no owning session), revoke
+  // lands in this session's private layer (review7 R2).
+  if (published.includes('connections')) {
+    const deviceCheck = validateLayerDeviceIds(rawPrivDevices, { layer: 'shared', sessionId: '' })
+    if (!deviceCheck.ok) return deviceCheck
+  } else if (revoked.includes('connections')) {
+    // Revoke copies shared into this session's private layer.
+    const deviceCheck = validateLayerDeviceIds(rawSharedDevices, { layer: 'private', sessionId: sid })
+    if (!deviceCheck.ok) return deviceCheck
+  }
+
   const sessionConfigs = { ...base.sessionConfigs, [sid]: normalizeSessionConfig(priv) }
   const nextModbus = normalizeModbus({
     ...base,

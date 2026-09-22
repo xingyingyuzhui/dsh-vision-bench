@@ -2,6 +2,10 @@
 
 export const TREND_KEEP_LOCAL = 600
 export const MAX_FRAMES_PER_CONN = 500
+/** Hex authority field: enough for max Modbus ADU with margin (bytes×2). */
+export const MAX_FRAME_HEX_CHARS = 1024
+/** Human-readable request/response summary (not the diagnostic authority). */
+export const MAX_FRAME_TEXT = 200
 
 /** @param {any} input */
 export const normalizeTrendByPoint = (input) => {
@@ -51,6 +55,13 @@ export const normalizePollingByConnection = (input, connections) => {
   return out
 }
 
+/** @param {any} value @param {number} [max] */
+const clipHex = (value, max = MAX_FRAME_HEX_CHARS) =>
+  String(value || '')
+    .replace(/[^0-9a-f]/gi, '')
+    .toUpperCase()
+    .slice(0, max)
+
 /**
  * @param {any} input
  * @param {any[]} [connections]
@@ -63,17 +74,17 @@ export const normalizeFramesByConnection = (input, connections) => {
   void connections
   if (!input || typeof input !== 'object') return out
   for (const [k, v] of Object.entries(input)) {
-    const arr = Array.isArray(v) ? v.slice(0, MAX_FRAMES_PER_CONN) : []
+    const arr = Array.isArray(v) ? v : []
     out[k] = arr
       .map((f) => {
         /** @type {any} */
         const rec = {
           t: Number(f && (f.t ?? f.at)) || Date.now(),
-          label: typeof f?.label === 'string' ? String(f.label).slice(0, 200) : '',
-          request: typeof f?.request === 'string' ? String(f.request).slice(0, 200) : '',
-          response: typeof f?.response === 'string' ? String(f.response).slice(0, 200) : '',
+          label: typeof f?.label === 'string' ? String(f.label).slice(0, MAX_FRAME_TEXT) : '',
+          request: typeof f?.request === 'string' ? String(f.request).slice(0, MAX_FRAME_TEXT) : '',
+          response: typeof f?.response === 'string' ? String(f.response).slice(0, MAX_FRAME_TEXT) : '',
           trace: Array.isArray(f?.trace)
-            ? f.trace.map((/** @type {any} */ s) => String(s).slice(0, 200)).slice(0, 8)
+            ? f.trace.map((/** @type {any} */ s) => String(s).slice(0, MAX_FRAME_TEXT)).slice(0, 8)
             : [],
           deviceId: typeof f?.deviceId === 'string' ? f.deviceId : '',
           connectionId: typeof f?.connectionId === 'string' ? f.connectionId : k,
@@ -94,9 +105,11 @@ export const normalizeFramesByConnection = (input, connections) => {
         if (f && Number.isFinite(Number(f.functionCode))) rec.functionCode = Math.trunc(Number(f.functionCode))
         if (f && Number.isFinite(Number(f.durationMs))) rec.durationMs = Math.trunc(Number(f.durationMs))
         if (f && typeof f.status === 'string') rec.status = f.status.slice(0, 16)
-        if (f && typeof f.error === 'string') rec.error = f.error.slice(0, 200)
-        if (f && typeof f.requestHex === 'string') rec.requestHex = f.requestHex.slice(0, 400)
-        if (f && typeof f.responseHex === 'string') rec.responseHex = f.responseHex.slice(0, 400)
+        if (f && typeof f.error === 'string') rec.error = f.error.slice(0, MAX_FRAME_TEXT)
+        const reqHex = f && (f.requestHex || f.request) ? clipHex(f.requestHex || f.request) : ''
+        const resHex = f && (f.responseHex || f.response) ? clipHex(f.responseHex || f.response) : ''
+        if (reqHex) rec.requestHex = reqHex
+        if (resHex) rec.responseHex = resHex
         if (f && (f.frameFormat === 'tcp-normalized' || f.frameFormat === 'rtu-adu')) rec.frameFormat = f.frameFormat
         return rec
       })

@@ -13,6 +13,8 @@ import { functionTag } from '../../domain/modbus/point-model.mjs'
 import { loadWorkspace, saveWorkspaceAsync } from '../../infrastructure/store/workspace-store.mjs'
 
 export const TREND_KEEP = 600
+/** Default samples-per-series window for Agent-facing trend queries when limit omitted. */
+export const AGENT_TREND_DEFAULT_LIMIT = 60
 
 /**
  * @param {any} [input]
@@ -22,6 +24,7 @@ export const normalizeTrendByPoint = (input) => {
   if (!input || typeof input !== 'object') return {}
   const out = /** @type {Record<string, any>} */ ({})
   for (const [pid, list] of Object.entries(input)) {
+    if (pid === '__rev') continue
     if (!Array.isArray(list)) continue
     const clean = []
     for (const sample of list) {
@@ -32,6 +35,8 @@ export const normalizeTrendByPoint = (input) => {
     }
     if (clean.length) out[pid] = clean.slice(-TREND_KEEP)
   }
+  const rev = Number(input.__rev)
+  if (Number.isFinite(rev) && rev > 0) out.__rev = Math.trunc(rev)
   return out
 }
 
@@ -45,6 +50,7 @@ export const normalizeTrendByPoint = (input) => {
 export const sampleTrendValues = (trendIn, pointValues, pointsById) => {
   const trend = { ...(trendIn || {}) }
   const now = Date.now()
+  let touched = false
   for (const rec of Array.isArray(pointValues) ? pointValues : []) {
     const pid = rec && (rec.pointId || rec.key)
     if (!pid) continue
@@ -52,16 +58,79 @@ export const sampleTrendValues = (trendIn, pointValues, pointsById) => {
     if (!pt || pt.monitorEnabled !== true) continue
     let list = Array.isArray(trend[pid]) ? trend[pid].slice() : []
     // 通信失败 → null 断点；成功 → 数值（回退 raw）
+    const ok = rec.ok !== false
     let val = null
-    if (rec.ok !== false) {
+    if (ok) {
       const n = Number(rec.value)
       val = Number.isFinite(n) ? n : Number.isFinite(Number(rec.raw)) ? Number(rec.raw) : null
+    }
+    const last = list[list.length - 1]
+    if (!ok || val == null) {
+      if (last && last[1] != null) {
+        list.push([last[0] + 1, null])
+        if (list.length > TREND_KEEP) list = list.slice(list.length - TREND_KEEP)
+        trend[pid] = list
+        touched = true
+      }
+      continue
     }
     list.push([Number(rec.at) || now, val])
     if (list.length > TREND_KEEP) list = list.slice(list.length - TREND_KEEP)
     trend[pid] = list
+    touched = true
   }
+  if (touched) trend.__rev = (Number(trendIn?.__rev) || 0) + 1
+  else if (trend.__rev == null && trendIn?.__rev != null) trend.__rev = Number(trendIn.__rev) || 0
   return trend
+}
+
+/**
+ * Session-pack variant: name / unit / connection / device come from the given
+ * pack (private session table). Samples still come from the shared runtime map.
+ * Prefer passing `sharedTrend` series when the caller already loaded them.
+ *
+ * @param {any} pack session-projected modbus pack
+ * @param {any} [opts]
+ * @returns {any}
+ */
+export const readTrendSeriesFromPack = (pack, opts = {}) => {
+  const points = Array.isArray(pack?.points) ? pack.points : []
+  const ids =
+    Array.isArray(opts.pointIds) && opts.pointIds.length
+      ? opts.pointIds
+      : points
+          .filter((/** @type {any} */ p) => p.monitorEnabled === true || p.trendEnabled === true)
+          .slice(0, 8)
+          .map((/** @type {any} */ p) => p.id)
+  /** @type {Record<string, any>} */
+  const sharedById = {}
+  for (const s of Array.isArray(opts.sharedTrend) ? opts.sharedTrend : []) {
+    if (s && s.pointId) sharedById[s.pointId] = s
+  }
+  return ids.map((/** @type {any} */ pid) => {
+    const pt = points.find((/** @type {any} */ p) => p.id === pid)
+    const shared = sharedById[pid] || {
+      pointId: pid,
+      count: 0,
+      returned: 0,
+      samples: [],
+    }
+    const samples = Array.isArray(shared.samples) ? shared.samples : []
+    const oldest = samples.length ? samples[0][0] : 0
+    const count = Number(shared.count) || samples.length
+    return {
+      pointId: pid,
+      name: pt ? pt.name || functionTag(pt.function) + pt.address : shared.name || pid,
+      connectionId: pt ? pt.connectionId : shared.connectionId || '',
+      deviceId: pt ? pt.deviceId : shared.deviceId || '',
+      unit: pt ? pt.unit : shared.unit || '',
+      count,
+      returned: samples.length,
+      samples,
+      hasMore: count > samples.length,
+      oldestReturnedAt: oldest,
+    }
+  })
 }
 
 /**
@@ -82,17 +151,26 @@ export const readTrendSeries = (home, cwd, opts = {}) => {
           .map((/** @type {any} */ p) => p.id)
   const from = Number(opts.start) || 0
   const to = Number(opts.end) || Date.now()
+  // limit = max samples per series (not total across series)
+  const rawLimit = Number(opts.limit)
+  const perSeriesLimit =
+    Number.isFinite(rawLimit) && rawLimit > 0 ? Math.trunc(rawLimit) : TREND_KEEP
   return ids.map((/** @type {any} */ pid) => {
     const pt = pack.points.find((/** @type {any} */ p) => p.id === pid)
     const list = Array.isArray(trend[pid]) ? trend[pid] : []
+    const windowed = list.filter(
+      (/** @type {any} */ sv) => (!from || sv[0] >= from) && (!to || sv[0] <= to),
+    )
+    const samples = windowed.slice(-perSeriesLimit)
     return {
       pointId: pid,
       name: pt ? pt.name || functionTag(pt.function) + pt.address : pid,
       connectionId: pt ? pt.connectionId : '',
       deviceId: pt ? pt.deviceId : '',
       unit: pt ? pt.unit : '',
-      count: list.length,
-      samples: list.filter((/** @type {any} */ sv) => (!from || sv[0] >= from) && (!to || sv[0] <= to)).slice(-TREND_KEEP),
+      count: windowed.length,
+      returned: samples.length,
+      samples,
     }
   })
 }

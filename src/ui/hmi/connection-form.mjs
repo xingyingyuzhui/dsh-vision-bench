@@ -28,7 +28,11 @@ export function renderConnectionForm(el, t, ctx) {
     el(
       'div',
       { className: 'dvb-panel-head' },
-      el('span', { className: 'dvb-panel-title' }, '编辑连接 · ' + (connForm.name || connForm.id)),
+      el(
+        'span',
+        { className: 'dvb-panel-title' },
+        (!(connForm.conn.port || connForm.conn.host) ? '新增连接 · ' : '编辑连接 · ') + (connForm.name || connForm.id),
+      ),
       formLocked
         ? el('span', { className: 'dvb-hint dvb-need' }, t('connEditLocked') || '连接中不可修改端点参数，请先断开')
         : null,

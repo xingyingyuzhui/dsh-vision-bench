@@ -1,48 +1,273 @@
 /**
- * Structure budget for hand-maintained sources (plan task P0-1 / P0-2).
+ * Structure budget for hand-maintained sources (P5-4 debt ratchet).
  *
- * Three groups are measured. Each group has a soft `warn` line and a hard
- * `error` line. A file over the hard line must be listed in `allow`, and every
- * allowlist entry carries the current line count as a `max` ratchet: a listed
- * file may shrink but never grow. Once a file drops back under the hard line it
- * must be removed from the list, so the allowlist cannot rot.
- *
- * Wildcards are rejected by the checker: a newly oversized file must fail the
- * build rather than slip into an existing pattern.
- *
- * `stage` records the plan task that removes the entry. See
- * docs/VISION_STRUCTURE_AND_TEST_REFACTOR_PLAN.md for the task definitions.
+ * Soft `warn` band requires an allowlist entry with a `max` ratchet: listed
+ * files may shrink but never grow. Hard `error` (500/80) remains absolute.
+ * Wildcards are rejected. Once a file drops under warn, remove it from allow.
  */
 export default {
-  groups: [
+  "groups": [
     {
-      name: 'production',
-      label: '人工维护生产文件',
-      dirs: ['src', 'runtime', 'scripts'],
-      suffixes: ['.mjs', '.js'],
-      rootPattern: '^(host|tools)\\.js$',
-      warn: 400,
-      error: 500,
-      allow: [],
-    },
-    {
-      name: 'facade',
-      label: '根目录兼容门面',
-      rootPattern: '^bench-.*\\.mjs$',
-      suffixes: ['.mjs'],
-      warn: 60,
-      error: 80,
-      allow: [
+      "name": "production",
+      "label": "人工维护生产文件",
+      "dirs": [
+        "src",
+        "runtime",
+        "scripts"
       ],
+      "suffixes": [
+        ".mjs",
+        ".js"
+      ],
+      "rootPattern": "^(host|tools)\\.js$",
+      "warn": 400,
+      "error": 500,
+      "allow": [
+        {
+          "file": "src/domain/modbus/visualization-model.mjs",
+          "max": 490,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/ui/debug/project/use-project-session.mjs",
+          "max": 489,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/infrastructure/debug/keil/uvsock-client.mjs",
+          "max": 486,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/ui/components/custom-select.mjs",
+          "max": 470,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/ui/monitor/frames/use-frames-page.mjs",
+          "max": 464,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/infrastructure/store/journal-store.mjs",
+          "max": 463,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/interfaces/rpc/vision-rpc-router.mjs",
+          "max": 452,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/application/debug/debug-launch-spec-service.mjs",
+          "max": 445,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/domain/program/program-model.mjs",
+          "max": 445,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/domain/modbus/point-model.mjs",
+          "max": 437,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "runtime/io/connection-manager.mjs",
+          "max": 422,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/ui/hmi/device-card-item.mjs",
+          "max": 421,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/ui/hmi/hmi-page.mjs",
+          "max": 421,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/infrastructure/keil/uv4-build-runner.mjs",
+          "max": 411,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/infrastructure/modbus/io-broker.mjs",
+          "max": 411,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P6",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "src/interfaces/agent/vision-bench-tool.mjs",
+          "max": 407,
+          "reason": "Agent tool schema+execute; split schema later",
+          "stage": "P6",
+          "owner": "vision-bench"
+        }
+      ]
     },
     {
-      name: 'test',
-      label: '测试文件',
-      dirs: ['test'],
-      suffixes: ['.test.mjs'],
-      warn: 350,
-      error: 500,
-      allow: [],
+      "name": "facade",
+      "label": "根目录兼容门面",
+      "rootPattern": "^bench-.*\\.mjs$",
+      "suffixes": [
+        ".mjs"
+      ],
+      "warn": 60,
+      "error": 80,
+      "allow": [
+        {
+          "file": "bench-points.mjs",
+          "max": 67,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P5",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "bench-shared.mjs",
+          "max": 67,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P5",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "bench-store.mjs",
+          "max": 61,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P5",
+          "owner": "vision-bench"
+        }
+      ]
     },
-  ],
+    {
+      "name": "test",
+      "label": "测试文件",
+      "dirs": [
+        "test"
+      ],
+      "suffixes": [
+        ".test.mjs"
+      ],
+      "warn": 350,
+      "error": 500,
+      "allow": [
+        {
+          "file": "test/commands/lossless-json.test.mjs",
+          "max": 629,
+          "reason": "Agent projection + lossless JSON coverage; split later",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/ui/project-workspace-isolation.test.mjs",
+          "max": 441,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/config/point-patch-semantics.test.mjs",
+          "max": 413,
+          "reason": "Point patch + batch atomicity coverage",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/ui/vision-view-request.test.mjs",
+          "max": 398,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/debug/debug-approval-service.test.mjs",
+          "max": 386,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/config/scope-wiring.test.mjs",
+          "max": 382,
+          "reason": "Session scope wiring coverage",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/agent/tool-schema.test.mjs",
+          "max": 376,
+          "reason": "Agent tool schema contract coverage",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/agent/agent-result-projection-bounds.test.mjs",
+          "max": 420,
+          "reason": "Agent projection pagination + budget coverage; split later",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/agent/alarm-notify-gate.test.mjs",
+          "max": 400,
+          "reason": "Alarm notify gate coverage; split later",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+
+        {
+          "file": "test/debug/keil-simulator-backend.test.mjs",
+          "max": 368,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/visualization/model.test.mjs",
+          "max": 368,
+          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "stage": "P4",
+          "owner": "vision-bench"
+        },
+        {
+          "file": "test/hmi/connection-presentation.test.mjs",
+          "max": 356,
+          "reason": "Connection presentation coverage",
+          "stage": "P4",
+          "owner": "vision-bench"
+        }
+      ]
+    }
+  ]
 }

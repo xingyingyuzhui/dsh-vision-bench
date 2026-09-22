@@ -1,17 +1,13 @@
-import { formatClock } from './value-renderer.mjs'
-
 export function renderSwitchWidget(el, spec = {}) {
   const s = spec.settings || {}
   const on = !!spec.on
   const busy = !!spec.busy
   const offline = !!spec.offline
-  const showTitle = s.showTitle !== false
   const styleKind = s.switchStyle === 'buttons' ? 'buttons' : 'toggle'
   const size = s.switchSize || 'md'
   const onLabel = s.onLabel || '已开启'
   const offLabel = s.offLabel || '已关闭'
   const radius = Number(s.cardRadius) || 8
-  const time = s.showUpdatedAt === false ? '' : formatClock(spec.at)
   const wrapStyle = {
     background: s.cardBg || undefined,
     borderRadius: radius + 'px',
@@ -81,16 +77,10 @@ export function renderSwitchWidget(el, spec = {}) {
   return el(
     'div',
     { className: 'dvb-viz-body dvb-viz-switch-card', style: wrapStyle },
-    showTitle ? el('span', { className: 'dvb-viz-value-name' }, spec.name || '') : null,
     spec.confirmHint ? el('div', { className: 'dvb-hint' }, spec.confirmHint) : null,
     styleKind === 'buttons' ? buttons : toggle,
     feedback,
-    el(
-      'div',
-      { className: 'dvb-viz-switch-meta' },
-      s.hintText ? el('span', { className: 'dvb-hint' }, s.hintText) : null,
-      time ? el('span', { className: 'dvb-viz-value-time' }, `更新于 ${time}`) : null,
-    ),
+    s.hintText ? el('div', { className: 'dvb-viz-switch-meta' }, el('span', { className: 'dvb-hint' }, s.hintText)) : null,
   )
 }
 

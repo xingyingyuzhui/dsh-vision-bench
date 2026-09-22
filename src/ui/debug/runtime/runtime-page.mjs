@@ -248,7 +248,7 @@ export function createRuntimePage(React, t, post) {
             ),
             el(
               Panel.Body,
-              { style: { padding: 0 } },
+              { className: 'dvb-debug-source-body', style: { padding: 0 } },
               sourcePreview.error
                 ? el(
                     'div',

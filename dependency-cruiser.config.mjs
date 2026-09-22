@@ -22,8 +22,20 @@ export default {
     },
     {
       name: 'no-orphans',
-      severity: 'info',
-      from: { orphan: true, pathNot: ['(^|/)index\\.mjs$', '\\.d\\.ts$', '(^|/)scripts/', '(^|/)test/'] },
+      severity: 'error',
+      comment: 'P5-3: orphans are errors; exact-path allowlist only.',
+      from: {
+        orphan: true,
+        pathNot: [
+          '(^|/)index\\.mjs$',
+          '\\.d\\.ts$',
+          '(^|/)scripts/',
+          '(^|/)test/',
+          // Documented ledger / optional adapter kept for package consumers.
+          '(^|/)src/ui/components/component-registry\\.mjs$',
+          '(^|/)src/infrastructure/modbus/verify-telemetry-adapter\\.mjs$',
+        ],
+      },
       to: {},
     },
     {
@@ -47,10 +59,39 @@ export default {
     {
       name: 'ui-no-direct-io',
       severity: 'error',
-      from: { path: '(^|/)(src/ui|bench-hmi|bench-live|bench-view|bench-frames-view|bench-visualization-view)\\.mjs' },
+      comment: 'UI and view facades must not touch Node I/O or serial transports.',
+      from: {
+        path: '(^|/)(src/ui/|bench-hmi\\.mjs$|bench-live\\.mjs$|bench-view\\.mjs$|bench-frames-view\\.mjs$|bench-visualization-view\\.mjs$)',
+      },
       to: {
         path: '(serialport|modbus-serial|node:child_process|node:fs|fs/promises)',
         dependencyTypes: ['npm', 'core'],
+      },
+    },
+    {
+      name: 'ui-components-no-features',
+      severity: 'error',
+      comment: 'P5-1: public components must not import feature modules.',
+      from: { path: '(^|/)src/ui/components/' },
+      to: { path: '(^|/)src/ui/(debug|hmi|monitor|settings|workspace)/' },
+    },
+    {
+      name: 'ui-patterns-no-features',
+      severity: 'error',
+      comment: 'P5-1: patterns must not import feature modules.',
+      from: { path: '(^|/)src/ui/patterns/' },
+      to: { path: '(^|/)src/ui/(debug|hmi|monitor|settings|workspace)/' },
+    },
+    {
+      name: 'ui-no-direct-vendor-packages',
+      severity: 'error',
+      comment: 'P5-1: UI must bind vendors through src/ui/vendor/*-runtime.mjs.',
+      from: {
+        path: '(^|/)src/ui/',
+        pathNot: '(^|/)src/ui/vendor/',
+      },
+      to: {
+        path: '^(echarts|gridstack|uplot|@codemirror/|@tanstack/)',
       },
     },
     {

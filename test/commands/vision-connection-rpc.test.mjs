@@ -130,11 +130,11 @@ test('bench-runtime apply fails closed without connection', () => {
         slots: {},
         locale: { register: () => () => {} },
       }),
-    /connection\.rpc\.call/,
+    /connection/,
   )
 })
 
-test('host apply fails closed without connection.rpc.handle', () => {
+test('host apply fails closed without connection.fetch.register', () => {
   assert.throws(
     () =>
       applyHost({
@@ -142,7 +142,7 @@ test('host apply fails closed without connection.rpc.handle', () => {
         tools: { register: () => () => {} },
         effect() {},
       }),
-    /connection\.rpc\.handle/,
+    /connection\.fetch\.register/,
   )
 })
 

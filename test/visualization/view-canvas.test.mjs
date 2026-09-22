@@ -57,21 +57,22 @@ test('未来 schema 进入只读模式：可查看、不可改、不发写请求
   )
   assert.ok(tree.container.textContent.includes('但不能修改布局、组件配置或执行组件控制'))
   const newBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '新建组件')
-  const editBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '编辑')
-  const delBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '删除')
   assert.ok(newBtn && newBtn.disabled, '新建 disabled')
+  const moreBtn = tree.container.querySelector('.dvb-viz-more')
+  assert.ok(moreBtn && !moreBtn.disabled, '组件菜单仍可用')
+  await act(async () => {
+    moreBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  })
+  await waitFor(() => assert.ok(document.querySelector('[role=menu]')), { timeout: 4000 })
+  const editBtn = Array.from(document.querySelectorAll('[role=menuitem]')).find((b) => b.textContent === '编辑')
+  const delBtn = Array.from(document.querySelectorAll('[role=menuitem]')).find((b) => b.textContent === '删除')
   assert.ok(editBtn && editBtn.disabled, '编辑 disabled')
   assert.ok(delBtn && delBtn.disabled, '删除 disabled')
   await act(async () => {
     editBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
     newBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
   })
-  assert.equal(tree.container.textContent.includes('编辑组件'), false, '点击 disabled 不打开编辑器')
-  const agentBtn = Array.from(tree.container.querySelectorAll('button')).find((b) => b.textContent === '复制引用')
-  assert.ok(agentBtn && !agentBtn.disabled, '复制引用仍可用')
-  await act(async () => {
-    agentBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
-  })
+  assert.equal(document.body.textContent.includes('编辑组件'), false, '点击 disabled 不打开编辑器')
   const switchBtn = tree.container.querySelector('.dvb-viz-switch-card [role=switch]')
   assert.ok(switchBtn && switchBtn.disabled, '控制开关 disabled')
   await act(async () => {
@@ -145,8 +146,8 @@ test('画布编辑模式切换：点击「编辑画布」解锁网格，点击�
 test('组件编辑：页签下只保留一条分隔线（去掉首个分组标题的顶边）', async () => {
   const { VISUALIZATION_CSS } = await import('../../src/ui/styles/visualization.mjs')
   const css = VISUALIZATION_CSS.join('')
-  assert.match(css, /\.dvb-viz-tabs-bar\{[^}]*border-bottom:1px solid var\(--dvb-bdr\)/)
-  assert.match(css, /\.dvb-viz-group-title\{[^}]*border-top:1px solid var\(--dvb-bdr\)/)
+  assert.match(css, /\.dvb-viz-tabs-bar\{[^}]*border-bottom:1px solid var\(--dvb-bdr,/)
+  assert.match(css, /\.dvb-viz-group-title\{[^}]*border-top:1px solid var\(--dvb-bdr,/)
   assert.match(css, /\.dvb-viz-group-title:first-child\{border-top:0\}/)
 })
 
@@ -161,4 +162,14 @@ test('组件编辑弹窗锁在视口内，不把整页撑出滚动', async () =>
   assert.doesNotMatch(css, /dvb-viz-picker-list\)\{border:1px/)
   assert.match(css, /body:has\(\.dvb-viz-modal-mask\)\{overflow:hidden\}/)
   assert.match(css, /\.dvb-viz-drawer-body\{[^}]*overscroll-behavior:contain/)
+  assert.match(
+    css,
+    /\.dvb-viz,\.dvb-viz-modal-mask,\.dvb-viz-modal\{--dvb-bdr:var\(--dsw-alias-border-l2,rgba\(128,128,128,\.25\)\)\}/,
+    'portaled editor inherits card borders without a .dvb-viz ancestor',
+  )
+  assert.match(
+    css,
+    /:is\(\.dvb-viz-modal,\.dvb-viz-type-card,\.dvb-viz-config-card,\.dvb-viz-preview-panel,\.dvb-viz-filter-pill\)\{border:1px solid var\(--dvb-bdr,var\(--dsw-alias-border-l2,rgba\(128,128,128,\.25\)\)\)\}/,
+    'editor card borders keep a literal fallback if --dvb-bdr is unset',
+  )
 })

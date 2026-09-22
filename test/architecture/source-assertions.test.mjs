@@ -161,8 +161,8 @@ test('allowlist entries must be well formed and self-cleaning', (t) => {
 test('the committed permission list matches the real suite', () => {
   const result = checkSourceAssertions(root, config)
   assert.equal(result.ok, true, result.violations.join('\n'))
-  assert.equal(result.allowlisted.length, 22)
-  assert.equal(config.allow.length, 22)
+  assert.equal(result.allowlisted.length, 23)
+  assert.equal(config.allow.length, 23)
   assert.ok(result.audit.length > 200, `expected a full suite, got ${result.audit.length}`)
 
   const selfTest = config.allow.filter((entry) => entry.file === 'test/architecture/source-assertions.test.mjs')

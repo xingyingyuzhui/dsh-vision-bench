@@ -104,7 +104,9 @@ export function useVizActions(_React, deps) {
       .then((ok) => {
         setSaving(false)
         if (ok) {
-          if (existingIndex >= 0 && base.type === 'line' && cand.type !== 'line') destroyChart(base.id)
+          if (existingIndex >= 0 && (base.type === 'line' || base.type === 'bar') && cand.type !== base.type) {
+            destroyChart(base.id)
+          }
           setEditor(null)
           setNote('')
         }
@@ -180,7 +182,7 @@ export function useVizActions(_React, deps) {
       connectionId: point.connectionId,
       deviceId: point.deviceId,
       pointId: point.pointId,
-      function: 1,
+      function: Number(point.function) || 1,
       address: point.address,
       values: [desiredValue],
     })

@@ -26,7 +26,7 @@ test('valueStatus 按上下限判定告警', () => {
   assert.equal(valueStatus(1, false, {}), 'offline')
 })
 
-test('数值卡 widget 渲染标题、单位与状态', () => {
+test('数值卡 widget 渲染单位与状态，不含标题和更新时间', () => {
   const tree = render(renderValueWidget(el, {
     settings: { yUnit: '℃', showStatus: true, showUpdatedAt: true, valueDecimals: 1 },
     name: '设备温度',
@@ -35,7 +35,8 @@ test('数值卡 widget 渲染标题、单位与状态', () => {
     at: Date.UTC(2026, 0, 1, 6, 5, 12),
   }))
   const text = tree.container.textContent
-  assert.ok(text.includes('设备温度'))
+  assert.equal(text.includes('设备温度'), false)
+  assert.equal(text.includes('更新于'), false)
   assert.ok(text.includes('26.8'))
   assert.ok(text.includes('℃'))
   assert.ok(text.includes('正常'))
@@ -48,7 +49,7 @@ test('控制开关 widget 默认滑动开关并可切换文案', () => {
     on: true,
   }))
   const text = tree.container.textContent
-  assert.ok(text.includes('风机开关'))
+  assert.equal(text.includes('风机开关'), false)
   assert.ok(text.includes('已开启'))
   const sw = tree.container.querySelector('[role=switch]')
   assert.ok(sw)

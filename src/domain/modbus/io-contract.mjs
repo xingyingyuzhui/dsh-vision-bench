@@ -183,8 +183,8 @@ const hexOk = (value) => typeof value === 'string' && value.length % 2 === 0 && 
  */
 export const normalizeFrames = (frames, mode) => {
   const src = frames && typeof frames === 'object' ? frames : {}
-  const requestHex = hexOk(src.requestHex) ? String(src.requestHex).toUpperCase().slice(0, 400) : ''
-  const responseHex = hexOk(src.responseHex) ? String(src.responseHex).toUpperCase().slice(0, 400) : ''
+  const requestHex = hexOk(src.requestHex) ? String(src.requestHex).toUpperCase().slice(0, 1024) : ''
+  const responseHex = hexOk(src.responseHex) ? String(src.responseHex).toUpperCase().slice(0, 1024) : ''
   return {
     requestHex,
     responseHex,

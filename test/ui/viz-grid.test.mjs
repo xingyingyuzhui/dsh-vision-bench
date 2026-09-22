@@ -145,6 +145,7 @@ test('readOnly=true initializes GridStack as static', () => {
   assert.equal(init[1].staticGrid, true)
   assert.equal(init[1].disableDrag, true)
   assert.equal(init[1].disableResize, true)
+  assert.equal(init[1].disableOneColumnMode, true)
   assert.equal(grid.lastOpts.staticGrid, true)
   assert.equal(tree.container.querySelector('.dvb-viz-grid').getAttribute('data-readonly'), 'true')
   tree.unmount()

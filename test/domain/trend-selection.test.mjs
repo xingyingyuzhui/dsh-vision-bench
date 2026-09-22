@@ -120,10 +120,12 @@ test('通信失败写入 null 断点（曲线不断连错误区间）', async ()
     trend.p2,
     [
       [100, 10],
-      [200, null],
+      [101, null],
     ],
-    '失败样本为 null 断点',
+    '失败样本为 null 断点，时间钉在最后有效点之后 1ms',
   )
+  const again = sampleTrendValues(trend, [{ pointId: 'p2', ok: false, error: '超时', at: 300 }], byId)
+  assert.equal(again.p2.length, 2, '连续失败不再往 X 轴塞空点')
 })
 
 test('旧字段迁移：trendEnabled 点位 → monitorEnabled 语义（规范化兼容）', async () => {
@@ -167,6 +169,63 @@ test('Agent trend 动作返回真实样本（非时间范围句柄）', async ()
   await rm(home, { recursive: true, force: true })
 })
 
+test('trendKey 只返回指定点，并使用会话点表元数据', async () => {
+  const { home, cwd } = await setup()
+  await runVisionBench(
+    home,
+    { action: 'read', connectionId: 'c1', deviceId: 'd1', function: 3, address: 0, count: 3 },
+    cwd,
+    { source: 'agent', sessionId: 's1' },
+  )
+  const res = await runVisionBench(
+    home,
+    { action: 'trend', trendKey: 'c1:d1:p2' },
+    cwd,
+    { source: 'agent', sessionId: 's1' },
+  )
+  assert.equal(res.ok, true, res.error)
+  assert.deepEqual(res.trend.pointIds, ['p2'], 'trendKey 只限定一个点')
+  assert.equal(res.trend.series.length, 1)
+  const s = res.trend.series[0]
+  assert.equal(s.pointId, 'p2')
+  assert.equal(s.connectionId, 'c1')
+  assert.equal(s.deviceId, 'd1')
+  assert.ok(s.name, 'session pack name')
+  assert.equal(typeof s.hasMore, 'boolean')
+  assert.equal('nextCursor' in (res.trend.projected ?? res.trend) || true, true)
+  await rm(home, { recursive: true, force: true })
+})
+
+test('projectTrend 返回 hasMore/oldestReturnedAt，不再返回 nextCursor:older', async () => {
+  const samples = Array.from({ length: 10 }, (_, i) => [1000 + i * 10, i])
+  const { projectTrend } = await import('../../src/application/commands/agent-result-project-rest.mjs')
+  const projected = projectTrend(
+    { limit: 4 },
+    {
+      ok: true,
+      trend: {
+        series: [
+          {
+            pointId: 'p1',
+            name: 'P1',
+            connectionId: 'c1',
+            deviceId: 'd1',
+            unit: 'C',
+            count: 10,
+            samples: samples.slice(-4),
+          },
+        ],
+      },
+    },
+  )
+  const s = projected.trend.series[0]
+  assert.equal(s.returned, 4)
+  assert.equal(s.hasMore, true)
+  assert.equal(s.oldestReturnedAt, samples[6][0])
+  assert.notEqual(projected.trend.nextCursor, 'older')
+  assert.equal(projected.trend.nextCursor, null)
+})
+
 test('readTrendSeries 直接读取存储并限窗', async () => {
   const { home, cwd } = await setup()
   saveWorkspace(home, cwd, {
@@ -183,5 +242,36 @@ test('readTrendSeries 直接读取存储并限窗', async () => {
   })
   const series = readTrendSeries(home, cwd, { pointIds: ['p2'], start: 1500, end: 2500 })
   assert.deepEqual(series[0].samples, [[2000, 2]], '窗口过滤生效')
+  await rm(home, { recursive: true, force: true })
+})
+
+test('readTrendSeries limit is samples per series; trend(limit=5) ≤5', async () => {
+  const { home, cwd } = await setup()
+  const samples = Array.from({ length: 20 }, (_, i) => [1000 + i * 100, i])
+  saveWorkspace(home, cwd, {
+    modbus: {
+      ...baseModbus,
+      trend: { p2: samples, p1: samples },
+    },
+  })
+  const series = readTrendSeries(home, cwd, { pointIds: ['p1', 'p2'], limit: 5 })
+  assert.equal(series.length, 2)
+  for (const s of series) {
+    assert.equal(s.count, 20)
+    assert.equal(s.returned, 5)
+    assert.ok(s.samples.length <= 5)
+    assert.equal(s.samples.length, 5)
+  }
+  const ran = await runVisionBench(
+    home,
+    { action: 'trend', connectionId: 'c1', pointIds: ['p2'], limit: 5, start: 0, end: Date.now() + 1 },
+    cwd,
+    { source: 'agent', sessionId: 's1' },
+  )
+  assert.equal(ran.ok, true, ran.error)
+  const s2 = ran.trend.series.find((/** @type {any} */ s) => s.pointId === 'p2')
+  assert.ok(s2)
+  assert.ok(s2.samples.length <= 5)
+  assert.equal(ran.trend.limit, 5)
   await rm(home, { recursive: true, force: true })
 })

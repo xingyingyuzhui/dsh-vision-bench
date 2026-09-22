@@ -14,7 +14,7 @@ import {
 
 const useViz = vendorUseVirtualizer() || (() => null)
 
-const PAGE_SIZE = 8
+const PAGE_SIZE = 50
 
 export function createLogPage(React, t, post, helpers = {}) {
   const el = React.createElement
@@ -99,8 +99,7 @@ export function createLogPage(React, t, post, helpers = {}) {
       return true
     })
 
-    // Sorted descending by time
-    const sorted = [...filtered].reverse()
+    const sorted = [...filtered].sort((a, b) => (b.at || b.startedAt || 0) - (a.at || a.startedAt || 0))
 
     // Pagination
     const totalCount = sorted.length

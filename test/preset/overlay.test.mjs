@@ -30,6 +30,7 @@ test('ensurePresetOverlay renames legacy host-named agent row to /agent', async 
   assert.match(text, /name: dsh-vision-bench\/agent/)
   assert.doesNotMatch(text, /name: dsh-vision-bench\n/)
 })
+
 test('ensurePresetOverlay appends the agent-plane row and persona', async (t) => {
   const dir = await createTempDir(t, 'dvb-preset-')
   await writeFile(

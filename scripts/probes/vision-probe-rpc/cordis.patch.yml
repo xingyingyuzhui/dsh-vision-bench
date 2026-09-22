@@ -1,0 +1,5 @@
+# Phase-0 probe B: rpc.handle control group.
+# On dsh-v0.1.6-alpha.1 Host installs this via owner.webServer — Desktop may fail.
+- insert:
+    - id: dsh.vision.probe.rpc
+      name: '@dsh-vision/probe-rpc'

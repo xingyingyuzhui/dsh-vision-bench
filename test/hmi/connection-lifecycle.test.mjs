@@ -40,7 +40,7 @@ test('TCP never appears in serialSources even when connected', async (t) => {
   )
 })
 
-test('sim connections report virtual connected state and are excluded from serial sources', async (t) => {
+test('sim connections report virtual connected state and appear as serial sources', async (t) => {
   const { home, cwd } = await setup(t, [connection('c4', 'rtu', 'COM7', { sim: true })])
   const transport = fakeTransport([{ connectionId: 'c4', state: 'connected', connectedAt: 1, port: 'COM7' }])
   const st = await listConnectionStates(home, cwd, { transport })
@@ -48,23 +48,32 @@ test('sim connections report virtual connected state and are excluded from seria
   assert.equal(st.connectionStates[0].status, 'connected')
   assert.equal(st.connectionStates[0].simulated, true)
   const src = await listConnectedSerialSources(home, cwd, { transport })
-  assert.equal(src.sources.length, 0, 'sim excluded from physical serial sources')
+  assert.equal(src.sources.length, 1)
+  assert.equal(src.sources[0].connectionId, 'c4')
+  assert.equal(src.sources[0].simulated, true)
 })
 
-test('frames port options only offer connected RTU sources (no TCP, no sim, no open button surface)', async () => {
+test('frames port options: proto lists all configured connections; raw only connected RTU', async () => {
   const conns = [
     { id: 'c1', name: 'C1', conn: { mode: 'rtu', port: 'COM3' } },
     { id: 'c3', name: 'C3', conn: { mode: 'tcp', host: '192.168.1.50', tcpPort: 502 } },
     { id: 'c4', name: 'C4', conn: { mode: 'rtu', port: 'COM7', sim: true } },
   ]
-  const opts = buildFramePortOptions(conns, [], 'proto', [
+  const live = [
     { connectionId: 'c1', port: 'COM3', state: 'connected' },
     { connectionId: 'c3', port: '192.168.1.50', state: 'connected' },
     { connectionId: 'c4', port: 'COM7', state: 'connected' },
-  ])
+  ]
+  const proto = buildFramePortOptions(conns, [], 'proto', live)
   assert.deepEqual(
-    opts.map((o) => o.value),
-    ['all', 'conn:c1'],
-    'TCP + sim excluded from 串口报文 source options',
+    proto.map((o) => o.value),
+    ['all', 'conn:c1', 'conn:c3', 'conn:c4'],
+    'protocol mode lists TCP/sim/configured history targets',
+  )
+  const raw = buildFramePortOptions(conns, [], 'raw', live)
+  assert.deepEqual(
+    raw.map((o) => o.value),
+    ['all', 'conn:c1', 'conn:c4'],
+    'raw mode keeps connected RTU including sim, no TCP',
   )
 })

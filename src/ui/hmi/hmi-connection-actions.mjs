@@ -80,11 +80,11 @@ export function createHmiConnectionActions(ctx, core) {
       activeDeviceId: '',
       version: 3,
     })
-    setHmiTab(id)
+    setHmiTab('all')
     lastDeviceByConn.current[id] = ''
     setFrameFilter(id)
     dismissEditorsExcept(id)
-    setDevForm({ open: true, id: '', name: '', unitId: 1, connectionId: id })
+    openConnEdit(connection)
   }
 
   function openAddDevice() {

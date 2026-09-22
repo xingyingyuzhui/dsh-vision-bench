@@ -150,6 +150,8 @@ export function useDebugEvents(React, post, scope) {
       setPendingControl,
       setActive,
     })
+    // Remount only on identity/controller change. Session discovery uses server-side
+    // waitForOwnerSession; do not remount when `active` flips or we abort the hang.
   }, [identityKey, controller, applyState, refreshRegisters, evaluateWatches, sessionId, cwd])
 
   const controlActions = useDebugRuntimeActions(React, {

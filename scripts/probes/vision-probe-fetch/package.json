@@ -1,0 +1,25 @@
+{
+  "name": "@dsh-vision/probe-fetch",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Phase-0 probe: connection.fetch.register exact /api route (no hardware).",
+  "type": "module",
+  "main": "./host.js",
+  "exports": {
+    ".": "./host.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "host.js",
+    "cordis.patch.yml",
+    "package.json"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

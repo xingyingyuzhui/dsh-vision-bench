@@ -128,6 +128,11 @@ export function getSharedDebugRuntime(deps = {}) {
   return defaultSharedDebugRuntime
 }
 
+/** @returns {ReturnType<typeof createDebugRuntime> | null} */
+export function peekSharedDebugRuntime() {
+  return defaultSharedDebugRuntime
+}
+
 /**
  * Sets or clears the shared DebugRuntime (used in host lifecycle or testing).
  * @param {ReturnType<typeof createDebugRuntime> | null} [runtime]

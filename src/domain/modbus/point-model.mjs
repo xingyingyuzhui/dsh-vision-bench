@@ -231,36 +231,32 @@ export const setPointValue = (values, point, raw, opts = {}) => {
   return list.slice(-MAX_VALUES)
 }
 
-/**
- * @param {any[]} values
- * @param {any[]} points
- * @param {any} batch
- * @param {any[]} raw
- * @param {boolean} ok
- * @param {string} error
- * @param {number} [at]
- */
+/** @param {any[]} values @param {any[]} points @param {any} batch @param {any[]} raw @param {boolean} ok @param {string} error @param {number} [at] */
 export const scatterBatch = (values, points, batch, raw, ok, error, at = Date.now()) => {
   const list = (Array.isArray(values) ? values : []).map(normalizeValueRec).filter((r) => r.key)
-  const normalized = normalizePoints(points)
   const batchFc = batch ? (batch.fc !== undefined ? batch.fc : batch.function) : undefined
-  for (let i = 0; i < normalized.length; i++) {
-    const p = normalized[i]
-    if (p.function !== batchFc) continue
-    if (p.address < batch.address || p.address >= batch.address + batch.count) continue
-    const idx = p.address - batch.address
+  const batchCid = batch ? String(batch.connectionId || batch.connId || '') : ''
+  const batchDid = batch ? String(batch.deviceId || '') : ''
+  for (const rawPt of Array.isArray(points) ? points : []) {
+    if (!rawPt || typeof rawPt !== 'object') continue
+    const fn = Number(rawPt.function)
+    const addr = Number(rawPt.address)
+    if (fn !== batchFc) continue
+    if (!Number.isFinite(addr) || addr < batch.address || addr >= batch.address + batch.count) continue
+    if (batchCid && String(rawPt.connectionId || rawPt.connId || '') !== batchCid) continue
+    if (batchDid && String(rawPt.deviceId || '') !== batchDid) continue
+    const id = String(rawPt.id || '').trim() || pointIdOf(fn, addr)
+    const idx = addr - batch.address
     const has = ok && Array.isArray(raw) && raw[idx] !== undefined
-    putValueRec(
-      list,
-      normalizeValueRec({
-        key: p.id,
-        raw: has ? raw[idx] : null,
-        value: has ? decodeValue(p, typeof raw[idx] === 'boolean' ? (raw[idx] ? 1 : 0) : raw[idx]) : null,
-        ok: !!ok,
-        error: ok ? '' : String(error || ''),
-        at,
-      }),
-    )
+    const rawVal = has ? raw[idx] : null
+    putValueRec(list, normalizeValueRec({
+      key: id,
+      raw: rawVal,
+      value: has ? decodeValue(rawPt, typeof rawVal === 'boolean' ? (rawVal ? 1 : 0) : rawVal) : null,
+      ok: !!ok,
+      error: ok ? '' : String(error || ''),
+      at,
+    }))
   }
   return list.slice(-MAX_VALUES)
 }
@@ -326,7 +322,10 @@ export const normalizePointV3 = (input) => {
   const raw = input && typeof input === 'object' ? input : {}
   const id = devText(raw.id, '') || genId('p')
   const connectionId = devText(raw.connectionId, '') || devText(raw.connId, '') || 'c1'
-  const deviceId = devText(raw.deviceId, '') || 'd1'
+  // Explicit empty/invalid deviceId must survive normalize so poll-time
+  // resolvePointDevice can reject it — never silently rebind to another device.
+  const deviceId =
+    raw.deviceId === undefined || raw.deviceId === null ? 'd1' : devText(raw.deviceId, '')
   const fnRaw = Number(raw.function ?? raw.fn)
   let fn = 3
   let area = devText(raw.area, '')
@@ -377,9 +376,8 @@ export const normalizePointsV3 = (list, connections, devices) => {
   const out = []
   for (const raw of list) {
     const p = normalizePointV3(raw)
-    // fix refs
+    // fix refs — connection may fall back; deviceId is never silently rebound.
     if (!validConnIds.has(p.connectionId)) p.connectionId = connections?.[0] ? connections[0].id : 'c1'
-    if (!validDevIds.has(p.deviceId)) p.deviceId = devices?.[0] ? devices[0].id : 'd1'
     if (seen.has(p.id)) continue
     seen.add(p.id)
     out.push(p)

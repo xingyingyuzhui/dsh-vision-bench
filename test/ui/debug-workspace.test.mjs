@@ -34,6 +34,25 @@ test('debug workspace has workbench, project, and runtime sections', () => {
   assert.equal(ids.includes('log'), false)
 })
 
+test('debug tab labels resolve at render time, not factory time', () => {
+  clearNavStore()
+  let lang = 'en'
+  const t = (key) => {
+    if (key === 'sectionWorkbench') return lang === 'zh' ? '工作台' : 'Workbench'
+    if (key === 'projectMap') return lang === 'zh' ? '工程结构' : 'Project map'
+    if (key === 'sectionRuntime') return lang === 'zh' ? '运行调试' : 'Runtime Debug'
+    return key
+  }
+  const React = makeReact()
+  const Page = createDebugWorkspace(React, t, async () => ({}))
+  lang = 'zh'
+  const tree = Page({ sessionId: 's1', scope: { cwd: '/tmp' } })
+  const tabs = tree.children[0]
+  const labels = (tabs.children || []).map((btn) => btn.children[0])
+  assert.deepEqual(labels, ['工作台', '工程结构', '运行调试'])
+  clearNavStore()
+})
+
 test('debug workspace tab click uses manual nav source', () => {
   clearNavStore()
   const React = makeReact()
@@ -128,7 +147,15 @@ test('WORKSPACE_CSS exports layout class tokens used by the workspace shell', as
   const { WORKSPACE_CSS } = await import('../../src/ui/styles/workspace.mjs')
   assert.ok(Array.isArray(WORKSPACE_CSS) && WORKSPACE_CSS.length > 0)
   const css = WORKSPACE_CSS.join('\n')
-  for (const token of ['.dvb-workspace', '.dvb-ws-tabs', '.dvb-ws-body', '--dsw-alias-border-l2']) {
+  for (const token of [
+    '.dvb-workspace',
+    '.dvb-ws-tabs',
+    '.dvb-ws-body',
+    '.dvb-ws-pane',
+    'visibility:hidden',
+    '--dsw-alias-border-l2',
+  ]) {
     assert.ok(css.includes(token), `missing token ${token}`)
   }
+  assert.doesNotMatch(css, /\.dvb-ws-pane\[data-active="false"\]\{[^}]*display:\s*none/)
 })

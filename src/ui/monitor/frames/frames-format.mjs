@@ -1,7 +1,11 @@
 export function framePayloadHex(frame) {
   const f = frame || {}
-  const raw = String(f.hex || f.request || f.response || f.text || f.line || '')
-  return raw.replace(/[^0-9a-f]/gi, '')
+  if (f.hex) return String(f.hex).replace(/[^0-9a-f]/gi, '')
+  const dir = String(f.direction || f.wireRole || 'tx').toLowerCase()
+  if (dir === 'rx' || dir === 'in' || dir === 'recv') {
+    return String(f.responseHex || f.response || f.text || f.line || '').replace(/[^0-9a-f]/gi, '')
+  }
+  return String(f.requestHex || f.request || f.response || f.text || f.line || '').replace(/[^0-9a-f]/gi, '')
 }
 
 export function formatHexDisplay(hex) {

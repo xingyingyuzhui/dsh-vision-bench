@@ -207,7 +207,8 @@ test('renderConnectionPanel 采用 dvb-conn-table 与 dvb-conn-actions 且各列
   assert.ok(actionsDiv, 'renders dvb-conn-actions container')
   // 检查操作栏包含的所有按钮
   const btnLabels = actionsDiv.children.map((b) => b.children?.[0])
-  assert.ok(btnLabels.some((l) => ['断开', '连接', '已连接', 'connLive', 'connUnlink'].includes(l)))
+  assert.ok(btnLabels.some((l) => ['断开', '连接', 'connLink', 'connUnlink'].includes(l)))
+  assert.ok(!btnLabels.includes('已连接') && !btnLabels.includes('connLive'))
   assert.ok(btnLabels.includes('编辑'))
   assert.ok(btnLabels.includes('AI'))
   assert.ok(btnLabels.some((l) => ['删除', 'removeDevice'].includes(l)))

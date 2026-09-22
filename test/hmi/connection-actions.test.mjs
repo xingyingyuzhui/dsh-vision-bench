@@ -166,3 +166,29 @@ test('linkConnection starts polling with intervalMs, and unlinkConnection stops 
   assert.equal(stopCall.body.connectionId, 'c1')
   assert.equal(closeCall.body.connectionId, 'c1')
 })
+
+test('toggleSim starts polling with saved connection intervalMs (not hardcoded 1000)', async () => {
+  const posts = []
+  const h = liveHarness({
+    post: async (path, body) => {
+      posts.push({ path, body })
+      if (path === '/dsh-vision-bench/connection/open') return { ok: true }
+      if (path === '/dsh-vision-bench/polling/start') return { ok: true }
+      if (path === '/dsh-vision-bench/state') {
+        return { ok: true, connectionStates: [{ connectionId: 'c1', status: 'connected' }] }
+      }
+      return { ok: true }
+    },
+    persist: async (patch) => {
+      Object.assign(h.workspace.modbus, patch)
+      return { ok: true }
+    },
+  })
+  h.workspace.modbus.pollingByConnection.c1.intervalMs = 5000
+
+  await h.actions.toggleSim()
+  const startCall = posts.find((p) => p.path === '/dsh-vision-bench/polling/start')
+  assert.ok(startCall, 'polling start called')
+  assert.equal(startCall.body.connectionId, 'c1')
+  assert.equal(startCall.body.intervalMs, 5000)
+})

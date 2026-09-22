@@ -1,10 +1,11 @@
-node_modules/
-*.log
-!test/fixtures/**/*.log
-.DS_Store
-__pycache__/
-*.pyc
-coverage/
-*.tgz
-.dist/
 
+__pycache__/
+!test/fixtures/**/*.log
+.cursor/
+.dist/
+.DS_Store
+*.log
+*.pyc
+*.tgz
+coverage/
+node_modules/

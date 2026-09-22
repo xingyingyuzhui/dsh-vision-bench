@@ -3,6 +3,7 @@ import * as yaml from 'yaml'
 import { LEGACY_VISION_PERSONAS, STANDARD_PERSONA } from './guidance.mjs'
 import { localPersonaConfigReplica } from './dsh-contract.mjs'
 import { validateCompositionPersona, yamlNodeToPlain } from './preset-validate.mjs'
+import { migrateObsoleteWorkflowWorkerRows } from './preset-workflow-migrate.mjs'
 import {
   AFFECTED_FILES,
   MARKER,
@@ -15,6 +16,8 @@ import {
   restoreAll,
   writeAtomic,
 } from './preset-transaction.mjs'
+
+export { migrateObsoleteWorkflowWorkerRows } from './preset-workflow-migrate.mjs'
 
 /**
  * Cordis stores JS expressions as `!!js …`. Overlay only needs to round-trip
@@ -172,6 +175,8 @@ export const ensurePresetOverlay = (dir, options) => {
   if (!seq || !Array.isArray(seq.items)) {
     return { ok: false, error: 'invalid composition: expected sequence', rebuildHelp: rebuildInstructions }
   }
+
+  migrateObsoleteWorkflowWorkerRows(seq)
 
   const ownership = checkOwnership(dir)
   if (ownership.error) {

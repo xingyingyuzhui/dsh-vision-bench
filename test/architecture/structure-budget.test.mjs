@@ -74,7 +74,8 @@ test('warn and error thresholds are reported separately', (t) => {
   assert.deepEqual(group.overError, [{ file: 'src/over.mjs', lines: 25 }])
   assert.equal(result.ok, false)
   assert.ok(result.violations.some((v) => v.includes('src/over.mjs is 25 lines')))
-  assert.ok(result.violations.every((v) => !v.includes('src/warn.mjs')))
+  // P5-4: the warn band is also a debt budget — unallowlisted warn files violate.
+  assert.ok(result.violations.some((v) => v.includes('src/warn.mjs')))
 })
 
 test('an allowlisted file passes but may not grow past its recorded max', (t) => {
@@ -147,19 +148,22 @@ test('the committed config passes and only lists known oversized files', () => {
   const facade = result.groups.find((group) => group.name === 'facade')
   const tests = result.groups.find((group) => group.name === 'test')
   assert.equal(production.overError.length, 0)
-  assert.equal(production.allowlisted.length, 0)
-  // P2-5 清零测试 >500：allowlist / overError 均为 0。
+  // Production still carries P5-4 debt allowlist entries; they must not grow past max.
+  assert.ok(production.allowlisted.length > 0)
+  assert.equal(production.allowlisted.length, config.groups.find((g) => g.name === 'production').allow.length)
+  // Test group still carries P4 debt allowlist entries under the 500-line hard cap.
   assert.equal(tests.overError.length, 0)
-  assert.equal(tests.allowlisted.length, 0)
+  assert.equal(tests.allowlisted.length, config.groups.find((g) => g.name === 'test').allow.length)
   assert.equal(facade.overError.length, 0)
-  assert.equal(facade.allowlisted.length, 0)
+  assert.equal(facade.allowlisted.length, config.groups.find((g) => g.name === 'facade').allow.length)
 
   for (const group of config.groups) {
     for (const entry of group.allow) {
       assert.ok(!entry.file.includes('*'), `wildcard in ${group.name}: ${entry.file}`)
       assert.ok(entry.reason, `missing reason for ${entry.file}`)
       assert.ok(entry.stage, `missing stage for ${entry.file}`)
-      assert.ok(entry.max > group.error, `${entry.file} should not be allowlisted at ${entry.max}`)
+      // P5-4: allowlist covers both the warn-band debt budget and the hard error cap.
+      assert.ok(entry.max > group.warn, `${entry.file} should not be allowlisted at ${entry.max}`)
     }
   }
 })

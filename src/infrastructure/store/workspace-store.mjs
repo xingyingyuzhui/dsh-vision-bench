@@ -5,6 +5,8 @@ import { normalizeConn, validateConnections } from '../../domain/modbus/connecti
 import { normalizeFramesByConnection } from '../../domain/modbus/frames-buffer.mjs'
 import { normalizeModbus } from '../../application/modbus/modbus-migration.mjs'
 import { validateDevices } from '../../domain/modbus/device-model.mjs'
+import { validateCandidateDeviceLayers } from '../../domain/modbus/device-identity.mjs'
+import { recordKeilProjectSelect } from './workspace-keil-select.mjs'
 import {
   normalizeTasks,
   normalizeTimeline,
@@ -302,6 +304,11 @@ export const applyWorkspacePatch = (prev, input) => {
   }
   mergedModbus.configVersion = nextConfigVersion
 
+  const deviceLayerCheck = validateCandidateDeviceLayers(mergedModbus)
+  if (!deviceLayerCheck.ok) {
+    return { ok: false, errorCode: deviceLayerCheck.errorCode, error: deviceLayerCheck.error, conflicts: deviceLayerCheck.conflicts, workspace: prev }
+  }
+
   const rawKeil = input?.keil
   const nextKeil = rawKeil
     ? {
@@ -326,32 +333,8 @@ export const applyWorkspacePatch = (prev, input) => {
   if (allErrs.length > 0) {
     return { ok: false, error: allErrs.join('；'), workspace }
   }
-  const keilProject = workspace.keil.project
-  if (keilProject && !isAbsolute(keilProject)) {
-    return { ok: false, error: 'keil.project 必须是绝对路径', workspace }
-  }
-  if (keilProject && keilProject !== prev.keil?.project) {
-    const summary = `选择工程 ${keilProject}`
-    const origin = {
-      source: input?.origin && input.origin.source === 'agent' ? 'agent' : 'user',
-      sessionId: input?.origin?.sessionId ? String(input.origin.sessionId) : '',
-    }
-    workspace.log = mergeLog(workspace.log, {
-      action: 'select-project',
-      ok: true,
-      summary,
-    })
-    workspace.timeline = pushEvent(
-      workspace.timeline,
-      normalizeTimelineEvent({
-        kind: 'select-project',
-        source: origin.source,
-        sessionId: origin.sessionId,
-        ok: true,
-        summary,
-      }),
-    )
-  }
+  const keilSelected = recordKeilProjectSelect(workspace, input, prev)
+  if (!keilSelected.ok) return keilSelected
   return { ok: true, workspace, prev }
 }
 

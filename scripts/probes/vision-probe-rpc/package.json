@@ -1,0 +1,25 @@
+{
+  "name": "@dsh-vision/probe-rpc",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Phase-0 probe B: connection.rpc.handle channel (expects webServer on current DSH).",
+  "type": "module",
+  "main": "./host.js",
+  "exports": {
+    ".": "./host.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "host.js",
+    "cordis.patch.yml",
+    "package.json"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

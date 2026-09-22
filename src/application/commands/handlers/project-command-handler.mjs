@@ -1,6 +1,9 @@
 // @ts-check
 import { connLabel } from '../../../domain/modbus/connection-model.mjs'
+import { isScopePartitioned } from '../../../domain/modbus/config-scope.mjs'
+import { ERROR_CODES } from '../../../domain/modbus/errors.mjs'
 import { normalizeModbus } from '../../modbus/modbus-migration.mjs'
+import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
 import { listWorkspaceDir as listDir } from '../../../infrastructure/files/project-fs.mjs'
 import { keilMap } from '../../keil/project-service.mjs'
 import { keilBuild } from '../../keil/build-service.mjs'
@@ -86,9 +89,28 @@ export async function handleProjectCommand(home, args, room, origin, opts) {
   const signal = opts?.signal
 
   if (action === 'status') {
-    const workspace = loadWorkspace(home, room.cwd)
+    const sessionId = typeof origin.sessionId === 'string' ? origin.sessionId : ''
+    /** @type {any} */
+    let workspace
+    /** @type {any} */
+    let pack
+    if (sessionId) {
+      workspace = await ensureWorkspaceClaimed(home, room.cwd, sessionId)
+      pack = modbusForSession(workspace, sessionId)
+    } else {
+      workspace = loadWorkspace(home, room.cwd)
+      if (isScopePartitioned(workspace.modbus)) {
+        return {
+          ok: false,
+          action,
+          errorCode: ERROR_CODES.SESSION_REQUIRED,
+          error: '该工作区已按会话隔离，status 必须携带 sessionId',
+        }
+      }
+      pack = normalizeModbus(workspace.modbus)
+    }
     const journal = journalView(workspace)
-    const pack = normalizeModbus(workspace.modbus)
+    const configVersion = pack.configVersion || 1
     const states = await listConnectionStates(home, room.cwd, opts)
     const connectionStates = states?.connectionStates || []
     const stateByConn = new Map(connectionStates.map((s) => [s.connectionId, s.status || '']))
@@ -96,9 +118,10 @@ export async function handleProjectCommand(home, args, room, origin, opts) {
       ok: true,
       action,
       cwd: room.cwd,
+      configVersion,
       session: {
         autoService: true,
-        sessionId: origin.sessionId || workspace.session?.boundId || '',
+        sessionId: sessionId || workspace.session?.boundId || '',
       },
       keil: workspace.keil,
       modbus: {
@@ -153,7 +176,7 @@ export async function handleProjectCommand(home, args, room, origin, opts) {
           sim: pack.conn.sim,
           label: connLabel(pack.conn),
         },
-        configVersion: pack.configVersion || 1,
+        configVersion,
       },
       focus: workspace.focus || { request: null, prev: null, tempWatchIds: [], badgeOnly: false, evidence: [] },
       evidence: buildEvidenceRefs(home, room.cwd),

@@ -1,7 +1,7 @@
 // @ts-check
 import { normalizePointV3 } from '../../domain/modbus/point-model.mjs'
 import { explicitId } from '../../domain/config/config-operation.mjs'
-import { applyPointPatch } from '../../domain/modbus/point-patch.mjs'
+import { applyPointPatch, validateMonitorAlias } from '../../domain/modbus/point-patch.mjs'
 import { resolveHierarchy } from '../../domain/modbus/target-resolver.mjs'
 
 /**
@@ -126,10 +126,15 @@ export function applyPoints(workspace, op, target, value) {
           ? [value]
           : []
     if (!inputs.length) return { ok: false, error: '缺少 points 或 point' }
-    const changed = []
-    let points = pack.points.slice()
+
+    // Pass 1: validate ALL inputs on a temp plan; any FIELD_CONFLICT fails the whole batch.
+    /** @type {Array<{ kind: 'add', next: any } | { kind: 'update', idx: number, point: any, id: string }>} */
+    const pending = []
+    const planned = pack.points.slice()
     for (const input of inputs) {
       const raw = { ...(input || {}) }
+      const alias = validateMonitorAlias(raw)
+      if (!alias.ok) return alias
       if (op === 'add') {
         const inCid = explicitId(raw.connectionId || raw.connId) || cid
         const inDid = explicitId(raw.deviceId) || did
@@ -139,8 +144,8 @@ export function applyPoints(workspace, op, target, value) {
         raw.deviceId = inDid
         const next = normalizePointV3(raw)
         if (
-          points.some((/** @type {any} */ p) => p.id === next.id) ||
-          points.some(
+          planned.some((/** @type {any} */ p) => p.id === next.id) ||
+          planned.some(
             (/** @type {any} */ p) =>
               p.connectionId === next.connectionId &&
               p.deviceId === next.deviceId &&
@@ -150,8 +155,8 @@ export function applyPoints(workspace, op, target, value) {
         ) {
           return { ok: false, error: `点位已存在: ${next.id}` }
         }
-        points = points.concat([next])
-        changed.push(next.id)
+        pending.push({ kind: 'add', next })
+        planned.push(next)
       } else {
         const pid = explicitId(raw.id || target.pointId)
         if (!pid) return { ok: false, errorCode: 'TARGET_REQUIRED', error: 'update 必须携带 pointId' }
@@ -161,18 +166,32 @@ export function applyPoints(workspace, op, target, value) {
           pointId: pid,
         })
         if (!scoped.ok) return scoped
-        const idx = points.findIndex((/** @type {any} */ p) => p.id === pid)
-        const existing = points[idx]
+        const idx = planned.findIndex((/** @type {any} */ p) => p.id === pid)
+        const existing = planned[idx]
         const patched = applyPointPatch(existing, raw)
         if (!patched.ok) return patched
-        points[idx] = {
+        const updated = {
           ...existing,
           ...patched.point,
           id: existing.id,
           connectionId: existing.connectionId,
           deviceId: existing.deviceId,
         }
-        changed.push(existing.id)
+        pending.push({ kind: 'update', idx, point: updated, id: existing.id })
+        planned[idx] = updated
+      }
+    }
+
+    // Pass 2: commit once
+    const changed = []
+    let points = pack.points.slice()
+    for (const step of pending) {
+      if (step.kind === 'add') {
+        points = points.concat([step.next])
+        changed.push(step.next.id)
+      } else {
+        points[step.idx] = step.point
+        changed.push(step.id)
       }
     }
     pack.points = points

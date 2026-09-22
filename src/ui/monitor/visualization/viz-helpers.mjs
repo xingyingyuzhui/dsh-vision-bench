@@ -20,6 +20,51 @@ export function vizTypeLabel(type) {
   return { line: '曲线图', bar: '柱状图', value: '数值卡', switch: '开关' }[type] || type
 }
 
+export function vizSettingsFingerprint(settings) {
+  try {
+    return JSON.stringify(settings || {})
+  } catch {
+    return ''
+  }
+}
+
+export function seriesIdentityFingerprint(payload) {
+  const keys = payload?.keys || []
+  const meta = payload?.meta || []
+  return keys.map((k, i) => `${k}:${meta[i]?.label || ''}:${meta[i]?.unit || ''}`).join('|')
+}
+
+export function dataFingerprint(payload, trendStore) {
+  const rev = Number(trendStore?.__rev ?? payload?.revision ?? payload?.__rev)
+  if (Number.isFinite(rev) && rev > 0) return `r:${rev | 0}`
+  const data = payload?.data || []
+  const xs = data[0]
+  if (!xs?.length) return ''
+  const n = xs.length
+  const mid = n >> 1
+  const cell = (s, i) => (s?.[i] == null || Number.isNaN(s[i]) ? '' : String(s[i]))
+  return `${n}:${xs[0]}:${xs[mid]}:${xs[n - 1]}:` + data.map((s) => `${cell(s, mid)},${cell(s, n - 1)}`).join('|')
+}
+
+export function optionFingerprint(settings, isDark) {
+  return `${isDark ? 1 : 0}:${vizSettingsFingerprint(settings)}`
+}
+
+export function chartState(comp, payload, isDark, trendStore) {
+  return {
+    series: seriesIdentityFingerprint(payload),
+    data: dataFingerprint(payload, trendStore),
+    option: optionFingerprint(comp?.settings, isDark),
+  }
+}
+
+export function latestFingerprint(latest) {
+  if (!Array.isArray(latest)) return ''
+  return latest
+    .map((it) => `${it?.pointId || ''}:${it?.name || ''}:${it?.unit || ''}:${it?.ok ? 1 : 0}:${it?.value ?? ''}:${it?.at || 0}`)
+    .join('|')
+}
+
 export function echartsSeriesFromTrend(payload, options = {}) {
   const data = payload?.data || []
   const times = data[0] || []
@@ -28,31 +73,31 @@ export function echartsSeriesFromTrend(payload, options = {}) {
   const series = []
   const isLinear = options.lineStyle === 'linear'
   const isStep = options.lineStyle === 'step'
-  const smooth = isLinear || isStep ? false : (options.smooth !== false ? 0.2 : false)
+  const smooth = isLinear || isStep ? false : options.smooth !== false ? 0.2 : false
   const step = isStep ? 'end' : false
   const lineWidth = Number(options.lineWidth) || 2
   const showSymbol = options.showSymbol !== false
   const connectNulls = options.connectNulls !== false
   for (let i = 1; i < data.length; i++) {
-    const label = meta[i - 1]?.label || `s${i}`
     const pts = []
     for (let j = 0; j < times.length; j++) {
       const v = data[i][j]
-      if (v != null && Number.isFinite(Number(v))) {
-        pts.push([isCount ? j + 1 : Number(times[j]) * 1000, Number(v)])
-      }
+      const x = isCount ? j + 1 : Number(times[j]) * 1000
+      if (v != null && Number.isFinite(Number(v))) pts.push([x, Number(v)])
+      else if (!connectNulls) pts.push([x, null])
     }
     const color = options.lineColor || VIZ_COLORS[(i - 1) % VIZ_COLORS.length]
     series.push({
       type: 'line',
-      name: label,
+      name: meta[i - 1]?.label || `s${i}`,
       showSymbol,
-      symbolSize: 4,
+      symbol: 'circle',
+      symbolSize: 6,
       connectNulls,
       smooth,
       step,
       lineStyle: { width: lineWidth, color },
-      itemStyle: { color },
+      itemStyle: { color, borderWidth: 0 },
       areaStyle: options.area ? { opacity: 0.14, color } : undefined,
       data: pts,
     })

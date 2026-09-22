@@ -162,9 +162,9 @@ export function migrateV2ToV3(v2) {
   // frames: old single-track frames -> framesByConnection[c1]
   /** @type {Record<string, any[]>} */
   let framesByConnection = { c1: [] }
-  if (v2.frames && Array.isArray(v2.frames)) framesByConnection.c1 = v2.frames.slice(0, MAX_FRAMES_PER_CONN)
+  if (v2.frames && Array.isArray(v2.frames)) framesByConnection.c1 = v2.frames.slice(-MAX_FRAMES_PER_CONN)
   else if (v2.framesLog && Array.isArray(v2.framesLog))
-    framesByConnection.c1 = v2.framesLog.slice(0, MAX_FRAMES_PER_CONN)
+    framesByConnection.c1 = v2.framesLog.slice(-MAX_FRAMES_PER_CONN)
   else if (v2.framesByConnection && typeof v2.framesByConnection === 'object') {
     framesByConnection = normalizeFramesByConnection(v2.framesByConnection, [connection])
     if (!framesByConnection.c1) framesByConnection.c1 = []

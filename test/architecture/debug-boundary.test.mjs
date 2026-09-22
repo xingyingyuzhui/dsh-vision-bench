@@ -12,12 +12,19 @@ test('debug boundary: VISION_RPC_CHANNEL remains strictly unique', () => {
 test('debug boundary: Host registers exactly one HTTP route (/dsh-vision-bench/command), no debug HTTP routes', async () => {
   const routes = []
   const registeredChannels = []
+  const fetchPaths = []
 
   const mockCtx = {
     connection: {
       rpc: {
         handle(channel) {
           registeredChannels.push(channel)
+          return () => {}
+        },
+      },
+      fetch: {
+        register(route) {
+          fetchPaths.push(route.path)
           return () => {}
         },
       },
@@ -38,9 +45,20 @@ test('debug boundary: Host registers exactly one HTTP route (/dsh-vision-bench/c
         return () => {}
       },
     },
+    inject(deps, fn) {
+      if (deps?.includes?.('webServer') && mockCtx.webServer) {
+        const child = {
+          ...mockCtx,
+          effect(factory) {
+            // Keep Web compat mounted for boundary assertions; Host effect owns cleanup.
+            factory()
+          },
+        }
+        fn(child)
+      }
+    },
     effect(factory) {
-      const cleanup = factory()
-      if (typeof cleanup === 'function') cleanup()
+      mockCtx._stop = factory()
     },
   }
 
@@ -49,6 +67,7 @@ test('debug boundary: Host registers exactly one HTTP route (/dsh-vision-bench/c
   // Exactly one HTTP route on webServer
   assert.equal(routes.length, 1, 'webServer must have exactly one registered route')
   assert.equal(routes[0]?.path, '/dsh-vision-bench/command')
+  assert.deepEqual(fetchPaths, ['/api/vision-bench/dispatch'])
 
   // No separate debug HTTP routes
   assert.ok(

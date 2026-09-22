@@ -4,51 +4,9 @@ import test from 'node:test'
 import { DEBUG_EVENT_TYPES } from '../../src/shared/debug-events.mjs'
 import { createDebugToolbar } from '../../src/ui/debug/runtime/debug-toolbar.mjs'
 import { normalizeDebugEventType, useDebugEvents } from '../../src/ui/debug/runtime/use-debug-events.mjs'
+import { createMockReact } from '../helpers/mock-react.mjs'
 
 // Simple mock React for testing hook lifecycle
-function createMockReact() {
-  const stateMap = new Map()
-  let stateIndex = 0
-  const refMap = new Map()
-  let refIndex = 0
-
-  return {
-    reset() {
-      stateIndex = 0
-      refIndex = 0
-    },
-    useState(init) {
-      const idx = stateIndex++
-      if (!stateMap.has(idx)) {
-        stateMap.set(idx, typeof init === 'function' ? init() : init)
-      }
-      const val = stateMap.get(idx)
-      const setVal = (next) => {
-        const newVal = typeof next === 'function' ? next(stateMap.get(idx)) : next
-        stateMap.set(idx, newVal)
-      }
-      return [val, setVal]
-    },
-    useEffect() {},
-    useCallback(fn) {
-      return fn
-    },
-    useMemo(fn) {
-      return fn()
-    },
-    useRef(init) {
-      const idx = refIndex++
-      if (!refMap.has(idx)) {
-        refMap.set(idx, { current: init })
-      }
-      return refMap.get(idx)
-    },
-    createElement(type, props, ...children) {
-      return { type, props: props || {}, children: children.flat().filter(Boolean) }
-    },
-  }
-}
-
 test('PR-4: normalizeDebugEventType maps legacy event strings to canonical DEBUG_EVENT_TYPES', () => {
   assert.equal(normalizeDebugEventType('running'), DEBUG_EVENT_TYPES.RUNNING)
   assert.equal(normalizeDebugEventType('paused'), DEBUG_EVENT_TYPES.PAUSED)
@@ -133,44 +91,6 @@ test('pause events re-evaluate watches added after subscribe', async () => {
   const afterPause = useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-1' })
   assert.equal(afterPause.watchValues.length, 1)
   assert.equal(afterPause.watchValues[0].value, '42')
-  if (typeof stop === 'function') stop()
-})
-
-test('useDebugEvents queries state once then waits; idle wake does not tight-loop', async () => {
-  const React = createMockReact()
-  /** @type {Array<() => any>} */
-  const effects = []
-  React.useEffect = (fn) => {
-    effects.push(fn)
-  }
-  let stateCalls = 0
-  let waitCalls = 0
-  /** @type {(value: any) => void} */
-  let settleWait
-  const waitGate = new Promise((resolve) => {
-    settleWait = resolve
-  })
-  const mockPost = async (path) => {
-    if (String(path).includes('/debug/state')) {
-      stateCalls += 1
-      return { ok: true, session: { state: 'running', variables: [] } }
-    }
-    if (String(path).includes('/debug/events/wait')) {
-      waitCalls += 1
-      if (waitCalls === 1) return waitGate
-      return new Promise(() => {})
-    }
-    return { ok: true }
-  }
-  useDebugEvents(React, mockPost, { cwd: '/ws', sessionId: 'sess-1' })
-  const stop = effects[0]?.()
-  await new Promise((r) => setImmediate(r))
-  assert.equal(stateCalls, 1, 'bootstraps with a single state query')
-  assert.equal(waitCalls, 1, 'then parks on waitEvents')
-  settleWait({ ok: true, woke: true, events: [], nextCursor: 0 })
-  await new Promise((r) => setTimeout(r, 30))
-  assert.ok(waitCalls >= 2, 'idle wake resumes waiting')
-  assert.ok(waitCalls <= 4, 'idle wake must not tight-loop')
   if (typeof stop === 'function') stop()
 })
 

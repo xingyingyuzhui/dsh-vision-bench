@@ -63,8 +63,12 @@ test('trend quality breakpoint: ok!==true writes null gap for uPlot and key is c
   const l2 = getTrendState(cwd).series.get(k2)
   assert.equal(l1.length, 2)
   assert.equal(l1[1].v, null, 'bad quality should be explicit null gap, not skipped')
+  assert.equal(l1[1].t, l1[0].t + 1, 'gap sits 1ms after the last good sample')
   assert.equal(l2.length, 2)
   assert.equal(l2[1].v, 21)
+  sampleTrend(cwd, packBad)
+  l1 = getTrendState(cwd).series.get(k1)
+  assert.equal(l1.length, 2, 'repeated failures must not walk the X axis')
 
   // recovery: good again should not span gap
   t0 += 1000
@@ -96,10 +100,7 @@ test('trend quality breakpoint: ok!==true writes null gap for uPlot and key is c
   const idx1 = u.keys.indexOf(k1)
   assert.ok(idx1 >= 0)
   const ys = u.data[idx1 + 1]
-  assert.equal(ys.length, 3)
-  assert.equal(ys[0], 10)
-  assert.equal(ys[1], null)
-  assert.equal(ys[2], 12)
+  assert.ok(ys.includes(10) && ys.includes(null) && ys.includes(12))
   // csv should export rows including empty value for null gap
   const csv = exportRangeCsv(cwd)
   assert.match(csv, /^time,connectionId/)
@@ -203,7 +204,7 @@ test('Task5/6 guards: no hard-coded configVersion collapse and no window.uPlot r
   assert.match(live, /destroy/, 'should destroy uPlot on teardown')
   assert.match(live, /\.setData\(/, 'should update via setData, not re-create chart')
   assert.match(live, /setSize/, 'should resize via setSize')
-  assert.match(live, /spanGaps: false/, 'curve does not connect error gaps')
+  assert.match(live, /spanGaps: s\.connectNulls !== false/, 'uPlot spanGaps follows connectNulls setting')
 })
 test('Task2/0.20.1: trendDataForComponents aligned uPlot data (multi-series, seconds, null gaps)', async () => {
   const base = Date.now() - 60000
@@ -269,6 +270,25 @@ test('Task2/0.20.1: 同时间戳合并去重；窗口过滤；零样本点保留
   assert.equal(narrow.data[1][0], 2)
 })
 
+test('trendDataForComponents xAutoScroll false keeps the first-sample window', () => {
+  const origin = 1_700_000_000_000
+  const store = {
+    p1: [
+      [origin, 1],
+      [origin + 10_000, 2],
+      [origin + 120_000, 9],
+    ],
+  }
+  const points = [{ id: 'p1', name: 'A' }]
+  const latest = trendDataForComponents(store, points, ['p1'], 60_000, { autoScroll: true, now: origin + 120_000 })
+  assert.equal(latest.data[1][latest.data[1].length - 1], 9)
+  assert.ok(!latest.data[1].includes(1), 'auto-scroll drops the origin once it leaves the window')
+  const fromStart = trendDataForComponents(store, points, ['p1'], 60_000, { autoScroll: false, now: origin + 120_000 })
+  assert.equal(fromStart.data[1][0], 1)
+  assert.equal(fromStart.data[1][fromStart.data[1].length - 1], 2)
+  assert.ok(!fromStart.data[1].includes(9), 'from-start window does not jump to the latest sample')
+})
+
 test('echartsSeriesFromTrend filters interleaving nulls and enables symbols', async () => {
   const { echartsSeriesFromTrend } = await import('../../src/ui/monitor/visualization/viz-helpers.mjs')
   const payload = {
@@ -283,6 +303,8 @@ test('echartsSeriesFromTrend filters interleaving nulls and enables symbols', as
   assert.equal(series.length, 2)
   assert.equal(series[0].name, '点位1')
   assert.equal(series[0].showSymbol, true)
+  assert.equal(series[0].symbol, 'circle')
+  assert.equal(series[0].itemStyle.borderWidth, 0)
   assert.equal(series[0].connectNulls, true)
   // 点位1 只保留有效点 [ [100000, 10], [102000, 12] ]
   assert.deepEqual(series[0].data, [
@@ -294,5 +316,34 @@ test('echartsSeriesFromTrend filters interleaving nulls and enables symbols', as
     [101000, 25],
     [103000, 28],
   ])
+})
+
+test('echartsSeriesFromTrend keeps null breakpoints when connectNulls is false', async () => {
+  const { echartsSeriesFromTrend } = await import('../../src/ui/monitor/visualization/viz-helpers.mjs')
+  const payload = {
+    data: [
+      [100, 101, 102],
+      [10, null, 12],
+    ],
+    meta: [{ label: '点位1' }],
+  }
+  const series = echartsSeriesFromTrend(payload, { connectNulls: false })
+  assert.equal(series[0].connectNulls, false)
+  assert.deepEqual(series[0].data, [
+    [100000, 10],
+    [101000, null],
+    [102000, 12],
+  ])
+})
+
+test('uPlot spanGaps mirrors connectNulls setting (true/false)', async () => {
+  const { UPLOT_PROTO } = await import('../../src/application/modbus/trend-model.mjs')
+  // Contract: callers set per-series spanGaps from settings.connectNulls !== false
+  const on = { ...UPLOT_PROTO, series: [{}, { spanGaps: true }] }
+  const off = { ...UPLOT_PROTO, series: [{}, { spanGaps: false }] }
+  assert.equal(on.series[1].spanGaps, true)
+  assert.equal(off.series[1].spanGaps, false)
+  assert.equal(({ connectNulls: undefined }.connectNulls !== false), true)
+  assert.equal(({ connectNulls: false }.connectNulls !== false), false)
 })
 

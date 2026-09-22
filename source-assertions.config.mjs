@@ -17,13 +17,19 @@ export default {
       file: 'test/alpha3-contract.test.mjs',
       purpose: 'architecture-boundary',
       reason: 'Host/Client 分层与兼容入口契约',
-      targets: ['client.js', 'host.js', 'src/ui/client/client-entry.mjs'],
+      targets: ['client.js', 'host.js', 'src/ui/client/client-entry.mjs', 'src/interfaces/web/vision-web-compat.mjs'],
     },
     {
       file: 'test/alpha3-remote-spike.test.mjs',
       purpose: 'architecture-boundary',
       reason: '远程传输 ADR 与 Client 入口契约',
-      targets: ['docs/architecture/ADR-012-remote-transport.md', 'host.js', 'package.json', 'src/ui/client/client-entry.mjs'],
+      targets: [
+        'docs/architecture/ADR-012-remote-transport.md',
+        'host.js',
+        'package.json',
+        'src/ui/client/client-entry.mjs',
+        'src/interfaces/web/vision-web-compat.mjs',
+      ],
     },
     {
       file: 'test/architecture/debug-boundary.test.mjs',
@@ -36,6 +42,12 @@ export default {
       purpose: 'architecture-boundary',
       reason: '门禁脚本不得依赖 shell glob',
       targets: ['bench-hmi.mjs', 'bench-runtime.mjs', 'package.json', 'scripts/run-tests.mjs'],
+    },
+    {
+      file: 'test/architecture/ui-dependency-gates.test.mjs',
+      purpose: 'architecture-boundary',
+      reason: 'P5-1 UI 依赖方向门禁：components/patterns 不得依赖功能域，禁止直连 vendor npm',
+      targets: ['host.js', 'node_modules/dependency-cruiser/bin/dependency-cruise.mjs', 'runtime/io'],
     },
     {
       file: 'test/architecture/workspace-single-writer.test.mjs',
@@ -88,7 +100,7 @@ export default {
       file: 'test/project/file-security.test.mjs',
       purpose: 'security-banned-pattern',
       reason: '路径穿越与命令注入防护',
-      targets: ['host.js', 'src/interfaces/rpc/vision-rpc-router.mjs'],
+      targets: ['host.js', 'src/interfaces/rpc/vision-rpc-router.mjs', 'src/interfaces/web/vision-web-compat.mjs'],
     },
     {
       file: 'test/release.test.mjs',

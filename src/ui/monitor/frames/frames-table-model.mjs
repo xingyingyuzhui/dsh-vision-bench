@@ -1,5 +1,6 @@
 import {
   mergeFramesDedup,
+  projectTransactionsToWireFrames,
   rawLineId,
   selectProtocolFrames,
 } from '../../../domain/modbus/frames-model.mjs'
@@ -49,23 +50,41 @@ export function mapSerialLineToFrame(line, idx, sel) {
  *   framesByConnection: Record<string, any[]>,
  *   frameScope: { cwd?: string, sessionId?: string, isShared?: boolean },
  *   serial: { lines?: any[] },
+ *   connections?: any[],
  *   viewClearedAt: number,
  * }} opts
  */
+export function simConnectionIds(connections, sel) {
+  const ids = (Array.isArray(connections) ? connections : [])
+    .filter((c) => c && c.id && (c.conn?.sim === true || c.sim === true))
+    .map((c) => c.id)
+  if (sel?.kind === 'conn') return ids.includes(sel.connectionId) ? [sel.connectionId] : []
+  return ids
+}
+
 export function buildLiveFrames(opts) {
-  const { mode, sel, framesByConnection, frameScope, serial, viewClearedAt } = opts
+  const { mode, sel, framesByConnection, frameScope, serial, connections, viewClearedAt } = opts
   let liveFrames = []
   if (mode === 'proto') {
     if (sel.kind === 'conn') {
       const persistedArray = framesByConnection[sel.connectionId]
       const mem = getFramesLog(frameScope, sel.connectionId)
-      liveFrames = mergeFramesDedup(persistedArray, mem, 500)
+      liveFrames = projectTransactionsToWireFrames(mergeFramesDedup(persistedArray, mem, 500))
     } else {
-      liveFrames = mergeFramesDedup(selectProtocolFrames(framesByConnection, 'all'), getFramesLog(frameScope), 1000)
+      liveFrames = projectTransactionsToWireFrames(
+        mergeFramesDedup(selectProtocolFrames(framesByConnection, 'all'), getFramesLog(frameScope), 1000),
+      )
     }
   } else {
     const lines = Array.isArray(serial?.lines) ? serial.lines : []
     liveFrames = lines.map((l, idx) => mapSerialLineToFrame(l, idx, sel))
+    const simIds = simConnectionIds(connections, sel)
+    if (simIds.length) {
+      const simMap = {}
+      for (const id of simIds) simMap[id] = framesByConnection?.[id] || []
+      const simWire = projectTransactionsToWireFrames(selectProtocolFrames(simMap, 'all'))
+      liveFrames = mergeFramesDedup(liveFrames, simWire, 2000)
+    }
   }
   if (viewClearedAt > 0) {
     liveFrames = liveFrames.filter((f) => (f.t || f.at || 0) > viewClearedAt)

@@ -5,6 +5,7 @@ import { createElement } from 'react'
 import {
   buildFramePortOptions,
   framesShouldStickToBottom,
+  framesShouldStickToTop,
   mergeFramesDedup,
   parseFramePortSelection,
   resolveFrameSelection,
@@ -52,13 +53,29 @@ test('frames identity: parseFramePortSelection maps explicit internal types', as
   assert.deepEqual(parseFramePortSelection(undefined), { kind: 'all', connectionId: '', port: '' })
 })
 
-test('frames identity: options list only live connected RTU sources', async () => {
+test('frames identity: proto lists configured connections; raw keeps live RTU only', async () => {
   const live = [{ connectionId: 'c1', port: 'COM3', state: 'connected' }]
   const proto = buildFramePortOptions(CONNECTIONS, ['COM3', 'COM4', 'COM7'], 'proto', live)
   assert.equal(proto[0].value, 'all')
-  assert.ok(proto.some((o) => o.value === 'conn:c1' && o.kind === 'connected'))
-  assert.ok(!proto.some((o) => o.value === 'conn:c2'), 'unconnected COM4 is hidden')
+  assert.ok(proto.some((o) => o.value === 'conn:c1' && o.kind === 'configured'))
+  assert.ok(proto.some((o) => o.value === 'conn:c2'), 'proto includes unconnected configured conn')
   assert.ok(!proto.some((o) => String(o.value).startsWith('raw:')), 'must not list unconfigured COM')
+  const raw = buildFramePortOptions(CONNECTIONS, ['COM3', 'COM4', 'COM7'], 'raw', live)
+  assert.ok(raw.some((o) => o.value === 'conn:c1' && o.kind === 'connected'))
+  assert.ok(!raw.some((o) => o.value === 'conn:c2'), 'raw hides unconnected COM4')
+})
+
+test('frames identity: raw lists connected sim sources', async () => {
+  const conns = [
+    { id: 'c1', name: '真机', conn: { mode: 'rtu', port: 'COM3' } },
+    { id: 'sim1', name: '仿真', conn: { mode: 'rtu', port: 'COM9', sim: true } },
+  ]
+  const live = [
+    { connectionId: 'c1', port: 'COM3', state: 'connected' },
+    { connectionId: 'sim1', port: 'COM9', state: 'connected' },
+  ]
+  const raw = buildFramePortOptions(conns, [], 'raw', live)
+  assert.ok(raw.some((o) => o.value === 'conn:sim1'), 'raw includes connected sim')
 })
 
 test('frames identity: selecting COM3 only shows c1 frames, COM4 only c2, all merges by time', async () => {
@@ -110,6 +127,12 @@ test('frames auto-follow only at bottom', async () => {
   assert.equal(framesShouldStickToBottom(700, 1000, 300), true)
   assert.equal(framesShouldStickToBottom(695, 1000, 300), true)
   assert.equal(framesShouldStickToBottom(500, 1000, 300), false)
+})
+
+test('frames newest-first auto-follow only at top', async () => {
+  assert.equal(framesShouldStickToTop(0), true)
+  assert.equal(framesShouldStickToTop(4), true)
+  assert.equal(framesShouldStickToTop(20), false)
 })
 
 test('cli wiring: frames/clear endpoint exists in RPC contract', () => {

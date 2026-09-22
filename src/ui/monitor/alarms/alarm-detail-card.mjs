@@ -10,6 +10,7 @@ import {
   formatAlarmTriggerCondition,
   formatFullDateTime,
 } from './alarm-format.mjs'
+import { renderEmptyState } from '../../components/empty-state.mjs'
 
 export function createAlarmDetailCard(React, t) {
   const el = React.createElement
@@ -23,7 +24,11 @@ export function createAlarmDetailCard(React, t) {
         'div',
         { className: 'dvb-detail-card dvb-alarm-detail is-empty' },
         el('div', { className: 'dvb-detail-head' }, el('span', { className: 'dvb-detail-title' }, '告警详情')),
-        el('div', { className: 'dvb-detail-empty-hint' }, '请从左侧列表选择一条告警查看详情'),
+        renderEmptyState(el, {
+          kind: 'empty',
+          detail: '请从左侧列表选择一条告警查看详情',
+          className: 'dvb-detail-empty-hint',
+        }),
       )
     }
 
@@ -195,7 +200,6 @@ export function createAlarmDetailCard(React, t) {
           },
           isAcked ? '已确认告警' : '确认告警',
         ),
-        el('div', { className: 'dvb-detail-action-subtext' }, '确认表示已知悉，不代表故障恢复。'),
         pt
           ? el(
               'button',

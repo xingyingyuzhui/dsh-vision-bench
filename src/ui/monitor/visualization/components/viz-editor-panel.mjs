@@ -1,6 +1,7 @@
 // TaskP2/0.20.0: 可视化组件编辑/新建抽屉 VizEditorPanel
 // 现代化右侧滑出抽屉形态：组件名称、可视化类型卡片、高级图表配置、实时预览及关联点位选择。
 
+import { toBodyPortal } from '../../../common/body-portal.mjs'
 import { getCustomSelect } from '../../../components/custom-select.mjs'
 import { renderPreviewChart } from '../hooks/viz-preview-chart.mjs'
 import { TYPE_DEFS } from './viz-editor-constants.mjs'
@@ -108,7 +109,7 @@ export function createVizEditorPanel(React, t) {
 
     const modalTitle = editor.id ? t('vizEdit') || '编辑组件' : t('vizNew') || '新建组件'
 
-    return el(
+    return toBodyPortal(el(
       'div',
       {
         className: 'dvb-mask dvb-viz-modal-mask',
@@ -211,6 +212,6 @@ export function createVizEditorPanel(React, t) {
           ),
         ),
       ),
-    )
+    ))
   }
 }

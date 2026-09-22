@@ -24,7 +24,6 @@ export function createWidgetTabRenderers(el) {
           ]
         : [
             sec('基础内容'),
-            rowSwitch('showTitle', '显示标题'),
             rowInp('单位', 'yUnit', '℃, rpm'),
             rowSel('小数位数', 'valueDecimals', DEC_OPTS),
             sec('数值样式'),
@@ -34,7 +33,6 @@ export function createWidgetTabRenderers(el) {
             rowPills('单位位置', 'unitPos', P('right:数值右侧,below:数值下方'), 'right', 2),
             sec('辅助信息'),
             rowSwitch('showStatus', '显示状态'),
-            rowSwitch('showUpdatedAt', '显示更新时间'),
             sec('卡片外观'),
             rowColor('背景颜色', 'cardBg', '#FFFFFF'),
             rowSwitch('cardBorder', '边框', true),
@@ -54,13 +52,11 @@ export function createWidgetTabRenderers(el) {
         ? [
             sec('状态反馈'),
             rowSwitch('showFeedback', '显示反馈状态', true, 4),
-            rowSwitch('showUpdatedAt', '显示更新时间', true, 4),
             rowInp('提示文案', 'hintText', '实际状态以设备反馈为准。', '', 4),
             el('div', { key: 'h', className: 'dvb-hint dvb-viz-span-4' }, '执行中：等待设备回读。离线：开关禁用，保留上次状态。'),
           ]
         : [
             sec('基础内容'),
-            rowSwitch('showTitle', '显示标题', true, 4),
             sec('控件样式'),
             rowPills('展示形式', 'switchStyle', P('toggle:滑动开关,buttons:双按钮'), 'toggle', 4),
             rowPills('控件尺寸', 'switchSize', P('sm:小,md:中,lg:大'), 'md', 4),

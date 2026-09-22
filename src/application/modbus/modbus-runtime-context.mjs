@@ -20,6 +20,7 @@ import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from './target-re
 import { endpointFingerprint, endpointLabelText, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { findPointV3, fnOfPoint } from '../../domain/modbus/function-code.mjs'
+import { MAX_FRAME_HEX_CHARS } from '../../domain/modbus/frames-buffer.mjs'
 import { compactPointRow, isStaleValue } from '../../domain/modbus/point-value.mjs'
 import { stampPoints } from '../../domain/modbus/unit-id.mjs'
 import { connReady, deviceDisabledOf, pickConnPatch, targetRequired } from '../../domain/modbus/validation.mjs'
@@ -42,6 +43,7 @@ import {
  * @typedef {import('../../types/modbus.js').TransportResult} TransportResult
  * @typedef {import('../../types/workspace.js').Connection} Connection
  * @typedef {import('../../types/workspace.js').Device} Device
+ * @typedef {import('../../types/workspace.js').Point} Point
  * @typedef {import('../../types/workspace.js').PointValue} PointValue
  */
 
@@ -111,8 +113,8 @@ export const createTransactionFrame = (label, frames, extra = {}) => {
     label,
     request: req,
     response: res,
-    requestHex: String(req).slice(0, 400),
-    responseHex: String(res).slice(0, 400),
+    requestHex: String(req).replace(/[^0-9a-f]/gi, '').toUpperCase().slice(0, MAX_FRAME_HEX_CHARS),
+    responseHex: String(res).replace(/[^0-9a-f]/gi, '').toUpperCase().slice(0, MAX_FRAME_HEX_CHARS),
     frameFormat: String(frames?.frameFormat || extra.frameFormat || ''),
     trace: frames && Array.isArray(frames.trace) ? frames.trace : [],
     unitId: Number.isFinite(Number(extra.unitId)) ? Math.trunc(Number(extra.unitId)) : 1,
@@ -127,7 +129,7 @@ export const frameEntry = createTransactionFrame
 
 /**
  * @param {PointValue[]} values
- * @param {ModbusWorkspace} pack
+ * @param {{ points?: Point[] }} pack
  * @param {ReadBatch} batch
  */
 export const pointValuesOfBatch = (values, pack, batch) => {

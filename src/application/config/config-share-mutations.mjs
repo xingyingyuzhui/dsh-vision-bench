@@ -22,6 +22,7 @@ export function applyShare(workspace, op, value, sessionId) {
       error: ran.error,
       needsConfirm: ran.needsConfirm === true,
       revoked: ran.revoked || [],
+      conflicts: ran.conflicts || [],
     }
   }
   workspace.modbus = ran.modbus
