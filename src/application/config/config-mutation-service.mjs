@@ -6,7 +6,7 @@ import { requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
 import { listConnectionStates } from '../../infrastructure/modbus/serial-monitor.mjs'
 import { normalizeWorkspace, workspaceKey } from '../../infrastructure/store/workspace-store.mjs'
 import { SESSION_SCOPED_SCOPES, parseOperation } from '../../domain/config/config-operation.mjs'
-import { isScopePartitioned, omitSessionConfigs } from '../../domain/modbus/config-scope.mjs'
+import { isScopePartitioned, isCategoryShared, normalizeScopeSessionId, omitSessionConfigs } from '../../domain/modbus/config-scope.mjs'
 import { ERROR_CODES, fail } from '../../domain/modbus/errors.mjs'
 import { createWorkspaceRepository } from '../../infrastructure/persistence/workspace-repository.mjs'
 import { claimLegacyPrivate, ensureScopeFields, foldModbusFromSession, projectModbusForSession } from '../modbus/config-scope-service.mjs'
@@ -27,14 +27,35 @@ const TIMELINE_WINDOW = 360
  * devices — check `applied.workspace.modbus.devices` (the post-op array),
  * never a pre-op sessionConfigs snapshot (that misses the un-folded append).
  *
+ * `deviceTarget` is the layer the write actually lands in (the fold target from
+ * `resolveMutationScope`): conflicts are reported against that layer, not
+ * guessed from "sessionId present ⇒ private" (review7 R2). share.* runs its own
+ * raw candidate checks in `applyShareFlags` and skips this generic pass.
+ *
  * @param {any} workspace
- * @param {{ scope: string, sessionId: string }} ctx
+ * @param {{ layer: string, sessionId: string }} deviceTarget
  */
-function validateMutatedDeviceLayer(workspace, ctx) {
+function validateMutatedDeviceLayer(workspace, deviceTarget) {
   const devices = workspace?.modbus?.devices
   if (!Array.isArray(devices)) return { ok: true }
-  const layer = ctx.scope === 'share' ? 'top' : ctx.sessionId ? 'private' : 'top'
-  return validateLayerDeviceIds(devices, { layer, sessionId: ctx.sessionId || '' })
+  return validateLayerDeviceIds(devices, deviceTarget)
+}
+
+/**
+ * Which config layer a device write lands in — must match the actual fold
+ * target (review7 R2 fixed field semantics):
+ * - connections shared effective        → shared layer (no owning session)
+ * - else with a sessionId               → that session's private layer
+ * - else (unpartitioned legacy top)     → top layer
+ *
+ * @param {any} base layered modbus the operation runs against
+ * @param {string} sessionId
+ * @returns {{ layer: string, sessionId: string }}
+ */
+function deviceWriteTarget(base, sessionId) {
+  if (isCategoryShared(base.share, 'connections')) return { layer: 'shared', sessionId: '' }
+  const sid = normalizeScopeSessionId(sessionId)
+  return sid ? { layer: 'private', sessionId: sid } : { layer: 'top', sessionId: '' }
 }
 
 /**
@@ -96,8 +117,12 @@ export function createConfigMutationService(deps = {}) {
       )
       if (!applied.ok) return applied
       // Raw operation result — BEFORE fold/normalize can dedupe device ids.
-      const identity = validateMutatedDeviceLayer(applied.workspace, { scope, sessionId })
-      if (!identity.ok) return identity
+      // Reported against the layer the fold writes into (share.* validates its
+      // own raw candidates in applyShareFlags and carries no deviceTarget).
+      if (scoped.deviceTarget) {
+        const identity = validateMutatedDeviceLayer(applied.workspace, scoped.deviceTarget)
+        if (!identity.ok) return identity
+      }
       const errors = validateWorkspaceConfig(applied.workspace)
       if (errors.length) {
         return { ok: false, errorCode: 'CONFIG_INVALID', error: errors.join('；') }
@@ -200,7 +225,7 @@ export async function mutateConfig(spec) {
  * @param {any} current layered workspace loaded inside the repository lock
  * @param {string} sessionId
  * @param {string} scope
- * @returns {{ ok: true, workspace: any, base: any, projected: boolean } | { ok: false, errorCode: string, error: string, retryable: boolean, details: Record<string, unknown> }}
+ * @returns {{ ok: true, workspace: any, base: any, projected: boolean, deviceTarget?: { layer: string, sessionId: string } } | { ok: false, errorCode: string, error: string, retryable: boolean, details: Record<string, unknown> }}
  */
 function resolveMutationScope(current, sessionId, scope) {
   if (scope === 'share') {
@@ -226,6 +251,7 @@ function resolveMutationScope(current, sessionId, scope) {
   }
   const claimed = claimLegacyPrivate(current.modbus, sessionId)
   const base = claimed.modbus
+  const deviceTarget = deviceWriteTarget(base, sessionId)
   if (!sessionId) {
     if (SESSION_SCOPED_SCOPES.has(scope) && isScopePartitioned(base)) {
       return {
@@ -236,13 +262,14 @@ function resolveMutationScope(current, sessionId, scope) {
         details: {},
       }
     }
-    return { ok: true, workspace: current, base, projected: false }
+    return { ok: true, workspace: current, base, projected: false, deviceTarget }
   }
   return {
     ok: true,
     workspace: { ...current, modbus: projectModbusForSession(base, sessionId) },
     base,
     projected: true,
+    deviceTarget,
   }
 }
 

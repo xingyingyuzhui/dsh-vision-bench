@@ -313,9 +313,11 @@ export function applyShareFlags(modbus, sessionId, nextShare, opts = {}) {
   // Judge the RESULTING candidate layer from RAW rows (not yet deduped).
   // Publish replaces the category with this session's slice — twins inside that
   // raw slice are duplicates; a legal replacement of one shared d1 by one
-  // private d1 is not.
+  // private d1 is not. Conflicts describe the layer the candidate would be
+  // saved into: publish lands in the shared layer (no owning session), revoke
+  // lands in this session's private layer (review7 R2).
   if (published.includes('connections')) {
-    const deviceCheck = validateLayerDeviceIds(rawPrivDevices, { layer: 'private', sessionId: sid })
+    const deviceCheck = validateLayerDeviceIds(rawPrivDevices, { layer: 'shared', sessionId: '' })
     if (!deviceCheck.ok) return deviceCheck
   } else if (revoked.includes('connections')) {
     // Revoke copies shared into this session's private layer.
