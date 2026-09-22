@@ -31,6 +31,7 @@ import { findPointV3, fnOfPoint } from '../../domain/modbus/function-code.mjs'
 import { compactPointRow, isStaleValue } from '../../domain/modbus/point-value.mjs'
 import { stampPoints } from '../../domain/modbus/unit-id.mjs'
 import { resolvePollSessionOwnership, resolvePollTargets } from './poll-session-ownership.mjs'
+import { validatePollRuntimeIdentities } from './poll-runtime-identity.mjs'
 export { resolvePollSessionOwnership, resolvePollTargets }
 import {
   isScopePartitioned,
@@ -178,6 +179,21 @@ export const modbusPoll = async (home, cwd, opts) => {
   // block a target that does have collectible points.
   const batchHasPoints = preparedTargets.some((t) => t.points.length > 0)
   if (!batchHasPoints) return { ok: false, error: '无点位，请先添加点位' }
+  // Runtime pointId identity conflicts must be rejected BEFORE transport/commit.
+  const identityCheck = validatePollRuntimeIdentities(workspace, preparedTargets)
+  if (!identityCheck.ok) {
+    return {
+      ok: false,
+      skipped: true,
+      error: identityCheck.error,
+      errorCode: identityCheck.errorCode,
+      reason: identityCheck.reason,
+      conflicts: identityCheck.conflicts,
+      polling: workspace.modbus?.polling,
+      pollingByConnection: workspace.modbus?.pollingByConnection,
+      values: workspace.modbus?.values,
+    }
+  }
   if (hasRunning(workspace, 'read')) {
     return {
       ok: true,
