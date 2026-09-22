@@ -136,39 +136,40 @@ export function projectFrames(args, result) {
 }
 
 /**
- * @param {any} args
+ * Build one series with a continuous newest suffix of `keep` samples.
+ * keep=0 is explicit empty — `slice(-0)` would return the entire array.
+ * @param {any} series
+ * @param {number} keep
+ */
+function buildSeriesPage(series, keep) {
+  const all = Array.isArray(series.samples) ? series.samples : []
+  const k = Number.isFinite(keep) && keep > 0 ? Math.trunc(keep) : 0
+  const samples = k > 0 ? all.slice(-k) : []
+  const count = Number(series.count) || all.length
+  return {
+    pointId: series.pointId,
+    name: series.name,
+    connectionId: series.connectionId,
+    deviceId: series.deviceId,
+    unit: series.unit,
+    count,
+    returned: samples.length,
+    samples,
+    hasMore: count > samples.length,
+    oldestReturnedAt: samples.length ? Number(samples[0][0]) || 0 : null,
+  }
+}
+
+/**
+ * @param {any[]} projectedSeries
+ * @param {number} limit
+ * @param {any} trend
  * @param {any} result
  */
-export function projectTrend(args, result) {
-  const trend = result.trend && typeof result.trend === 'object' ? { ...result.trend } : {}
-  /** @type {any[]} */
-  const series = Array.isArray(trend.series) ? trend.series : []
-  let total = 0
-  let returned = 0
-  const projectedSeries = series.map((/** @type {any} */ s) => {
-    const count = Number(s?.count) || (Array.isArray(s?.samples) ? s.samples.length : 0)
-    const samples = Array.isArray(s?.samples) ? s.samples : []
-    total += count
-    returned += samples.length
-    const oldestReturnedAt = samples.length
-      ? Number(s.oldestReturnedAt) || Number(samples[0][0]) || 0
-      : 0
-    const hasMore = typeof s.hasMore === 'boolean' ? s.hasMore : count > samples.length
-    return {
-      pointId: s.pointId,
-      name: s.name,
-      connectionId: s.connectionId,
-      deviceId: s.deviceId,
-      unit: s.unit,
-      count,
-      returned: samples.length,
-      samples,
-      hasMore,
-      oldestReturnedAt,
-    }
-  })
-  const limit = Number(args?.limit)
-  const projected = {
+function assembleTrendResult(projectedSeries, limit, trend, result) {
+  const total = projectedSeries.reduce((n, s) => n + (Number(s.count) || 0), 0)
+  const returned = projectedSeries.reduce((n, s) => n + s.samples.length, 0)
+  return {
     ...pickSafetyFields(result),
     trend: {
       ...trend,
@@ -180,25 +181,42 @@ export function projectTrend(args, result) {
       limit: Number.isFinite(limit) && limit > 0 ? Math.trunc(limit) : undefined,
     },
   }
-  return enforceBudget(projected, AGENT_TEXT_CAPS.trendBytes, 'trend 超预算：减小 limit 或缩小 pointIds', (p) => ({
-    ...p,
-    trend: {
-      ...p.trend,
-      series: (p.trend?.series || []).map((/** @type {any} */ s) => {
-        const samples = (s.samples || []).slice(0, 5)
-        const oldestReturnedAt = samples.length ? Number(samples[0][0]) || 0 : 0
-        return {
-          ...s,
-          samples,
-          returned: samples.length,
-          hasMore: true,
-          oldestReturnedAt,
-        }
-      }),
-      nextCursor: null,
-    },
+}
+
+/**
+ * @param {any} args
+ * @param {any} result
+ */
+export function projectTrend(args, result) {
+  const trend = result.trend && typeof result.trend === 'object' ? { ...result.trend } : {}
+  /** @type {any[]} */
+  const series = Array.isArray(trend.series) ? trend.series : []
+  const limit = Number(args?.limit)
+  const cap = AGENT_TEXT_CAPS.trendBytes
+  // Full candidate page first (newest continuous window as provided).
+  const full = series.map((/** @type {any} */ s) => {
+    const count = Number(s?.count) || (Array.isArray(s?.samples) ? s.samples.length : 0)
+    const samples = Array.isArray(s?.samples) ? s.samples : []
+    return { ...s, count, samples }
+  })
+  let keep = full.reduce((m, s) => Math.max(m, s.samples.length), 0)
+  for (; keep >= 0; keep--) {
+    const projectedSeries = full.map((s) => buildSeriesPage(s, keep))
+    const projected = assembleTrendResult(projectedSeries, limit, trend, result)
+    if (utf8ByteLength(projected) <= cap) {
+      const shrunk = projectedSeries.some((s) => s.hasMore)
+      return shrunk ? { ...projected, truncated: true } : projected
+    }
+    if (keep === 0) break
+  }
+  // Even one sample per series does not fit: explicit overrun, never a fake empty ok page.
+  const one = full.map((s) => buildSeriesPage(s, s.samples.length ? 1 : 0))
+  return {
+    ...assembleTrendResult(one, limit, trend, result),
     truncated: true,
-  }))
+    overrun: true,
+    hint: 'trend 超预算：缩小 pointIds 或降低 limit',
+  }
 }
 
 /**

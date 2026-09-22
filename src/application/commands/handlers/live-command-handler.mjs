@@ -185,8 +185,13 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
       const rt = resolveTarget(pack, { connectionId })
       if (!rt.ok) return { ok: false, action, error: rt.error, errorCode: rt.errorCode }
     }
-    const start = Number(args.start) || Date.now() - 5 * 60 * 1000
-    const end = Number(args.end) || Date.now()
+    // `start`/`end` accept explicit 0 (paging from the oldest sample).
+    const start =
+      args.start != null && Number.isFinite(Number(args.start))
+        ? Number(args.start)
+        : Date.now() - 5 * 60 * 1000
+    const end =
+      args.end != null && Number.isFinite(Number(args.end)) ? Number(args.end) : Date.now()
     const scopeIds = trendKey
       ? [resolvedPointId]
       : pointIds.length
