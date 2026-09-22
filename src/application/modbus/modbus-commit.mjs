@@ -1,4 +1,5 @@
 // @ts-check
+import { randomUUID } from 'node:crypto'
 import { evaluateAlarms } from '../../domain/modbus/alarm-model.mjs'
 import { COND_ACTIVE, PROCESS } from '../../domain/modbus/alarm-constants.mjs'
 import { normalizeModbus } from './modbus-migration.mjs'
@@ -44,6 +45,31 @@ const appendFrame = (map, connectionId, frame) => {
   ring.push(frame)
   next[cid] = ring.slice(-500)
   return next
+}
+
+/**
+ * Stamp a committed `alarms.fired` transition with a stable notify identity.
+ * `eventId` is generated once per committed migration (not alarm.id / firstAt);
+ * all subscribers and retries reuse the same id. `at` is this transition time.
+ *
+ * @param {any} item
+ * @returns {any}
+ */
+export const stampAlarmTransitionIdentity = (item) => {
+  if (!item || typeof item !== 'object') return item
+  const transitionAt =
+    Number(item.at) ||
+    Number(item.eventAt) ||
+    Number(item.commitSeq) ||
+    Number(item.alarm?.lastAt) ||
+    Number(item.alarm?.firstAt) ||
+    Date.now()
+  return {
+    ...item,
+    eventId: item.eventId || item.alarm?.eventId || randomUUID(),
+    at: transitionAt,
+    eventAt: transitionAt,
+  }
 }
 
 /**
@@ -187,7 +213,7 @@ const commit = (home, cwd, input, kind) =>
       workspace: { ...ws, modbus: { ...ws.modbus, ...patch } },
       drift: !!drift,
       alarms: {
-        fired: drift ? [] : fired,
+        fired: drift ? [] : fired.map(stampAlarmTransitionIdentity),
         recovered: drift ? [] : recovered,
         alarmState,
         alarmActive,

@@ -1,5 +1,6 @@
 // @ts-check
 // Emit journal + optional Agent followups only from committed alarm transitions.
+import { randomUUID } from 'node:crypto'
 import { decodeValue } from '../../domain/modbus/point-math.mjs'
 import { pointLabel } from '../../domain/modbus/point-model.mjs'
 import { runningTasks } from '../../domain/modbus/journal-model.mjs'
@@ -51,18 +52,25 @@ function alarmEventMeta(item, ctx = {}) {
     point?.connectionId || item?.connectionId || item?.alarm?.connectionId || '',
   )
   const kind = String(item?.kind || item?.alarm?.kind || '')
-  const transitionAt =
-    Number(item?.at) ||
-    Number(item?.eventAt) ||
-    Number(item?.commitSeq) ||
-    Number(item?.alarm?.firstAt) ||
-    Number(item?.alarm?.lastAt) ||
-    0
+  // Verifiable transition markers only (not episode firstAt/lastAt reuse).
+  const explicitTransitionAt =
+    Number(item?.at) || Number(item?.eventAt) || Number(item?.commitSeq) || 0
+  // eventAt is THIS migration time — prefer lastAt over firstAt.
+  const eventAt =
+    explicitTransitionAt || Number(item?.alarm?.lastAt) || Number(item?.alarm?.firstAt) || 0
   const realEventId = item?.eventId || item?.alarm?.eventId
-  const eventId = realEventId
-    ? String(realEventId)
-    : `alarm:${String(ctx.cwd || '')}:${String(ctx.sessionId || '')}:${connectionId}:${pointId}:${kind}:${transitionAt}`
-  return { eventId, pointId, connectionId, eventAt: transitionAt, kind }
+  let eventId
+  if (realEventId) {
+    eventId = String(realEventId)
+  } else if (explicitTransitionAt) {
+    // Fallback for old callers / synthetic tests that carry a transition time.
+    eventId = `alarm:${String(ctx.cwd || '')}:${String(ctx.sessionId || '')}:${connectionId}:${pointId}:${kind}:${explicitTransitionAt}`
+  } else {
+    // No verifiable transition time (e.g. suppress-window re-fire reuses firstAt).
+    // Mint a fresh id so distinct events are never permanently merged.
+    eventId = `alarm:${randomUUID()}`
+  }
+  return { eventId, pointId, connectionId, eventAt, kind }
 }
 
 /**
