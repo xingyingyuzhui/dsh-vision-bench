@@ -258,6 +258,8 @@ export async function emitCommittedAlarmTransitions(home, cwd, alarms, opts = {}
         }
         for (const recipient of match.recipients) {
           if (!isAlarmRuntimeCurrent(runtimeToken)) return { notified, recorded, failed, queued, ambiguousOwner }
+          // Snapshot is stale the moment A's send is in flight — recheck before claim.
+          if (!recipientStillAuthorized(home, cwd, item, recipient)) continue
           const meta = alarmEventMeta(item, { cwd, sessionId: recipient.sessionId })
           const live = recheckAlarmCurrent(home, cwd, item, recipient.sessionId)
           // Historical (deleted/cleared) events stay in the journal only — not current faults.
