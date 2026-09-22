@@ -33,11 +33,10 @@ import { stampPoints } from '../../domain/modbus/unit-id.mjs'
 import { resolvePollSessionOwnership, resolvePollTargets } from './poll-session-ownership.mjs'
 import { validatePollRuntimeIdentities } from './poll-runtime-identity.mjs'
 import {
+  preparePollReadPlan,
   prepareReadTargets,
   prepareTargetViews,
-  validateDeviceRouting,
 } from './poll-target-preparation.mjs'
-import { resolvePointDevice } from '../../domain/modbus/device-identity.mjs'
 export { resolvePollSessionOwnership, resolvePollTargets }
 import {
   isScopePartitioned,
@@ -167,15 +166,15 @@ export const modbusPoll = async (home, cwd, opts) => {
   }))
   const batchHasPoints = readTargets.some((t) => t.points.length > 0)
   if (!batchHasPoints) return { ok: false, error: '无点位，请先添加点位' }
-  const routing = validateDeviceRouting(executable)
-  if (!routing.ok) {
+  const plan = preparePollReadPlan(executable)
+  if (!plan.ok) {
     return {
       ok: false,
       skipped: true,
-      error: routing.error,
-      errorCode: routing.errorCode,
-      reason: routing.reason,
-      conflicts: routing.conflicts,
+      error: plan.error,
+      errorCode: plan.errorCode,
+      reason: plan.reason,
+      conflicts: plan.conflicts,
       polling: workspace.modbus?.polling,
       pollingByConnection: workspace.modbus?.pollingByConnection,
       values: workspace.modbus?.values,
@@ -250,7 +249,6 @@ export const modbusPoll = async (home, cwd, opts) => {
         continue
       }
       const transport = transportOf(opts)
-      const scopes = planScopedReadBatches(stampPoints({ ...tpack, points: pts }))
       const interval = pollingByConnection[connId] || {
         enabled: false,
         intervalMs: 1000,
@@ -259,15 +257,13 @@ export const modbusPoll = async (home, cwd, opts) => {
         error: '',
       }
       let connOk = true
+      const planned = (plan.targets || []).find(
+        (t) => t.connectionId === connId && (t.sourceSessionId || '') === (connObj.__sourceSessionId || ''),
+      )
+      const scopes = planned?.scopes || []
       for (const scope of scopes) {
-        const batchConnObj = tpack.connections.find((/** @type {any} */ c) => c.id === scope.connectionId) || connObj
-        const routed = resolvePointDevice(tpack, pts[0] || { deviceId: scope.deviceId }, scope.connectionId || connId)
-        const batchDevice = routed.ok
-          ? routed.device
-          : tpack.devices.find((/** @type {any} */ d) => d.id === scope.deviceId) || {
-              id: scope.deviceId,
-              unitId: scope.unitId,
-            }
+        const batchConnObj = scope.connection || connObj
+        const batchDevice = scope.device
         for (const batch of scope.batches) {
           if (aborted(signal)) {
             timedOut = true

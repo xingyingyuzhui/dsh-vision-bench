@@ -322,7 +322,10 @@ export const normalizePointV3 = (input) => {
   const raw = input && typeof input === 'object' ? input : {}
   const id = devText(raw.id, '') || genId('p')
   const connectionId = devText(raw.connectionId, '') || devText(raw.connId, '') || 'c1'
-  const deviceId = devText(raw.deviceId, '') || 'd1'
+  // Explicit empty/invalid deviceId must survive normalize so poll-time
+  // resolvePointDevice can reject it — never silently rebind to another device.
+  const deviceId =
+    raw.deviceId === undefined || raw.deviceId === null ? 'd1' : devText(raw.deviceId, '')
   const fnRaw = Number(raw.function ?? raw.fn)
   let fn = 3
   let area = devText(raw.area, '')
@@ -373,9 +376,8 @@ export const normalizePointsV3 = (list, connections, devices) => {
   const out = []
   for (const raw of list) {
     const p = normalizePointV3(raw)
-    // fix refs
+    // fix refs — connection may fall back; deviceId is never silently rebound.
     if (!validConnIds.has(p.connectionId)) p.connectionId = connections?.[0] ? connections[0].id : 'c1'
-    if (!validDevIds.has(p.deviceId)) p.deviceId = devices?.[0] ? devices[0].id : 'd1'
     if (seen.has(p.id)) continue
     seen.add(p.id)
     out.push(p)
