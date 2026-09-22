@@ -198,19 +198,16 @@ export function matchingAlarmRecipients(home, cwd, item, sourceSessionId) {
   const focus = ws?.focus
   if (focus?.request?.by === 'agent') {
     const req = focus.request
-    const focusSession = String(focus.sessionId || ws.session?.boundId || '')
-    const related =
-      (req.alarmId && (req.alarmId === pointId || req.alarmId === item?.alarm?.id)) ||
-      (req.pointId && req.pointId === pointId) ||
-      (req.connectionId && req.connectionId === connectionId && req.kind === 'alarm')
-    if (related) {
+    const focusSession = focusRecipientSession(ws)
+    const related = focusMatchesAlarm(req, item)
+    if (related && focusSession) {
       offer({
         sessionId: focusSession,
         commandId: '',
         testRunId: '',
         reason: 'agent-focus',
         explicitWatch: false,
-        authId: `focus:${req.alarmId || req.pointId || req.connectionId || ''}`,
+        authId: focusAuthorizationId(focus, focusSession),
       })
     }
   }
@@ -308,6 +305,58 @@ export function recipientStillLive(home, cwd, item, recipient, recheckAlarmCurre
 }
 
 /**
+ * Focus session: explicit focus.sessionId wins; boundId is fallback only.
+ * @param {any} workspace
+ * @returns {string}
+ */
+export function focusRecipientSession(workspace) {
+  const explicit = normalizeScopeSessionId(workspace?.focus?.sessionId)
+  if (explicit) return explicit
+  return normalizeScopeSessionId(workspace?.session?.boundId)
+}
+
+/**
+ * @param {any} request
+ * @param {any} item
+ * @returns {boolean}
+ */
+export function focusMatchesAlarm(request, item) {
+  if (!request) return false
+  const pointId = String(item?.point?.id || item?.pointId || item?.alarm?.pointId || '')
+  const connectionId = String(
+    item?.point?.connectionId || item?.connectionId || item?.alarm?.connectionId || '',
+  )
+  return !!(
+    (request.alarmId && (request.alarmId === pointId || request.alarmId === item?.alarm?.id)) ||
+    (request.pointId && request.pointId === pointId) ||
+    (request.connectionId && request.connectionId === connectionId && request.kind === 'alarm')
+  )
+}
+
+/**
+ * Stable focus authorization id: same session + same normalized request fields.
+ * New at/version ⇒ new identity. Never Date.now() or random here.
+ * @param {any} focus
+ * @param {string} resolvedSessionId
+ * @returns {string}
+ */
+export function focusAuthorizationId(focus, resolvedSessionId) {
+  const req = focus?.request || {}
+  return JSON.stringify([
+    String(resolvedSessionId || ''),
+    Number(req.at) || 0,
+    String(req.version ?? ''),
+    String(req.kind || ''),
+    String(req.connectionId || ''),
+    String(req.deviceId || ''),
+    String(req.pointId || ''),
+    String(req.alarmId || ''),
+    String(req.frameId || ''),
+    String(req.trendKey || ''),
+  ])
+}
+
+/**
  * Re-validate the ORIGINAL authorization reason. A retry must not silently
  * switch to another reason for the same session after the old watch/command dies.
  *
@@ -336,13 +385,14 @@ export function recipientStillAuthorized(home, cwd, item, recipient) {
   }
 
   if (recipient.reason === 'agent-focus') {
-    const req = workspace?.focus?.request
+    const focus = workspace?.focus
+    const req = focus?.request
     if (!req || req.by !== 'agent') return false
-    return !!(
-      (req.alarmId && (req.alarmId === pointId || req.alarmId === item?.alarm?.id)) ||
-      (req.pointId && req.pointId === pointId) ||
-      (req.connectionId && req.connectionId === connectionId && req.kind === 'alarm')
-    )
+    const sid = focusRecipientSession(workspace)
+    if (sid !== recipient.sessionId) return false
+    if (!focusMatchesAlarm(req, item)) return false
+    const authId = focusAuthorizationId(focus, sid)
+    return !recipient.authId || recipient.authId === authId
   }
 
   if (
