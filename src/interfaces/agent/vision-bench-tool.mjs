@@ -110,9 +110,9 @@ export function visionBenchTool(home) {
       'points：op=list|add|update|remove|clear。一次调用可以批量：op=add 用 points[{name,function,address,connectionId,deviceId,...}] 数组一次写入多个点；op=update 同样用 points[]；op=remove 用 ids[] 或 pointId。不要逐个 add。address 是协议地址（保持寄存器 0 = 40001），不要填 40001。clear 必须带 connectionId+deviceId。监视开关用 monitorEnabled；trendEnabled 只是旧别名，同请求传相反值会 FIELD_CONFLICT。' +
       'visualization：op=list|get|add|update|remove|layout。get 必须带 visualizationId（缺 ID 不会默认取第一个组件）。layout 必须携带 expectedConfigVersion 与 items[{id,x,y,w,h}]；CONFIG_DRIFT 后按 refresh 提示重新 list/get 再提交。' +
       '所有配置修改必须携带最近一次 status/list/get 返回的 configVersion（字段名 expectedConfigVersion；configVersion 为别名）。CONFIG_DRIFT 后必须重新读取配置，再基于新版本重试；不得把 actualVersion 当重试凭证。适用 config、configureConnection、points add/update/remove/clear、visualization add/update/remove/layout。status、points list、visualization list/get 不要求版本。' +
-      'frames/trend/alarm：需要 connectionId（alarm 仅有 alarmId、trend 仅有 trendKey 时可例外）；trend 的 limit 是每条序列的样本数。' +
+      'frames/trend/alarm：需要 connectionId（alarm 仅有 alarmId、trend 仅有 trendKey 时可例外）；trend 的 limit 是每条序列的样本数；trend 分页用每条 series 的 hasMore/oldestReturnedAt（再查 pointIds:[id], end:oldestReturnedAt-1），不是 nextCursor。' +
       'focus 会改变 UI 焦点；evidence[] 会追加日志——二者不是纯只读。' +
-      'alarm 带 watch/followup=true 才订阅过程量告警跟进；默认过程告警只记事件不唤醒 Agent。' +
+      'alarm 带 watch/followup=true 才订阅过程量告警跟进；watch/followup=false 取消本会话订阅（不需要 connectionId/alarmId）；二者同义，同时传且布尔值不同会 FIELD_CONFLICT。默认过程告警只记事件不唤醒 Agent。' +
       'manual：请求用户完成现场操作；' +
       'system.ping：无副作用探活 Host（不读写串口、不启动采集）。' +
       '配置修改立即生效并记入操作记录；向真实设备写值、烧录、复位仍需用户批准。',
@@ -332,11 +332,11 @@ export function visionBenchTool(home) {
         close: { type: 'boolean' },
         watch: {
           type: 'boolean',
-          description: 'action=alarm 时：true 订阅过程量告警 Agent 跟进；false 取消订阅',
+          description: 'action=alarm 时：true 订阅过程量告警 Agent 跟进；false 取消本会话订阅（不需要目标 ID）。与 followup 同义，同时传相反值返回 FIELD_CONFLICT',
         },
         followup: {
           type: 'boolean',
-          description: 'action=alarm 时与 watch 同义：显式要求 Agent 接收告警跟进',
+          description: 'action=alarm 时与 watch 同义：true 订阅，false 取消本会话订阅；同时传相反值返回 FIELD_CONFLICT',
         },
         monitorEnabled: {
           type: 'boolean',

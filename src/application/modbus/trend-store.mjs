@@ -85,6 +85,55 @@ export const sampleTrendValues = (trendIn, pointValues, pointsById) => {
 }
 
 /**
+ * Session-pack variant: name / unit / connection / device come from the given
+ * pack (private session table). Samples still come from the shared runtime map.
+ * Prefer passing `sharedTrend` series when the caller already loaded them.
+ *
+ * @param {any} pack session-projected modbus pack
+ * @param {any} [opts]
+ * @returns {any}
+ */
+export const readTrendSeriesFromPack = (pack, opts = {}) => {
+  const points = Array.isArray(pack?.points) ? pack.points : []
+  const ids =
+    Array.isArray(opts.pointIds) && opts.pointIds.length
+      ? opts.pointIds
+      : points
+          .filter((/** @type {any} */ p) => p.monitorEnabled === true || p.trendEnabled === true)
+          .slice(0, 8)
+          .map((/** @type {any} */ p) => p.id)
+  /** @type {Record<string, any>} */
+  const sharedById = {}
+  for (const s of Array.isArray(opts.sharedTrend) ? opts.sharedTrend : []) {
+    if (s && s.pointId) sharedById[s.pointId] = s
+  }
+  return ids.map((/** @type {any} */ pid) => {
+    const pt = points.find((/** @type {any} */ p) => p.id === pid)
+    const shared = sharedById[pid] || {
+      pointId: pid,
+      count: 0,
+      returned: 0,
+      samples: [],
+    }
+    const samples = Array.isArray(shared.samples) ? shared.samples : []
+    const oldest = samples.length ? samples[0][0] : 0
+    const count = Number(shared.count) || samples.length
+    return {
+      pointId: pid,
+      name: pt ? pt.name || functionTag(pt.function) + pt.address : shared.name || pid,
+      connectionId: pt ? pt.connectionId : shared.connectionId || '',
+      deviceId: pt ? pt.deviceId : shared.deviceId || '',
+      unit: pt ? pt.unit : shared.unit || '',
+      count,
+      returned: samples.length,
+      samples,
+      hasMore: count > samples.length,
+      oldestReturnedAt: oldest,
+    }
+  })
+}
+
+/**
  * @param {any} [home]
  * @param {any} [cwd]
  * @param {any} [opts]

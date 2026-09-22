@@ -7,9 +7,11 @@ import {
   AGENT_TREND_DEFAULT_LIMIT,
   TREND_KEEP,
   readTrendSeries,
+  readTrendSeriesFromPack,
 } from '../../modbus/trend-store.mjs'
 import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
 import {
+  cancelAlarmNotifyRetries,
   clearAgentAlarmWatch,
   setAgentAlarmWatch,
 } from '../../modbus/poll-alarm-notify.mjs'
@@ -145,9 +147,31 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
     if (!connectionId && !trendKey && pack.connections.length > 1) {
       return { ok: false, action, error: '缺少 connectionId', errorCode: 'TARGET_REQUIRED' }
     }
+    /** @type {string} */
+    let resolvedPointId = ''
+    /** @type {string} */
+    let resolvedConnectionId = connectionId
+    /** @type {string} */
+    let resolvedDeviceId = typeof args.deviceId === 'string' ? args.deviceId : ''
     if (trendKey) {
-      const rt = resolveTarget(pack, { connectionId, deviceId: args.deviceId, pointId: pointIds[0], trendKey })
+      const rt = resolveTarget(pack, {
+        connectionId: connectionId || undefined,
+        deviceId: args.deviceId,
+        pointId: pointIds[0],
+        trendKey,
+      })
       if (!rt.ok) return { ok: false, action, error: rt.error, errorCode: rt.errorCode }
+      resolvedPointId = rt.pointId
+      resolvedConnectionId = rt.connectionId || connectionId
+      resolvedDeviceId = rt.deviceId || resolvedDeviceId
+      if (pointIds.length && !pointIds.includes(resolvedPointId)) {
+        return {
+          ok: false,
+          action,
+          error: 'trendKey 与 pointIds 不一致',
+          errorCode: 'TARGET_MISMATCH',
+        }
+      }
     } else if (pointIds.length) {
       for (const pid of pointIds) {
         const rt = resolveTarget(pack, {
@@ -163,13 +187,15 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
     }
     const start = Number(args.start) || Date.now() - 5 * 60 * 1000
     const end = Number(args.end) || Date.now()
-    const scopeIds = pointIds.length
-      ? pointIds
-      : pack.points
-          .filter((/** @type {any} */ p) => !connectionId || p.connectionId === connectionId)
-          .filter((/** @type {any} */ p) => p.trendEnabled === true)
-          .slice(0, 8)
-          .map((/** @type {any} */ p) => p.id)
+    const scopeIds = trendKey
+      ? [resolvedPointId]
+      : pointIds.length
+        ? pointIds
+        : pack.points
+            .filter((/** @type {any} */ p) => !resolvedConnectionId || p.connectionId === resolvedConnectionId)
+            .filter((/** @type {any} */ p) => p.trendEnabled === true || p.monitorEnabled === true)
+            .slice(0, 8)
+            .map((/** @type {any} */ p) => p.id)
     const rawLimit = Number(args.limit)
     const limit =
       Number.isFinite(rawLimit) && rawLimit > 0
@@ -177,7 +203,14 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
         : origin.source === 'agent'
           ? AGENT_TREND_DEFAULT_LIMIT
           : TREND_KEEP
-    const series = readTrendSeries(home, room.cwd, { pointIds: scopeIds, start, end, limit })
+    // Metadata (name/unit/connection/device) comes from the SESSION pack.
+    const series = readTrendSeriesFromPack(pack, {
+      pointIds: scopeIds,
+      start,
+      end,
+      limit,
+      sharedTrend: readTrendSeries(home, room.cwd, { pointIds: scopeIds, start, end, limit }),
+    })
     const total = series.reduce((/** @type {number} */ n, /** @type {any} */ s) => n + (Number(s.count) || 0), 0)
     const returned = series.reduce(
       (/** @type {number} */ n, /** @type {any} */ s) => n + (Number(s.returned) || (s.samples || []).length),
@@ -187,7 +220,8 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
       ok: true,
       action,
       trend: {
-        connectionId: connectionId || pack.activeConnectionId,
+        connectionId: resolvedConnectionId || pack.activeConnectionId,
+        deviceId: resolvedDeviceId,
         pointIds: series.map((/** @type {any} */ sv) => sv.pointId),
         start,
         end,
@@ -201,6 +235,32 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
   }
 
   if (action === 'alarm') {
+    // Unsubscribe is session-local and must not require resolveTarget / alarm list.
+    if (origin.source === 'agent' && (args.watch === false || args.followup === false)) {
+      if (args.watch !== undefined && args.followup !== undefined && Boolean(args.watch) !== Boolean(args.followup)) {
+        return {
+          ok: false,
+          action,
+          errorCode: 'FIELD_CONFLICT',
+          error: 'watch 与 followup 语义不一致',
+        }
+      }
+      clearAgentAlarmWatch(room.cwd, origin.sessionId)
+      cancelAlarmNotifyRetries({ sessionId: origin.sessionId || undefined, cwd: room.cwd })
+      return {
+        ok: true,
+        action,
+        subscription: { cleared: true, sessionId: origin.sessionId || '' },
+      }
+    }
+    if (args.watch !== undefined && args.followup !== undefined && Boolean(args.watch) !== Boolean(args.followup)) {
+      return {
+        ok: false,
+        action,
+        errorCode: 'FIELD_CONFLICT',
+        error: 'watch 与 followup 语义不一致',
+      }
+    }
     const workspace = await ensureWorkspaceClaimed(home, room.cwd, origin.sessionId)
     const pack = modbusForSession(workspace, origin.sessionId)
     const connectionId = cid || ''
@@ -240,9 +300,6 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
           connectionId: resolvedConnectionId,
           ttlMs: Number(args.ttlMs) > 0 ? Number(args.ttlMs) : undefined,
         })
-      } else if (args.watch === false || args.followup === false) {
-        clearAgentAlarmWatch(room.cwd, origin.sessionId)
-        subscription = { cleared: true, sessionId: origin.sessionId || '' }
       }
     }
     /** @type {any} */

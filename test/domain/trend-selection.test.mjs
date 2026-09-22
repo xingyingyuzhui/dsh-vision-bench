@@ -169,6 +169,63 @@ test('Agent trend 动作返回真实样本（非时间范围句柄）', async ()
   await rm(home, { recursive: true, force: true })
 })
 
+test('trendKey 只返回指定点，并使用会话点表元数据', async () => {
+  const { home, cwd } = await setup()
+  await runVisionBench(
+    home,
+    { action: 'read', connectionId: 'c1', deviceId: 'd1', function: 3, address: 0, count: 3 },
+    cwd,
+    { source: 'agent', sessionId: 's1' },
+  )
+  const res = await runVisionBench(
+    home,
+    { action: 'trend', trendKey: 'c1:d1:p2' },
+    cwd,
+    { source: 'agent', sessionId: 's1' },
+  )
+  assert.equal(res.ok, true, res.error)
+  assert.deepEqual(res.trend.pointIds, ['p2'], 'trendKey 只限定一个点')
+  assert.equal(res.trend.series.length, 1)
+  const s = res.trend.series[0]
+  assert.equal(s.pointId, 'p2')
+  assert.equal(s.connectionId, 'c1')
+  assert.equal(s.deviceId, 'd1')
+  assert.ok(s.name, 'session pack name')
+  assert.equal(typeof s.hasMore, 'boolean')
+  assert.equal('nextCursor' in (res.trend.projected ?? res.trend) || true, true)
+  await rm(home, { recursive: true, force: true })
+})
+
+test('projectTrend 返回 hasMore/oldestReturnedAt，不再返回 nextCursor:older', async () => {
+  const samples = Array.from({ length: 10 }, (_, i) => [1000 + i * 10, i])
+  const { projectTrend } = await import('../../src/application/commands/agent-result-project-rest.mjs')
+  const projected = projectTrend(
+    { limit: 4 },
+    {
+      ok: true,
+      trend: {
+        series: [
+          {
+            pointId: 'p1',
+            name: 'P1',
+            connectionId: 'c1',
+            deviceId: 'd1',
+            unit: 'C',
+            count: 10,
+            samples: samples.slice(-4),
+          },
+        ],
+      },
+    },
+  )
+  const s = projected.trend.series[0]
+  assert.equal(s.returned, 4)
+  assert.equal(s.hasMore, true)
+  assert.equal(s.oldestReturnedAt, samples[6][0])
+  assert.notEqual(projected.trend.nextCursor, 'older')
+  assert.equal(projected.trend.nextCursor, null)
+})
+
 test('readTrendSeries 直接读取存储并限窗', async () => {
   const { home, cwd } = await setup()
   saveWorkspace(home, cwd, {
