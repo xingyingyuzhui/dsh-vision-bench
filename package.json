@@ -534,7 +534,9 @@
     "src/interfaces/agent/vision-bench-tool.mjs",
     "src/interfaces/agent/agent-tool-preflight.mjs",
     "src/infrastructure/modbus/modbus-slave.mjs",
-    "src/application/modbus/alarm-notify-registry.mjs"
+    "src/application/modbus/alarm-notify-registry.mjs",
+    "src/application/modbus/alarm-notify-match.mjs",
+    "src/application/modbus/alarm-notify-retry.mjs"
   ],
   "repository": {
     "type": "git",

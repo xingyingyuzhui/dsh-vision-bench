@@ -2,6 +2,7 @@ import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { stopVisionIoBroker } from './bench-io-broker.mjs'
 import { setAgentsRegistry } from './bench-notify.mjs'
 import { resetPollingService, stopAllPolling } from './bench-polling-service.mjs'
+import { disposeAlarmNotifyRuntime } from './src/application/modbus/poll-alarm-notify.mjs'
 
 import { clearSerialMonitorState } from './bench-serial-monitor.mjs'
 import { modbusRead } from './bench-actions.mjs'
@@ -345,6 +346,7 @@ export function apply(ctx) {
     stopAllPolling()
     clearFlashApprovals()
     clearDebugApprovals()
+    disposeAlarmNotifyRuntime()
     const brokerStop = stopVisionIoBroker('plugin-dispose')
     const runtimeStop =
       peekSharedDebugRuntime() === lease.debugRuntime

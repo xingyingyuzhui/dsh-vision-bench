@@ -7,6 +7,15 @@ const LEDGER_MAX = 4000
 export const MAX_DELIVERY_ATTEMPTS = 3
 
 /**
+ * Delivery ledger entry states.
+ * pending  — a claim is in-flight; a second claim must not proceed.
+ * queued   — failed once and waiting for bounded retry.
+ * delivered— successfully notified this recipient.
+ * exhausted— retry budget used up without success.
+ * @typedef {'pending' | 'queued' | 'delivered' | 'exhausted'} DeliveryState
+ */
+
+/**
  * @type {Map<string, {
  *   followup: boolean,
  *   sessionId: string,
@@ -20,7 +29,8 @@ export const MAX_DELIVERY_ATTEMPTS = 3
 export const agentAlarmWatchByKey = new Map()
 
 /**
- * @type {Map<string, { state: 'pending' | 'delivered', attempts: number, at: number }>}
+ * Keyed by eventId + sessionId so multi-session fan-out is independent.
+ * @type {Map<string, { state: DeliveryState, attempts: number, at: number }>}
  */
 export const deliveryLedger = new Map()
 
@@ -66,6 +76,14 @@ export async function deliverNotify(home, cwd, summary, detail, opts) {
  */
 export function watchKey(cwd, sessionId) {
   return `${String(cwd || '')}::${String(sessionId || '')}`
+}
+
+/**
+ * @param {string} eventId
+ * @param {string} sessionId
+ */
+export function deliveryKey(eventId, sessionId) {
+  return `${String(eventId || '')}::${String(sessionId || '')}`
 }
 
 /**
@@ -172,34 +190,101 @@ export function getAgentAlarmWatch(cwd, sessionId) {
 }
 
 /**
+ * Claim one recipient delivery slot. A second claim while pending returns
+ * proceed:false so concurrent emit paths cannot double-deliver.
+ *
  * @param {string} eventId
+ * @param {string} sessionId
+ * @returns {{ proceed: boolean, entry: { state: DeliveryState, attempts: number, at: number } | null }}
  */
-export function beginDeliveryAttempt(eventId) {
+export function beginDeliveryAttempt(eventId, sessionId) {
   pruneDeliveryLedger()
   const id = String(eventId || '')
+  const sid = String(sessionId || '')
   if (!id) return { proceed: true, entry: null }
-  const existing = deliveryLedger.get(id)
+  const key = deliveryKey(id, sid)
+  const existing = deliveryLedger.get(key)
   if (existing?.state === 'delivered') return { proceed: false, entry: existing }
-  if (existing && existing.attempts >= MAX_DELIVERY_ATTEMPTS) return { proceed: false, entry: existing }
+  if (existing?.state === 'exhausted') return { proceed: false, entry: existing }
+  if (existing?.state === 'pending') return { proceed: false, entry: existing }
+  if (existing?.state === 'queued') {
+    // Retry path re-claims the same slot.
+    if (existing.attempts >= MAX_DELIVERY_ATTEMPTS) {
+      deliveryLedger.set(key, { state: 'exhausted', attempts: existing.attempts, at: nowMs() })
+      return { proceed: false, entry: deliveryLedger.get(key) || null }
+    }
+    const entry = {
+      state: /** @type {'pending'} */ ('pending'),
+      attempts: existing.attempts + 1,
+      at: nowMs(),
+    }
+    deliveryLedger.set(key, entry)
+    return { proceed: true, entry }
+  }
   const entry = {
     state: /** @type {'pending'} */ ('pending'),
     attempts: (existing?.attempts || 0) + 1,
     at: nowMs(),
   }
-  deliveryLedger.set(id, entry)
+  deliveryLedger.set(key, entry)
   return { proceed: true, entry }
 }
 
 /**
  * @param {string} eventId
+ * @param {string} sessionId
  */
-export function markDelivered(eventId) {
-  const id = String(eventId || '')
-  if (!id) return
-  const prev = deliveryLedger.get(id)
-  deliveryLedger.set(id, {
+export function markDelivered(eventId, sessionId) {
+  const key = deliveryKey(eventId, sessionId)
+  if (!String(eventId || '')) return
+  const prev = deliveryLedger.get(key)
+  deliveryLedger.set(key, {
     state: 'delivered',
     attempts: prev?.attempts || 1,
     at: nowMs(),
   })
+}
+
+/**
+ * @param {string} eventId
+ * @param {string} sessionId
+ */
+export function markQueued(eventId, sessionId) {
+  const key = deliveryKey(eventId, sessionId)
+  if (!String(eventId || '')) return
+  const prev = deliveryLedger.get(key)
+  deliveryLedger.set(key, {
+    state: 'queued',
+    attempts: prev?.attempts || 1,
+    at: nowMs(),
+  })
+}
+
+/**
+ * @param {string} eventId
+ * @param {string} sessionId
+ */
+export function markExhausted(eventId, sessionId) {
+  const key = deliveryKey(eventId, sessionId)
+  if (!String(eventId || '')) return
+  const prev = deliveryLedger.get(key)
+  deliveryLedger.set(key, {
+    state: 'exhausted',
+    attempts: prev?.attempts || MAX_DELIVERY_ATTEMPTS,
+    at: nowMs(),
+  })
+}
+
+/**
+ * @param {string} eventId
+ * @param {string} sessionId
+ */
+export function getDeliveryEntry(eventId, sessionId) {
+  return deliveryLedger.get(deliveryKey(eventId, sessionId)) || null
+}
+
+/** Process-wide dispose: watches + ledger. Retry timers are cleared by the retry module. */
+export function clearAlarmNotifyRegistryRuntime() {
+  agentAlarmWatchByKey.clear()
+  deliveryLedger.clear()
 }
