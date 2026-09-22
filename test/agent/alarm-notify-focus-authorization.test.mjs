@@ -14,7 +14,7 @@ import {
 import {
   focusAuthorizationId,
   focusRecipientSession,
-} from '../../src/application/modbus/alarm-notify-match.mjs'
+} from '../../src/application/modbus/alarm-notify-authorization.mjs'
 import { runDueAlarmNotifyRetries, _internal as retryInternal } from '../../src/application/modbus/alarm-notify-retry.mjs'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
 import { createBench } from '../helpers/workspace-factory.mjs'
