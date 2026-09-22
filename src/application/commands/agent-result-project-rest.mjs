@@ -1,5 +1,5 @@
 // @ts-check
-import { AGENT_FRAMES_MAX_LIMIT, AGENT_TEXT_CAPS } from './agent-result-caps.mjs'
+import { AGENT_FRAMES_MAX_LIMIT, AGENT_TEXT_CAPS, utf8ByteLength } from './agent-result-caps.mjs'
 import { enforceBudget, pickSafetyFields } from './agent-result-project-status-read.mjs'
 
 const ALARM_PAGE_DEFAULT = 40
@@ -59,12 +59,21 @@ export function projectFrames(args, result) {
     ),
   )
   const offset = Math.max(0, Number(args?.offset) || 0)
-  const frames = allFrames.slice(0, limit)
-  const returned = frames.length
-  const nextOffset = offset + returned
-  const nextCursor = nextOffset < total ? String(nextOffset) : null
-  const projected = {
+  // `offset` is live-list pagination counted from the newest end (see listFrames);
+  // it does NOT guarantee snapshot consistency during concurrent collection.
+  const page = allFrames.slice(0, limit)
+  const cap = AGENT_TEXT_CAPS.framesBytes
+
+  /**
+   * @param {any[]} frames
+   * @param {number} returned
+   * @param {string | null} nextCursor
+   * @param {boolean | undefined} truncated
+   * @param {Record<string, unknown>} [extra]
+   */
+  const build = (frames, returned, nextCursor, truncated, extra) => ({
     ...pickSafetyFields(result),
+    ...extra,
     frames,
     total,
     returned,
@@ -76,14 +85,54 @@ export function projectFrames(args, result) {
     frame: result.frame,
     stale: result.stale,
     warning: result.warning,
-    truncated: nextCursor != null || allFrames.length > limit || undefined,
+    truncated,
+  })
+
+  if (page.length === 0) {
+    const nextCursor = offset < total ? String(offset) : null
+    return build([], 0, nextCursor, nextCursor != null || undefined)
   }
-  return enforceBudget(projected, AGENT_TEXT_CAPS.framesBytes, 'frames 超预算：减小 limit 或用 frameId 单查', (p) => ({
-    ...p,
-    frames: (p.frames || []).slice(0, 10),
+
+  // Keep the tail continuous k so `offset+k` points at the next older batch.
+  // Metadata is derived from k: returned === frames.length always.
+  for (let k = page.length; k >= 1; k--) {
+    const frames = page.slice(-k)
+    const nextOffset = offset + k
+    const nextCursor = nextOffset < total ? String(nextOffset) : null
+    const truncated = nextCursor != null || page.length > k || undefined
+    const projected = build(frames, k, nextCursor, truncated)
+    if (utf8ByteLength(projected) <= cap) return projected
+  }
+
+  // Even one frame exceeds budget: surface frameId + target + overrun (not an empty ok page).
+  const culprit = page[page.length - 1]
+  const frameId = (culprit && (culprit.frameId || culprit.id)) || ''
+  const skipOffset = offset + 1
+  const nextCursor = skipOffset < total ? String(skipOffset) : null
+  const stub = [{ frameId, id: frameId, overrun: true }]
+  const extra = {
+    frameId,
+    overrun: true,
+    hint: '单条报文超预算：用 frameId 单查',
+  }
+  const projected = build(stub, stub.length, nextCursor, true, extra)
+  if (utf8ByteLength(projected) <= cap) return projected
+
+  return {
+    ...pickSafetyFields(result),
+    connectionId: result.connectionId,
+    deviceId: result.deviceId,
+    configVersion: result.configVersion,
+    total,
+    limit,
+    frames: [],
+    returned: 0,
+    nextCursor: skipOffset < total ? String(skipOffset) : null,
     truncated: true,
-    nextCursor: p.nextCursor || '10',
-  }))
+    frameId,
+    overrun: true,
+    hint: '单条报文超预算：用 frameId 单查',
+  }
 }
 
 /**
@@ -101,6 +150,10 @@ export function projectTrend(args, result) {
     const samples = Array.isArray(s?.samples) ? s.samples : []
     total += count
     returned += samples.length
+    const oldestReturnedAt = samples.length
+      ? Number(s.oldestReturnedAt) || Number(samples[0][0]) || 0
+      : 0
+    const hasMore = typeof s.hasMore === 'boolean' ? s.hasMore : count > samples.length
     return {
       pointId: s.pointId,
       name: s.name,
@@ -110,13 +163,11 @@ export function projectTrend(args, result) {
       count,
       returned: samples.length,
       samples,
+      hasMore,
+      oldestReturnedAt,
     }
   })
   const limit = Number(args?.limit)
-  const nextCursor =
-    Number.isFinite(limit) && limit > 0 && projectedSeries.some((/** @type {any} */ s) => s.count > s.returned)
-      ? 'older'
-      : null
   const projected = {
     ...pickSafetyFields(result),
     trend: {
@@ -124,7 +175,8 @@ export function projectTrend(args, result) {
       series: projectedSeries,
       total,
       returned,
-      nextCursor,
+      // Not a Host-parsed cursor: agents page with pointIds + end=oldestReturnedAt-1.
+      nextCursor: null,
       limit: Number.isFinite(limit) && limit > 0 ? Math.trunc(limit) : undefined,
     },
   }
@@ -132,12 +184,18 @@ export function projectTrend(args, result) {
     ...p,
     trend: {
       ...p.trend,
-      series: (p.trend?.series || []).map((/** @type {any} */ s) => ({
-        ...s,
-        samples: (s.samples || []).slice(0, 5),
-        returned: Math.min(5, (s.samples || []).length),
-      })),
-      nextCursor: p.trend?.nextCursor || 'older',
+      series: (p.trend?.series || []).map((/** @type {any} */ s) => {
+        const samples = (s.samples || []).slice(0, 5)
+        const oldestReturnedAt = samples.length ? Number(samples[0][0]) || 0 : 0
+        return {
+          ...s,
+          samples,
+          returned: samples.length,
+          hasMore: true,
+          oldestReturnedAt,
+        }
+      }),
+      nextCursor: null,
     },
     truncated: true,
   }))

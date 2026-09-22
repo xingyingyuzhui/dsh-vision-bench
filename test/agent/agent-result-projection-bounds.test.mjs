@@ -160,7 +160,136 @@ test('projectFrames: agent limit hard-capped', () => {
   )
   assert.ok(projected.frames.length <= AGENT_FRAMES_MAX_LIMIT)
   assert.equal(projected.limit, AGENT_FRAMES_MAX_LIMIT)
+  assert.equal(projected.returned, projected.frames.length)
   assert.ok(projected.nextCursor != null || projected.truncated === true)
+})
+
+/** listFrames: offset counts from the newest end; page order is oldest→newest of that window. */
+function listFramesWindow(all, offset, limit) {
+  const length = all.length
+  if (offset >= length) return []
+  const end = Math.max(0, length - offset)
+  const start = Math.max(0, end - limit)
+  return all.slice(start, end)
+}
+
+function makeSeqFrames(n, payloadBytes = 300) {
+  return Array.from({ length: n }, (_, i) => {
+    const id = `f${String(i).padStart(3, '0')}`
+    return {
+      frameId: id,
+      id,
+      t: 1_700_000_000_000 + i,
+      pad: 'x'.repeat(payloadBytes),
+    }
+  })
+}
+
+test('projectFrames: budget shrink keeps tail k; nextCursor = offset+k is continuous', () => {
+  // 200 frames ~300B each; limit=100 page overflows framesBytes and must shrink to tail k.
+  const all = makeSeqFrames(200, 300)
+  const page1Raw = listFramesWindow(all, 0, 100)
+  const page1 = projectAgentResult(
+    { action: 'frames', limit: 100, offset: 0 },
+    { ok: true, action: 'frames', frames: page1Raw, total: all.length, connectionId: 'c1', deviceId: 'd1' },
+  )
+  assert.equal(page1.returned, page1.frames.length, 'returned === frames.length')
+  assert.ok(page1.frames.length >= 1 && page1.frames.length < 100, 'budget must shrink below limit')
+  assert.ok(utf8ByteLength(page1) <= AGENT_TEXT_CAPS.framesBytes)
+
+  // Tail of the requested page, not the head.
+  const tail = page1Raw.slice(-page1.frames.length).map((f) => f.frameId)
+  assert.deepEqual(page1.frames.map((f) => f.frameId), tail)
+
+  // IDs continuous within the page (all = f000..f199 in order).
+  const idxOf = (id) => all.findIndex((f) => f.frameId === id)
+  const p1Idx = page1.frames.map((f) => idxOf(f.frameId))
+  for (let i = 1; i < p1Idx.length; i++) {
+    assert.equal(p1Idx[i], p1Idx[i - 1] + 1, 'page 1 IDs continuous')
+  }
+
+  assert.equal(page1.nextCursor, String(0 + page1.returned), 'nextCursor usable as offset')
+  const offset2 = Number(page1.nextCursor)
+  assert.ok(Number.isFinite(offset2))
+
+  const page2Raw = listFramesWindow(all, offset2, 100)
+  const page2 = projectAgentResult(
+    { action: 'frames', limit: 100, offset: offset2 },
+    { ok: true, action: 'frames', frames: page2Raw, total: all.length, connectionId: 'c1', deviceId: 'd1' },
+  )
+  assert.equal(page2.returned, page2.frames.length)
+
+  // Second page continues at the record immediately older than page 1's oldest returned ID.
+  const p1Oldest = idxOf(page1.frames[0].frameId)
+  const p2Newest = idxOf(page2.frames[page2.frames.length - 1].frameId)
+  assert.equal(p2Newest, p1Oldest - 1, 'page 2 newest is immediately older than page 1 oldest')
+
+  // Merged covered window: no gaps, no duplicates.
+  const mergedIdx = [...page1.frames, ...page2.frames].map((f) => idxOf(f.frameId))
+  assert.equal(new Set(mergedIdx).size, mergedIdx.length, 'no duplicates across pages')
+  const sorted = [...mergedIdx].sort((a, b) => a - b)
+  for (let i = 1; i < sorted.length; i++) {
+    assert.equal(sorted[i], sorted[i - 1] + 1, 'merged pages have no gaps')
+  }
+
+  if (page2.nextCursor != null) {
+    assert.equal(page2.nextCursor, String(offset2 + page2.returned))
+  }
+})
+
+test('projectFrames: overrun shrinks to tail k with returned=k and nextCursor=offset+k', () => {
+  // Oversized frames force a small k; keep the newest tail so pagination walks older cleanly.
+  const all = makeSeqFrames(20, 2000)
+  const pageRaw = listFramesWindow(all, 0, 20)
+  const projected = projectAgentResult(
+    { action: 'frames', limit: 20, offset: 0 },
+    { ok: true, action: 'frames', frames: pageRaw, total: all.length, connectionId: 'c1' },
+  )
+  const k = projected.frames.length
+  assert.ok(k >= 1 && k < 20, `expected shrink, got k=${k}`)
+  assert.equal(projected.returned, k)
+  assert.deepEqual(projected.frames.map((f) => f.frameId), pageRaw.slice(-k).map((f) => f.frameId))
+  assert.equal(projected.nextCursor, String(0 + k))
+  assert.ok(utf8ByteLength(projected) <= AGENT_TEXT_CAPS.framesBytes)
+
+  // Mid-list offset: nextCursor = offset + k still holds.
+  const offset = 5
+  const pageMid = listFramesWindow(all, offset, 20)
+  const mid = projectAgentResult(
+    { action: 'frames', limit: 20, offset },
+    { ok: true, action: 'frames', frames: pageMid, total: all.length, connectionId: 'c1' },
+  )
+  const kMid = mid.frames.length
+  assert.equal(mid.returned, kMid)
+  assert.deepEqual(mid.frames.map((f) => f.frameId), pageMid.slice(-kMid).map((f) => f.frameId))
+  assert.equal(mid.nextCursor, String(offset + kMid))
+})
+
+test('projectFrames: huge single frame keeps frameId + overrun, not an empty ok page', () => {
+  const huge = {
+    frameId: 'fx-huge',
+    id: 'fx-huge',
+    requestHex: 'ab'.repeat(20_000),
+  }
+  const projected = projectAgentResult(
+    { action: 'frames', limit: 5 },
+    { ok: true, action: 'frames', frames: [huge], total: 3, connectionId: 'c1', deviceId: 'd1' },
+  )
+  assert.equal(projected.returned, projected.frames.length, 'returned === frames.length')
+  assert.equal(projected.overrun, true)
+  assert.equal(projected.frameId, 'fx-huge')
+  assert.ok(projected.hint, 'hint to query by frameId')
+  assert.equal(projected.connectionId, 'c1')
+  assert.equal(projected.deviceId, 'd1')
+  // Not a silent empty full page: either a stub frame with the id, or empty+overrun+frameId.
+  if (projected.frames.length === 0) {
+    assert.equal(projected.overrun, true)
+    assert.equal(projected.frameId, 'fx-huge')
+  } else {
+    assert.equal(projected.frames[0].frameId, 'fx-huge')
+    assert.equal(projected.frames[0].overrun, true)
+  }
+  assert.ok(projected.ok === true ? projected.overrun === true : true)
 })
 
 test('projectAgentResult: budget overrun keeps safety fields', () => {
