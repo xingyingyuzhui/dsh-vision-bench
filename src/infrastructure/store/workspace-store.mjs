@@ -5,6 +5,7 @@ import { normalizeConn, validateConnections } from '../../domain/modbus/connecti
 import { normalizeFramesByConnection } from '../../domain/modbus/frames-buffer.mjs'
 import { normalizeModbus } from '../../application/modbus/modbus-migration.mjs'
 import { validateDevices } from '../../domain/modbus/device-model.mjs'
+import { validateCandidateDeviceLayers } from '../../domain/modbus/device-identity.mjs'
 import {
   normalizeTasks,
   normalizeTimeline,
@@ -301,6 +302,18 @@ export const applyWorkspacePatch = (prev, input) => {
     nextConfigVersion = (nextConfigVersion || 1) + 1
   }
   mergedModbus.configVersion = nextConfigVersion
+
+  // BEFORE normalizeWorkspace/normalizeDevices — raw rows still carry duplicates.
+  const deviceLayerCheck = validateCandidateDeviceLayers(mergedModbus)
+  if (!deviceLayerCheck.ok) {
+    return {
+      ok: false,
+      errorCode: deviceLayerCheck.errorCode,
+      error: deviceLayerCheck.error,
+      conflicts: deviceLayerCheck.conflicts,
+      workspace: prev,
+    }
+  }
 
   const rawKeil = input?.keil
   const nextKeil = rawKeil

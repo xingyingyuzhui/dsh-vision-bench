@@ -19,6 +19,7 @@
  */
 import { normalizeModbus } from './modbus-migration.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
+import { validateLayerDeviceIds } from '../../domain/modbus/device-identity.mjs'
 import {
   SHARE_CATEGORIES,
   emptySessionConfig,
@@ -303,7 +304,7 @@ function mergeValues(projectedValues, baseValues) {
  * @param {Partial<ShareFlags> | any} nextShare
  * @param {{ confirmed?: boolean }} [opts]
  * @returns {{ ok: true, modbus: any, published: ShareCategory[], revoked: ShareCategory[] }
- *   | { ok: false, errorCode: string, error: string, needsConfirm?: boolean, revoked?: ShareCategory[] }}
+ *   | { ok: false, errorCode: string, error: string, needsConfirm?: boolean, revoked?: ShareCategory[], conflicts?: any[] }}
  */
 export function applyShareFlags(modbus, sessionId, nextShare, opts = {}) {
   const base = ensureScopeFields(modbus)
@@ -337,6 +338,28 @@ export function applyShareFlags(modbus, sessionId, nextShare, opts = {}) {
   for (const category of revoked) {
     priv = withCategory(priv, shared, category)
     shared = withCategory(shared, empty, category)
+  }
+  // Publish/merge can form a layer with duplicate deviceIds — reject before save.
+  // Do not change share replace/publish semantics; only judge the resulting layer.
+  const mergedLayerCheck = validateLayerDeviceIds(shared.devices, {
+    layer: published.includes('connections') ? 'shared' : 'top',
+  })
+  if (!mergedLayerCheck.ok) {
+    return {
+      ok: false,
+      errorCode: mergedLayerCheck.errorCode,
+      error: mergedLayerCheck.error,
+      conflicts: mergedLayerCheck.conflicts,
+    }
+  }
+  const privLayerCheck = validateLayerDeviceIds(priv.devices, { layer: 'private', sessionId: sid })
+  if (!privLayerCheck.ok) {
+    return {
+      ok: false,
+      errorCode: privLayerCheck.errorCode,
+      error: privLayerCheck.error,
+      conflicts: privLayerCheck.conflicts,
+    }
   }
   const sessionConfigs = { ...base.sessionConfigs, [sid]: normalizeSessionConfig(priv) }
   const nextModbus = normalizeModbus({

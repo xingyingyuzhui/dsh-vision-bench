@@ -220,7 +220,7 @@ test('unique pointIds succeed with per-connection values and metadata', async (t
   assert.ok(ws.modbus.trend?.p2?.length >= 1)
 })
 
-test('shared point visible twice still collects; same deviceId on different connections is isolated', async (t) => {
+test('shared point visible twice still collects with unique deviceIds', async (t) => {
   const bench = await createBench(t, { prefix: 'dvb-rid-shared-' })
   const { home, cwd } = bench
   bench.save({
@@ -228,10 +228,10 @@ test('shared point visible twice still collects; same deviceId on different conn
       version: 3,
       share: { enabled: true, connections: true, points: true, visualization: false },
       connections: [rtuSim('c1', 'COM3'), rtuSim('c2', 'COM4')],
-      devices: [device('d1', 'c1', 1), device('d1', 'c2', 2)],
+      devices: [device('d1', 'c1', 1), device('d2', 'c2', 2)],
       points: [
         hrPoint('p1', 'c1', 'd1', 0),
-        hrPoint('p2', 'c2', 'd1', 5),
+        hrPoint('p2', 'c2', 'd2', 5),
       ],
       sessionConfigs: {
         a: { connections: [], devices: [], points: [] },
@@ -246,5 +246,29 @@ test('shared point visible twice still collects; same deviceId on different conn
   assert.ok(v1 && v2)
   assert.equal(v1.connectionId, 'c1')
   assert.equal(v2.connectionId, 'c2')
-  assert.notEqual(v1.raw, v2.raw, 'different addresses must not collapse')
+  assert.equal(v1.deviceId, 'd1')
+  assert.equal(v2.deviceId, 'd2')
+})
+
+test('same-layer duplicate deviceId is rejected before save; config and version unchanged', async (t) => {
+  const bench = await createBench(t, { prefix: 'dvb-rid-devdup-' })
+  const { home, cwd } = bench
+  const before = loadWorkspace(home, cwd)
+  const { saveWorkspace } = await import('../../bench-store.mjs')
+  const ran = saveWorkspace(home, cwd, {
+    modbus: {
+      version: 3,
+      connections: [rtuSim('c1', 'COM3'), rtuSim('c2', 'COM4')],
+      // Same-layer two d1 rows — must CONFLICT before normalizeDevices drops one.
+      devices: [device('d1', 'c1', 1), device('d1', 'c2', 2)],
+      points: [hrPoint('p1', 'c1', 'd1', 0)],
+    },
+  })
+  assert.equal(ran.ok, false)
+  assert.equal(ran.errorCode, 'CONFLICT')
+  assert.ok(Array.isArray(ran.conflicts) && ran.conflicts.length >= 1)
+  assert.equal(ran.conflicts[0].deviceId, 'd1')
+  const after = loadWorkspace(home, cwd)
+  assert.deepEqual(after.modbus.devices, before.modbus.devices)
+  assert.equal(after.modbus.configVersion, before.modbus.configVersion)
 })
