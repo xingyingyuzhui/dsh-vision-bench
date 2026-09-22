@@ -30,8 +30,8 @@ import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { findPointV3, fnOfPoint } from '../../domain/modbus/function-code.mjs'
 import { compactPointRow, isStaleValue } from '../../domain/modbus/point-value.mjs'
 import { stampPoints } from '../../domain/modbus/unit-id.mjs'
-import { resolvePollSessionOwnership } from './poll-session-ownership.mjs'
-export { resolvePollSessionOwnership }
+import { resolvePollSessionOwnership, resolvePollTargets } from './poll-session-ownership.mjs'
+export { resolvePollSessionOwnership, resolvePollTargets }
 import {
   isScopePartitioned,
   normalizeSessionConfigs,
@@ -112,40 +112,52 @@ export const modbusPoll = async (home, cwd, opts) => {
   const workspace = loadWorkspace(home, room.cwd)
   const cidArg = opts && (opts.connectionId || opts.connId) ? String(opts.connectionId || opts.connId).trim() : ''
   const sessionId = String(opts?.sessionId || '')
-  const ownership = resolvePollSessionOwnership(workspace, { sessionId, connectionId: cidArg })
-  if (!ownership.ok) {
+  // Full batch ownership pre-check BEFORE any transport / frames / runtime commit.
+  const batchOwnership = resolvePollTargets(workspace, { sessionId, connectionId: cidArg })
+  if (!batchOwnership.ok) {
     return {
       ok: false,
       skipped: true,
-      error: ownership.error,
-      errorCode: ownership.errorCode,
-      reason: ownership.reason,
-      owners: ownership.owners,
-      // Ambiguous ownership must not guess a session for collection OR notify.
+      error: batchOwnership.error,
+      errorCode: batchOwnership.errorCode,
+      reason: batchOwnership.reason,
+      conflicts: batchOwnership.conflicts,
+      owners: batchOwnership.conflicts[0]?.owners,
       polling: workspace.modbus?.polling,
       pollingByConnection: workspace.modbus?.pollingByConnection,
       values: workspace.modbus?.values,
     }
   }
-  const targetSessionId = ownership.targetSessionId
+  /** @type {Record<string, string>} */
+  const sourceSessionByConnection = {}
+  for (const t of batchOwnership.targets) {
+    sourceSessionByConnection[t.connectionId] = t.sourceSessionId
+  }
+  const targetSessionId = sessionId || batchOwnership.targets[0]?.sourceSessionId || ''
+
+  /**
+   * Effective pack for one resolved target — never `find` the first same-id
+   * device/point from a cross-session union.
+   * @param {{ connectionId: string, sourceSessionId: string, shared: boolean }} t
+   */
+  const packForTarget = (t) => {
+    if (t.sourceSessionId) return /** @type {ModbusWorkspace} */ (modbusForSession(workspace, t.sourceSessionId))
+    if (isScopePartitioned(workspace.modbus)) {
+      const sc = normalizeSessionConfigs(workspace.modbus.sessionConfigs)
+      return /** @type {ModbusWorkspace} */ (
+        normalizeModbus({
+          ...workspace.modbus,
+          connections: unionScopedConnections(workspace.modbus.connections, sc, workspace.modbus.share),
+          devices: unionScopedDevices(workspace.modbus.devices, sc, workspace.modbus.share),
+          points: unionScopedPoints(workspace.modbus.points, sc, workspace.modbus.share),
+        })
+      )
+    }
+    return /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
+  }
 
   /** @type {ModbusWorkspace} */
-  let pack
-  if (targetSessionId) {
-    pack = /** @type {ModbusWorkspace} */ (modbusForSession(workspace, targetSessionId))
-  } else if (isScopePartitioned(workspace.modbus)) {
-    const sc = normalizeSessionConfigs(workspace.modbus.sessionConfigs)
-    pack = /** @type {ModbusWorkspace} */ (
-      normalizeModbus({
-        ...workspace.modbus,
-        connections: unionScopedConnections(workspace.modbus.connections, sc, workspace.modbus.share),
-        devices: unionScopedDevices(workspace.modbus.devices, sc, workspace.modbus.share),
-        points: unionScopedPoints(workspace.modbus.points, sc, workspace.modbus.share),
-      })
-    )
-  } else {
-    pack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
-  }
+  let pack = packForTarget(batchOwnership.targets[0])
 
   // support per-connection polling; if no points, report
   if (!pack.points.length) return { ok: false, error: '无点位，请先添加点位' }
@@ -158,9 +170,14 @@ export const modbusPoll = async (home, cwd, opts) => {
       values: pack.values,
     }
   }
-  const targetConns = cidArg
-    ? pack.connections.filter((/** @type {any} */ c) => c.id === cidArg)
-    : pack.connections.filter((/** @type {any} */ c) => c.enabled !== false)
+  const targetConns = []
+  for (const t of batchOwnership.targets) {
+    const tpack = packForTarget(t)
+    const found = tpack.connections.find((/** @type {any} */ c) => c.id === t.connectionId)
+    if (found && found.enabled !== false) {
+      targetConns.push({ ...found, __sourceSessionId: t.sourceSessionId, __shared: t.shared, __pack: tpack })
+    }
+  }
   if (cidArg && !targetConns.length) return { ok: false, error: `连接不存在: ${cidArg}` }
   if (!targetConns.length) return { ok: false, error: '无可用连接' }
   // use a global lock per cwd (legacy) plus per-conn locks for multi
@@ -193,7 +210,8 @@ export const modbusPoll = async (home, cwd, opts) => {
     for (const connObj of targetConns) {
       const conn = connObj.conn
       const connId = connObj.id
-      const pts = pack.points.filter((/** @type {any} */ p) => (p.connectionId || p.connId) === connId)
+      const tpack = connObj.__pack || pack
+      const pts = tpack.points.filter((/** @type {any} */ p) => (p.connectionId || p.connId) === connId)
       if (!pts.length) {
         // still update polling timestamp for empty but enabled connection?
         pollingByConnection[connId] = {
@@ -205,7 +223,7 @@ export const modbusPoll = async (home, cwd, opts) => {
         continue
       }
       const transport = transportOf(opts)
-      const scopes = planScopedReadBatches(stampPoints({ ...pack, points: pts }))
+      const scopes = planScopedReadBatches(stampPoints({ ...tpack, points: pts }))
       const interval = pollingByConnection[connId] || {
         enabled: false,
         intervalMs: 1000,
@@ -215,8 +233,8 @@ export const modbusPoll = async (home, cwd, opts) => {
       }
       let connOk = true
       for (const scope of scopes) {
-        const batchConnObj = pack.connections.find((/** @type {any} */ c) => c.id === scope.connectionId) || connObj
-        const batchDevice = pack.devices.find((/** @type {any} */ d) => d.id === scope.deviceId) || {
+        const batchConnObj = tpack.connections.find((/** @type {any} */ c) => c.id === scope.connectionId) || connObj
+        const batchDevice = tpack.devices.find((/** @type {any} */ d) => d.id === scope.deviceId) || {
           id: scope.deviceId,
           unitId: scope.unitId,
         }
@@ -231,7 +249,7 @@ export const modbusPoll = async (home, cwd, opts) => {
           // the in-flight read and close the COM (runModbusOp abort → client.close).
           const ran = await runReadTx(
             transport,
-            pack,
+            tpack,
             batchConnObj,
             batchDevice,
             batch,
@@ -318,6 +336,7 @@ export const modbusPoll = async (home, cwd, opts) => {
     if (!committed.drift) {
       await emitCommittedAlarmTransitions(home, room.cwd, committed.alarms, {
         sourceSessionId: targetSessionId || undefined,
+        sourceSessionByConnection,
       })
     }
     const nextMb = committed.workspace.modbus

@@ -173,7 +173,7 @@ export function shouldNotifyAgentOfProcessAlarm(home, cwd, item) {
  * @param {any} home
  * @param {string} cwd
  * @param {{ fired?: any[], recovered?: any[] } | null | undefined} alarms
- * @param {{ sourceSessionId?: string }} [opts]
+ * @param {{ sourceSessionId?: string, sourceSessionByConnection?: Record<string, string> }} [opts]
  * @returns {Promise<{ notified: number, recorded: number, failed: number, queued: number, ambiguousOwner: boolean }>}
  */
 export async function emitCommittedAlarmTransitions(home, cwd, alarms, opts = {}) {
@@ -181,16 +181,32 @@ export async function emitCommittedAlarmTransitions(home, cwd, alarms, opts = {}
   const fired = Array.isArray(alarms.fired) ? alarms.fired : []
   const recovered = Array.isArray(alarms.recovered) ? alarms.recovered : []
   const sourceSessionId = opts.sourceSessionId
+  const sourceSessionByConnection = opts.sourceSessionByConnection || {}
   let notified = 0
   let recorded = 0
   let failed = 0
   let queued = 0
   let ambiguousOwner = false
 
+  /**
+   * Per-event source: the connection's resolved poll owner wins over batch default.
+   * @param {any} item
+   */
+  const sourceOf = (item) => {
+    const cid = String(
+      item?.point?.connectionId || item?.connectionId || item?.alarm?.connectionId || '',
+    )
+    if (cid && Object.prototype.hasOwnProperty.call(sourceSessionByConnection, cid)) {
+      return sourceSessionByConnection[cid] || undefined
+    }
+    return sourceSessionId
+  }
+
   if (fired.length) {
     const procFired = fired.filter((/** @type {any} */ f) => f.point)
     const commFired = fired.filter((/** @type {any} */ f) => f.connectionId && !f.point)
     if (procFired.length) {
+      // Journal once per committed transition batch — never once per recipient.
       const summaries = procFired.slice(0, 5).map((/** @type {any} */ item) => {
         const limit = item.kind === 'max' ? item.point.alarmMax : item.point.alarmMin
         return `${pointLabel(item.point)}=${decodeValue(item.point, item.raw ?? item.alarm?.value)}${item.kind === 'max' ? `>${limit}` : `<${limit}`}`
@@ -208,7 +224,7 @@ export async function emitCommittedAlarmTransitions(home, cwd, alarms, opts = {}
       recorded += 1
 
       for (const item of procFired) {
-        const match = matchingAlarmRecipients(home, cwd, item, sourceSessionId)
+        const match = matchingAlarmRecipients(home, cwd, item, sourceOf(item))
         if (match.ambiguousOwner) {
           ambiguousOwner = true
           await recordBenchEvent(
