@@ -1,6 +1,7 @@
 // @ts-check
+import { randomBytes } from 'node:crypto'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
-import { pendingState, pendingWrites, prunePendingWrites } from './modbus-runtime-context.mjs'
+import { pendingWrites, prunePendingWrites } from './modbus-runtime-context.mjs'
 /**
  * @typedef {import('../../types/modbus.js').ModbusCommandBody} ModbusCommandBody
  * @typedef {{ id: string, cwd: string, createdAt: number, params: ModbusCommandBody }} PendingWriteEntry
@@ -13,15 +14,64 @@ const pendingKey = (cwd, id) => `${String(cwd)}:${String(id || '')}`
 /** @param {unknown} value */
 const sessionOf = (value) => (value ? String(value).trim() : '')
 
+const PENDING_WRITE_LIMIT = 20
+
+/**
+ * @param {unknown} left
+ * @param {unknown} right
+ */
+const sameValues = (left, right) => {
+  const a = Array.isArray(left) ? left : []
+  const b = Array.isArray(right) ? right : []
+  return a.length === b.length && a.every((value, index) => value === b[index])
+}
+
+/**
+ * @param {ModbusCommandBody | undefined} params
+ */
+const fingerprintOf = (params) => ({
+  sessionId: sessionOf(params?.sessionId),
+  connectionId: sessionOf(params?.connectionId || params?.connId),
+  deviceId: sessionOf(params?.deviceId),
+  function: Number(params?.function),
+  address: Number(params?.address),
+})
+
 /**
  * @param {string} cwd
  * @param {ModbusCommandBody} params
- * @returns {ModbusCommandBody & { id: string }}
+ * @returns {(ModbusCommandBody & { id: string, deduped?: true }) | { ok: false, errorCode: string, error: string }}
  */
 export const createPendingWrite = (cwd, params) => {
-  const id = `pw${Date.now().toString(36)}${(++pendingState.seq).toString(36)}`
-  pendingWrites.set(pendingKey(cwd, id), { id, cwd, createdAt: Date.now(), params })
   prunePendingWrites()
+  const next = fingerprintOf(params)
+  for (const entry of pendingWrites.values()) {
+    if (entry.cwd !== cwd) continue
+    const prev = fingerprintOf(entry.params)
+    if (
+      prev.sessionId === next.sessionId &&
+      prev.connectionId === next.connectionId &&
+      prev.deviceId === next.deviceId &&
+      prev.function === next.function &&
+      prev.address === next.address &&
+      sameValues(entry.params?.values, params?.values)
+    ) {
+      return { id: entry.id, ...entry.params, deduped: true }
+    }
+  }
+  let count = 0
+  for (const entry of pendingWrites.values()) {
+    if (entry.cwd === cwd) count += 1
+  }
+  if (count >= PENDING_WRITE_LIMIT) {
+    return {
+      ok: false,
+      errorCode: ERROR_CODES.APPROVAL_QUEUE_FULL,
+      error: '待批准写点已达上限',
+    }
+  }
+  const id = randomBytes(8).toString('hex')
+  pendingWrites.set(pendingKey(cwd, id), { id, cwd, createdAt: Date.now(), params })
   return { id, ...params }
 }
 

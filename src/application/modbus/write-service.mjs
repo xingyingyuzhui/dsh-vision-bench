@@ -143,6 +143,7 @@ export const modbusWrite = async (home, cwd, body, opts = {}) => {
       pointIds: targetPointIds.slice(),
       endpoint: { ...endpointFingerprint(conn, devForWrite), configVersion: pack.configVersion || 1 },
     })
+    if (request.ok === false) return { ok: false, errorCode: request.errorCode, error: request.error }
     return {
       ok: false,
       needsConfirm: true,
@@ -151,6 +152,7 @@ export const modbusWrite = async (home, cwd, body, opts = {}) => {
       label: request.label,
       nextStep: '等待用户在界面批准；结果会以通知返回，不要重复调用 write',
       error: 'Agent 写点是高影响操作，需要用户在界面上批准',
+      ...(request.deduped ? { deduped: true } : {}),
     }
   }
 
