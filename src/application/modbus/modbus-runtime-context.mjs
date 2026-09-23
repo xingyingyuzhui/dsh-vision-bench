@@ -54,6 +54,8 @@ export const transportOf = (opts) => opts?.transport || createModbusTransport()
 
 /** @type {Map<string, unknown>} */
 export const pollLocks = new Map()
+/** In-process write mutual exclusion, keyed by workspace cwd. */
+export const writeLocks = new Set()
 export const POLL_BUDGET_MS = 30000
 
 export const PENDING_TTL_MS = 5 * 60 * 1000

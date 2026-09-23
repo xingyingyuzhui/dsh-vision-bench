@@ -10,7 +10,7 @@ import { endpointFingerprint, sameEndpoint } from '../../domain/modbus/endpoint.
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { findPointV3 } from '../../domain/modbus/function-code.mjs'
 import { deviceDisabledOf, targetRequired } from '../../domain/modbus/validation.mjs'
-import { entryLabel } from './modbus-runtime-context.mjs'
+import { entryLabel, writeLocks } from './modbus-runtime-context.mjs'
 import { createPendingWrite, takePendingWrite } from './write-approval-service.mjs'
 import { executeApprovedWrite } from './write-execute.mjs'
 
@@ -68,8 +68,8 @@ export const modbusWrite = async (home, cwd, body, opts = {}) => {
   if (!check.ok) return { ok: false, error: check.error, errorCode: ERROR_CODES.TARGET_REQUIRED }
   const writeValues = Array.isArray(check.values) ? check.values : []
   const count = writeValues.length
-  if (hasRunning(workspace, 'write')) {
-    return { ok: false, error: '已有写入任务进行中' }
+  if (writeLocks.has(room.cwd) || hasRunning(workspace, 'write')) {
+    return { ok: false, errorCode: ERROR_CODES.WRITE_BUSY, error: '已有写入任务进行中' }
   }
   /** @type {string[]} */
   const targetPointIds = []
@@ -118,25 +118,30 @@ export const modbusWrite = async (home, cwd, body, opts = {}) => {
     }
   }
 
-  return executeApprovedWrite({
-    home,
-    roomCwd: room.cwd,
-    sessionId,
-    pack,
-    origin,
-    signal,
-    opts,
-    targetCid,
-    targetDid,
-    targetConnObj,
-    conn,
-    fn,
-    address,
-    writeValues,
-    count,
-    check,
-    targetPointIds,
-  })
+  writeLocks.add(room.cwd)
+  try {
+    return await executeApprovedWrite({
+      home,
+      roomCwd: room.cwd,
+      sessionId,
+      pack,
+      origin,
+      signal,
+      opts,
+      targetCid,
+      targetDid,
+      targetConnObj,
+      conn,
+      fn,
+      address,
+      writeValues,
+      count,
+      check,
+      targetPointIds,
+    })
+  } finally {
+    writeLocks.delete(room.cwd)
+  }
 }
 
 /**
