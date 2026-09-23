@@ -3,6 +3,7 @@
 
 import { toBodyPortal } from '../../../common/body-portal.mjs'
 import { getCustomSelect } from '../../../components/custom-select.mjs'
+import { createModalDialog } from '../../../components/modal-dialog.mjs'
 import { renderPreviewChart } from '../hooks/viz-preview-chart.mjs'
 import { TYPE_DEFS } from './viz-editor-constants.mjs'
 import { renderChartConfigContent } from './viz-editor-chart-tabs.mjs'
@@ -12,6 +13,7 @@ import { createVizPointPicker } from './viz-point-picker.mjs'
 
 export function createVizEditorPanel(React, t) {
   const el = React.createElement
+  const ModalDialog = createModalDialog(React, t)
   const CustomSelect = getCustomSelect(React)
   const VizPointPicker = createVizPointPicker(React, t)
   const widgets = createWidgetTabRenderers(el)
@@ -32,17 +34,7 @@ export function createVizEditorPanel(React, t) {
     const [activeTab, setActiveTab] = React.useState('style')
     const [previewState, setPreviewState] = React.useState('on')
     const previewRef = React.useRef(null)
-
-    React.useEffect(() => {
-      const onKey = (e) => {
-        if (e.key === 'Escape') {
-          e.stopPropagation()
-          onCancel?.()
-        }
-      }
-      window.addEventListener('keydown', onKey)
-      return () => window.removeEventListener('keydown', onKey)
-    }, [onCancel])
+    const nameRef = React.useRef(null)
 
     React.useEffect(() => {
       renderPreviewChart(previewRef.current, editor)
@@ -89,7 +81,11 @@ export function createVizEditorPanel(React, t) {
           fields,
           activeTab,
           setActiveTab,
-          [['display', '显示'], ['format', '数值格式'], ['status', '状态规则']],
+          [
+            ['display', t('vizTabDisplay')],
+            ['format', t('vizTabFormat')],
+            ['status', t('vizTabStatus')],
+          ],
           widgets.renderValueTabContent(fields, activeTab),
           widgets.valuePreview(s, editor.name),
         )
@@ -99,7 +95,11 @@ export function createVizEditorPanel(React, t) {
           fields,
           activeTab,
           setActiveTab,
-          [['display', '外观'], ['behavior', '控制行为'], ['feedback', '状态反馈']],
+          [
+            ['display', t('vizTabLook')],
+            ['behavior', t('vizTabBehavior')],
+            ['feedback', t('vizTabFeedback')],
+          ],
           widgets.renderSwitchTabContent(fields, activeTab),
           widgets.switchPreview(fields, s, editor.name, previewState, setPreviewState),
         )
@@ -107,44 +107,36 @@ export function createVizEditorPanel(React, t) {
       return null
     }
 
-    const modalTitle = editor.id ? t('vizEdit') || '编辑组件' : t('vizNew') || '新建组件'
+    const modalTitle = editor.id ? t('vizEdit') : t('vizNew')
 
-    return toBodyPortal(el(
-      'div',
-      {
-        className: 'dvb-mask dvb-viz-modal-mask',
-        onClick(e) {
-          if (e.target === e.currentTarget && !saving) onCancel?.()
-        },
-      },
-      el(
-        'div',
-        {
-          className: 'dvb-viz-modal',
-          role: 'dialog',
-          'aria-modal': 'true',
-          'aria-label': modalTitle,
-        },
-        el(
-          'div',
-          { className: 'dvb-viz-drawer-head' },
-          el('div', { className: 'dvb-viz-drawer-title' }, modalTitle),
-          el(
-            'button',
-            { type: 'button', className: 'dvb-viz-drawer-close', 'aria-label': '关闭', disabled: saving, onClick: () => onCancel?.() },
-            '✕',
-          ),
-        ),
-        el(
+    return toBodyPortal(
+      el(ModalDialog, {
+        open: true,
+        title: modalTitle,
+        maskClassName: 'dvb-viz-modal-mask',
+        dialogClassName: 'dvb-viz-modal',
+        showIcon: false,
+        maskClosable: !saving,
+        loading: Boolean(saving),
+        confirmLoading: Boolean(saving),
+        confirmDisabled: !editorCheck.ok || vizReadOnly,
+        cancelText: t('csvCancel'),
+        confirmText: saving ? t('saving') : t('vizSave'),
+        initialFocusRef: nameRef,
+        onCancel,
+        onConfirm: onSave,
+        onClose: onCancel,
+        content: el(
           'div',
           { className: 'dvb-viz-drawer-body' },
           el(
             'div',
             { className: 'dvb-viz-form-section' },
-            el('label', { className: 'dvb-viz-form-label' }, t('vizName') || '组件名称'),
+            el('label', { className: 'dvb-viz-form-label' }, t('vizName')),
             el('input', {
+              ref: nameRef,
               className: 'dvb-input dvb-viz-input',
-              placeholder: t('vizNamePh') || '如：主电机转速',
+              placeholder: t('vizNamePh'),
               value: editor.name || '',
               maxLength: 40,
               onChange: (e) => setEditor((p) => ({ ...p, name: e.target.value })),
@@ -153,7 +145,7 @@ export function createVizEditorPanel(React, t) {
           el(
             'div',
             { className: 'dvb-viz-form-section dvb-viz-type-section' },
-            el('label', { className: 'dvb-viz-form-label' }, '组件类型与配置'),
+            el('label', { className: 'dvb-viz-form-label' }, t('vizTypeConfig')),
             el(
               'div',
               { className: 'dvb-viz-type-split' },
@@ -196,22 +188,7 @@ export function createVizEditorPanel(React, t) {
           }),
           !editorCheck.ok && editorCheck.reason && el('div', { className: 'dvb-hint dvb-need' }, editorCheck.reason),
         ),
-        el(
-          'div',
-          { className: 'dvb-viz-drawer-footer dvb-dialog-footer' },
-          el('button', { type: 'button', className: 'dvb-btn', disabled: saving, onClick: onCancel }, t('csvCancel') || '取消'),
-          el(
-            'button',
-            {
-              type: 'button',
-              className: 'dvb-btn dvb-btn-primary',
-              disabled: saving || !editorCheck.ok || vizReadOnly,
-              onClick: onSave,
-            },
-            saving ? t('saving') || '保存中…' : t('vizSave') || '保存',
-          ),
-        ),
-      ),
-    ))
+      }),
+    )
   }
 }
