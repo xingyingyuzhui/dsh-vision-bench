@@ -74,7 +74,7 @@ Desktop 在 **桌面插件…** 里移除。绑定写在 `$DSH_HOME/vision-bench
 
 宿主 `dsh-vision-bench` 顶层只注入 `connection`，UI 发 `POST /api/vision-bench/dispatch`。旧 `/vision-bench` RPC 与 Agent HTTP 命令桥仅在有 `webServer` 时挂载。Agent 工具是另一条 loader：`dsh-vision-bench/agent`（`export name` 为 `dsh-vision-bench-tools`），由 **Vision模式** 预设插入，不和宿主同名。
 
-预设是安装物，不在宿主 `apply()` 里 seed。首次安装或升级后执行 `node scripts/seed-preset.mjs`（或设置页重建），写入 `$DSH_HOME/.agent-presets/vision-bench/`。**新建 Session 后生效**。
+DSH `0.1.5-rc.1`–`0.1.6` 的 Vision模式是目录式预设：首次安装或升级后执行 `node scripts/seed-preset.mjs`（或设置页重建），写入 `$DSH_HOME/.agent-presets/vision-bench/`。DSH `0.1.7+` 由 Host 自动声明注册，无需 seed。**新建 Session 后生效**。
 
 `vision_bench` 只出现在这个预设里。Agent 需要时自己调用，不把现场状态塞进每一轮系统提示。
 
