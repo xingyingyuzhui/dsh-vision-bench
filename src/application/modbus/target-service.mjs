@@ -1,2 +1,2 @@
 // @ts-check
-export { resolveTarget, TARGET_CODES } from './target-resolver-service.mjs'
+export { resolveTarget, TARGET_CODES } from '../../domain/modbus/target-resolver-service.mjs'

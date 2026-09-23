@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { listPendingWrites, resolvePendingWrite } from '../../bench-actions.mjs'
 import { loadWorkspace, workspaceRepository } from '../../bench-store.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 import { writeLocks } from '../../src/application/modbus/modbus-runtime-context.mjs'
 import { modbusForSession } from '../../src/application/modbus/workspace-session-view.mjs'
 import { createBench } from '../helpers/workspace-factory.mjs'
@@ -38,7 +38,7 @@ test('approving after a same-address point id change is CONFIG_DRIFT and does no
     { source: 'agent', sessionId: 's1' },
   )
   assert.equal(first.needsConfirm, true)
-  assert.deepEqual(first.request.pointIds, ['p1'])
+  assert.deepEqual(listPendingWrites(cwd, 's1').find((item) => item.id === first.requestId)?.pointIds, ['p1'])
   const before = loadWorkspace(home, cwd).modbus.configVersion || 1
   const patched = await workspaceRepository(home).update(cwd, null, async (current) => {
     const session = current.modbus && current.modbus.sessionConfigs && current.modbus.sessionConfigs.s1

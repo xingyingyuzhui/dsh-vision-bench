@@ -2,7 +2,7 @@
 import { connLabel } from '../../../domain/modbus/connection-model.mjs'
 import { isScopePartitioned } from '../../../domain/modbus/config-scope.mjs'
 import { ERROR_CODES } from '../../../domain/modbus/errors.mjs'
-import { normalizeModbus } from '../../modbus/modbus-migration.mjs'
+import { normalizeModbus } from '../../../domain/modbus/modbus-migration.mjs'
 import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
 import { listWorkspaceDir as listDir } from '../../../infrastructure/files/project-fs.mjs'
 import { keilMap } from '../../keil/project-service.mjs'

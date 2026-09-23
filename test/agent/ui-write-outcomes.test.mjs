@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { ERROR_CODES, modbusWrite, resolvePendingWrite } from '../../bench-modbus.mjs'
 import { loadWorkspace } from '../../bench-store.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 import { mutateConfig } from '../../src/application/config/config-mutation-service.mjs'
 import { createBench } from '../helpers/workspace-factory.mjs'
 import {

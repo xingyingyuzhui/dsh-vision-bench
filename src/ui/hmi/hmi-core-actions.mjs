@@ -1,4 +1,4 @@
-import { normalizeModbus } from '../../application/modbus/modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { canUseModbus, ioRuntimeStatus } from '../../domain/modbus/io-capability.mjs'
 import { buildAgentRef, dispatchAgentRef, evidenceFromRef, hasHarnessInput, postEvidence } from '../common/agent-reference.mjs'
 import { emptyWorkspace, pickJournal } from '../common/ui-format.mjs'

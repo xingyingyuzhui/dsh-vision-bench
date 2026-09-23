@@ -8,6 +8,7 @@ export const AGENT_TEXT_CAPS = Object.freeze({
   framesBytes: 16 * 1024,
   trendBytes: 16 * 1024,
   alarmBytes: 16 * 1024,
+  listBytes: 16 * 1024,
 })
 
 /** Server-side Agent frames page cap (client may send a larger limit). */

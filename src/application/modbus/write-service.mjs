@@ -5,7 +5,7 @@ import { requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
 import { clampInt, functionTag, normalizeWriteValues } from '../../domain/modbus/point-model.mjs'
 import { recordBenchEvent } from '../../infrastructure/store/journal-store.mjs'
 import { ensureWorkspaceClaimed, modbusForSession } from './workspace-session-view.mjs'
-import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from './target-resolver-service.mjs'
+import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from '../../domain/modbus/target-resolver-service.mjs'
 import { endpointFingerprint, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { findPointV3 } from '../../domain/modbus/function-code.mjs'
@@ -130,11 +130,12 @@ export const modbusWrite = async (home, cwd, body, opts = {}) => {
   }
   if (origin.source === 'agent' && !(body && body.confirm === true)) {
     const devForWrite = pack.devices.find((d) => d.id === targetDid)
+    const label = entryLabel(fn, address, count, writeValues)
     const request = createPendingWrite(room.cwd, {
       function: fn,
       address,
       values: writeValues.slice(),
-      label: '',
+      label,
       sessionId: origin.sessionId,
       connectionId: targetCid,
       connId: targetCid,
@@ -142,13 +143,16 @@ export const modbusWrite = async (home, cwd, body, opts = {}) => {
       pointIds: targetPointIds.slice(),
       endpoint: { ...endpointFingerprint(conn, devForWrite), configVersion: pack.configVersion || 1 },
     })
-    request.label = entryLabel(fn, address, count, writeValues)
+    if (!('id' in request)) return { ok: false, errorCode: request.errorCode, error: request.error }
     return {
       ok: false,
       needsConfirm: true,
+      errorCode: ERROR_CODES.APPROVAL_PENDING,
       requestId: request.id,
-      request,
+      label: request.label,
+      nextStep: '等待用户在界面批准；结果会以通知返回，不要重复调用 write',
       error: 'Agent 写点是高影响操作，需要用户在界面上批准',
+      ...(request.deduped ? { deduped: true } : {}),
     }
   }
 

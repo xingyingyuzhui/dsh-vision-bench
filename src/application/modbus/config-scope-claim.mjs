@@ -13,7 +13,7 @@
  * One-way dependency: `config-scope-service.mjs` imports from here (never the
  * reverse), and this module stays on domain helpers + `normalizeModbus`.
  */
-import { normalizeModbus } from './modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import {
   emptySessionConfig,
   emptyShareFlags,

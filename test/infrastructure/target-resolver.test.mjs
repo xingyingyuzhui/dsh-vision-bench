@@ -8,7 +8,7 @@ import { normalizeModbus } from '../../bench-devices.mjs'
 import { ERROR_CODES } from '../../bench-modbus.mjs'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
 import { resolveTarget } from '../../bench-targets.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 
 const packFixture = () =>
   normalizeModbus({

@@ -4,7 +4,7 @@
  * Shared by precheck and execution so both see the same read set.
  */
 import { modbusForSession } from './workspace-session-view.mjs'
-import { normalizeModbus } from './modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import {
   isScopePartitioned,
   normalizeSessionConfigs,

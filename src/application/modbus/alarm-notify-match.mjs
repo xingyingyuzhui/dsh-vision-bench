@@ -6,7 +6,7 @@
 import { runningTasks } from '../../domain/modbus/journal-model.mjs'
 import { isCategoryShared, isScopePartitioned, normalizeScopeSessionId } from '../../domain/modbus/config-scope.mjs'
 import { loadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
-import { normalizeModbus } from './modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { modbusForSession } from './workspace-session-view.mjs'
 import { pendingWrites, prunePendingWrites } from './modbus-runtime-context.mjs'
 import {

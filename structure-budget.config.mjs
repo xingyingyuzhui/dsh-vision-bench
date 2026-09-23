@@ -218,13 +218,6 @@ export default {
           "owner": "vision-bench"
         },
         {
-          "file": "test/agent/tool-schema.test.mjs",
-          "max": 376,
-          "reason": "Agent tool schema contract coverage",
-          "stage": "P4",
-          "owner": "vision-bench"
-        },
-        {
           "file": "test/agent/agent-result-projection-bounds.test.mjs",
           "max": 420,
           "reason": "Agent projection pagination + budget coverage; split later",

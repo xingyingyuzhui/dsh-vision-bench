@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { modbusPoll } from '../bench-modbus.mjs'
 import { loadWorkspace, saveWorkspace } from '../bench-store.mjs'
-import { runVisionBench } from '../bench-tool.mjs'
+import { runVisionBench } from './helpers/run-vision-bench.mjs'
 
 test('Task10: 一次读取同步进入 点表值/监视/曲线/告警（单一实时值来源）', async () => {
   const home = await mkdtemp(join(tmpdir(), 'uc-'))

@@ -2,10 +2,7 @@
 import { finalizeAgentCommandResult } from '../../application/commands/lossless-json.mjs'
 import { projectAgentResult } from '../../application/commands/agent-result-projection.mjs'
 import { attachConfigDriftRefresh } from '../../application/commands/config-drift-refresh.mjs'
-import { executeHostCommand } from '../../application/commands/host-command-service.mjs'
 import { dispatchVisionCommand } from '../../infrastructure/host/vision-host-client.mjs'
-import { loadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
-import { modbusForSession } from '../../application/modbus/workspace-session-view.mjs'
 import { validateAgentToolArgs } from './agent-tool-preflight.mjs'
 import { POINT_BATCH_ITEM_PROPERTIES } from './vision-bench-point-schema.mjs'
 
@@ -53,46 +50,6 @@ export const sessionIdOf = (agent) => {
   if (header && header.id) return String(header.id)
   if (session && session.id) return String(session.id)
   return ''
-}
-
-/**
- * @param {any} [input]
- * @returns {any}
- */
-const originFrom = (input) => ({
-  source: input && input.source === 'agent' ? 'agent' : 'user',
-  sessionId: input && input.sessionId ? String(input.sessionId) : '',
-})
-
-/**
- * Test / app-service helper: calls the Host application layer directly.
- * Production Agent tools must use `visionBenchTool` → `dispatchVisionCommand({ requireHost: true })`
- * so missing Host never falls back to a second local writer.
- * Keeps full Host results (no Agent projection) for business tests.
- * @param {any} [home]
- * @param {any} [args]
- * @param {any} [cwd]
- * @param {any} [originInput]
- * @param {any} [opts]
- * @returns {Promise<any>}
- */
-export async function runVisionBench(home, args, cwd, originInput, opts) {
-  const origin = originFrom(originInput)
-  return finalizeAgentCommandResult(
-    await executeHostCommand({
-      home,
-      cwd,
-      action: args && args.action,
-      payload: args || {},
-      source: origin.source,
-      sessionId: origin.sessionId,
-      signal: opts && opts.signal,
-      commandId: opts && opts.commandId,
-      expectedConfigVersion: args && (args.expectedConfigVersion ?? args.configVersion),
-      transport: opts && opts.transport,
-    }),
-    origin.source,
-  )
 }
 
 /**
@@ -331,7 +288,7 @@ export function visionBenchTool(home) {
     output: {
       schema: { type: 'object', additionalProperties: true },
       render(/** @type {any} */ _args, /** @type {any} */ value) {
-        return [{ type: 'text', text: JSON.stringify(value, null, 2) }]
+        return [{ type: 'text', text: JSON.stringify(value) }]
       },
     },
     timeoutMs: 620000,
@@ -342,18 +299,7 @@ export function visionBenchTool(home) {
         return finalizeAgentCommandResult({ ok: false, cancelled: true, error: '已取消' }, 'agent')
       const cwd = cwdOf(agent)
       const sessionId = sessionIdOf(agent)
-      /** @type {any} */
-      let pack = null
-      const action = args && args.action
-      if ((action === 'alarm' || action === 'trend') && cwd) {
-        try {
-          const ws = loadWorkspace(home, cwd)
-          pack = modbusForSession(ws, sessionId)
-        } catch {
-          pack = null
-        }
-      }
-      const preflight = validateAgentToolArgs(args, { pack })
+      const preflight = validateAgentToolArgs(args, { pack: null })
       if (preflight) return finalizeAgentCommandResult(preflight, 'agent')
       const dispatched = await dispatchVisionCommand({
         home,
@@ -384,4 +330,4 @@ export function visionBenchTool(home) {
   }
 }
 
-export const _internal = { ACTIONS, originFrom }
+export const _internal = { ACTIONS }

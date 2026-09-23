@@ -17,7 +17,7 @@
  * Layered store ⇄ flat session view:
  *   claimLegacyPrivate → projectModbusForSession → (applyOperation) → foldModbusFromSession
  */
-import { normalizeModbus } from './modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { validateLayerDeviceIds } from '../../domain/modbus/device-identity.mjs'
 import { hasTopology, isLegacyClaimable, pickTopology, topologyFingerprint } from './config-scope-claim.mjs'

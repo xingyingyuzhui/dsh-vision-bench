@@ -6,7 +6,7 @@ import {
   evidenceFromRef,
   postEvidence,
 } from '../../../common/agent-reference.mjs'
-import { TREND_WINDOW_MS } from '../../../../application/modbus/trend-model.mjs'
+import { TREND_WINDOW_MS } from '../../../../domain/modbus/trend-model.mjs'
 import {
   formatSwitchWriteNote,
   normalizeVisualizationComponent,

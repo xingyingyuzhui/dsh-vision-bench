@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizeModbus } from '../modbus/modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { normalizeTimelineEvent, prepend, trimTimeline } from '../../domain/modbus/journal-model.mjs'
 import { notifyConnectionRelease } from '../../infrastructure/modbus/modbus-transport.mjs'
 import { requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'

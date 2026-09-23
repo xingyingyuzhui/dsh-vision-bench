@@ -2,7 +2,8 @@
 import { connectOp, modbusRead, modbusWrite } from '../../modbus/index.mjs'
 import { buildEvidenceRefs } from '../../modbus/index.mjs'
 import { createManualRequest } from '../../../infrastructure/store/journal-store.mjs'
-import { resolveTarget } from '../../modbus/target-resolver-service.mjs'
+import { agentLocatorError } from '../agent-locator-error.mjs'
+import { resolveTarget } from '../../../domain/modbus/target-resolver-service.mjs'
 import {
   AGENT_TREND_DEFAULT_LIMIT,
   TREND_KEEP,
@@ -162,7 +163,7 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
         pointId: pointIds[0],
         trendKey,
       })
-      if (!rt.ok) return { ok: false, action, error: rt.error, errorCode: rt.errorCode }
+      if (!rt.ok) return agentLocatorError(action, rt, connectionId)
       resolvedPointId = rt.pointId
       resolvedConnectionId = rt.connectionId || connectionId
       resolvedDeviceId = rt.deviceId || resolvedDeviceId
@@ -300,7 +301,7 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
         pointId,
         alarmId,
       })
-      if (!rt.ok) return { ok: false, action, error: rt.error, errorCode: rt.errorCode }
+      if (!rt.ok) return agentLocatorError(action, rt, connectionId)
       if (rt.connectionId) resolvedConnectionId = rt.connectionId
     }
     if (alarmId) {

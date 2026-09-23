@@ -1,5 +1,5 @@
 import { projectModbusForSession } from '../../application/modbus/config-scope-service.mjs'
-import { normalizeModbus } from '../../application/modbus/modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { createModbusTransport } from './modbus-transport.mjs'
 import { loadWorkspace } from '../store/workspace-store.mjs'
 

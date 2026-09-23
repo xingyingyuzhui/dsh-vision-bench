@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { normalizeModbus } from '../../bench-devices.mjs'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 
 test('Task5: schemaVersion fixed 3, configVersion increments on each connection/device/point change, evidence uses configVersion', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-version-'))

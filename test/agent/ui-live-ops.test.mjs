@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { ERROR_CODES, modbusWrite, resolvePendingWrite } from '../../bench-modbus.mjs'
+import { listPendingWrites, resolvePendingWrite } from '../../bench-actions.mjs'
+import { ERROR_CODES, modbusWrite } from '../../bench-modbus.mjs'
 import { agentRefToText, buildAgentRef } from '../../bench-shared.mjs'
 import { loadWorkspace } from '../../bench-store.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 import { projectModbusForSession } from '../../src/application/modbus/config-scope-service.mjs'
 import { saveSessionModbusPatch } from '../../src/application/modbus/workspace-session-view.mjs'
 import { createBench } from '../helpers/workspace-factory.mjs'
@@ -92,10 +93,13 @@ test('Agent live ops need deviceId on multi-device connections; pending write bi
     { source: 'agent', sessionId: 's1' },
   )
   assert.equal(first.needsConfirm, true)
-  assert.equal(first.request.deviceId, 'd1')
-  assert.deepEqual(first.request.pointIds, ['p1'])
-  assert.equal(first.request.endpoint.configVersion, loadWorkspace(home, cwd).modbus.configVersion)
-  assert.equal(first.request.endpoint.unitId, 1)
+  assert.equal('request' in first, false)
+  const pending = listPendingWrites(cwd, 's1').find((item) => item.id === first.requestId)
+  assert.ok(pending)
+  assert.equal(pending.deviceId, 'd1')
+  assert.deepEqual(pending.pointIds, ['p1'])
+  assert.equal(pending.endpoint.configVersion, loadWorkspace(home, cwd).modbus.configVersion)
+  assert.equal(pending.endpoint.unitId, 1)
   assert.equal((await resolvePendingWrite(home, cwd, first.requestId, false, { sessionId: 's1' })).rejected, true)
   assert.equal((loadWorkspace(home, cwd).modbus.values || []).length, 0)
   const second = await runVisionBench(

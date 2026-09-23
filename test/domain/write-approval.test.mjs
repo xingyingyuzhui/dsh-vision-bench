@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { resolvePendingWrite } from '../../bench-actions.mjs'
+import { listPendingWrites, resolvePendingWrite } from '../../bench-actions.mjs'
 import { journalView, loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 import { projectModbusForSession } from '../../src/application/modbus/config-scope-service.mjs'
 import { saveSessionModbusPatch } from '../../src/application/modbus/workspace-session-view.mjs'
 import { createBench, pointSeries } from '../helpers/workspace-factory.mjs'
@@ -30,7 +30,7 @@ test('runVisionBench write action requires user approval then executes', async (
   assert.equal(first.ok, false)
   assert.equal(first.needsConfirm, true)
   assert.ok(first.requestId)
-  assert.deepEqual(first.request.values, [42, 43])
+  assert.deepEqual(listPendingWrites(cwd, 's1').find((item) => item.id === first.requestId)?.values, [42, 43])
   const untouched = loadWorkspace(home, cwd).modbus.values
   assert.equal((untouched || []).length, 0)
 

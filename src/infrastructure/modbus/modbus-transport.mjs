@@ -1,4 +1,4 @@
-import { normalizeModbus } from '../../application/modbus/modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { getVisionIoBroker } from './io-broker.mjs'
 import { clampTimeoutMs, endpointFingerprint, ioError, toEndpoint, validateIoRequest } from '../../domain/modbus/io-contract.mjs'
 

@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
 import { workspaceKey } from '../../bench-store.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 import { workspaceDir } from '../../src/infrastructure/persistence/workspace-migration.mjs'
 
 test('legacy configDrafts are ignored on load and dropped on next save', async () => {

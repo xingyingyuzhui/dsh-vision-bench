@@ -123,7 +123,7 @@ test('Task7: POST /evidence merges and validates via host', async () => {
     saveWorkspace(home, cwd, { modbus: { version: 3, connections: [c1], devices: [d1], points: [p1] } })
     const cv = loadWorkspace(home, cwd).modbus.configVersion
     // use bench-tool via host-like call: runVisionBench evidence should use appendEvidence internally
-    const { runVisionBench } = await import('../../bench-tool.mjs')
+    const { runVisionBench } = await import('../helpers/run-vision-bench.mjs')
     let res = await runVisionBench(
       home,
       {

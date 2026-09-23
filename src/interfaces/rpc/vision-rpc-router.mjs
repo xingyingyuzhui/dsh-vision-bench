@@ -14,7 +14,7 @@ import {
   resolvePendingWrite,
 } from '../../application/modbus/index.mjs'
 import { runSelfCheck } from '../../application/system/self-check.mjs'
-import { normalizeModbus } from '../../application/modbus/modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { artifactInfo, readBuildLog, readProjectFile } from '../../infrastructure/files/project-fs.mjs'
 import { toEndpoint } from '../../domain/modbus/io-contract.mjs'
 import { changedConnectionIds, notifyConnectionRelease } from '../../infrastructure/modbus/modbus-transport.mjs'

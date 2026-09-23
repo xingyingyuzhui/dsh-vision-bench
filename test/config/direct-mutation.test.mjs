@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 import { mutateConfig } from '../../src/application/config/config-mutation-service.mjs'
 import { projectModbusForSession } from '../../src/application/modbus/config-scope-service.mjs'
 

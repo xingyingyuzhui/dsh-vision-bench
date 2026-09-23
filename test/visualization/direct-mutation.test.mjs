@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 
 test('visualization update/remove keep id and do not auto-delete degraded components', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dvb-viz-'))
