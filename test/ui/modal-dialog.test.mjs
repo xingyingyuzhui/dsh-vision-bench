@@ -70,3 +70,31 @@ test('maskClosable=false keeps the mask inert', () => {
   node.props.onClick()
   assert.equal(closed.length, 0)
 })
+
+test('danger defaults maskClosable to false unless the caller opts in', () => {
+  const closed = []
+  const danger = renderModalDialog(el, t, {
+    open: true,
+    danger: true,
+    kind: 'confirm',
+    onClose: () => closed.push('danger'),
+  })
+  danger.props.onClick()
+  assert.equal(closed.length, 0)
+  const opted = renderModalDialog(el, t, {
+    open: true,
+    danger: true,
+    kind: 'confirm',
+    maskClosable: true,
+    onClose: () => closed.push('opt'),
+  })
+  opted.props.onClick()
+  assert.deepEqual(closed, ['opt'])
+})
+
+test('confirmDisabled blocks the primary action without disabling cancel', () => {
+  const node = renderModalDialog(el, t, { open: true, showCancel: true, confirmDisabled: true })
+  const footer = node.children[0].children[2]
+  assert.equal(footer.children[0].props.disabled, false)
+  assert.equal(footer.children[1].props.disabled, true)
+})
