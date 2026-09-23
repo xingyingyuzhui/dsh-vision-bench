@@ -60,7 +60,7 @@ export default {
         },
         {
           "file": "src/infrastructure/store/journal-store.mjs",
-          "max": 498,
+          "max": 494,
           "reason": "P5-4 debt ratchet; split in later P4/P6",
           "stage": "P6",
           "owner": "vision-bench"

@@ -63,10 +63,10 @@ export const probeBindings = (bindings, exists = existsSync) => {
   return health
 }
 
-/** @param {string} home */
+/** @param {string | undefined} home */
 export const loadBindings = (home) => {
   try {
-    return normalizeBindings(JSON.parse(readFileSync(bindingsPath(home), 'utf8')))
+    return normalizeBindings(JSON.parse(readFileSync(bindingsPath(/** @type {string} */ (home)), 'utf8')))
   } catch {
     return emptyBindings()
   }

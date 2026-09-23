@@ -218,7 +218,6 @@ export const journalView = (workspace) => ({
 })
 
 /** @param {string} home @param {string} cwd @param {unknown} sessionId */
-/** @param {string} home @param {string} cwd @param {unknown} sessionId */
 export const bindSession = async (home, cwd, sessionId) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -261,7 +260,6 @@ export const touchServiceSession = async (home, cwd, sessionId) => {
 }
 
 /** @param {string} home @param {string} cwd */
-/** @param {string} home @param {string} cwd */
 export const unbindSession = async (home, cwd) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -271,7 +269,6 @@ export const unbindSession = async (home, cwd) => {
   return { ok: true, boundId: '' }
 }
 
-/** @param {string} home @param {string} cwd @param {JournalSpec} spec */
 /** @param {string} home @param {string} cwd @param {JournalSpec} spec */
 export const createManualRequest = async (home, cwd, spec) => {
   const room = requireWorkspaceCwd(cwd)
@@ -303,8 +300,7 @@ export const createManualRequest = async (home, cwd, spec) => {
   return { ok: true, request }
 }
 
-/** @param {string} home @param {string} cwd @param {unknown} id @param {unknown} done */
-/** @param {string} home @param {string} cwd @param {unknown} id @param {unknown} done */
+/** @param {string} home @param {string | undefined} cwd @param {unknown} id @param {unknown} done */
 export const resolveManualRequest = async (home, cwd, id, done) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -399,7 +395,7 @@ export const pruneBuildLogs = (home, keep = 30) => {
   return { ok: true, pruned }
 }
 
-/** @param {string} home @param {string} cwd @param {{ connectionId?: unknown, all?: unknown }} options */
+/** @param {string} home @param {string | undefined} cwd @param {{ connectionId?: unknown, all?: unknown }} options */
 export const clearFramesByConnection = async (home, cwd, options) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -426,7 +422,7 @@ export const clearFramesByConnection = async (home, cwd, options) => {
   return { ok: true, cleared: all ? 'all' : connId, workspace: saved.workspace }
 }
 
-/** @param {string} home @param {string} cwd @param {unknown} evidence @param {unknown} [sessionId] */
+/** @param {string} home @param {string | undefined} cwd @param {unknown} evidence @param {unknown} [sessionId] */
 export const appendEvidence = async (home, cwd, evidence, sessionId = '') => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }

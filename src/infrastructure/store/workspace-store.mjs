@@ -114,10 +114,10 @@ const normalizeManualRequests = (list) => {
   return out
 }
 
-/** @param {string} home @param {string | undefined} cwd */ export const loadWorkspace = (home, cwd) => {
+/** @param {string | undefined} home @param {string | undefined} cwd */ export const loadWorkspace = (home, cwd) => {
   try {
     const repo = createWorkspaceRepository({
-      home,
+      home: /** @type {string} */ (home),
       keyOf: workspaceKey,
       normalizeWorkspace,
     })
