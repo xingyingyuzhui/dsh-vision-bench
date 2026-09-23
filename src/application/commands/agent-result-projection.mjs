@@ -16,6 +16,33 @@ export { AGENT_FRAMES_MAX_LIMIT, AGENT_TEXT_CAPS, utf8ByteLength } from './agent
 const CONFIG_ACTIONS = new Set(['points', 'config', 'configureConnection', 'visualization'])
 
 /**
+ * Pending writes must not hand the model the endpoint fingerprint inside `request`.
+ * @param {any} result
+ */
+function projectWrite(result) {
+  if (!result || result.needsConfirm !== true) {
+    if (result && 'workspace' in result) {
+      const { workspace: _workspace, ...rest } = result
+      void _workspace
+      return rest
+    }
+    return result
+  }
+  /** @type {Record<string, unknown>} */
+  const projected = {
+    ok: false,
+    needsConfirm: true,
+    errorCode: result.errorCode,
+    requestId: result.requestId,
+    label: result.label,
+    nextStep: result.nextStep,
+  }
+  if (result.error !== undefined) projected.error = result.error
+  if (result.deduped === true) projected.deduped = true
+  return projected
+}
+
+/**
  * @param {any} args
  * @param {any} result
  * @returns {any}
@@ -56,6 +83,7 @@ export function projectAgentResult(args, result) {
     case 'build':
     case 'map':
     case 'write':
+      return projectWrite(result)
     case 'manual':
     case 'connect':
     case 'openConnection':
