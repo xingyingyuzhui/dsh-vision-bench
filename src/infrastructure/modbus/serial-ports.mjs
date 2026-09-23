@@ -1,3 +1,4 @@
+// @ts-check
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { runExecFile } from '../process/run-command.mjs'
@@ -7,6 +8,24 @@ const winRegExe = () => join(process.env.SystemRoot || process.env.windir || 'C:
 const COM_ID = /^COM(\d+)$/i
 const UNIX_KEEP = /^(cu\.usb|cu\.wchusb|cu\.SLAB_USBtoUART|cu\.usbserial|cu\.usbmodem|ttyUSB|ttyACM)/
 
+/**
+ * @typedef {(bin: string, args: string[], opts: { timeoutMs?: number }) => Promise<{ stdout?: string }>} PortExec
+ * @typedef {{ platform?: string, execFile?: PortExec, readdir?: (dir: string) => string[] }} SerialListOptions
+ */
+
+/**
+ * @param {unknown} error
+ * @returns {string}
+ */
+function thrownText(error) {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = /** @type {{ message?: unknown }} */ (error).message
+    return String(message || error)
+  }
+  return String(error)
+}
+
+/** @param {Iterable<unknown>} ids */
 const uniqSorted = (ids) => {
   const seen = new Set()
   const out = []
@@ -22,6 +41,7 @@ const uniqSorted = (ids) => {
   return out
 }
 
+/** @param {unknown} port */
 export const serialDevicePath = (port) => {
   const raw = String(port || '').trim()
   const prefixed = raw.match(/^\\\\\.\\COM(\d+)$/i)
@@ -32,6 +52,7 @@ export const serialDevicePath = (port) => {
   return n >= 10 ? '\\\\.\\' + id : id
 }
 
+/** @param {unknown} text */
 export const parseRegSerialComm = (text) => {
   const ids = []
   for (const line of String(text || '').split(/\r?\n/)) {
@@ -41,6 +62,7 @@ export const parseRegSerialComm = (text) => {
   return uniqSorted(ids)
 }
 
+/** @param {unknown} text */
 export const parseJsonStringList = (text) => {
   const raw = String(text || '').trim()
   if (!raw) return []
@@ -59,7 +81,9 @@ export const parseJsonStringList = (text) => {
   )
 }
 
+/** @param {unknown} text @returns {Record<string, string>} */
 export const parsePnpPortLabels = (text) => {
+  /** @type {Record<string, string>} */
   const labels = {}
   const raw = String(text || '').trim()
   if (!raw) return labels
@@ -79,6 +103,7 @@ export const parsePnpPortLabels = (text) => {
   return labels
 }
 
+/** @param {Iterable<unknown> | null | undefined} names */
 export const listUnixPortsFromNames = (names) => {
   const ports = []
   for (const name of names || []) {
@@ -90,12 +115,20 @@ export const listUnixPortsFromNames = (names) => {
   return ports
 }
 
+/**
+ * @param {PortExec} execFileFn
+ * @param {string} bin
+ * @param {string[]} args
+ * @param {number} timeoutMs
+ */
 const execOut = async (execFileFn, bin, args, timeoutMs) => {
   const ran = await execFileFn(bin, args, { timeoutMs })
   return String((ran && ran.stdout) || '')
 }
 
+/** @param {PortExec} execFileFn */
 const listWindowsPorts = async (execFileFn) => {
+  /** @type {string[]} */
   let ids = []
   try {
     ids = parseRegSerialComm(
@@ -128,6 +161,7 @@ const listWindowsPorts = async (execFileFn) => {
   return ids.map((id) => ({ path: id, label: id }))
 }
 
+/** @param {SerialListOptions} [opts] */
 export const listSerialPorts = async (opts = {}) => {
   const plat = opts.platform || process.platform
   const execFileFn = opts.execFile || runExecFile
@@ -138,7 +172,7 @@ export const listSerialPorts = async (opts = {}) => {
   } catch (error) {
     return {
       ok: false,
-      error: String((error && error.message) || error).slice(0, 200),
+      error: thrownText(error).slice(0, 200),
       ports: [],
     }
   }

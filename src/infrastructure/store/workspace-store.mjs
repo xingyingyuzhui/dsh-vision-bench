@@ -1,3 +1,4 @@
+// @ts-check
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
@@ -21,11 +22,12 @@ import { storeDir } from './bindings-store.mjs'
 import { emptyFocusState, normalizeFocusState } from './focus-store.mjs'
 
 const TIMELINE_WINDOW = 360
-const pushEvent = (timeline, event) => trimTimeline(prepend(timeline, event, TIMELINE_WINDOW))
+/** @typedef {Record<string, any>} WorkspaceJson */
+/** @param {unknown} timeline @param {unknown} event */ const pushEvent = (timeline, event) => trimTimeline(prepend(timeline, event, TIMELINE_WINDOW))
 
-export const stringifyConfigSlice = (modbus) => {
+/** @param {unknown} modbus */ export const stringifyConfigSlice = (modbus) => {
   try {
-    const pack = modbus && typeof modbus === 'object' ? modbus : {}
+    const pack = modbus && typeof modbus === 'object' ? /** @type {WorkspaceJson} */ (modbus) : {}
     const slice = {
       connections: pack.connections || [],
       devices: pack.devices || [],
@@ -41,6 +43,7 @@ export const stringifyConfigSlice = (modbus) => {
   }
 }
 
+/** @returns {WorkspaceJson & { keil: WorkspaceJson, session: { boundId: string }, manualRequests: WorkspaceJson[], modbus: WorkspaceJson, focus: unknown, log: unknown, tasks: unknown, timeline: unknown }} */
 export const emptyWorkspace = () => ({
   keil: { project: '', target: '', artifact: 'hex', download: '' },
   log: emptyLog(),
@@ -54,11 +57,12 @@ export const emptyWorkspace = () => ({
 
 const MANUAL_STATUSES = new Set(['pending', 'done', 'rejected'])
 
+/** @param {unknown} list */
 const normalizeManualRequests = (list) => {
   if (!Array.isArray(list)) return []
   return list
     .slice(0, 20)
-    .map((item) => ({
+    .map((/** @type {WorkspaceJson} */ item) => ({
       id: typeof item?.id === 'string' ? item.id.trim() : '',
       text: typeof item?.text === 'string' ? item.text.trim().slice(0, 240) : '',
       status: MANUAL_STATUSES.has(item?.status) ? item.status : 'pending',
@@ -68,25 +72,25 @@ const normalizeManualRequests = (list) => {
     .filter((item) => item.id && item.text)
 }
 
-export const workspaceKey = (cwd) =>
+/** @param {unknown} cwd */ export const workspaceKey = (cwd) =>
   createHash('sha256')
     .update(String(cwd || ''))
     .digest('hex')
     .slice(0, 16)
 
-export const workspaceRepository = (home) =>
+/** @param {string} home */ export const workspaceRepository = (home) =>
   createWorkspaceRepository({
     home,
     keyOf: workspaceKey,
     normalizeWorkspace,
   })
 
-export const workspacePath = (home, cwd) => join(storeDir(home), 'workspaces', `${workspaceKey(cwd)}.json`)
+/** @param {string} home @param {string | undefined} cwd */ export const workspacePath = (home, cwd) => join(storeDir(home), 'workspaces', `${workspaceKey(cwd)}.json`)
 
-export const normalizeWorkspace = (input) => {
+/** @param {WorkspaceJson | null | undefined} input */ export const normalizeWorkspace = (input) => {
   const out = emptyWorkspace()
-  const keil = input?.keil && typeof input.keil === 'object' ? input.keil : {}
-  const modbus = input?.modbus && typeof input.modbus === 'object' ? input.modbus : {}
+  const keil = input?.keil && typeof input.keil === 'object' ? /** @type {WorkspaceJson} */ (input.keil) : {}
+  const modbus = input?.modbus && typeof input.modbus === 'object' ? /** @type {WorkspaceJson} */ (input.modbus) : {}
   out.keil.project = typeof keil.project === 'string' ? keil.project.trim() : ''
   out.keil.target = typeof keil.target === 'string' ? keil.target.trim() : ''
   const artifact = typeof keil.artifact === 'string' ? keil.artifact.trim().toLowerCase() : 'hex'
@@ -102,7 +106,7 @@ export const normalizeWorkspace = (input) => {
   out.log = rawLog.map(normalizeEvent).slice(0, 8)
   out.tasks = normalizeTasks(input?.tasks)
   out.timeline = normalizeTimeline(input?.timeline)
-  const session = input?.session && typeof input.session === 'object' ? input.session : {}
+  const session = input?.session && typeof input.session === 'object' ? /** @type {WorkspaceJson} */ (input.session) : {}
   out.session = { boundId: typeof session.boundId === 'string' ? session.boundId.trim() : '' }
   out.manualRequests = normalizeManualRequests(input?.manualRequests)
   out.modbus = normalizeModbus(modbus)
@@ -110,10 +114,10 @@ export const normalizeWorkspace = (input) => {
   return out
 }
 
-export const loadWorkspace = (home, cwd) => {
+/** @param {string | undefined} home @param {string | undefined} cwd */ export const loadWorkspace = (home, cwd) => {
   try {
     const repo = createWorkspaceRepository({
-      home,
+      home: /** @type {string} */ (home),
       keyOf: workspaceKey,
       normalizeWorkspace,
     })
@@ -123,13 +127,14 @@ export const loadWorkspace = (home, cwd) => {
   }
 }
 
+/** @param {WorkspaceJson | null | undefined} incoming */
 const isV3Patch = (incoming) => {
   if (!incoming || typeof incoming !== 'object') return false
   return (
     incoming.version === 3 ||
     Array.isArray(incoming.connections) ||
     (Array.isArray(incoming.devices) &&
-      incoming.devices.some((d) => d && (d.connectionId || d.unitId !== undefined))) ||
+      incoming.devices.some((/** @type {WorkspaceJson} */ d) => d && (d.connectionId || d.unitId !== undefined))) ||
     incoming.pollingByConnection !== undefined ||
     incoming.framesByConnection !== undefined ||
     incoming.activeConnectionId !== undefined ||
@@ -142,6 +147,7 @@ const isV3Patch = (incoming) => {
   )
 }
 
+/** @param {WorkspaceJson | null | undefined} incoming @param {boolean} looksLegacy */
 const isV2Partial = (incoming, looksLegacy) => {
   if (looksLegacy) return false
   if (!incoming || typeof incoming !== 'object') return false
@@ -159,12 +165,13 @@ const isV2Partial = (incoming, looksLegacy) => {
   ].some((k) => Object.prototype.hasOwnProperty.call(incoming, k))
 }
 
+/** @param {WorkspaceJson} prev @param {WorkspaceJson | null | undefined} input */
 export const applyWorkspacePatch = (prev, input) => {
-  const incoming = input?.modbus || {}
+  const incoming = /** @type {WorkspaceJson} */ (input?.modbus || {})
   const looksLegacy =
     incoming.conn === undefined &&
     ((Array.isArray(incoming.devices) &&
-      incoming.devices.some((d) => d && (d.mode !== undefined || d.port !== undefined || Array.isArray(d.segments)))) ||
+      incoming.devices.some((/** @type {WorkspaceJson} */ d) => d && (d.mode !== undefined || d.port !== undefined || Array.isArray(d.segments)))) ||
       incoming.mode !== undefined ||
       incoming.segments !== undefined)
   const v3Patch = isV3Patch(incoming)
@@ -195,7 +202,7 @@ export const applyWorkspacePatch = (prev, input) => {
         input._replaceFramesByConnection && typeof input._replaceFramesByConnection === 'object'
           ? input._replaceFramesByConnection
           : {}
-      const replaced = {}
+      const replaced = /** @type {WorkspaceJson} */ ({})
       for (const [k, v] of Object.entries(replaceMap)) {
         replaced[k] = normalizeFramesByConnection({ [k]: v }, [])[k] || []
       }
@@ -220,7 +227,7 @@ export const applyWorkspacePatch = (prev, input) => {
       if (aid) {
         const raw = { ...incoming.conn }
         raw.slave = undefined
-        mergedModbus.connections = (mergedModbus.connections || []).map((c) =>
+        mergedModbus.connections = (mergedModbus.connections || []).map((/** @type {WorkspaceJson} */ c) =>
           c.id === aid ? { ...c, conn: { ...c.conn, ...raw } } : c,
         )
       }
@@ -233,19 +240,19 @@ export const applyWorkspacePatch = (prev, input) => {
       const aid = mergedModbus.activeConnectionId || mergedModbus.connections?.[0]?.id
       const raw = { ...incoming.conn }
       raw.slave = undefined
-      mergedModbus.connections = (mergedModbus.connections || []).map((c) =>
+      mergedModbus.connections = (mergedModbus.connections || []).map((/** @type {WorkspaceJson} */ c) =>
         c.id === aid ? { ...c, conn: normalizeConn({ ...c.conn, ...raw }) } : c,
       )
     }
     if (incoming.points !== undefined) {
-      const AREA_BY_FN = { 1: 'coil', 2: 'discreteInput', 3: 'holdingRegister', 4: 'inputRegister' }
+      const AREA_BY_FN = /** @type {Record<number, string>} */ ({ 1: 'coil', 2: 'discreteInput', 3: 'holdingRegister', 4: 'inputRegister' })
       const activeConnId = mergedModbus.activeConnectionId || mergedModbus.connections?.[0]?.id || 'c1'
       const activeDevId = mergedModbus.activeDeviceId || mergedModbus.devices?.[0]?.id || 'd1'
       const kept = (mergedModbus.points || []).filter(
-        (p) => !(p.connectionId === activeConnId && p.deviceId === activeDevId),
+        (/** @type {WorkspaceJson} */ p) => !(p.connectionId === activeConnId && p.deviceId === activeDevId),
       )
-      const genId = (pref) => pref + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-      const newPts = (Array.isArray(incoming.points) ? incoming.points : []).map((raw) => {
+      const genId = (/** @type {string} */ pref) => pref + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+      const newPts = (Array.isArray(incoming.points) ? incoming.points : []).map((/** @type {WorkspaceJson} */ raw) => {
         const fn = Number(raw?.function)
         const area = AREA_BY_FN[fn] || 'holdingRegister'
         const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : genId('p')
@@ -344,7 +351,7 @@ export const applyWorkspacePatch = (prev, input) => {
   return { ok: true, workspace, prev }
 }
 
-export const saveWorkspace = (home, cwd, input) => {
+/** @param {string} home @param {string | undefined} cwd @param {WorkspaceJson} input */ export const saveWorkspace = (home, cwd, input) => {
   const prev = loadWorkspace(home, cwd)
   const applied = applyWorkspacePatch(prev, input)
   if (!applied.ok) return applied
@@ -381,8 +388,9 @@ export const saveWorkspace = (home, cwd, input) => {
   })
 }
 
+/** @param {string} home @param {string | undefined} cwd @param {WorkspaceJson} input */
 export async function saveWorkspaceAsync(home, cwd, input) {
-  return workspaceRepository(home).update(cwd, null, async (current) =>
+  return workspaceRepository(home).update(cwd, null, async (/** @type {WorkspaceJson | null | undefined} */ current) =>
     applyWorkspacePatch(current || emptyWorkspace(), input),
   )
 }

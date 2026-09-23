@@ -177,6 +177,21 @@ export default {
       targets: ['bench-styles.mjs', 'client.js', 'node_modules/@tanstack/table-core', 'node_modules/@tanstack/virtual-core', 'package-lock.json', 'package.json', 'scripts/build-client.mjs', 'scripts/vendor-entry.mjs'],
     },
     {
+      file: 'test/architecture/coverage-critical.test.mjs',
+      purpose: 'architecture-boundary',
+      reason: '关键覆盖率门槛对照写路径、烧录、预设声明与挂载文件',
+      targets: [
+        'src/application/flash',
+        'src/application/flash/*',
+        'src/application/flash/flash-service.mjs',
+        'src/application/modbus',
+        'src/application/modbus/*',
+        'src/application/modbus/write-service.mjs',
+        'src/infrastructure/harness/preset-declaration.mjs',
+        'src/infrastructure/host/vision-preset-attach.mjs',
+      ],
+    },
+    {
       file: 'test/architecture/source-assertions.test.mjs',
       purpose: 'architecture-boundary',
       reason: '门禁自测：路径字面量仅作分类与许可清单用例，不读取生产源码',

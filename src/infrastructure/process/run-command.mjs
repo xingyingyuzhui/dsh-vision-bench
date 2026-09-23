@@ -1,17 +1,34 @@
+// @ts-check
 import { execFile, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const RUNTIME_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../..', 'runtime')
+/** @type {Record<string, string>} */
 const SCRIPTS = {}
 
+/**
+ * @typedef {{
+ *   signal?: AbortSignal,
+ *   timeoutMs?: number,
+ *   maxBuffer?: number,
+ *   cwd?: string,
+ *   env?: NodeJS.ProcessEnv,
+ * }} ExecOpts
+ */
+
+/**
+ * @param {unknown} pythonBin
+ * @param {readonly string[]} extra
+ */
 const pythonArgv = (pythonBin, extra) => {
   const name = basename(String(pythonBin).replace(/\\/g, '/')).toLowerCase()
   const prefix = name === 'py' || name === 'py.exe' ? ['-3'] : []
   return prefix.concat(extra)
 }
 
+/** @param {unknown} text */
 const parseJsonStdout = (text) => {
   const raw = String(text || '').trim()
   if (!raw) return { error: '脚本没有输出' }
@@ -31,6 +48,7 @@ const parseJsonStdout = (text) => {
   }
 }
 
+/** @param {number | undefined} pid */
 export const killProcessTree = (pid) => {
   if (!pid || pid <= 0) return
   if (process.platform === 'win32') {
@@ -44,6 +62,11 @@ export const killProcessTree = (pid) => {
   }
 }
 
+/**
+ * @param {string} bin
+ * @param {readonly string[]} args
+ * @param {ExecOpts} [opts]
+ */
 export const runExecFile = (bin, args, opts = {}) =>
   new Promise((resolve, reject) => {
     const signal = opts.signal
@@ -60,6 +83,7 @@ export const runExecFile = (bin, args, opts = {}) =>
     let cancelled = false
     let timedOut = false
     let settled = false
+    /** @type {import('node:child_process').ChildProcess | undefined} */
     let child
     const finish = () => {
       if (settled) return
@@ -72,12 +96,13 @@ export const runExecFile = (bin, args, opts = {}) =>
     if (signal) signal.addEventListener('abort', onAbort, { once: true })
     // execFile's built-in timeout only kills the direct child; route expiry
     // through killProcessTree so grandchildren like UV4.exe die with it.
+    const timeoutMs = opts.timeoutMs || 0
     const killer =
-      opts.timeoutMs > 0
+      timeoutMs > 0
         ? setTimeout(() => {
             timedOut = true
             if (child) killProcessTree(child.pid)
-          }, opts.timeoutMs)
+          }, timeoutMs)
         : null
     child = execFile(
       bin,
@@ -109,14 +134,21 @@ export const runExecFile = (bin, args, opts = {}) =>
     )
   })
 
+/**
+ * @param {unknown} pythonBin
+ * @param {string} scriptName
+ * @param {readonly string[]} args
+ * @param {ExecOpts} [opts]
+ */
 export const runPythonScript = async (pythonBin, scriptName, args, opts = {}) => {
   if (!pythonBin) return { ok: false, error: '未绑定 Python' }
-  if (!existsSync(pythonBin)) return { ok: false, error: 'Python 路径不存在: ' + pythonBin }
+  const bin = /** @type {string} */ (pythonBin)
+  if (!existsSync(bin)) return { ok: false, error: 'Python 路径不存在: ' + pythonBin }
   const script = SCRIPTS[scriptName]
   if (!script || !existsSync(script)) return { ok: false, error: '脚本不存在: ' + scriptName }
   if (opts.signal && opts.signal.aborted) return { ok: false, cancelled: true, error: '已取消' }
-  const argv = pythonArgv(pythonBin, [script, ...args])
-  const ran = await runExecFile(pythonBin, argv, {
+  const argv = pythonArgv(bin, [script, ...args])
+  const ran = await runExecFile(bin, argv, {
     timeoutMs: opts.timeoutMs || 30000,
     cwd: opts.cwd,
     signal: opts.signal,

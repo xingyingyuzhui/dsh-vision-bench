@@ -1,6 +1,58 @@
+// @ts-check
 import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { getVisionIoBroker } from './io-broker.mjs'
 import { clampTimeoutMs, endpointFingerprint, ioError, toEndpoint, validateIoRequest } from '../../domain/modbus/io-contract.mjs'
+
+/**
+ * @typedef {{ id?: string, connectionId?: string, role?: string, enabled?: boolean, sim?: boolean, conn?: { sim?: boolean, mode?: string } }} TransportConnection
+ * @typedef {{ id?: string, unitId?: unknown }} TransportDevice
+ * @typedef {{ fc?: unknown, address?: unknown, count?: number }} TransportBatch
+ * @typedef {{ address?: unknown, function?: unknown }} TransportPoint
+ * @typedef {{
+ *   cwd?: unknown,
+ *   connection?: TransportConnection,
+ *   device?: TransportDevice,
+ *   batch?: TransportBatch,
+ *   point?: TransportPoint,
+ *   values?: unknown,
+ *   timeoutMs?: unknown,
+ *   configVersion?: unknown,
+ *   fc?: unknown,
+ *   source?: unknown,
+ * }} TransportBuildInput
+ * @typedef {{
+ *   endpoint?: { sim?: boolean, mode?: string },
+ *   address?: unknown,
+ *   count?: number,
+ *   functionCode?: unknown,
+ *   values?: unknown,
+ *   cwd?: unknown,
+ *   connectionId?: unknown,
+ *   since?: unknown,
+ *   max?: unknown,
+ * }} TransportRequest
+ * @typedef {{ sim?: boolean, signal?: AbortSignal }} TransportCallOpts
+ * @typedef {{ code?: unknown, message?: unknown, frames?: unknown, transactionId?: unknown, durationMs?: unknown }} ThrownIo
+ */
+
+/**
+ * @param {unknown} error
+ * @returns {ThrownIo & { raw: unknown }}
+ */
+function thrownIo(error) {
+  if (!error || typeof error !== 'object') return { raw: error }
+  return { raw: error, .../** @type {ThrownIo} */ (error) }
+}
+
+/** @param {Record<string, unknown>} request @returns {TransportRequest} */
+function asRequest(request) {
+  return /** @type {TransportRequest} */ (request)
+}
+
+/** @param {Record<string, unknown>} [opts] @returns {TransportCallOpts} */
+function asOpts(opts) {
+  return /** @type {TransportCallOpts} */ (opts || {})
+}
 
 let simSeq = 0
 const nextSimTx = () => 'sim:' + ++simSeq
@@ -12,6 +64,7 @@ const nowMs = () => {
   return Number(process.hrtime.bigint()) / 1e6
 }
 
+/** @param {TransportBuildInput} input */
 export const toReadRequest = ({ cwd, connection, device, batch, timeoutMs, configVersion, source }) => {
   const endpoint = toEndpoint(connection)
   const unitId = Math.trunc(Number(device && device.unitId))
@@ -32,6 +85,7 @@ export const toReadRequest = ({ cwd, connection, device, batch, timeoutMs, confi
   }
 }
 
+/** @param {TransportBuildInput} input */
 export const toWriteRequest = ({ cwd, connection, device, point, values, timeoutMs, configVersion, fc, source }) => {
   const endpoint = toEndpoint(connection)
   const unitId = Math.trunc(Number(device && device.unitId))
@@ -52,9 +106,13 @@ export const toWriteRequest = ({ cwd, connection, device, point, values, timeout
   }
 }
 
+/**
+ * @param {{ address?: unknown, count?: number }} batch
+ * @param {unknown} [fc]
+ */
 const simRaw = (batch, fc = 3) => {
   const tick = Math.floor(Date.now() / 1000)
-  return Array.from({ length: batch.count }, (_, i) => {
+  return Array.from({ length: batch.count ?? 0 }, (_, i) => {
     const addr = Number(batch.address || 0) + i
     if (fc === 1 || fc === 2) {
       return (Math.floor(tick / 4) + addr) % 2 === 0 ? 1 : 0
@@ -81,12 +139,15 @@ const simRaw = (batch, fc = 3) => {
   })
 }
 
+/** @param {unknown} prevModbus @param {unknown} nextModbus */
 export function changedConnectionIds(prevModbus, nextModbus) {
   const prev = normalizeModbus(prevModbus || {})
   const next = normalizeModbus(nextModbus || {})
+  const prevConnections = /** @type {TransportConnection[]} */ (prev.connections || [])
+  const nextConnections = /** @type {TransportConnection[]} */ (next.connections || [])
   const ids = []
-  for (const old of prev.connections || []) {
-    const neu = (next.connections || []).find((item) => item.id === old.id)
+  for (const old of prevConnections) {
+    const neu = nextConnections.find((item) => item.id === old.id)
     if (!neu) {
       ids.push(old.id)
       continue
@@ -104,6 +165,11 @@ export function changedConnectionIds(prevModbus, nextModbus) {
   return ids
 }
 
+/**
+ * @param {unknown} cwd
+ * @param {unknown} ids
+ * @param {{ transport?: ReturnType<typeof createModbusTransport> }} [extra]
+ */
 export function notifyConnectionRelease(cwd, ids, extra = {}) {
   const list = Array.isArray(ids) ? ids.filter(Boolean) : []
   if (!cwd || !list.length) return
@@ -113,7 +179,14 @@ export function notifyConnectionRelease(cwd, ids, extra = {}) {
   }
 }
 
+/**
+ * @param {{ broker?: ReturnType<typeof getVisionIoBroker> }} [options]
+ */
 export function createModbusTransport({ broker = getVisionIoBroker() } = {}) {
+  /**
+   * @param {Record<string, unknown>} payload
+   * @param {Record<string, unknown>} [opts]
+   */
   const call = async (payload, opts) => {
     const body =
       payload && typeof payload === 'object' ? (payload.id ? payload : { ...payload, id: nextReqId() }) : payload
@@ -132,13 +205,13 @@ export function createModbusTransport({ broker = getVisionIoBroker() } = {}) {
       }
       return ran
     } catch (error) {
+      const thrown = thrownIo(error)
       return {
         ok: false,
-        error:
-          error && error.code ? error : ioError('IO_RUNTIME_UNAVAILABLE', String((error && error.message) || error)),
-        frames: error && error.frames,
-        transactionId: error && error.transactionId,
-        durationMs: error && error.durationMs,
+        error: thrown.code ? thrown.raw : ioError('IO_RUNTIME_UNAVAILABLE', String(thrown.message || error)),
+        frames: thrown.frames,
+        transactionId: thrown.transactionId,
+        durationMs: thrown.durationMs,
       }
     }
   }
@@ -151,10 +224,16 @@ export function createModbusTransport({ broker = getVisionIoBroker() } = {}) {
     async health() {
       return broker.health()
     },
+    /**
+     * @param {Record<string, unknown>} request
+     * @param {Record<string, unknown>} [opts]
+     */
     async read(request, opts = {}) {
-      if (opts.sim || request.endpoint?.sim) {
+      const req = asRequest(request)
+      const options = asOpts(opts)
+      if (options.sim || req.endpoint?.sim) {
         const t0 = nowMs()
-        const data = simRaw({ address: request.address, count: request.count }, request.functionCode)
+        const data = simRaw({ address: req.address, count: req.count }, req.functionCode)
         return {
           ok: true,
           data,
@@ -163,36 +242,50 @@ export function createModbusTransport({ broker = getVisionIoBroker() } = {}) {
           frames: {
             requestHex: '',
             responseHex: '',
-            frameFormat: request.endpoint && request.endpoint.mode === 'tcp' ? 'tcp-normalized' : 'rtu-adu',
-            request: 'SIM TX ' + request.functionCode + '@' + request.address + '×' + request.count,
+            frameFormat: req.endpoint && req.endpoint.mode === 'tcp' ? 'tcp-normalized' : 'rtu-adu',
+            request: 'SIM TX ' + req.functionCode + '@' + req.address + '×' + req.count,
             response: 'SIM RX ' + data.slice(0, 3).join(','),
           },
         }
       }
       return call(request, opts)
     },
+    /**
+     * @param {Record<string, unknown>} request
+     * @param {Record<string, unknown>} [opts]
+     */
     async write(request, opts = {}) {
-      if (opts.sim || request.endpoint?.sim) {
+      const req = asRequest(request)
+      const options = asOpts(opts)
+      if (options.sim || req.endpoint?.sim) {
         const t0 = nowMs()
         return {
           ok: true,
-          data: request.values,
+          data: req.values,
           durationMs: Math.max(0, Math.round(nowMs() - t0)),
           transactionId: nextSimTx(),
           frames: {
             requestHex: '',
             responseHex: '',
-            frameFormat: request.endpoint && request.endpoint.mode === 'tcp' ? 'tcp-normalized' : 'rtu-adu',
-            request: 'SIM TX ' + request.functionCode + '@' + request.address,
-            response: 'SIM RX ' + (Array.isArray(request.values) ? request.values.join(',') : ''),
+            frameFormat: req.endpoint && req.endpoint.mode === 'tcp' ? 'tcp-normalized' : 'rtu-adu',
+            request: 'SIM TX ' + req.functionCode + '@' + req.address,
+            response: 'SIM RX ' + (Array.isArray(req.values) ? req.values.join(',') : ''),
           },
         }
       }
       return call(request, opts)
     },
+    /**
+     * @param {Record<string, unknown>} request
+     * @param {Record<string, unknown>} [opts]
+     */
     async openConnection(request, opts = {}) {
       return call({ v: 1, op: 'connection.open', ...request }, opts)
     },
+    /**
+     * @param {Record<string, unknown>} request
+     * @param {Record<string, unknown>} [opts]
+     */
     async closeConnection(request, opts = {}) {
       const state = broker && typeof broker.getState === 'function' ? broker.getState() : ''
       if (!state || state === 'idle' || state === 'stopped' || state === 'stopping') {
@@ -200,6 +293,10 @@ export function createModbusTransport({ broker = getVisionIoBroker() } = {}) {
       }
       return call({ v: 1, op: 'connection.close', cwd: request.cwd, connectionId: request.connectionId }, opts)
     },
+    /**
+     * @param {Record<string, unknown>} request
+     * @param {Record<string, unknown>} [opts]
+     */
     async listConnections(request, opts = {}) {
       const state = broker && typeof broker.getState === 'function' ? broker.getState() : ''
       if (!state || state === 'idle' || state === 'stopped') {
@@ -207,6 +304,10 @@ export function createModbusTransport({ broker = getVisionIoBroker() } = {}) {
       }
       return call({ v: 1, op: 'connection.status', cwd: request.cwd, connectionId: request.connectionId || '' }, opts)
     },
+    /**
+     * @param {Record<string, unknown>} request
+     * @param {Record<string, unknown>} [opts]
+     */
     async captureFeed(request, opts = {}) {
       const state = broker && typeof broker.getState === 'function' ? broker.getState() : ''
       if (!state || state === 'idle' || state === 'stopped') {
@@ -224,6 +325,10 @@ export function createModbusTransport({ broker = getVisionIoBroker() } = {}) {
         opts,
       )
     },
+    /**
+     * @param {Record<string, unknown>} request
+     * @param {Record<string, unknown>} [opts]
+     */
     async releaseConnection(request, opts = {}) {
       return this.closeConnection(request, opts)
     },

@@ -1,3 +1,4 @@
+// @ts-check
 import { join } from 'node:path'
 import * as yaml from 'yaml'
 import { LEGACY_VISION_PERSONAS, STANDARD_PERSONA } from './guidance.mjs'
@@ -14,6 +15,7 @@ import {
   _readFileSync,
   createBackup,
   restoreAll,
+  thrownMessage,
   writeAtomic,
 } from './preset-transaction.mjs'
 
@@ -97,6 +99,7 @@ export function checkOwnership(dir) {
 
 // lastManagedAt is intentionally excluded: a fully consistent preset must not
 // be rewritten just to refresh the timestamp.
+/** @param {{ owner?: unknown, presetSchemaVersion?: unknown, basePresetId?: unknown, pluginRowId?: unknown } | null | undefined} payload */
 export function templateFieldsMatch(payload) {
   return (
     !!payload &&
@@ -107,10 +110,12 @@ export function templateFieldsMatch(payload) {
   )
 }
 
+/** @param {unknown} nowIso */
 function ownershipText(nowIso) {
   return JSON.stringify({ ...OWNERSHIP_TEMPLATE, lastManagedAt: nowIso }, null, 2) + '\n'
 }
 
+/** @param {unknown} value */
 function yamlString(value) {
   return typeof value === 'string' ? value : undefined
 }
@@ -125,6 +130,7 @@ export function isVisionToolRow(id, name, hostPluginName, agentPluginSpec) {
   return id === 'vision-bench-tools' || name === hostPluginName || name === agentPluginSpec
 }
 
+/** @param {any} doc @param {any} parent @param {string} key */
 function ensureYamlMap(doc, parent, key) {
   let node = typeof parent.get === 'function' ? parent.get(key) : undefined
   if (!node || typeof node.set !== 'function') {
@@ -161,7 +167,7 @@ export const ensurePresetOverlay = (dir, options) => {
   try {
     doc = parseCompositionDocument(raw)
   } catch (e) {
-    return { ok: false, error: 'invalid yaml: ' + String((e && e.message) || e), rebuildHelp: rebuildInstructions }
+    return { ok: false, error: 'invalid yaml: ' + thrownMessage(e), rebuildHelp: rebuildInstructions }
   }
   if (doc.errors && doc.errors.length) {
     return {
@@ -171,7 +177,7 @@ export const ensurePresetOverlay = (dir, options) => {
       rebuildHelp: rebuildInstructions,
     }
   }
-  const seq = doc.contents
+  const seq = /** @type {{ items?: any[] } | null | undefined} */ (doc.contents)
   if (!seq || !Array.isArray(seq.items)) {
     return { ok: false, error: 'invalid composition: expected sequence', rebuildHelp: rebuildInstructions }
   }
@@ -221,7 +227,7 @@ export const ensurePresetOverlay = (dir, options) => {
     } catch (e) {
       return {
         ok: false,
-        error: ' persona 迁移失败：' + String((e && e.message) || e),
+        error: ' persona 迁移失败：' + thrownMessage(e),
         needsReview: true,
         dir,
         rebuildHelp: rebuildInstructions,
@@ -305,14 +311,15 @@ export const ensurePresetOverlay = (dir, options) => {
   } catch (e) {
     return {
       ok: false,
-      error: '预设备份失败：' + String((e && e.message) || e),
+      error: '预设备份失败：' + thrownMessage(e),
       errorCode: PRESET_BACKUP_FAILED,
       needsReview: true,
-      backupDir: (e && e.backupDir) || null,
+      backupDir: (e && typeof e === 'object' && 'backupDir' in e ? /** @type {{ backupDir?: string | null }} */ (e).backupDir : null) || null,
       rebuildHelp: rebuildInstructions,
     }
   }
 
+  /** @type {Record<string, boolean>} */
   const existedBefore = {}
   for (const n of AFFECTED_FILES) existedBefore[n] = _existsSync(join(dir, n))
 
@@ -325,12 +332,12 @@ export const ensurePresetOverlay = (dir, options) => {
     try {
       restoreAll(backupDir, dir, existedBefore)
     } catch (re) {
-      restoreErr = String((re && re.message) || re)
+      restoreErr = thrownMessage(re)
     }
     if (restoreErr) {
       return {
         ok: false,
-        error: '预设写入失败且回滚失败：' + String((e && e.message) || e) + ' / ' + restoreErr,
+        error: '预设写入失败且回滚失败：' + thrownMessage(e) + ' / ' + restoreErr,
         errorCode: PRESET_RESTORE_FAILED,
         backupDir,
         needsReview: true,
@@ -339,7 +346,7 @@ export const ensurePresetOverlay = (dir, options) => {
     }
     return {
       ok: false,
-      error: '预设写入失败：' + String((e && e.message) || e),
+      error: '预设写入失败：' + thrownMessage(e),
       errorCode: PRESET_WRITE_FAILED,
       backupDir,
       needsReview: true,

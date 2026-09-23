@@ -1,6 +1,22 @@
 // @ts-check
 import { ioError } from '../../domain/modbus/io-contract.mjs'
 
+/** @typedef {import('../../types/io-broker.d.ts').IoMessage} IoMessage */
+
+/** @param {unknown} error @returns {string} */
+export function thrownText(error) {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = /** @type {{ message?: unknown }} */ (error).message
+    return String(message || error)
+  }
+  return String(error)
+}
+
+/** @param {unknown} value @returns {IoMessage} */
+export function asMessage(value) {
+  return value && typeof value === 'object' ? /** @type {IoMessage} */ (value) : {}
+}
+
 /**
  * @param {{ settled?: boolean, timer?: ReturnType<typeof setTimeout>, abortCleanup?: () => void, resolve: (value: any) => void, reject: (error: any) => void }} entry
  * @param {{ ok?: boolean, error?: any, frames?: unknown, transactionId?: unknown, durationMs?: unknown }} result

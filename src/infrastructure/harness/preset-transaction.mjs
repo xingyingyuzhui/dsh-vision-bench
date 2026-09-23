@@ -1,16 +1,39 @@
+// @ts-check
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 
 // Every fs access goes through the same require cache as the test harness, so
 // failures can be injected by patching node:fs (see test/preset/transaction.test.mjs).
 const _require = createRequire(import.meta.url)
-export const _readFileSync = (...a) => _require('node:fs').readFileSync(...a)
-export const _writeFileSync = (...a) => _require('node:fs').writeFileSync(...a)
-export const _copySync = (...a) => _require('node:fs').copyFileSync(...a)
-export const _renameSync = (...a) => _require('node:fs').renameSync(...a)
-export const _unlinkSync = (...a) => _require('node:fs').unlinkSync(...a)
-export const _mkdirSync = (...a) => _require('node:fs').mkdirSync(...a)
-export const _existsSync = (...a) => _require('node:fs').existsSync(...a)
+/** @param {...unknown} args */
+export const _readFileSync = (...args) => _require('node:fs').readFileSync(...args)
+/** @param {...unknown} args */
+export const _writeFileSync = (...args) => _require('node:fs').writeFileSync(...args)
+/** @param {...unknown} args */
+export const _copySync = (...args) => _require('node:fs').copyFileSync(...args)
+/** @param {...unknown} args */
+export const _renameSync = (...args) => _require('node:fs').renameSync(...args)
+/** @param {...unknown} args */
+export const _unlinkSync = (...args) => _require('node:fs').unlinkSync(...args)
+/** @param {...unknown} args */
+export const _mkdirSync = (...args) => _require('node:fs').mkdirSync(...args)
+/** @param {...unknown} args */
+export const _existsSync = (...args) => _require('node:fs').existsSync(...args)
+
+/** @param {unknown} error */
+export function thrownMessage(error) {
+  const message = error && typeof error === 'object' && 'message' in error ? /** @type {{ message?: unknown }} */ (error).message : undefined
+  return String(message || error)
+}
+
+export class PresetBackupError extends Error {
+  /** @param {string} message @param {string} backupDir */
+  constructor(message, backupDir) {
+    super(message)
+    this.name = 'Error'
+    this.backupDir = backupDir
+  }
+}
 
 export const PRESET_BACKUP_FAILED = 'PRESET_BACKUP_FAILED'
 export const PRESET_WRITE_FAILED = 'PRESET_WRITE_FAILED'
@@ -36,10 +59,7 @@ export function createBackup(dir, presetId) {
         _copySync(src, join(backupDir, name))
         files.push(name)
       } catch (e) {
-        const err = new Error('复制备份失败 ' + name + ': ' + String((e && e.message) || e))
-        // @ts-ignore
-        err.backupDir = backupDir
-        throw err
+        throw new PresetBackupError('复制备份失败 ' + name + ': ' + thrownMessage(e), backupDir)
       }
     }
   }

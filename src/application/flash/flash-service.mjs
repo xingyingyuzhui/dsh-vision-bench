@@ -1,3 +1,4 @@
+// @ts-check
 import { basename, join } from 'node:path'
 import { artifactInfo } from '../../infrastructure/files/project-fs.mjs'
 import { aborted, originOf, signalOf } from '../../domain/modbus/journal-model.mjs'
@@ -23,8 +24,10 @@ import { runOpenOcdFlash } from '../../infrastructure/process/openocd-runner.mjs
 export { DEFAULT_OPENOCD_INTERFACE, DEFAULT_OPENOCD_TARGET, FLASH_INTERFACES, FLASH_TARGETS }
 export { clearFlashApprovals }
 
+/** @param {string} errorCode @param {string} error @param {Record<string, unknown>} [extra] */
 const flashFail = (errorCode, error, extra = {}) => ({ ok: false, errorCode, error, ...extra })
 
+/** @param {Record<string, unknown>} record */
 const toPublicRequest = (record) => ({
   kind: 'download',
   requestId: record.requestId,
@@ -37,16 +40,19 @@ const toPublicRequest = (record) => ({
   expiresAt: record.expiresAt,
 })
 
+/** @param {unknown} error */
 function safeFlashError(error) {
   const raw = error instanceof Error ? error.message : String(error || '烧录失败')
   return raw.replace(/(?:[A-Za-z]:)?(?:\\|\/)[^\s:'"]+/g, '…').slice(0, 240) || '烧录失败'
 }
 
+/** @param {string | undefined} cwd @param {unknown} body */
 function approvalScope(cwd, body) {
   const origin = originOf(body)
   return { cwd, sessionId: origin.sessionId }
 }
 
+/** @param {any} ran */
 function isOpenOcdRunnerResult(ran) {
   return !!(
     ran &&
@@ -61,6 +67,7 @@ function isOpenOcdRunnerResult(ran) {
   )
 }
 
+/** @param {string | undefined} home @param {unknown} cwd @param {Record<string, any>} [body] @param {Record<string, any>} [opts] */
 export const openocdDownload = async (home, cwd, body, opts) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -123,12 +130,21 @@ export const openocdDownload = async (home, cwd, body, opts) => {
   }
 }
 
+/**
+ * @param {string | undefined} home
+ * @param {string | undefined} cwd
+ * @param {Record<string, any>} record
+ * @param {Record<string, any>} body
+ * @param {Record<string, any> | undefined} opts
+ * @param {unknown} signal
+ * @param {{ openocd?: string }} bindings
+ */
 async function executeApprovedFlash(home, cwd, record, body, opts, signal, bindings) {
   const approver = originOf(body)
-  await saveWorkspaceAsync(home, cwd, { keil: { flash: { interface: record.interfaceName, target: record.target } } })
+  await saveWorkspaceAsync(/** @type {string} */ (home), cwd, { keil: { flash: { interface: record.interfaceName, target: record.target } } })
   const opened = await openExclusiveTask(
-    home,
-    cwd,
+    /** @type {string} */ (home),
+    /** @type {string} */ (cwd),
     {
       type: 'download',
       source: record.source,
@@ -139,23 +155,24 @@ async function executeApprovedFlash(home, cwd, record, body, opts, signal, bindi
   )
   if (!opened.ok) return opened
   const task = opened.task
-  const stagingRoot = join(storeDir(home), 'flash-staging')
+  const stagingRoot = join(storeDir(/** @type {string} */ (home)), 'flash-staging')
+  /** @type {{ ok?: boolean, dir?: string, path?: string, error?: string, errorCode?: string }} */
   let snapshot = { ok: false, dir: '', path: '' }
   let finished = false
   const finish = opts && typeof opts.finishTask === 'function' ? opts.finishTask : finishTask
-  const completeTaskOnce = async (patch) => {
+  const completeTaskOnce = async (/** @type {Record<string, unknown>} */ patch) => {
     if (finished) return
     finished = true
-    await finish(home, cwd, task.id, patch)
+    await finish(/** @type {string} */ (home), /** @type {string} */ (cwd), task.id, patch)
   }
-  const withAudit = (payload) => ({
+  const withAudit = (/** @type {Record<string, unknown>} */ payload) => ({
     ...payload,
     taskId: task.id,
     source: record.source,
     sessionId: record.sessionId,
     approvedBySessionId: approver.sessionId,
   })
-  const failFlash = async (error, extra = {}) => {
+  const failFlash = async (/** @type {unknown} */ error, /** @type {Record<string, unknown>} */ extra = {}) => {
     const summary = safeFlashError(error)
     await completeTaskOnce({ ok: false, summary, errors: [summary] })
     return withAudit({
@@ -165,6 +182,7 @@ async function executeApprovedFlash(home, cwd, record, body, opts, signal, bindi
       ...extra,
     })
   }
+  /** @type {Record<string, any> | undefined} */
   let result
   try {
     try {

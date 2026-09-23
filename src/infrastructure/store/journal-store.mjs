@@ -1,3 +1,4 @@
+// @ts-check
 import { readdirSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
@@ -32,8 +33,23 @@ import {
 } from './workspace-store.mjs'
 
 const TIMELINE_WINDOW = 360
+/** @param {unknown} timeline @param {unknown} event */
 const pushEvent = (timeline, event) => trimTimeline(prepend(timeline, event, TIMELINE_WINDOW))
 
+/**
+ * @typedef {{
+ *   keil?: Record<string, unknown>,
+ *   modbus?: Record<string, unknown>,
+ *   log?: unknown,
+ *   timeline?: unknown,
+ *   tasks?: Array<Record<string, unknown>>,
+ *   manualRequests?: Array<Record<string, unknown>>,
+ *   session?: { boundId?: string },
+ * }} JournalWorkspace
+ * @typedef {{ source?: unknown, sessionId?: unknown, taskId?: unknown, text?: unknown, keil?: Record<string, unknown>, modbus?: Record<string, unknown>, type?: unknown, summary?: unknown, conflicts?: unknown[] }} JournalSpec
+ */
+
+/** @param {string} home @param {string} cwd @param {Record<string, unknown>} event @param {JournalSpec} [extra] */
 export const recordBenchEvent = async (home, cwd, event, extra = {}) => {
   const timelineEvent = normalizeTimelineEvent({
     kind: event?.action,
@@ -43,7 +59,7 @@ export const recordBenchEvent = async (home, cwd, event, extra = {}) => {
     ok: event?.ok,
     summary: event?.summary,
   })
-  return workspaceRepository(home).update(cwd, null, async (current) => ({
+  return workspaceRepository(home).update(cwd, null, async (/** @type {JournalWorkspace} */ current) => ({
     ok: true,
     workspace: normalizeWorkspace({
       ...current,
@@ -56,6 +72,7 @@ export const recordBenchEvent = async (home, cwd, event, extra = {}) => {
   }))
 }
 
+/** @param {string} home @param {string} cwd @param {JournalSpec} spec */
 export const openTask = async (home, cwd, spec) => {
   const origin = {
     source: spec && spec.source === 'agent' ? 'agent' : 'user',
@@ -77,7 +94,7 @@ export const openTask = async (home, cwd, spec) => {
     taskId: task.id,
     summary: task.summary || `开始 ${task.type}`,
   })
-  await workspaceRepository(home).update(cwd, null, async (current) => ({
+  await workspaceRepository(home).update(cwd, null, async (/** @type {JournalWorkspace} */ current) => ({
     ok: true,
     workspace: normalizeWorkspace({
       ...current,
@@ -88,6 +105,7 @@ export const openTask = async (home, cwd, spec) => {
   return task
 }
 
+/** @param {string} home @param {string} cwd @param {JournalSpec} spec @param {JournalSpec} [opts] */
 export const openExclusiveTask = async (home, cwd, spec, opts = {}) => {
   const origin = {
     source: spec && spec.source === 'agent' ? 'agent' : 'user',
@@ -110,7 +128,7 @@ export const openExclusiveTask = async (home, cwd, spec, opts = {}) => {
     summary: task.summary || `开始 ${task.type}`,
   })
   const conflicts = Array.isArray(opts.conflicts) && opts.conflicts.length ? opts.conflicts : [task.type]
-  const saved = await workspaceRepository(home).update(cwd, null, async (current) => {
+  const saved = await workspaceRepository(home).update(cwd, null, async (/** @type {JournalWorkspace} */ current) => {
     for (const type of conflicts) {
       if (hasRunning(current, type)) {
         return {
@@ -139,6 +157,7 @@ export const openExclusiveTask = async (home, cwd, spec, opts = {}) => {
   return { ok: true, task }
 }
 
+/** @param {string} home @param {string} cwd @param {unknown} taskId @param {Record<string, unknown>} patch */
 export const finishTask = async (home, cwd, taskId, patch) => {
   const status =
     patch && (patch.cancelled || patch.status === 'cancelled')
@@ -147,8 +166,8 @@ export const finishTask = async (home, cwd, taskId, patch) => {
         ? 'error'
         : 'ok'
   const summary = patch?.summary ? String(patch.summary).slice(0, 240) : ''
-  return workspaceRepository(home).update(cwd, null, async (prev) => {
-    const tasks = (prev.tasks || []).map((item) => {
+  return workspaceRepository(home).update(cwd, null, async (/** @type {JournalWorkspace} */ prev) => {
+    const tasks = (prev.tasks || []).map((/** @type {Record<string, unknown>} */ item) => {
       if (item.id !== taskId) return item
       return normalizeTask({
         ...item,
@@ -163,7 +182,7 @@ export const finishTask = async (home, cwd, taskId, patch) => {
         errors: patch && patch.errors !== undefined ? patch.errors : item.errors,
       })
     })
-    const current = tasks.find((item) => item.id === taskId)
+    const current = tasks.find((/** @type {Record<string, unknown>} */ item) => item.id === taskId)
     const type = current?.type
     const action = type === 'build' || type === 'read' || type === 'write' ? type : 'task'
     const event = normalizeTimelineEvent({
@@ -191,12 +210,14 @@ export const finishTask = async (home, cwd, taskId, patch) => {
   })
 }
 
+/** @param {JournalWorkspace | null | undefined} workspace */
 export const journalView = (workspace) => ({
   tasks: compactTasks(workspace?.tasks),
   running: compactTasks(runningTasks(workspace?.tasks)),
   timeline: compactTimeline(workspace?.timeline),
 })
 
+/** @param {string} home @param {string} cwd @param {unknown} sessionId */
 export const bindSession = async (home, cwd, sessionId) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -211,8 +232,10 @@ export const bindSession = async (home, cwd, sessionId) => {
   }
 }
 
+/** @type {Map<string, { boundId: string, touchedAt: number }>} */
 const touchedSessionCache = new Map()
 
+/** @param {string} home @param {unknown} cwd @param {unknown} sessionId */
 export const touchServiceSession = async (home, cwd, sessionId) => {
   const id = typeof sessionId === 'string' ? sessionId.trim() : ''
   if (!id || !cwd) return { ok: false, skipped: 'no-session' }
@@ -229,13 +252,14 @@ export const touchServiceSession = async (home, cwd, sessionId) => {
     touchedSessionCache.set(cacheKey, { boundId: id, touchedAt: Date.now() })
     return { ok: true, boundId: id, unchanged: true }
   }
-  const res = await bindSession(home, room.cwd, id)
+  const res = await bindSession(home, /** @type {string} */ (room.cwd), id)
   if (res?.ok) {
     touchedSessionCache.set(cacheKey, { boundId: id, touchedAt: Date.now() })
   }
   return res
 }
 
+/** @param {string} home @param {string} cwd */
 export const unbindSession = async (home, cwd) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -245,6 +269,7 @@ export const unbindSession = async (home, cwd) => {
   return { ok: true, boundId: '' }
 }
 
+/** @param {string} home @param {string} cwd @param {JournalSpec} spec */
 export const createManualRequest = async (home, cwd, spec) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -257,7 +282,7 @@ export const createManualRequest = async (home, cwd, spec) => {
     createdAt: Date.now(),
     sessionId: typeof spec?.sessionId === 'string' ? spec.sessionId.trim() : '',
   }
-  const saved = await workspaceRepository(home).update(room.cwd, null, async (prev) =>
+  const saved = await workspaceRepository(home).update(room.cwd, null, async (/** @type {JournalWorkspace & { manualRequests?: Array<Record<string, unknown>> }} */ prev) =>
     applyWorkspacePatch(prev, {
       manualRequests: prepend(prev.manualRequests, request, 20),
       timeline: pushEvent(
@@ -275,18 +300,19 @@ export const createManualRequest = async (home, cwd, spec) => {
   return { ok: true, request }
 }
 
+/** @param {string} home @param {string | undefined} cwd @param {unknown} id @param {unknown} done */
 export const resolveManualRequest = async (home, cwd, id, done) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
   let request = null
-  const saved = await workspaceRepository(home).update(room.cwd, null, async (prev) => {
+  const saved = await workspaceRepository(home).update(room.cwd, null, async (/** @type {JournalWorkspace & { manualRequests?: Array<Record<string, unknown>> }} */ prev) => {
     const current = (prev.manualRequests || []).find(
-      (item) => item.id === String(id || '') && item.status === 'pending',
+      (/** @type {Record<string, unknown>} */ item) => item.id === String(id || '') && item.status === 'pending',
     )
     if (!current) return { ok: false, error: '请求不存在或已处理' }
     const status = done ? 'done' : 'rejected'
     request = { ...current, status }
-    const manualRequests = (prev.manualRequests || []).map((item) =>
+    const manualRequests = (prev.manualRequests || []).map((/** @type {Record<string, unknown>} */ item) =>
       item.id === current.id ? { ...item, status } : item,
     )
     return applyWorkspacePatch(prev, {
@@ -307,6 +333,7 @@ export const resolveManualRequest = async (home, cwd, id, done) => {
   return { ok: true, request }
 }
 
+/** @param {string} home @param {{ persistWorkspace?: (key: string, workspace: unknown) => void }} [options] */
 export const sweepStaleTasks = async (home, options = {}) => {
   const repo = createWorkspaceRepository({
     home,
@@ -315,14 +342,14 @@ export const sweepStaleTasks = async (home, options = {}) => {
     persistWorkspace: options.persistWorkspace,
   })
   return repo.sweepInterruptedTasks({
-    markInterruptedTask: (item, now) =>
+    markInterruptedTask: (/** @type {Record<string, unknown>} */ item, /** @type {number} */ now) =>
       normalizeTask({
         ...item,
         status: 'error',
         endedAt: now,
         summary: `${item.summary || `${item.type} 任务`}（上次运行中断）`,
       }),
-    appendSweepEvent: (timeline, stale) =>
+    appendSweepEvent: (/** @type {unknown} */ timeline, /** @type {{ length: number }} */ stale) =>
       pushEvent(
         timeline,
         normalizeTimelineEvent({
@@ -335,8 +362,10 @@ export const sweepStaleTasks = async (home, options = {}) => {
   })
 }
 
+/** @param {string} home @param {number} [keep] */
 export const pruneBuildLogs = (home, keep = 30) => {
   const dir = join(storeDir(home), 'logs')
+  /** @type {string[]} */
   let entries = []
   try {
     entries = readdirSync(dir)
@@ -366,6 +395,7 @@ export const pruneBuildLogs = (home, keep = 30) => {
   return { ok: true, pruned }
 }
 
+/** @param {string} home @param {string | undefined} cwd @param {{ connectionId?: unknown, all?: unknown }} options */
 export const clearFramesByConnection = async (home, cwd, options) => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }
@@ -379,7 +409,7 @@ export const clearFramesByConnection = async (home, cwd, options) => {
   if (all) {
     nextFrames = {}
   } else {
-    const exists = (pack.connections || []).some((c) => c.id === connId)
+    const exists = (pack.connections || []).some((/** @type {{ id?: string }} */ c) => c.id === connId)
     if (!exists) return { ok: false, error: `连接不存在: ${connId}`, errorCode: 'CONNECTION_NOT_FOUND' }
     nextFrames = { ...current }
     delete nextFrames[connId]
@@ -392,6 +422,7 @@ export const clearFramesByConnection = async (home, cwd, options) => {
   return { ok: true, cleared: all ? 'all' : connId, workspace: saved.workspace }
 }
 
+/** @param {string} home @param {string | undefined} cwd @param {unknown} evidence @param {unknown} [sessionId] */
 export const appendEvidence = async (home, cwd, evidence, sessionId = '') => {
   const room = requireWorkspaceCwd(cwd)
   if (room.error) return { ok: false, error: room.error }

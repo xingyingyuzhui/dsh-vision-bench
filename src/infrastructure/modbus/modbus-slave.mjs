@@ -1,30 +1,95 @@
+// @ts-check
 import { createServer } from 'node:net'
 import { applyPointWrite, segmentCovering, simulateRaw } from '../../domain/modbus/point-legacy-segments.mjs'
 
+/**
+ * @typedef {{ id?: string, function?: number, address?: number, count?: number }} SlaveSegment
+ * @typedef {{ segmentId?: string, address?: number, value?: number | boolean | null }} SlaveValue
+ * @typedef {{
+ *   id?: string,
+ *   host?: string,
+ *   tcpPort?: number,
+ *   role?: string,
+ *   listen?: boolean,
+ *   mode?: string,
+ *   sim?: boolean,
+ *   segments?: SlaveSegment[],
+ *   values?: SlaveValue[],
+ *   listening?: boolean,
+ *   listenError?: string,
+ * }} SlaveDevice
+ * @typedef {(fn: number, address: number, values: number[], at: number) => void} SlaveWrite
+ * @typedef {import('node:net').Server & {
+ *   dshHost: string,
+ *   dshPort: number,
+ *   dshGet: (() => SlaveDevice | null | undefined) | null,
+ *   dshOnWrite: SlaveWrite | null,
+ *   dshSockets: Set<import('node:net').Socket>,
+ * }} SlaveServer
+ * @typedef {{ devices?: SlaveDevice[], activeId?: string }} SlaveModbus
+ */
+
 // Task6: stable frameId/transactionId - slave also generates rich frame fields for Task6
 export const SCHEMA_VERSION = 3
+/**
+ * @param {unknown} trans
+ * @param {unknown} unit
+ * @param {unknown} at
+ */
 const genFrameId = (trans, unit, at) => `slave:${trans}:${unit}:${at}`
+/** @param {unknown} trans @param {unknown} unit */
 const genTxId = (trans, unit) => `tx-slave:${trans}:${unit}`
 
+/** @type {Map<string, SlaveServer>} */
 const servers = new Map()
+/** @type {Map<string, string>} */
 const listenErrors = new Map()
 
+/**
+ * @param {unknown} error
+ * @returns {string}
+ */
+function thrownText(error) {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = /** @type {{ message?: unknown }} */ (error).message
+    return String(message || error)
+  }
+  return String(error)
+}
+
+/** @param {import('node:net').Server} server @returns {SlaveServer} */
+function asSlaveServer(server) {
+  return /** @type {SlaveServer} */ (server)
+}
+
+/** @param {unknown} cwd @param {unknown} deviceId */
 const keyOf = (cwd, deviceId) => String(cwd) + ':' + String(deviceId)
 
+/** @param {Buffer} buf @param {number} offset */
 const u16 = (buf, offset) => buf.readUInt16BE(offset)
 
+/** @param {number} fc @param {number} code */
 const exception = (fc, code) => Buffer.from([fc | 0x80, code])
 
+/**
+ * @param {SlaveDevice} device
+ * @param {number} fn
+ * @param {number} at
+ */
 const bankOf = (device, fn, at) => {
+  /** @type {Map<number, number | boolean>} */
   const values = new Map()
   const segments = Array.isArray(device.segments) ? device.segments : []
   for (const segment of segments) {
     if (Number(segment.function) !== fn) continue
     const recs = Array.isArray(device.values) ? device.values : []
     const raw = device.sim ? simulateRaw(segment, at) : null
-    for (let i = 0; i < segment.count; i++) {
-      const address = segment.address + i
+    const count = /** @type {number} */ (segment.count)
+    const base = /** @type {number} */ (segment.address)
+    for (let i = 0; i < count; i++) {
+      const address = base + i
       const rec = recs.find((item) => item.segmentId === segment.id && item.address === address)
+      /** @type {number | boolean} */
       let value = 0
       if (raw) value = raw[i]
       else if (rec && rec.value !== null && rec.value !== undefined) value = rec.value
@@ -34,6 +99,11 @@ const bankOf = (device, fn, at) => {
   return values
 }
 
+/**
+ * @param {Map<number, number | boolean>} bank
+ * @param {number} addr
+ * @param {number} qty
+ */
 const readBits = (bank, addr, qty) => {
   const bytes = Math.ceil(qty / 8)
   const out = Buffer.alloc(2 + bytes)
@@ -46,6 +116,12 @@ const readBits = (bank, addr, qty) => {
   return out
 }
 
+/**
+ * @param {Map<number, number | boolean>} bank
+ * @param {number} addr
+ * @param {number} qty
+ * @param {number} fc
+ */
 const readRegs = (bank, addr, qty, fc) => {
   const out = Buffer.alloc(2 + qty * 2)
   out[0] = fc
@@ -57,6 +133,12 @@ const readRegs = (bank, addr, qty, fc) => {
   return out
 }
 
+/**
+ * @param {SlaveDevice} device
+ * @param {Buffer} pdu
+ * @param {number} [at]
+ * @param {SlaveWrite | null} [onWrite]
+ */
 export const handlePdu = (device, pdu, at = Date.now(), onWrite = null) => {
   if (!pdu || pdu.length < 1) return exception(0, 1)
   const fc = pdu[0]
@@ -94,6 +176,15 @@ export const handlePdu = (device, pdu, at = Date.now(), onWrite = null) => {
   return exception(fc, 1)
 }
 
+/**
+ * @param {SlaveDevice} device
+ * @param {number} fc
+ * @param {number} address
+ * @param {number[]} values
+ * @param {number} at
+ * @param {SlaveWrite | null} onWrite
+ * @param {number} echoWord
+ */
 const writePoints = (device, fc, address, values, at, onWrite, echoWord) => {
   const fn = fc === 5 || fc === 15 ? 1 : 3
   const segments = Array.isArray(device.segments) ? device.segments : []
@@ -108,6 +199,11 @@ const writePoints = (device, fc, address, values, at, onWrite, echoWord) => {
   return out
 }
 
+/**
+ * @param {number} trans
+ * @param {number} unit
+ * @param {Buffer} pdu
+ */
 const frameResponse = (trans, unit, pdu) => {
   const out = Buffer.alloc(7 + pdu.length)
   out.writeUInt16BE(trans, 0)
@@ -118,6 +214,12 @@ const frameResponse = (trans, unit, pdu) => {
   return out
 }
 
+/**
+ * @param {unknown} cwd
+ * @param {SlaveDevice} device
+ * @param {(() => SlaveDevice | null | undefined) | null} getDevice
+ * @param {SlaveWrite | null} [onWrite]
+ */
 export const startDeviceSlave = (cwd, device, getDevice, onWrite = null) => {
   const id = keyOf(cwd, device.id)
   const host = device.host || '127.0.0.1'
@@ -133,13 +235,13 @@ export const startDeviceSlave = (cwd, device, getDevice, onWrite = null) => {
     closeServer(prev)
     servers.delete(id)
   }
-  const server = createServer((socket) => {
+  const server = asSlaveServer(createServer((socket) => {
     server.dshSockets.add(socket)
     socket.on('close', () => {
       server.dshSockets.delete(socket)
     })
     let buf = Buffer.alloc(0)
-    socket.on('data', (chunk) => {
+    socket.on('data', (/** @type {Buffer} */ chunk) => {
       buf = Buffer.concat([buf, chunk])
       while (buf.length >= 8) {
         const len = buf.readUInt16BE(4)
@@ -163,7 +265,7 @@ export const startDeviceSlave = (cwd, device, getDevice, onWrite = null) => {
     socket.on('error', () => {
       /* drop */
     })
-  })
+  }))
   server.dshHost = host
   server.dshPort = port
   server.dshGet = getDevice
@@ -179,6 +281,7 @@ export const startDeviceSlave = (cwd, device, getDevice, onWrite = null) => {
   })
 }
 
+/** @param {SlaveServer} server */
 const closeServer = (server) => {
   try {
     server.close()
@@ -194,6 +297,7 @@ const closeServer = (server) => {
   }
 }
 
+/** @param {unknown} cwd @param {unknown} deviceId */
 export const stopDeviceSlave = (cwd, deviceId) => {
   const id = keyOf(cwd, deviceId)
   const server = servers.get(id)
@@ -211,6 +315,10 @@ export const stopAllSlaves = () => {
   listenErrors.clear()
 }
 
+/**
+ * @param {unknown} cwd
+ * @param {{ modbus?: SlaveModbus }} workspace
+ */
 export const withListenRuntime = (cwd, workspace) => {
   const modbus = workspace && workspace.modbus && typeof workspace.modbus === 'object' ? workspace.modbus : {}
   const devices = Array.isArray(modbus.devices)
@@ -235,6 +343,12 @@ export const withListenRuntime = (cwd, workspace) => {
   }
 }
 
+/**
+ * @param {unknown} cwd
+ * @param {SlaveModbus | null | undefined} modbus
+ * @param {(() => SlaveModbus | null | undefined) | null | undefined} getModbus
+ * @param {((deviceId: unknown, fn: number, address: number, values: number[], at: number) => void) | null} [onWrite]
+ */
 export const syncDeviceSlaves = async (cwd, modbus, getModbus, onWrite = null) => {
   const devices = modbus && Array.isArray(modbus.devices) ? modbus.devices : []
   const want = new Set()
@@ -255,7 +369,7 @@ export const syncDeviceSlaves = async (cwd, modbus, getModbus, onWrite = null) =
       )
       listenErrors.delete(keyOf(cwd, device.id))
     } catch (error) {
-      const message = String((error && error.message) || error).slice(0, 180)
+      const message = thrownText(error).slice(0, 180)
       listenErrors.set(keyOf(cwd, device.id), message)
       errors.push(message)
     }

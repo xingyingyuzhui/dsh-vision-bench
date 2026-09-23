@@ -1,8 +1,10 @@
+// @ts-check
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { writeJsonAtomicSync } from '../persistence/atomic-json.mjs'
 import { storeDir } from './bindings-store.mjs'
 
+/** @param {string} home */
 export const globalSharePath = (home) => join(storeDir(home), 'global-share.json')
 
 export const emptyGlobalShare = () => ({
@@ -12,8 +14,9 @@ export const emptyGlobalShare = () => ({
   visualization: false,
 })
 
+/** @param {unknown} input */
 export const normalizeGlobalShare = (input) => {
-  const src = input && typeof input === 'object' ? input : {}
+  const src = input && typeof input === 'object' ? /** @type {{ enabled?: unknown, connections?: unknown, points?: unknown, visualization?: unknown }} */ (input) : {}
   return {
     enabled: src.enabled === true,
     connections: src.connections === true,
@@ -22,6 +25,7 @@ export const normalizeGlobalShare = (input) => {
   }
 }
 
+/** @param {string} home */
 export const loadGlobalShare = (home) => {
   try {
     return normalizeGlobalShare(JSON.parse(readFileSync(globalSharePath(home), 'utf8')))
@@ -30,6 +34,7 @@ export const loadGlobalShare = (home) => {
   }
 }
 
+/** @param {string} home @param {unknown} input */
 export const saveGlobalShare = (home, input) => {
   const share = normalizeGlobalShare(input)
   mkdirSync(storeDir(home), { recursive: true })

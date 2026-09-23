@@ -124,6 +124,9 @@ export function validateAllowlist(projectRoot, group, groupFiles) {
     if (!entry.reason) problems.push(`${group.name}: allowlist entry needs a reason (${file})`)
     if (!entry.stage) problems.push(`${group.name}: allowlist entry needs an expiry stage (${file})`)
     if (typeof entry.max !== 'number') problems.push(`${group.name}: allowlist entry needs a numeric max (${file})`)
+    else if (typeof group.error === 'number' && entry.max > group.error) {
+      problems.push(`${group.name}: allowlist max ${entry.max} exceeds the ${group.error}-line hard limit (${file})`)
+    }
     if (!groupFiles.includes(file)) {
       problems.push(`${group.name}: allowlisted file is not part of this group or no longer exists (${file})`)
     }
@@ -155,6 +158,11 @@ export function checkBudget(projectRoot = root, budget = config) {
 
     for (const { file, lines } of measured) {
       const entry = byFile.get(file)
+      if (entry && typeof entry.max === 'number' && entry.max > lines + 5) {
+        violations.push(
+          `${group.name}: allowlist max ${entry.max} for ${file} is more than 5 lines above its current ${lines}`,
+        )
+      }
       if (lines > group.error) {
         overError.push({ file, lines })
         if (!entry) {
