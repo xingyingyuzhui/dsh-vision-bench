@@ -10,6 +10,7 @@ export const CORE_TYPECHECK_DIRS = [
   'src/application/config',
   'src/application/commands',
   'src/application/modbus',
+  'src/application/flash',
   'src/infrastructure/persistence',
   'src/infrastructure/host',
   'src/infrastructure/modbus',
