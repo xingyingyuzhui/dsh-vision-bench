@@ -68,29 +68,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  * @property {string} backupDir
  */
 
-/** @type {DeclarationState} */
-let declarationState = {
-  mode: 'unknown',
-  phase: 'idle',
-  via: '',
-  at: '',
-  error: '',
-  migrationWarning: '',
-  backupDir: '',
-}
-
 /** @returns {DeclarationState} */
-export function getDeclarationState() {
-  return { ...declarationState }
-}
-
-/** @param {Partial<DeclarationState>} patch */
-export function setDeclarationState(patch) {
-  declarationState = { ...declarationState, ...patch }
-}
-
-export function resetDeclarationState() {
-  declarationState = {
+function idleDeclarationState() {
+  return {
     mode: 'unknown',
     phase: 'idle',
     via: '',
@@ -99,6 +79,54 @@ export function resetDeclarationState() {
     migrationWarning: '',
     backupDir: '',
   }
+}
+
+/** @type {DeclarationState} */
+let declarationState = idleDeclarationState()
+
+/**
+ * HMR re-imports this module, so fibers coordinate through one global slot:
+ * `epoch` drops a stale fiber's late write, `settled` is the previous fiber's
+ * "wait until mount finishes, then unregister" chain.
+ *
+ * @typedef {Object} PresetDeclarationSlot
+ * @property {number} epoch
+ * @property {Promise<void>} settled
+ */
+
+const PRESET_DECLARATION_SLOT = Symbol.for('dsh-vision-bench.preset-declaration')
+
+/** @returns {PresetDeclarationSlot} */
+export function presetDeclarationSlot() {
+  const host = /** @type {any} */ (globalThis)
+  const current = host[PRESET_DECLARATION_SLOT]
+  if (!current || typeof current.epoch !== 'number' || typeof current.settled?.then !== 'function') {
+    /** @type {PresetDeclarationSlot} */
+    const created = { epoch: 0, settled: Promise.resolve() }
+    host[PRESET_DECLARATION_SLOT] = created
+    return created
+  }
+  return current
+}
+
+/** @returns {DeclarationState} */
+export function getDeclarationState() {
+  return { ...declarationState }
+}
+
+/**
+ * @param {Partial<DeclarationState>} patch
+ * @param {number} [epoch] ignored when it is not the active fiber's epoch
+ */
+export function setDeclarationState(patch, epoch) {
+  if (typeof epoch === 'number' && epoch !== presetDeclarationSlot().epoch) return
+  declarationState = { ...declarationState, ...patch }
+}
+
+/** @param {number} [epoch] ignored when it is not the active fiber's epoch */
+export function resetDeclarationState(epoch) {
+  if (typeof epoch === 'number' && epoch !== presetDeclarationSlot().epoch) return
+  declarationState = idleDeclarationState()
 }
 
 /**
@@ -265,14 +293,15 @@ export const userPresetDir = (/** @type {string} */ home) => join(home, '.agent-
  *
  * @param {any} agentPresets
  * @param {string} home
- * @param {{ definition?: PresetDefinition, platform?: string, duplicateRetries?: number, retryDelayMs?: number }} [options]
+ * @param {{ definition?: PresetDefinition, platform?: string, duplicateRetries?: number, retryDelayMs?: number, epoch?: number }} [options]
  * @returns {Promise<DeclarationActivation>}
  */
 export async function activateVisionPresetDeclaration(agentPresets, home, options = {}) {
-  setDeclarationState({ mode: 'declarative', phase: 'pending', via: '', at: '', error: '', migrationWarning: '', backupDir: '' })
+  const epoch = options.epoch
+  setDeclarationState({ mode: 'declarative', phase: 'pending', via: '', at: '', error: '', migrationWarning: '', backupDir: '' }, epoch)
   const registration = await registerVisionPreset(agentPresets, options)
   if (!registration.ok) {
-    setDeclarationState({ phase: 'failed', via: registration.via, error: registration.error || 'Vision预设声明注册失败' })
+    setDeclarationState({ phase: 'failed', via: registration.via, error: registration.error || 'Vision预设声明注册失败' }, epoch)
     return {
       ok: false,
       via: registration.via,
@@ -284,9 +313,12 @@ export async function activateVisionPresetDeclaration(agentPresets, home, option
     }
   }
   const roster = await describeDeclaredPreset(agentPresets)
-  // Only a verified row may displace the legacy directory: it is the recovery
-  // data when activation fails.
-  const migration = roster.ok ? migrateLegacyPresetDir(home) : { ok: true, migrated: false }
+  // Only the declaration this fiber just registered may displace the legacy
+  // directory. An external owner of the id, or a broken row, leaves it in place.
+  const migration =
+    roster.ok && registration.via === 'agentPresets.register'
+      ? migrateLegacyPresetDir(home)
+      : { ok: true, migrated: false }
   const at = new Date().toISOString()
   setDeclarationState({
     phase: 'registered',
@@ -295,7 +327,7 @@ export async function activateVisionPresetDeclaration(agentPresets, home, option
     error: roster.ok ? '' : roster.error,
     migrationWarning: migration.ok ? '' : migration.error || '',
     backupDir: migration.backupDir || '',
-  })
+  }, epoch)
   return {
     ok: roster.ok,
     via: registration.via,
