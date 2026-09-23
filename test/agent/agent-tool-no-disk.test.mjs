@@ -1,49 +1,23 @@
 // @ts-check
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { cruise } from 'dependency-cruiser'
 import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 import { validateAgentToolArgs } from '../../src/interfaces/agent/agent-tool-preflight.mjs'
 import { connection, createBench } from '../helpers/workspace-factory.mjs'
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
-const toolPath = join(root, 'src/interfaces/agent/vision-bench-tool.mjs')
-
-/**
- * Static import graph of one production module (relative specifiers only).
- * @param {string} file
- * @param {Set<string>} [seen]
- * @returns {string[]}
- */
-function importGraph(file, seen = new Set()) {
-  const abs = file.startsWith(root) ? file : join(root, file)
-  if (seen.has(abs)) return []
-  seen.add(abs)
-  const src = readFileSync(abs, 'utf8')
-  const specs = [...src.matchAll(/from\s+['"](\.[^'"]+)['"]/g)].map((m) => m[1])
-  /** @type {string[]} */
-  const out = []
-  for (const spec of specs) {
-    const resolved = join(dirname(abs), spec)
-    const rel = resolved.startsWith(root) ? resolved.slice(root.length + 1) : resolved
-    out.push(rel)
-    out.push(...importGraph(resolved, seen))
-  }
-  return out
-}
-
-test('vision_bench production module does not import the workspace store or host executor', () => {
-  const src = readFileSync(toolPath, 'utf8')
-  assert.doesNotMatch(src, /executeHostCommand/)
-  assert.doesNotMatch(src, /loadWorkspace/)
-  const graph = importGraph(toolPath)
+test('vision_bench production module does not import the workspace store or host executor', async () => {
+  const result = await cruise(['src/interfaces/agent/vision-bench-tool.mjs'], {
+    combinedDependencies: true,
+    ruleSet: { forbidden: [] },
+  })
+  const sources = result.output.modules.map((/** @type {{ source: string }} */ mod) => mod.source)
   assert.equal(
-    graph.some((item) => item.includes('infrastructure/store')),
+    sources.some((item) => item.includes('infrastructure/store')),
     false,
-    `import graph must not include infrastructure/store:\n${graph.filter((item) => item.includes('store')).join('\n')}`,
+    sources.filter((item) => item.includes('store')).join('\n'),
   )
+  assert.equal(sources.some((item) => item.includes('host-command-service')), false)
 })
 
 test('alarmId-only preflight is schema-level and does not prove uniqueness', () => {
