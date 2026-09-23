@@ -230,7 +230,8 @@ export const modbusPoll = async (home, cwd, opts) => {
     /** @type {Map<string, any>} */
     const changedById = new Map()
     const framesLog = []
-    const pollingByConnection = { ...(pack.pollingByConnection || {}) }
+    /** @type {Record<string, { lastAt: number, lastOk: boolean, error: string }>} */
+    const pollingRuntime = {}
     for (const connObj of targetConns) {
       const conn = connObj.conn
       const connId = connObj.id
@@ -239,9 +240,7 @@ export const modbusPoll = async (home, cwd, opts) => {
         ? connObj.__points
         : tpack.points.filter((/** @type {any} */ p) => (p.connectionId || p.connId) === connId)
       if (!pts.length) {
-        // still update polling timestamp for empty but enabled connection?
-        pollingByConnection[connId] = {
-          ...(pollingByConnection[connId] || { enabled: false, intervalMs: 1000, lastAt: 0, lastOk: true, error: '' }),
+        pollingRuntime[connId] = {
           lastAt: Date.now(),
           lastOk: true,
           error: '',
@@ -249,13 +248,6 @@ export const modbusPoll = async (home, cwd, opts) => {
         continue
       }
       const transport = transportOf(opts)
-      const interval = pollingByConnection[connId] || {
-        enabled: false,
-        intervalMs: 1000,
-        lastAt: 0,
-        lastOk: true,
-        error: '',
-      }
       let connOk = true
       const planned = (plan.targets || []).find(
         (t) => t.connectionId === connId && (t.sourceSessionId || '') === (connObj.__sourceSessionId || ''),
@@ -326,8 +318,7 @@ export const modbusPoll = async (home, cwd, opts) => {
         }
         if (!connOk) break
       }
-      pollingByConnection[connId] = {
-        ...interval,
+      pollingRuntime[connId] = {
         lastAt: Date.now(),
         lastOk: connOk && !timedOut,
         error: timedOut ? '轮询超时' : connOk ? '' : '轮询部分失败',
@@ -341,7 +332,7 @@ export const modbusPoll = async (home, cwd, opts) => {
       baseConfigVersion: pack.configVersion,
       pointValues: changedPointValues,
       frames: framesLog,
-      pollingByConnection,
+      pollingRuntime,
     })
     if (!committed?.ok) {
       return {

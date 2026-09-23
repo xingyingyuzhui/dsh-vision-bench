@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import { evaluateAlarms } from '../../domain/modbus/alarm-model.mjs'
 import { COND_ACTIVE, PROCESS } from '../../domain/modbus/alarm-constants.mjs'
+import { normalizePolling } from '../../domain/modbus/frames-buffer.mjs'
 import { normalizeModbus } from './modbus-migration.mjs'
 import { workspaceRepository } from '../../infrastructure/store/workspace-store.mjs'
 import { sampleTrendValues } from './trend-store.mjs'
@@ -123,6 +124,31 @@ export const appendTransactionFrame = (home, cwd, frame) =>
   })
 
 /**
+ * Stamp lastAt/lastOk/error only. The tick must not write enabled or
+ * intervalMs — those can change while the read is in flight — and must not
+ * recreate a polling row whose connection was deleted before commit.
+ *
+ * @param {any} pack
+ * @param {any[]} connections
+ * @param {Record<string, any>} runtime
+ */
+const mergePollingRuntime = (pack, connections, runtime) => {
+  const next = { ...(pack.pollingByConnection || {}) }
+  const live = new Set((connections || []).map((/** @type {any} */ c) => c && c.id).filter(Boolean))
+  for (const [cid, stamp] of Object.entries(runtime || {})) {
+    if (!live.has(cid)) continue
+    const base = next[cid] || normalizePolling(null)
+    next[cid] = {
+      ...base,
+      lastAt: stamp?.lastAt,
+      lastOk: stamp?.lastOk,
+      error: stamp?.error,
+    }
+  }
+  return next
+}
+
+/**
  * @param {any} [home]
  * @param {any} [cwd]
  * @param {any} [input]
@@ -171,8 +197,8 @@ const commit = (home, cwd, input, kind) =>
       }
     }
     const pollingByConnection =
-      (kind === 'poll' && input && input.pollingByConnection
-        ? { ...pack.pollingByConnection, ...input.pollingByConnection }
+      (kind === 'poll' && input && input.pollingRuntime
+        ? mergePollingRuntime(pack, connections, input.pollingRuntime)
         : pack.pollingByConnection) || pack.pollingByConnection
     const alarmEval = evaluateAlarms({
       points,
@@ -201,7 +227,7 @@ const commit = (home, cwd, input, kind) =>
       trend,
       version: 3,
     })
-    if (kind === 'poll' && input && input.pollingByConnection) {
+    if (kind === 'poll' && input && input.pollingRuntime) {
       patch.pollingByConnection = pollingByConnection
     }
     // Always persist alarm maps from the committed values snapshot. On config
