@@ -79,17 +79,37 @@ test('warn and error thresholds are reported separately', (t) => {
 })
 
 test('an allowlisted file passes but may not grow past its recorded max', (t) => {
-  const dir = makeTree({ 'src/big.mjs': 25 })
+  const dir = makeTree({ 'src/big.mjs': 15 })
   t.after(() => rmSync(dir, { recursive: true, force: true }))
-  const group = { ...GROUP, allow: [{ file: 'src/big.mjs', max: 25, reason: 'UI 组合', stage: 'P4-1' }] }
+  const group = { ...GROUP, allow: [{ file: 'src/big.mjs', max: 15, reason: 'UI 组合', stage: 'P4-1' }] }
   const ok = checkBudget(dir, { groups: [group] })
   assert.equal(ok.ok, true)
   assert.equal(ok.groups[0].allowlisted.length, 1)
 
-  writeFileSync(join(dir, 'src/big.mjs'), 'x\n'.repeat(26))
+  writeFileSync(join(dir, 'src/big.mjs'), 'x\n'.repeat(16))
   const grown = checkBudget(dir, { groups: [group] })
   assert.equal(grown.ok, false)
-  assert.ok(grown.violations.some((v) => v.includes('grew to 26 lines (allowlisted max 25)')))
+  assert.ok(grown.violations.some((v) => v.includes('grew to 16 lines (allowlisted max 15)')))
+})
+
+test('allowlist max cannot exceed the group hard limit', (t) => {
+  const dir = makeTree({ 'src/big.mjs': 15 })
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const group = { ...GROUP, allow: [{ file: 'src/big.mjs', max: 25, reason: 'UI 组合', stage: 'P4-1' }] }
+  const result = checkBudget(dir, { groups: [group] })
+  assert.equal(result.ok, false)
+  assert.ok(result.violations.some((v) => v.includes('allowlist max 25 exceeds the 20-line hard limit')))
+})
+
+test('allowlist max cannot sit more than 5 lines above the file', (t) => {
+  const dir = makeTree({ 'src/big.mjs': 12 })
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const tight = { ...GROUP, allow: [{ file: 'src/big.mjs', max: 17, reason: 'UI 组合', stage: 'P4-1' }] }
+  assert.equal(checkBudget(dir, { groups: [tight] }).ok, true)
+  const loose = { ...GROUP, allow: [{ file: 'src/big.mjs', max: 18, reason: 'UI 组合', stage: 'P4-1' }] }
+  const result = checkBudget(dir, { groups: [loose] })
+  assert.equal(result.ok, false)
+  assert.ok(result.violations.some((v) => v.includes('more than 5 lines above its current 12')))
 })
 
 test('allowlist entries must be removed once the file is back under the limit', (t) => {
