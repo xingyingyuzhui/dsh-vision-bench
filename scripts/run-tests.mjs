@@ -47,6 +47,21 @@ export function testFileArgs(projectRoot = root) {
   return collectTestFiles(projectRoot).map((file) => relative(projectRoot, file).replaceAll('\\', '/'))
 }
 
+/** Default per-test limit. Callers can override with `--test-timeout` or `--test-timeout=…`. */
+export const DEFAULT_TEST_TIMEOUT_MS = 60_000
+
+/**
+ * Node's test runner args. A caller-supplied timeout replaces the default.
+ *
+ * @param {string[]} [extra]
+ * @returns {string[]}
+ */
+export function nodeTestArgs(extra = []) {
+  const overridden = extra.some((arg) => arg === '--test-timeout' || arg.startsWith('--test-timeout='))
+  const timeout = overridden ? [] : [`--test-timeout=${DEFAULT_TEST_TIMEOUT_MS}`]
+  return ['--test', ...timeout, ...extra]
+}
+
 function main() {
   const files = testFileArgs(root)
   if (!files.length) {
@@ -54,7 +69,7 @@ function main() {
     process.exit(1)
   }
   const extra = process.argv.slice(2)
-  const result = spawnSync(process.execPath, ['--test', ...extra, ...files], {
+  const result = spawnSync(process.execPath, [...nodeTestArgs(extra), ...files], {
     cwd: root,
     env: process.env,
     stdio: 'inherit',

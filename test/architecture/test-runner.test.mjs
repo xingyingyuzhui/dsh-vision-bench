@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { collectTestFiles, testFileArgs } from '../../scripts/run-tests.mjs'
+import { collectTestFiles, DEFAULT_TEST_TIMEOUT_MS, nodeTestArgs, testFileArgs } from '../../scripts/run-tests.mjs'
 import { listBenchFacades } from '../../scripts/run-with-bench.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -46,6 +46,25 @@ test('npm quality scripts do not rely on shell glob expansion', () => {
   const script = readFileSync(join(root, 'scripts/run-tests.mjs'), 'utf8')
   assert.match(script, /endsWith\('\.test\.mjs'\)/)
   assert.match(script, /spawnSync/)
+  assert.match(script, /nodeTestArgs\(extra\)/)
+})
+
+test('the suite defaults to a 60s per-test timeout and honors an explicit override', () => {
+  assert.equal(DEFAULT_TEST_TIMEOUT_MS, 60_000)
+  assert.deepEqual(nodeTestArgs([]), ['--test', '--test-timeout=60000'])
+  assert.deepEqual(nodeTestArgs(['--test-reporter=spec']), ['--test', '--test-timeout=60000', '--test-reporter=spec'])
+  assert.deepEqual(nodeTestArgs(['--test-timeout=10000']), ['--test', '--test-timeout=10000'])
+  assert.deepEqual(nodeTestArgs(['--test-timeout', '0', '--test-name-pattern', 'x']), [
+    '--test',
+    '--test-timeout',
+    '0',
+    '--test-name-pattern',
+    'x',
+  ])
+  const workflow = readFileSync(join(root, '.github/workflows/quality.yml'), 'utf8')
+  assert.match(workflow, /timeout-minutes:\s*25/)
+  assert.match(workflow, /group:\s*quality-\$\{\{\s*github\.ref\s*\}\}/)
+  assert.match(workflow, /cancel-in-progress:\s*true/)
 })
 
 test('c8 --all include/exclude covers published production JS without generated client', () => {

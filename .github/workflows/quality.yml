@@ -5,8 +5,13 @@ on:
     branches: [main, master, 'chore/**', 'fix/**', 'refactor/**']
   pull_request:
 
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
