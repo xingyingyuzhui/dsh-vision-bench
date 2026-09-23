@@ -200,6 +200,12 @@ export function createVisionIoBroker(options = {}) {
         return
       }
       child = proc
+      proc.stdin.on('error', (error) => {
+        if (workerEpoch !== epoch) return
+        lastError = ioError('IO_RUNTIME_UNAVAILABLE', String((error && error.message) || error))
+        killWorker(lastError)
+      })
+      if (typeof options.onWorker === 'function') options.onWorker(proc)
       stdoutBuf = ''
       stderrTail = ''
       draining = false

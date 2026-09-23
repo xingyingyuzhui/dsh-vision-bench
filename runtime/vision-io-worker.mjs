@@ -134,7 +134,10 @@ rl.on('line', (line) => {
   void handle(parsed.value)
 })
 
+let shuttingDown = false
 const shutdown = async () => {
+  if (shuttingDown) return
+  shuttingDown = true
   try {
     await manager.stop()
   } catch {
@@ -142,6 +145,12 @@ const shutdown = async () => {
   }
   process.exit(0)
 }
+rl.on('close', () => {
+  void shutdown()
+})
+process.stdout.on('error', () => {
+  void shutdown()
+})
 process.on('SIGTERM', () => {
   void shutdown()
 })
