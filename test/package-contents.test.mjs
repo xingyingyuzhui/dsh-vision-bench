@@ -15,6 +15,10 @@ test('package.json: version tracks package and no legacy python modbus files', a
     'keil_build.py',
     'keil_project.py',
     'openocd_flash.py',
+    'scripts/apply-live-preset.sh',
+    'scripts/gen-standard-preset-snapshot.mjs',
+    'scripts/check-client-budget.mjs',
+    'scripts/report-client-vendors.mjs',
   ]) {
     assert.ok(!files.some((f) => String(f).indexOf(bad) >= 0), bad + ' must not be packaged')
   }
