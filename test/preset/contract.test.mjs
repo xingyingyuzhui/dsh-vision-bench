@@ -32,7 +32,7 @@ test('official dsh-persona Config rejects text-only and accepts prefix', async (
   assert.equal(ok.prefix, 'You are a coding agent')
   const replicaFail = () => localPersonaConfigReplica({ text: 'You are a coding agent' })
   assert.throws(replicaFail, /prefix missing required value/)
-  assert.equal(SUPPORTED_DSH_CONTRACT, '0.1.5-rc.1')
+  assert.equal(SUPPORTED_DSH_CONTRACT, '0.1.7-alpha.2')
 })
 
 test('real legacy preset migrates text→prefix and host row→/agent, then passes official Config', async () => {

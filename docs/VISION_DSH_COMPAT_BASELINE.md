@@ -1,16 +1,16 @@
-# Vision / DSH 兼容基线（0.29.0）
+# Vision / DSH 兼容基线（0.29.27）
 
-记录日期：2026-09-19（自 0.28.0 / 2026-09-10 基线修订）。后续每步验收对照本文件，不把空闲低 CPU 单独当成修复成功。跨平台矩阵见 [`ACCEPTANCE_NATIVE_WEB_DESKTOP.md`](./ACCEPTANCE_NATIVE_WEB_DESKTOP.md)。
+记录日期：2026-09-23（自 0.29.0 / 2026-09-19 基线修订，随 DSH Desktop 0.1.7-alpha.2 实测抬钉）。后续每步验收对照本文件，不把空闲低 CPU 单独当成修复成功。跨平台矩阵见 [`ACCEPTANCE_NATIVE_WEB_DESKTOP.md`](./ACCEPTANCE_NATIVE_WEB_DESKTOP.md)。
 
 ## 安装与加载
 
 | 项 | 值 |
 |---|---|
-| DSH CLI（契约钉） | `@deepseek-ai/dsh@0.1.5-rc.1`（`SUPPORTED_DSH_CONTRACT`）；本机开发可对齐 `0.1.6-alpha.1`，**不因此抬钉** |
+| DSH CLI（契约钉） | `@deepseek-ai/dsh@0.1.7-alpha.2`（`SUPPORTED_DSH_CONTRACT`，Desktop 0.1.7-alpha.2 实测抬钉）；`0.1.5-rc.1`–`0.1.6` 走旧目录契约仍受支持 |
 | 本机 Web profile | `~/.dsh/profiles/web`（开发可用 `link:` / tgz） |
 | Desktop 产品安装 | 仅 registry `dsh-vision-bench@<exact>`；`link:` / 本地 tgz 不算产品验收 |
 | Vision 加载路径（开发） | `link:/Users/qin/DSH/plugins/dsh-vision-suite/dsh-vision-bench` |
-| 支持契约 | `SUPPORTED_DSH_CONTRACT = 0.1.5-rc.1` |
+| 支持契约 | `SUPPORTED_DSH_CONTRACT = 0.1.7-alpha.2`（预设双轨：≤0.1.6 目录式，0.1.7+ 声明式） |
 | 默认 bundle | 仅 `dsh-vision-bench`。`dsh-vision-harness` 不进入默认安装 |
 
 ## 产品拆分
@@ -18,8 +18,18 @@
 - 宿主：`host.js`，`name: dsh-vision-bench`，顶层 inject **仅** `connection`；UI 走 `POST /api/vision-bench/dispatch`
 - Web 兼容：可选 `inject(['webServer'])` 挂旧 `/vision-bench` RPC + Agent HTTP 命令桥（Desktop 不挂）
 - Agent：`tools.js`，export `./agent`，`name: dsh-vision-bench-tools`；缺 Host → `HOST_UNAVAILABLE`（不猜 `:3080`）
-- 预设：`$DSH_HOME/.agent-presets/vision-bench`，工具行 `dsh-vision-bench/agent`，persona 用 `prefix`
+- 预设（双轨）：0.1.7+ 由宿主经 `agentPresets.register()` 注册声明 `{ id: vision-bench, name: Vision模式, plugins: standard 快照 + dsh-vision-bench/agent }`；≤0.1.6 写 `$DSH_HOME/.agent-presets/vision-bench`（工具行 `dsh-vision-bench/agent`，persona 用 `prefix`）
 - Desktop 能力：UI / TCP / 仿真可宣称；**完整 RTU native** 待 `serialport` 进入官方 `allowBuilds` 或可选 RTU 包
+
+## Agent 预设契约（0.1.7 声明式）
+
+DSH 0.1.7 起目录式预设（`$DSH_HOME/.agent-presets/<id>/`）**不再被读取**，预设是 Cordis 组合里的 `@deepseek-ai/dsh-agent-preset` 声明（registry 服务 `agentPresets`，公开 API `register(definition)`）。要点：
+
+- **自包含**：registry 的 `list()/resolve()` 只回展示元数据，`agentPresets.copy` 已移除 → 声明必须重述完整子插件清单。清单由 `scripts/gen-standard-preset-snapshot.mjs` 从钉住 tag 的 `packages/bundle/web-app/presets/standard.patch.yml` 生成（`--check` 作漂移门）；`!!js process.platform` 行在注册时以纯布尔落地。
+- **能力探测**：`agentPresets.register` 存在且无 `copy` → 声明式；否则沿用目录 seed，零回归。
+- **迁移**：声明通过 roster 校验（`list()` 行无 `broken`）后，旧目录整体改名备份到 `$DSH_HOME/.agent-presets/.vision-bench.backup.<ISO>`；归属标记（`.dsh-vision-bench`）缺失或外来目录**不动**。激活失败时保留旧目录作为恢复数据。
+- **同 id**：`vision-bench` 与旧会话记录的预设身份一致；id 被外部声明占用时让位（`external-declaration`），不抢占。
+- **健康检查**：Settings → Vision 的 `presetHealth` 在声明式下报 `via` / roster 诊断 / 迁移警告，`nextStep` 给声明重建指引。
 
 ## 复现动作（隔离 `DSH_HOME`）
 

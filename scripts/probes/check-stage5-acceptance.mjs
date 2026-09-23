@@ -181,7 +181,7 @@ check('rpc.channelCompat', contract.includes("VISION_RPC_CHANNEL = '/vision-benc
 const dshContract = read('src/infrastructure/harness/dsh-contract.mjs')
 check(
   'supportedContractPinned',
-  /SUPPORTED_DSH_CONTRACT = '0\.1\.5-rc\.1'/.test(dshContract),
+  /SUPPORTED_DSH_CONTRACT = '0\.1\.7-alpha\.2'/.test(dshContract),
   'keep pin until release re-measure',
 )
 
