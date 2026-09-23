@@ -127,13 +127,6 @@ export default {
           "reason": "P5-4 debt ratchet; split in later P4/P6",
           "stage": "P6",
           "owner": "vision-bench"
-        },
-        {
-          "file": "src/interfaces/agent/vision-bench-tool.mjs",
-          "max": 407,
-          "reason": "Agent tool schema+execute; split schema later",
-          "stage": "P6",
-          "owner": "vision-bench"
         }
       ]
     },
