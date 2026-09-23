@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 import { createBench } from '../helpers/workspace-factory.mjs'
 import { sessionPack } from '../helpers/preset-fixtures.mjs'
 

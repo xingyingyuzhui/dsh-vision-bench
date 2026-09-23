@@ -278,7 +278,7 @@ test('Task4: POST /evidence via host appends typed frame evidence and survives r
   const cwd = join(home, 'board')
   try {
     const cv = await setup(home, cwd)
-    const { runVisionBench } = await import('../../bench-tool.mjs')
+    const { runVisionBench } = await import('../helpers/run-vision-bench.mjs')
     const res = await runVisionBench(
       home,
       {

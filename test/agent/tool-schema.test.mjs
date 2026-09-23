@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { PRESET_METADATA } from '../../bench-preset.mjs'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
-import { runVisionBench, visionBenchTool } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
+import { visionBenchTool } from '../../bench-tool.mjs'
 import { apply as applyAgent } from '../../tools.js'
 import { LEGACY_PERSONA_A, LEGACY_PERSONA_B } from '../helpers/preset-fixtures.mjs'
 import { ERROR_CODES } from '../../src/domain/modbus/errors.mjs'
@@ -14,7 +15,6 @@ import {
   unregisterVisionHost,
 } from '../../src/infrastructure/host/vision-host-client.mjs'
 import { createVisionCommandDispatcher } from '../../src/interfaces/http/vision-command-routes.mjs'
-import { validateAgentToolArgs } from '../../src/interfaces/agent/agent-tool-preflight.mjs'
 
 test('agent role registers vision_bench and skips HTTP routes', async () => {
   const tools = []
@@ -288,39 +288,6 @@ test('Agent execute preflight returns missingFields once for read/frames', async
     stop()
     unregisterVisionHost()
   }
-})
-
-test('Agent preflight alarmId without unique connection matches Host TARGET_REQUIRED', () => {
-  const pack = {
-    connections: [
-      { id: 'c1', enabled: true },
-      { id: 'c2', enabled: true },
-    ],
-    devices: [
-      { id: 'd1', connectionId: 'c1' },
-      { id: 'd2', connectionId: 'c2' },
-    ],
-    points: [],
-    alarmState: {
-      // alarm without connectionId and no unique single-conn fallback
-      shared: { condition: 'active', pointId: 'px' },
-    },
-  }
-  const miss = validateAgentToolArgs({ action: 'alarm', alarmId: 'shared' }, { pack })
-  assert.ok(miss)
-  assert.equal(miss.errorCode, 'TARGET_REQUIRED')
-  assert.ok(miss.missingFields.includes('connectionId'))
-
-  const ok = validateAgentToolArgs(
-    { action: 'alarm', alarmId: 'shared', connectionId: 'c1' },
-    {
-      pack: {
-        ...pack,
-        alarmState: { shared: { condition: 'active', pointId: 'px', connectionId: 'c1' } },
-      },
-    },
-  )
-  assert.equal(ok, null)
 })
 
 test('Agent execute projects status/read; Host runVisionBench keeps full status points', async (t) => {

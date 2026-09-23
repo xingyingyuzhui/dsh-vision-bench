@@ -5,7 +5,7 @@ import {
   projectAgentResult,
   utf8ByteLength,
 } from '../../src/application/commands/agent-result-projection.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
 import { createBench } from '../helpers/workspace-factory.mjs'
 

@@ -1,19 +1,10 @@
 // @ts-check
 /**
- * Agent-entry preflight: one structured TARGET_REQUIRED with missingFields[] + hint.
- * Host/UI paths keep multi-target ambiguity protection and are not routed here.
- *
- * alarmId / trendKey exceptions must match Host `resolveTarget`:
- * - trendKey encodes connectionId:deviceId:pointId
- * - alarmId alone is allowed only when Host can uniquely infer connection from
- *   alarmState / point table (pass optional `pack` for the same check). Without
- *   a unique locator, return missingFields including connectionId.
+ * Agent-entry preflight: schema checks only (missingFields[] + hint).
+ * alarmId / trendKey uniqueness is resolved on the Host, which returns the same envelope.
+ * A well-formed trendKey (connectionId:deviceId:pointId) satisfies the connection requirement.
+ * alarmId alone does not: without the point table this side cannot prove a unique connection.
  */
-
-import {
-  TARGET_CODES,
-  resolveTarget,
-} from '../../application/modbus/target-resolver-service.mjs'
 
 const NEEDS_CONNECTION = new Set(['frames', 'trend', 'alarm'])
 const NEEDS_CONNECTION_AND_DEVICE = new Set(['read', 'write'])
@@ -68,7 +59,7 @@ function hintFor(action, missing) {
 
 /**
  * @param {any} [args]
- * @param {{ pack?: any }} [opts] optional Host modbus pack for alarmId/trendKey uniqueness
+ * @param {{ pack?: any }} [_opts] retained so older callers stay source-compatible; ignored
  * @returns {null | {
  *   ok: false,
  *   action: string,
@@ -78,7 +69,7 @@ function hintFor(action, missing) {
  *   hint: string,
  * }}
  */
-export function validateAgentToolArgs(args, opts = {}) {
+export function validateAgentToolArgs(args, _opts = {}) {
   const action = typeof args?.action === 'string' ? args.action : ''
   if (!action) {
     return {
@@ -115,37 +106,12 @@ export function validateAgentToolArgs(args, opts = {}) {
   const missing = []
   const cid = connectionIdOf(args)
   const did = deviceIdOf(args)
-  const pack = opts.pack && typeof opts.pack === 'object' ? opts.pack : null
 
   if (NEEDS_CONNECTION.has(action)) {
     const hasAlarmId = typeof args?.alarmId === 'string' && args.alarmId.trim()
     const hasTrendKey = typeof args?.trendKey === 'string' && args.trendKey.trim()
     if (action === 'alarm' && hasAlarmId) {
-      if (pack) {
-        const rt = resolveTarget(pack, {
-          connectionId: cid || undefined,
-          deviceId: did || undefined,
-          pointId: typeof args.pointId === 'string' ? args.pointId : undefined,
-          alarmId: String(args.alarmId).trim(),
-        })
-        if (!rt.ok) {
-          if (rt.errorCode === TARGET_CODES.TARGET_REQUIRED) {
-            missing.push('connectionId')
-          } else {
-            return {
-              ok: false,
-              action,
-              errorCode: rt.errorCode || 'TARGET_REQUIRED',
-              error: rt.error || 'alarmId 无法唯一定位',
-              missingFields: cid ? [] : ['connectionId'],
-              hint: hintFor(action, ['connectionId']),
-            }
-          }
-        }
-      } else if (!cid) {
-        // Without pack we cannot prove uniqueness — require connectionId.
-        missing.push('connectionId')
-      }
+      if (!cid) missing.push('connectionId')
     } else if (action === 'trend' && hasTrendKey) {
       const parsed = parseTrendKey(args.trendKey)
       if (!parsed.ok) {
@@ -158,23 +124,6 @@ export function validateAgentToolArgs(args, opts = {}) {
           error: 'trendKey 与 connectionId 不一致',
           missingFields: ['connectionId'],
           hint: hintFor(action, ['connectionId']),
-        }
-      } else if (pack) {
-        const rt = resolveTarget(pack, {
-          connectionId: cid || parsed.connectionId,
-          deviceId: did || parsed.deviceId,
-          pointId: parsed.pointId,
-          trendKey: String(args.trendKey).trim(),
-        })
-        if (!rt.ok) {
-          return {
-            ok: false,
-            action,
-            errorCode: rt.errorCode || 'TARGET_REQUIRED',
-            error: rt.error || 'trendKey 无法唯一定位',
-            missingFields: rt.errorCode === TARGET_CODES.TARGET_REQUIRED ? ['connectionId'] : [],
-            hint: hintFor(action, ['connectionId']),
-          }
         }
       }
     } else if (!cid) {

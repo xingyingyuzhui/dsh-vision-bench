@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { connectOp } from '../../bench-modbus.mjs'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 
 const c1 = {
   id: 'c1',

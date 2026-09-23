@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { keilMap } from '../../bench-actions.mjs'
 import { saveBindings, saveWorkspace } from '../../bench-store.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 import { mapProject } from '../../src/application/keil/project-service.mjs'
 
 const UVPROJX = `<?xml version="1.0" encoding="UTF-8" standalone="no" ?>

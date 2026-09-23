@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { loadWorkspace, saveWorkspace, workspaceRepository } from '../../bench-store.mjs'
-import { runVisionBench } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 import { migrateVisualizationToV2 } from '../../bench-visualization-model.mjs'
 import { preVisualizationV2BackupPath } from '../../src/infrastructure/persistence/workspace-migration.mjs'
 

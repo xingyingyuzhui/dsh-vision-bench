@@ -15,7 +15,8 @@ import {
   runningTasks,
 } from '../../bench-journal.mjs'
 import { finishTask, journalView, loadWorkspace, openTask, saveBindings, saveWorkspace } from '../../bench-store.mjs'
-import { runVisionBench, sessionIdOf } from '../../bench-tool.mjs'
+import { runVisionBench } from '../helpers/run-vision-bench.mjs'
+import { sessionIdOf } from '../../bench-tool.mjs'
 
 test('normalizeOrigin and task defaults', async () => {
   assert.deepEqual(normalizeOrigin({ source: 'agent', sessionId: ' s1 ' }), {
