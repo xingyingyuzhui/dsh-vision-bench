@@ -27,7 +27,8 @@ test('virtualized profile 注入 vendor，restore 后清掉', async () => {
   try {
     assert.ok(globalThis.DvbVendor)
     assert.equal(typeof globalThis.DvbVendor.useVirtualizer, 'function')
-    assert.equal(typeof globalThis.DvbVendor.uPlot, 'function')
+    assert.equal(typeof globalThis.DvbVendor.Virtualizer, 'function')
+    assert.equal(globalThis.DvbVendor.uPlot, undefined)
   } finally {
     restore()
   }

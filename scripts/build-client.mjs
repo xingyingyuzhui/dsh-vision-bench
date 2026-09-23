@@ -125,19 +125,12 @@ function asNamedIife(name, raw) {
 }
 
 function readVendorCss() {
-  const files = [
-    join(root, 'node_modules/uplot/dist/uPlot.min.css'),
-    join(root, 'node_modules/gridstack/dist/gridstack.min.css'),
-  ]
-  return files
-    .map((p) => {
-      try {
-        return readFileSync(p, 'utf8')
-      } catch (error) {
-        throw new Error('无法读取 vendor CSS: ' + p + ' (' + error.message + ')')
-      }
-    })
-    .join('\n')
+  const file = join(root, 'node_modules/gridstack/dist/gridstack.min.css')
+  try {
+    return readFileSync(file, 'utf8')
+  } catch (error) {
+    throw new Error('无法读取 vendor CSS: ' + file + ' (' + error.message + ')')
+  }
 }
 
 async function buildNamedBundle(name, entry) {

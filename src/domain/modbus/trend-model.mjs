@@ -208,7 +208,7 @@ export function toUplotData(cwd, opts = {}) {
   const timeSet = new Set()
   for (const list of seriesLists) for (const item of list) timeSet.add(item.t)
   const times = Array.from(timeSet).sort((a, /** @type {any} */ b) => a - b)
-  // uPlot expects x in seconds when scale x.time=true; seconds match typical uPlot examples
+  // Aligned x is unix seconds. Line options convert seconds to milliseconds.
   const xs = times.map((/** @type {any} */ t) => t / 1000)
   const data = [xs]
   for (let si = 0; si < seriesLists.length; si++) {
@@ -224,8 +224,7 @@ export function toUplotData(cwd, opts = {}) {
   return { data, keys, meta: keys.map((/** @type {any} */ k) => state.meta.get(k) || {}) }
 }
 
-// data-layer proto for uPlot view — no runtime dependency, spanGaps:false keeps null gaps as breaks
-// Task2/0.20.1: 按组件 pointIds + windowMs 构造 uPlot ALIGNED data。
+// 按组件 pointIds + windowMs 构造对齐数据（无图表库依赖）。
 // 输出 [x秒..., s1..., s2...]：合并时间戳升序去重 → 毫秒转秒 → 每点位按统一
 // 时间轴补 null（通信失败本就为 null 断点）→ 所有数组等长，点位顺序稳定。
 /**
@@ -277,7 +276,7 @@ export const trendDataForComponents = (trendStore, points, componentIds = [], wi
   const keys = []
   const meta = []
   if (times.length) {
-    // 时间轴统一为秒（uPlot time scale）
+    // 时间轴统一为秒；折线 option 再换算成毫秒
     data.push(times.map((/** @type {any} */ t) => t / 1000))
     for (const pid of ids) {
       const entry = seriesByPoint.get(pid)

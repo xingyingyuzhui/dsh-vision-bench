@@ -113,4 +113,5 @@ export const t = (k) =>
     vizReadOnlyTitle: '可视化配置为只读',
     vizReadOnlyHint: '当前可以查看组件和实时数据，但不能修改布局、组件配置或执行组件控制。请升级插件后再编辑。',
     vizReadOnlyAction: '当前配置由更高版本插件创建，无法修改',
+    vizChartUnavailable: '图表运行时不可用',
   })[k] || k

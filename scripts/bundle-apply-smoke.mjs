@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-// The bundle now embeds browser-only vendor libs (uPlot / virtual-core) that
+// The bundle now embeds browser-only vendor libs (ECharts / virtual-core) that
 // read document/window at init — install a minimal DOM stub like a real browser.
 import { installDomStub } from '../test/dom-stub.mjs'
 

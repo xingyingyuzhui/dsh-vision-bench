@@ -1,7 +1,7 @@
 import { normalizeModbus } from '../../../domain/modbus/modbus-migration.mjs'
 // TaskP2/0.20.0: 侧边栏「可视化」— 以组件为中心（line/bar/value/switch）。
 // 组件编辑器：名称/类型/关联点位搜索（仅 monitorEnabled，限定路径）。
-// 渲染来源：line → modbus.trend（uPlot / ECharts）；bar → 最新 values；
+// 渲染来源：line → modbus.trend（ECharts）；bar → 最新 values；
 // value → 数值卡；switch → FC01 写点（确认后写入并读回）。
 import { buildInputBridge, hasHarnessInput, readInputDraft } from '../../common/agent-reference.mjs'
 import { subscribeFocus } from '../../common/focus-store.mjs'
@@ -141,7 +141,7 @@ export function createVisualizationPage(React, t, post, hooks) {
 
     const { chartErrors, setChartErrors, destroyChart, seriesOfComponent, ensureChart, ensureBarChart } = useVizCharts(
       React,
-      { components, points, trendStore },
+      { components, points, trendStore, t },
     )
 
     const { editorValidation, saveComponent, removeComponent, openEditor, toggleSwitch, copyComponentRef } = useVizActions(

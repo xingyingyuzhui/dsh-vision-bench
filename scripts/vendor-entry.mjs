@@ -20,10 +20,9 @@ import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/compon
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { GridStack } from 'gridstack'
-// Build-time vendor: uPlot + TanStack + GridStack + ECharts + CodeMirror.
+// Build-time vendor: TanStack + GridStack + ECharts + CodeMirror.
 // Never pollutes window. react is EXTERNAL. Do not import react-arborist
 // (peer react-dom + react-dnd) or useReactTable.
-import uPlot from 'uplot'
 
 echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
@@ -50,7 +49,6 @@ const codeMirror = {
 }
 
 export {
-  uPlot,
   Virtualizer,
   elementScroll,
   observeElementRect,

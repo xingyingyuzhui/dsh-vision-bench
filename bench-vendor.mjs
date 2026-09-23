@@ -1,7 +1,6 @@
 // Compatibility facade — prefer src/ui/vendor/vendor-bridge.mjs.
 export {
   getVendor,
-  vendorUPlot,
   vendorVirtualizer,
   vendorElementScroll,
   vendorUseVirtualizer,

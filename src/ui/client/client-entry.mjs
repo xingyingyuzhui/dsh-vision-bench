@@ -28,7 +28,7 @@ export function apply(ctx) {
   if (doc && doc.head) {
     styleTag = doc.createElement('style')
     styleTag.setAttribute(ATTR, '')
-    // Task1/0.18.1: append official uPlot CSS (injected by build as DvbVendorCss)
+    // Vendor CSS (gridstack) is injected by the build as DvbVendorCss.
     styleTag.textContent = CSS + (typeof DvbVendorCss === 'string' ? '\n' + DvbVendorCss : '')
     doc.head.appendChild(styleTag)
     doc.body.setAttribute(ATTR, '')

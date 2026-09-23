@@ -52,6 +52,75 @@ test('ensureChart does not init ECharts until the plot node has a real size', ()
   assert.equal(inits.length, 0)
 })
 
+function reactWithErrors(box) {
+  return {
+    useState: (init) => {
+      box.errors = typeof init === 'function' ? init() : init
+      return [
+        box.errors,
+        (next) => {
+          box.errors = typeof next === 'function' ? next(box.errors) : next
+        },
+      ]
+    },
+    useRef: (init) => ({ current: init }),
+    useCallback: (fn) => fn,
+    useEffect: () => {},
+  }
+}
+
+test('ensureChart reports the chart-library message when ECharts is missing', () => {
+  const translated = { errors: null }
+  const fallback = { errors: null }
+  const node = { clientWidth: 640, clientHeight: 280 }
+  const comp = { id: 'c1', type: 'line', pointIds: ['p1'], settings: {} }
+  useVizCharts(reactWithErrors(translated), {
+    components: [],
+    points: [],
+    trendStore: trendStore(),
+    t: (key) => (key === 'vizChartUnavailable' ? 'Chart library not loaded' : key),
+  }).ensureChart(node, comp)
+  useVizCharts(reactWithErrors(fallback), {
+    components: [],
+    points: [],
+    trendStore: trendStore(),
+  }).ensureChart(node, comp)
+  assert.equal(translated.errors.c1, 'Chart library not loaded')
+  assert.equal(fallback.errors.c1, 'Chart library not loaded')
+})
+
+test('ensureChart paints line options with resolved CSS tokens', () => {
+  const options = []
+  const prev = globalThis.getComputedStyle
+  globalThis.getComputedStyle = () => ({
+    getPropertyValue(name) {
+      if (name === '--dvb-color-fg-muted') return 'rgb(9, 9, 9)'
+      return ''
+    },
+  })
+  setEchartsRuntime({
+    init() {
+      return {
+        setOption(opt) {
+          options.push(opt)
+        },
+        resize() {},
+        dispose() {},
+      }
+    },
+  })
+  try {
+    const hook = useVizCharts(makeReact(), { components: [], points: [], trendStore: trendStore() })
+    hook.ensureChart({ clientWidth: 640, clientHeight: 280 }, { id: 'c1', type: 'line', pointIds: ['p1'], settings: {} })
+    assert.equal(options.length, 1)
+    assert.equal(options[0].textStyle.color, 'rgb(9, 9, 9)')
+    assert.equal(options[0].series.length, 1)
+  } finally {
+    if (prev) globalThis.getComputedStyle = prev
+    else delete globalThis.getComputedStyle
+  }
+})
+
 test('ensureChart inits ECharts at the node box and attaches ResizeObserver', () => {
   const inits = []
   const resizes = []

@@ -190,8 +190,7 @@ test('Task3: trend buffers are isolated per cwd (same pointId, different values)
   clean(cwdB)
 })
 
-test('Task5/6 guards: no hard-coded configVersion collapse and no window.uPlot reliance', async () => {
-  // TaskP2/0.20.0: 曲线已迁移为「可视化」组件页与 useVizCharts hook
+test('line charts use bundled ECharts and do not touch host plot globals', async () => {
   const chartHook = join(dirname(fileURLToPath(import.meta.url)), '../..',
     'src/ui/monitor/visualization/hooks/use-viz-charts.mjs',
   )
@@ -199,12 +198,12 @@ test('Task5/6 guards: no hard-coded configVersion collapse and no window.uPlot r
     'src/ui/monitor/visualization/visualization-page.mjs',
   )
   const live = `${readFileSync(chartHook, 'utf8')}\n${readFileSync(vizPage, 'utf8')}`
-  assert.doesNotMatch(live, /window\.uPlot|globalThis\.uPlot/, 'must not rely on host uPlot globals')
-  assert.match(live, /vendorUPlot\(\)/, 'should consume bundled uPlot constructor lazily')
-  assert.match(live, /destroy/, 'should destroy uPlot on teardown')
-  assert.match(live, /\.setData\(/, 'should update via setData, not re-create chart')
-  assert.match(live, /setSize/, 'should resize via setSize')
-  assert.match(live, /spanGaps: s\.connectNulls !== false/, 'uPlot spanGaps follows connectNulls setting')
+  assert.doesNotMatch(live, /window\.uPlot|globalThis\.uPlot|window\.echarts|globalThis\.echarts/)
+  assert.doesNotMatch(live, /vendorUPlot\(|from ['"]uplot['"]/)
+  assert.match(live, /getEcharts\(\)/)
+  assert.match(live, /setOption/)
+  assert.match(live, /\.resize\(/)
+  assert.match(live, /dispose/)
 })
 test('Task2/0.20.1: trendDataForComponents aligned uPlot data (multi-series, seconds, null gaps)', async () => {
   const base = Date.now() - 60000

@@ -135,7 +135,7 @@ export default {
     {
       file: 'test/domain/trend.test.mjs',
       purpose: 'architecture-boundary',
-      reason: '曲线须走 bundled vendorUPlot，禁止依赖宿主全局 uPlot',
+      reason: '折线须走 bundled ECharts（getEcharts），禁止依赖宿主全局绘图库',
       targets: [
         'src/ui/monitor/visualization/hooks/use-viz-charts.mjs',
         'src/ui/monitor/visualization/visualization-page.mjs',

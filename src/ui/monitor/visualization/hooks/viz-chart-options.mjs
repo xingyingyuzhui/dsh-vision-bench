@@ -8,8 +8,57 @@ export const darkAlpha = (isDark, a) => (isDark ? `rgba(255,255,255,${a})` : `rg
 export const checkDark = () =>
   typeof globalThis !== 'undefined' && !!globalThis.window?.matchMedia?.('(prefers-color-scheme: dark)').matches
 
-export const buildAxisOpt = (s = {}, p, isDark, extra = {}) => {
-  const ls = { color: s[p + 'AxisColor'] || darkAlpha(isDark, '.3') }
+const SKIP_COLOR = /^(inherit|initial|unset|revert|revert-layer)$/i
+
+const CHART_TOKEN_NAMES = {
+  text: '--dvb-color-fg-muted',
+  axis: '--dvb-color-fg-subtle',
+  grid: '--dvb-color-border',
+  tooltipBg: '--dvb-bg-surface',
+  tooltipBorder: '--dvb-color-border',
+}
+
+export function chartInk(isDark, tokens = {}) {
+  const pick = (value, fallback) => {
+    const text = String(value ?? '').trim()
+    if (!text || SKIP_COLOR.test(text)) return fallback
+    return text
+  }
+  return {
+    text: pick(tokens?.text, darkAlpha(isDark, '.72')),
+    axis: pick(tokens?.axis, darkAlpha(isDark, '.3')),
+    grid: pick(tokens?.grid, darkAlpha(isDark, '.08')),
+    tooltipBg: pick(tokens?.tooltipBg, isDark ? 'rgba(20,24,32,.92)' : 'rgba(255,255,255,.96)'),
+    tooltipBorder: pick(tokens?.tooltipBorder, darkAlpha(isDark, '.12')),
+  }
+}
+
+export function readChartTokens(node) {
+  const tokens = {}
+  let style = null
+  try {
+    const view = node?.ownerDocument?.defaultView || globalThis
+    if (typeof view?.getComputedStyle === 'function' && node) style = view.getComputedStyle(node)
+  } catch {
+    style = null
+  }
+  for (const [key, name] of Object.entries(CHART_TOKEN_NAMES)) {
+    let value = ''
+    try {
+      value = style?.getPropertyValue?.(name) || ''
+    } catch {
+      value = ''
+    }
+    const text = String(value).trim()
+    if (text) tokens[key] = text
+  }
+  return tokens
+}
+
+export const buildAxisOpt = (s = {}, p, isDark, extra = {}, ink = {}) => {
+  const axisColor = s[p + 'AxisColor'] || ink.axis || darkAlpha(isDark, '.3')
+  const gridColor = s[p + 'GridColor'] || s.gridColor || ink.grid || darkAlpha(isDark, '.08')
+  const ls = { color: axisColor }
   const n = (k, d) => Number(s[p + k]) || d
   return {
     ...extra,
@@ -25,7 +74,7 @@ export const buildAxisOpt = (s = {}, p, isDark, extra = {}) => {
     splitLine: {
       show: s[p + 'ShowGrid'] ?? (s.showGrid !== false),
       lineStyle: {
-        color: s[p + 'GridColor'] || s.gridColor || darkAlpha(isDark, '.08'),
+        color: gridColor,
         type: s[p + 'GridType'] || s.gridLineType || 'solid',
       },
     },
@@ -106,7 +155,8 @@ export function resolveLineTimeRange(s = {}, payload, explicitNow) {
   return { isCount: false, min: now - windowMs, max: now + padMs, windowMs, now, firstMs, lastMs }
 }
 
-export function buildLineOption(s = {}, payload, isDark = false, isPreview = false, explicitNow) {
+export function buildLineOption(s = {}, payload, isDark = false, isPreview = false, explicitNow, tokens) {
+  const ink = chartInk(isDark, tokens)
   const range = resolveLineTimeRange(s, payload, explicitNow)
   const windowMs = range.windowMs
   const isCount = range.isCount
@@ -171,10 +221,13 @@ export function buildLineOption(s = {}, payload, isDark = false, isPreview = fal
     animation: false,
     backgroundColor: 'transparent',
     color: s.lineColor ? [s.lineColor] : VIZ_COLORS,
-    textStyle: { color: darkAlpha(isDark, '.72'), fontSize: isPreview ? 10 : 12 },
+    textStyle: { color: ink.text, fontSize: isPreview ? 10 : 12 },
     tooltip: {
       show: s.showTooltip !== false,
       trigger: s.tooltipTrigger || 'axis',
+      backgroundColor: ink.tooltipBg,
+      borderColor: ink.tooltipBorder,
+      textStyle: { color: ink.text },
       axisPointer: {
         type: s.tooltipAxisPointer || 'cross',
         label: {
@@ -222,8 +275,8 @@ export function buildLineOption(s = {}, payload, isDark = false, isPreview = fal
           top: showLegend && legendPos === 'top' ? 28 : 16,
           bottom: (showLegend && legendPos === 'bottom' ? 32 : 24) + (Number(s.xLabelRotate) ? 14 : 0),
         },
-    xAxis: buildAxisOpt(s, 'x', isDark, xAxisExtra),
-    yAxis: buildAxisOpt(s, 'y', isDark, yExtra),
+    xAxis: buildAxisOpt(s, 'x', isDark, xAxisExtra, ink),
+    yAxis: buildAxisOpt(s, 'y', isDark, yExtra, ink),
     series: echartsSeriesFromTrend(payload, s),
   }
 }
