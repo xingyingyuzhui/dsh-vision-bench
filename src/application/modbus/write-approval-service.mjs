@@ -62,6 +62,16 @@ export const takePendingWrite = (cwd, id, sessionId) => {
 }
 
 /**
+ * Put a consumed approval back. Used when the write cannot start (the bus is
+ * busy) so the user can approve the same request again.
+ * @param {PendingWriteEntry | null | undefined} entry
+ */
+export const restorePendingWrite = (entry) => {
+  if (!entry || !entry.id || !entry.cwd) return
+  pendingWrites.set(pendingKey(entry.cwd, entry.id), entry)
+}
+
+/**
  * Pending writes visible to a session. Without a session nothing is visible so
  * an anonymous browser can never observe (or approve) another session's requests.
  * Requests raised without a session are unowned and visible to every session.
