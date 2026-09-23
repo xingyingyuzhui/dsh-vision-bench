@@ -27,7 +27,7 @@ test('host named exports', async () => {
   assert.equal(pkg.exports['./scan-guard'], undefined)
 })
 
-test('host apply optionally injects webServer for Web compat only', async () => {
+test('host apply optionally injects webServer and the preset registry', async () => {
   const connection = mockRpcHost()
   const injected = []
   let toolRegs = 0
@@ -45,7 +45,8 @@ test('host apply optionally injects webServer for Web compat only', async () => 
   }
   apply(ctx)
   apply(ctx)
-  assert.deepEqual(injected, [['webServer'], ['webServer']])
+  // 两个可选注入都必须按序发生：webServer（Web 兼容）+ agentPresets（Vision模式声明）。
+  assert.deepEqual(injected, [['webServer'], ['agentPresets'], ['webServer'], ['agentPresets']])
   assert.equal(toolRegs, 0)
   await stop()
 })

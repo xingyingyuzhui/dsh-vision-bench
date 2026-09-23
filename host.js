@@ -24,6 +24,7 @@ import { clearDebugApprovals } from './src/application/debug/debug-approval-serv
 import { clearFlashApprovals } from './src/application/flash/flash-approval-service.mjs'
 import { createVerifyCommandService } from './src/application/verify/verify-command-service.mjs'
 import { registerVisionHost } from './src/infrastructure/host/vision-host-client.mjs'
+import { createAgentPresetAttacher } from './src/infrastructure/host/vision-preset-attach.mjs'
 import { createVerifyTelemetryAdapter } from './src/infrastructure/modbus/verify-telemetry-adapter.mjs'
 import { registerVisionFetchDispatch } from './src/interfaces/fetch/vision-fetch-route.mjs'
 import { createVisionCommandDispatcher } from './src/interfaces/http/vision-command-routes.mjs'
@@ -231,23 +232,29 @@ export function apply(ctx) {
     })
   }
 
+  const attachAgentPreset = createAgentPresetAttacher(ctx, { getHome: () => dshHome })
+
   try {
     // Fallible registrations first — must not steal the active lease on throw.
     stopFetch = registerVisionFetchDispatch(ctx.connection, router)
 
     if (typeof ctx.inject === 'function') {
       ctx.inject(['webServer'], attachWebCompat)
-    } else if (ctx.webServer) {
-      legacyWebCompat = mountVisionWebCompat({
-        connection: ctx.connection,
-        webServer: ctx.webServer,
-        router,
-        dshHome,
-        touchSession: (sessionId) => touchServiceSession(sessionId, dshHome),
-        capabilityMatches,
-        commandDeps: { debugRuntime, verifyCommandService },
-      })
-      webMounted = true
+      ctx.inject(['agentPresets'], attachAgentPreset)
+    } else {
+      if (ctx.webServer) {
+        legacyWebCompat = mountVisionWebCompat({
+          connection: ctx.connection,
+          webServer: ctx.webServer,
+          router,
+          dshHome,
+          touchSession: (sessionId) => touchServiceSession(sessionId, dshHome),
+          capabilityMatches,
+          commandDeps: { debugRuntime, verifyCommandService },
+        })
+        webMounted = true
+      }
+      if (ctx.agentPresets) attachAgentPreset(ctx)
     }
 
     // Phase 2 — commit shared ownership only after fallible mounts succeed.
