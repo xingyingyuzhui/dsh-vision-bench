@@ -97,7 +97,7 @@ test('broker timeout sends cancel and ignores late response', async () => {
   const log = join(tmpdir(), 'dvb-io-cancel-' + Date.now() + '.log')
   const broker = createVisionIoBroker({
     workerPath: delayWorker,
-    env: { ...process.env, VISION_IO_DELAY_MS: '400', VISION_IO_OPLOG: log },
+    env: { ...process.env, VISION_IO_DELAY_MS: '2200', VISION_IO_OPLOG: log },
   })
   try {
     await broker.health()
@@ -135,7 +135,7 @@ test('queued write that times out is cancelled before exec', async () => {
   const log = join(tmpdir(), 'dvb-io-write-to-' + Date.now() + '.log')
   const broker = createVisionIoBroker({
     workerPath: delayWorker,
-    env: { ...process.env, VISION_IO_DELAY_MS: '200', VISION_IO_OPLOG: log },
+    env: { ...process.env, VISION_IO_DELAY_MS: '2200', VISION_IO_OPLOG: log },
   })
   try {
     await broker.health()

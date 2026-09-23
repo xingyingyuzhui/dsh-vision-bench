@@ -16,6 +16,8 @@ import {
 import { killProcessTree } from '../process/run-command.mjs'
 
 const DEFAULT_WORKER = join(dirname(fileURLToPath(import.meta.url)), '../../../runtime/vision-io-worker.mjs')
+/** Driver timeout and this deadline used to be equal, so the broker cancel closed the shared port before the driver could report MODBUS_TIMEOUT. */
+export const BROKER_GRACE_MS = 1500
 const OUTBOUND_CAP = 32
 const RESTART_WINDOW_MS = 60_000
 const STDERR_CAP = 4000
@@ -294,7 +296,7 @@ export function createVisionIoBroker(options = {}) {
       throw ioError('IO_BACKPRESSURE', 'I/O 队列已满')
     }
     const id = payload.id || nextId()
-    const timeoutMs = clampTimeoutMs(opts.timeoutMs, payload.timeoutMs || 8000)
+    const timeoutMs = clampTimeoutMs(opts.timeoutMs, payload.timeoutMs || 8000) + BROKER_GRACE_MS
     const signal = opts.signal
     const epoch = workerEpoch
     return new Promise((resolve, reject) => {
