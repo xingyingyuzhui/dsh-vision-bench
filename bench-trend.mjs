@@ -1,4 +1,4 @@
-// Compatibility facade — prefer src/application/modbus/trend-model.mjs.
+// Compatibility facade — prefer src/domain/modbus/trend-model.mjs.
 export {
   TREND_CAP,
   TREND_WINDOW_MS,
@@ -13,4 +13,4 @@ export {
   trendDataForComponents,
   componentLatestValues,
   UPLOT_PROTO,
-} from './src/application/modbus/trend-model.mjs'
+} from './src/domain/modbus/trend-model.mjs'

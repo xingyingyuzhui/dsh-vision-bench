@@ -6,7 +6,7 @@ import { pointLabel } from '../../domain/modbus/point-model.mjs'
 import { isScopePartitioned, normalizeScopeSessionId } from '../../domain/modbus/config-scope.mjs'
 import { recordBenchEvent } from '../../infrastructure/store/journal-store.mjs'
 import { loadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
-import { normalizeModbus } from './modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { modbusForSession } from './workspace-session-view.mjs'
 import {
   MAX_DELIVERY_ATTEMPTS,

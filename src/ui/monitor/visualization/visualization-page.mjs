@@ -1,4 +1,4 @@
-import { normalizeModbus } from '../../../application/modbus/modbus-migration.mjs'
+import { normalizeModbus } from '../../../domain/modbus/modbus-migration.mjs'
 // TaskP2/0.20.0: 侧边栏「可视化」— 以组件为中心（line/bar/value/switch）。
 // 组件编辑器：名称/类型/关联点位搜索（仅 monitorEnabled，限定路径）。
 // 渲染来源：line → modbus.trend（uPlot / ECharts）；bar → 最新 values；

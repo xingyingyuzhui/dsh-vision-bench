@@ -1,26 +1,26 @@
 // @ts-check
-import { normalizeAlarmState } from '../../domain/modbus/alarm-model.mjs'
-import { emptyVisualization, normalizeVisualizationForRead } from '../../domain/modbus/visualization-model.mjs'
-import { normalizeConn, normalizeConnections } from '../../domain/modbus/connection-model.mjs'
-import { normalizeDevices } from '../../domain/modbus/device-model.mjs'
+import { normalizeAlarmState } from './alarm-model.mjs'
+import { emptyVisualization, normalizeVisualizationForRead } from './visualization-model.mjs'
+import { normalizeConn, normalizeConnections } from './connection-model.mjs'
+import { normalizeDevices } from './device-model.mjs'
 import {
   normalizeFramesByConnection,
   normalizePolling,
   normalizePollingByConnection,
   normalizeTrendByPoint,
-} from '../../domain/modbus/frames-buffer.mjs'
+} from './frames-buffer.mjs'
 import {
   filterValues,
   normalizePoints,
   normalizePointsV3,
   normalizeQualifiedValues,
-} from '../../domain/modbus/point-model.mjs'
+} from './point-model.mjs'
 import {
   normalizeScopeSessionId,
   normalizeSessionConfigs,
   normalizeShareFlags,
   unionScopedPoints,
-} from '../../domain/modbus/config-scope.mjs'
+} from './config-scope.mjs'
 import { attachLegacyCompatAccessors } from './modbus-compat-accessors.mjs'
 import { devText, migrateLegacy, migrateV2ToV3 } from './modbus-migrate-steps.mjs'
 

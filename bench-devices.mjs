@@ -38,4 +38,4 @@ export {
   normalizeModbus,
   patchConn,
   recipePair,
-} from './src/application/modbus/modbus-migration.mjs'
+} from './src/domain/modbus/modbus-migration.mjs'

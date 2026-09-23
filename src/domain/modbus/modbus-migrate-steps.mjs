@@ -1,12 +1,12 @@
 // @ts-check
-import { normalizeConn } from '../../domain/modbus/connection-model.mjs'
-import { parseUnitId } from '../../domain/modbus/device-model.mjs'
+import { normalizeConn } from './connection-model.mjs'
+import { parseUnitId } from './device-model.mjs'
 import {
   MAX_FRAMES_PER_CONN,
   normalizeFramesByConnection,
   normalizePolling,
-} from '../../domain/modbus/frames-buffer.mjs'
-import { AREA_BY_FN, normalizeValueRec } from '../../domain/modbus/point-model.mjs'
+} from './frames-buffer.mjs'
+import { AREA_BY_FN, normalizeValueRec } from './point-model.mjs'
 
 const devText = (/** @type {any} */ v, fb = '') => {
   const s = typeof v === 'string' ? v.trim() : ''

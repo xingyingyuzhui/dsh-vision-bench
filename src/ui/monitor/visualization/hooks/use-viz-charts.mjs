@@ -1,4 +1,4 @@
-import { TREND_WINDOW_MS, UPLOT_PROTO, trendDataForComponents } from '../../../../application/modbus/trend-model.mjs'
+import { TREND_WINDOW_MS, UPLOT_PROTO, trendDataForComponents } from '../../../../domain/modbus/trend-model.mjs'
 import { visualizationComponentStatus } from '../../../../domain/modbus/visualization-model.mjs'
 import { getEcharts } from '../../../vendor/echarts-runtime.mjs'
 import { vendorUPlot } from '../../../vendor/vendor-bridge.mjs'

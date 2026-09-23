@@ -1,6 +1,6 @@
 // @ts-check
-import { emptyConn } from '../../domain/modbus/connection-model.mjs'
-import { normalizePolling } from '../../domain/modbus/frames-buffer.mjs'
+import { emptyConn } from './connection-model.mjs'
+import { normalizePolling } from './frames-buffer.mjs'
 
 /**
  * Attach non-enumerable legacy v2-compat getters onto a normalized v3 pack.

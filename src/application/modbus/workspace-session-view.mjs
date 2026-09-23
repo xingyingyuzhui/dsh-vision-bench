@@ -8,7 +8,7 @@
  *
  *   ensureWorkspaceClaimed → modbusForSession → (operate on flat view)
  */
-import { normalizeModbus } from './modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { applyWorkspacePatch, loadWorkspace, saveWorkspace, workspaceRepository } from '../../infrastructure/store/workspace-store.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { isScopePartitioned, normalizeScopeSessionId, omitSessionConfigs } from '../../domain/modbus/config-scope.mjs'

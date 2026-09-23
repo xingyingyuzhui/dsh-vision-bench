@@ -1,6 +1,6 @@
 // @ts-check
 import { evaluateAlarms, normalizeAlarmState } from '../../domain/modbus/alarm-model.mjs'
-import { normalizeModbus } from './modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { normalizePointV3 } from '../../domain/modbus/point-model.mjs'
 import { pickArtifact } from '../../infrastructure/files/project-fs.mjs'
 import { toEndpoint } from '../../domain/modbus/io-contract.mjs'
@@ -17,7 +17,7 @@ import { finishTask, openTask, pruneBuildLogs, recordBenchEvent } from '../../in
 import { loadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
 import { normalizeFocusRequest, normalizeFocusState } from '../../infrastructure/store/focus-store.mjs'
 import { ensureWorkspaceClaimed, modbusForSession, saveSessionModbusPatch } from './workspace-session-view.mjs'
-import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from './target-resolver-service.mjs'
+import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from '../../domain/modbus/target-resolver-service.mjs'
 import { endpointFingerprint, endpointLabelText, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { findPointV3, fnOfPoint } from '../../domain/modbus/function-code.mjs'

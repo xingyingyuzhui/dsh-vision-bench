@@ -139,8 +139,62 @@ export default {
       name: 'agent-tool-no-store-or-io',
       severity: 'error',
       comment: 'Agent proxy may not import store, broker or transport.',
-      from: { path: '(^|/)bench-tool\\.mjs$' },
-      to: { path: '(^|/)(bench-store|bench-io-broker|bench-modbus-transport|runtime/io/)' },
+      from: { path: '^src/interfaces/agent/' },
+      to: {
+        path: '(^|/)(src/infrastructure/(store|modbus)/|bench-store|bench-io-broker|bench-modbus-transport|runtime/io/)',
+      },
+    },
+    {
+      name: 'infrastructure-no-application',
+      severity: 'error',
+      comment:
+        'Infrastructure must not depend on application. Known leftovers are narrowed by infrastructure-application-edge-config-scope and infrastructure-application-edge-host-client.',
+      from: { path: '(^|/)src/infrastructure/' },
+      to: {
+        path: '(^|/)src/application/',
+        pathNot: [
+          // journal-store.mjs + serial-monitor.mjs → config-scope-service.mjs (session projection of a stored pack).
+          '(^|/)src/application/modbus/config-scope-service\\.mjs$',
+          // vision-host-client.mjs → command-contract.mjs + lossless-json.mjs (dispatch errors and result normalization).
+          '(^|/)src/application/commands/command-contract\\.mjs$',
+          '(^|/)src/application/commands/lossless-json\\.mjs$',
+        ],
+      },
+    },
+    {
+      name: 'infrastructure-application-edge-config-scope',
+      severity: 'error',
+      comment:
+        'Only journal-store.mjs and serial-monitor.mjs may import config-scope-service.mjs. config-scope-service stays in application because it imports config-scope-claim.mjs.',
+      from: {
+        path: '(^|/)src/infrastructure/',
+        pathNot: [
+          '(^|/)src/infrastructure/store/journal-store\\.mjs$',
+          '(^|/)src/infrastructure/modbus/serial-monitor\\.mjs$',
+        ],
+      },
+      to: { path: '(^|/)src/application/modbus/config-scope-service\\.mjs$' },
+    },
+    {
+      name: 'infrastructure-application-edge-host-client',
+      severity: 'error',
+      comment:
+        'Only vision-host-client.mjs may import command-contract.mjs and lossless-json.mjs.',
+      from: {
+        path: '(^|/)src/infrastructure/',
+        pathNot: ['(^|/)src/infrastructure/host/vision-host-client\\.mjs$'],
+      },
+      to: {
+        path: '(^|/)src/application/commands/(command-contract|lossless-json)\\.mjs$',
+      },
+    },
+    {
+      name: 'ui-no-application',
+      severity: 'error',
+      comment:
+        'UI must not import the application layer. ui/client → infrastructure/host/vision-rpc-client is allowed (infrastructure, not application) and is the Fetch dispatch path.',
+      from: { path: '(^|/)src/ui/' },
+      to: { path: '(^|/)src/application/' },
     },
     {
       name: 'not-to-unresolvable',

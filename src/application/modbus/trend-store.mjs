@@ -8,7 +8,7 @@
 //
 // This module is host-side only (imported via bench-modbus-commit → bench-modbus
 // → bench-tool/host); the browser bundle never references it.
-import { normalizeModbus } from './modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { functionTag } from '../../domain/modbus/point-model.mjs'
 import { loadWorkspace, saveWorkspaceAsync } from '../../infrastructure/store/workspace-store.mjs'
 

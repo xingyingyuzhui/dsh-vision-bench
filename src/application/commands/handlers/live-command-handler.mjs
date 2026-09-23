@@ -3,7 +3,7 @@ import { connectOp, modbusRead, modbusWrite } from '../../modbus/index.mjs'
 import { buildEvidenceRefs } from '../../modbus/index.mjs'
 import { createManualRequest } from '../../../infrastructure/store/journal-store.mjs'
 import { agentLocatorError } from '../agent-locator-error.mjs'
-import { resolveTarget } from '../../modbus/target-resolver-service.mjs'
+import { resolveTarget } from '../../../domain/modbus/target-resolver-service.mjs'
 import {
   AGENT_TREND_DEFAULT_LIMIT,
   TREND_KEEP,

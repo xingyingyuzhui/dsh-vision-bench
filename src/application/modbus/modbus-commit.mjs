@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { evaluateAlarms } from '../../domain/modbus/alarm-model.mjs'
 import { COND_ACTIVE, PROCESS } from '../../domain/modbus/alarm-constants.mjs'
 import { normalizePolling } from '../../domain/modbus/frames-buffer.mjs'
-import { normalizeModbus } from './modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { workspaceRepository } from '../../infrastructure/store/workspace-store.mjs'
 import { sampleTrendValues } from './trend-store.mjs'
 import {

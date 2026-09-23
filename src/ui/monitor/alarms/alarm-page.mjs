@@ -1,5 +1,5 @@
 import { COMM, COND_ACTIVE, PROCESS, acknowledgeAlarm, groupAlarms } from '../../../domain/modbus/alarm-model.mjs'
-import { normalizeModbus } from '../../../application/modbus/modbus-migration.mjs'
+import { normalizeModbus } from '../../../domain/modbus/modbus-migration.mjs'
 import { clockOf } from '../../../domain/modbus/point-model.mjs'
 import { buildAgentRef, buildInputBridge, dispatchAgentRef, evidenceFromRef, postEvidence, readInputDraft } from '../../common/agent-reference.mjs'
 import { subscribeState } from '../../common/state-subscription.mjs'

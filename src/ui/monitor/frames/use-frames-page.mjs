@@ -1,4 +1,4 @@
-import { normalizeModbus } from '../../../application/modbus/modbus-migration.mjs'
+import { normalizeModbus } from '../../../domain/modbus/modbus-migration.mjs'
 import {
   buildFramePortOptions,
   countAddedFrameIds,

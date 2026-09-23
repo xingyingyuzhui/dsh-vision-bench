@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizeModbus } from './modbus-migration.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 // Task2/0.19.3: Host-managed background collection service.
 //
 // One Polling Coordinator per workspace. Each connection keeps its own cycle

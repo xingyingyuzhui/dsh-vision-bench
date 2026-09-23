@@ -1,6 +1,6 @@
 // Pure ECharts option builders for line/bar visualization components.
 
-import { TREND_WINDOW_MS } from '../../../../application/modbus/trend-model.mjs'
+import { TREND_WINDOW_MS } from '../../../../domain/modbus/trend-model.mjs'
 import { VIZ_COLORS, echartsSeriesFromTrend } from '../viz-helpers.mjs'
 
 export const darkAlpha = (isDark, a) => (isDark ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a})`)

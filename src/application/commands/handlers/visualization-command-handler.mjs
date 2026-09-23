@@ -1,6 +1,6 @@
 // @ts-check
-import { normalizeModbus } from '../../modbus/modbus-migration.mjs'
-import { componentLatestValues } from '../../modbus/trend-model.mjs'
+import { normalizeModbus } from '../../../domain/modbus/modbus-migration.mjs'
+import { componentLatestValues } from '../../../domain/modbus/trend-model.mjs'
 import { mutateConfig } from '../../config/config-mutation-service.mjs'
 import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
 
