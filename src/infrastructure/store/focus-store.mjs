@@ -1,3 +1,42 @@
+// @ts-check
+
+/**
+ * @typedef {{
+ *   connectionId: string,
+ *   deviceId: string,
+ *   pointId: string,
+ *   frameId: string,
+ *   trendKey: string,
+ *   alarmId: string,
+ *   visualizationId?: string,
+ *   snapshotId?: string,
+ *   debugSessionId?: string,
+ *   kind: string,
+ *   at: number,
+ *   by?: string,
+ *   version: number,
+ * }} FocusRequest
+ * @typedef {FocusRequest & {
+ *   id: string,
+ *   timeRange: { start: number, end: number },
+ *   componentType?: string,
+ *   pointIds?: string[],
+ *   reason?: string,
+ *   file?: string,
+ *   line?: number,
+ *   firmwareHash?: string,
+ * }} FocusEvidence
+ * @typedef {{
+ *   sessionId: string,
+ *   request: FocusRequest | null,
+ *   prev: FocusRequest | null,
+ *   tempWatchIds: string[],
+ *   badgeOnly: boolean,
+ *   evidence: Array<FocusEvidence | null>,
+ * }} FocusState
+ */
+
+/** @returns {FocusState} */
 export const emptyFocusState = () => ({
   sessionId: '',
   request: null,
@@ -7,23 +46,26 @@ export const emptyFocusState = () => ({
   evidence: [],
 })
 
+/** @param {unknown} v */
 const focusText = (v) => (typeof v === 'string' ? v.trim().slice(0, 64) : '')
 
+/** @param {unknown} input @returns {FocusRequest | null} */
 export const normalizeFocusRequest = (input) => {
   if (!input || typeof input !== 'object') return null
-  const connectionId = focusText(input.connectionId || input.connId)
-  const deviceId = focusText(input.deviceId)
-  const pointId = focusText(input.pointId)
-  const frameId = focusText(input.frameId)
-  const trendKey = focusText(input.trendKey)
-  const alarmId = focusText(input.alarmId)
-  const visualizationId = focusText(input.visualizationId)
-  const snapshotId = focusText(input.snapshotId)
-  const debugSessionId = focusText(input.debugSessionId)
-  const kind = typeof input.kind === 'string' ? input.kind.slice(0, 32) : ''
-  const at = Number(input.at) > 0 ? Number(input.at) : Date.now()
-  const by = input.by === 'agent' ? 'agent' : 'user'
-  const version = Number(input.version) > 0 ? Number(input.version) : 0
+  const src = /** @type {Record<string, unknown>} */ (input)
+  const connectionId = focusText(src.connectionId || src.connId)
+  const deviceId = focusText(src.deviceId)
+  const pointId = focusText(src.pointId)
+  const frameId = focusText(src.frameId)
+  const trendKey = focusText(src.trendKey)
+  const alarmId = focusText(src.alarmId)
+  const visualizationId = focusText(src.visualizationId)
+  const snapshotId = focusText(src.snapshotId)
+  const debugSessionId = focusText(src.debugSessionId)
+  const kind = typeof src.kind === 'string' ? src.kind.slice(0, 32) : ''
+  const at = Number(src.at) > 0 ? Number(src.at) : Date.now()
+  const by = src.by === 'agent' ? 'agent' : 'user'
+  const version = Number(src.version) > 0 ? Number(src.version) : 0
   const hasTarget =
     connectionId ||
     deviceId ||
@@ -52,71 +94,74 @@ export const normalizeFocusRequest = (input) => {
   }
 }
 
+/** @param {unknown} input */
 export const normalizeFocusState = (input) => {
   const out = emptyFocusState()
   if (!input || typeof input !== 'object') return out
-  const req = normalizeFocusRequest(input.request || input)
-  const prev = normalizeFocusRequest(input.prev)
-  out.sessionId = typeof input.sessionId === 'string' ? input.sessionId.trim().slice(0, 128) : ''
+  const src = /** @type {Record<string, unknown>} */ (input)
+  const req = normalizeFocusRequest(src.request || input)
+  const prev = normalizeFocusRequest(src.prev)
+  out.sessionId = typeof src.sessionId === 'string' ? src.sessionId.trim().slice(0, 128) : ''
   out.request = req
   out.prev = prev
-  if (Array.isArray(input.tempWatchIds)) {
-    out.tempWatchIds = input.tempWatchIds
-      .map((v) => focusText(v))
+  if (Array.isArray(src.tempWatchIds)) {
+    out.tempWatchIds = src.tempWatchIds
+      .map((/** @type {unknown} */ v) => focusText(v))
       .filter(Boolean)
       .slice(0, 32)
-  } else if (Array.isArray(input.tempWatch)) {
-    out.tempWatchIds = input.tempWatch
-      .map((v) => focusText(v))
+  } else if (Array.isArray(src.tempWatch)) {
+    out.tempWatchIds = src.tempWatch
+      .map((/** @type {unknown} */ v) => focusText(v))
       .filter(Boolean)
       .slice(0, 32)
   }
-  out.badgeOnly = input.badgeOnly === true
-  if (Array.isArray(input.evidence)) {
-    out.evidence = input.evidence
+  out.badgeOnly = src.badgeOnly === true
+  if (Array.isArray(src.evidence)) {
+    out.evidence = src.evidence
       .slice(0, 20)
-      .map((e) => {
+      .map((/** @type {unknown} */ e) => {
         if (!e || typeof e !== 'object') return null
-        const kind = typeof e.kind === 'string' ? e.kind.slice(0, 32) : ''
-        const at = Number(e.at) > 0 ? Number(e.at) : Date.now()
-        const pointId = focusText(e.pointId || (kind === 'point' ? e.id : ''))
-        const frameId = focusText(e.frameId || (kind === 'frame' ? e.id : ''))
-        const alarmId = focusText(e.alarmId || (kind === 'alarm' ? e.id : ''))
-        const trendKey = focusText(e.trendKey || (kind === 'trend' ? e.id : ''))
-        const visualizationId = focusText(e.visualizationId || (kind === 'visualization' ? e.id : ''))
-        const snapshotId = focusText(e.snapshotId || (kind === 'debug_snapshot' ? e.id : ''))
-        const debugSessionId = focusText(e.debugSessionId)
-        const reason = typeof e.reason === 'string' ? e.reason.slice(0, 120) : ''
-        const file = typeof e.file === 'string' ? e.file.slice(0, 256) : ''
-        const line = Number(e.line) || 0
-        const firmwareHash = typeof e.firmwareHash === 'string' ? e.firmwareHash.slice(0, 64) : ''
-        const componentType = typeof e.componentType === 'string' ? e.componentType.slice(0, 16) : ''
-        const pointIds = Array.isArray(e.pointIds)
-          ? e.pointIds
-              .map((x) => focusText(x))
+        const rowSrc = /** @type {Record<string, unknown>} */ (e)
+        const kind = typeof rowSrc.kind === 'string' ? rowSrc.kind.slice(0, 32) : ''
+        const at = Number(rowSrc.at) > 0 ? Number(rowSrc.at) : Date.now()
+        const pointId = focusText(rowSrc.pointId || (kind === 'point' ? rowSrc.id : ''))
+        const frameId = focusText(rowSrc.frameId || (kind === 'frame' ? rowSrc.id : ''))
+        const alarmId = focusText(rowSrc.alarmId || (kind === 'alarm' ? rowSrc.id : ''))
+        const trendKey = focusText(rowSrc.trendKey || (kind === 'trend' ? rowSrc.id : ''))
+        const visualizationId = focusText(rowSrc.visualizationId || (kind === 'visualization' ? rowSrc.id : ''))
+        const snapshotId = focusText(rowSrc.snapshotId || (kind === 'debug_snapshot' ? rowSrc.id : ''))
+        const debugSessionId = focusText(rowSrc.debugSessionId)
+        const reason = typeof rowSrc.reason === 'string' ? rowSrc.reason.slice(0, 120) : ''
+        const file = typeof rowSrc.file === 'string' ? rowSrc.file.slice(0, 256) : ''
+        const line = Number(rowSrc.line) || 0
+        const firmwareHash = typeof rowSrc.firmwareHash === 'string' ? rowSrc.firmwareHash.slice(0, 64) : ''
+        const componentType = typeof rowSrc.componentType === 'string' ? rowSrc.componentType.slice(0, 16) : ''
+        const pointIds = Array.isArray(rowSrc.pointIds)
+          ? rowSrc.pointIds
+              .map((/** @type {unknown} */ x) => focusText(x))
               .filter(Boolean)
               .slice(0, 16)
           : []
-        const rawRange = e?.timeRange
+        const rawRange = /** @type {{ start?: unknown, end?: unknown } | null | undefined} */ (rowSrc.timeRange)
         const rangeStart = Number(rawRange?.start)
         const rangeEnd = Number(rawRange?.end)
         const timeRange =
           Number.isFinite(rangeStart) && rangeStart > 0 && Number.isFinite(rangeEnd) && rangeEnd >= rangeStart
             ? { start: rangeStart, end: rangeEnd }
             : { start: at - 5 * 60 * 1000, end: at }
-        const row = {
+        const row = /** @type {FocusEvidence} */ ({
           kind,
-          id: focusText(e.id || snapshotId || visualizationId || pointId || frameId || trendKey || alarmId),
-          connectionId: focusText(e.connectionId || e.connId),
-          deviceId: focusText(e.deviceId),
+          id: focusText(rowSrc.id || snapshotId || visualizationId || pointId || frameId || trendKey || alarmId),
+          connectionId: focusText(rowSrc.connectionId || rowSrc.connId),
+          deviceId: focusText(rowSrc.deviceId),
           pointId,
           frameId,
           trendKey,
           alarmId,
           at,
-          version: Number(e.version) > 0 ? Number(e.version) : 0,
+          version: Number(rowSrc.version) > 0 ? Number(rowSrc.version) : 0,
           timeRange,
-        }
+        })
         if (kind === 'visualization' || visualizationId) {
           row.visualizationId = visualizationId
           row.componentType = componentType
