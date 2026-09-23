@@ -55,21 +55,27 @@ export function renderFocusToast(el, t, ctx) {
 
 /** Pending agent write approvals. */
 export function renderPendingPanel(el, t, ctx) {
-  const { pending, resolveWrite } = ctx
+  const { pending, resolveWrite, resolvingId = '' } = ctx
   if (!pending.length) return null
+  const busy = Boolean(resolvingId)
   return el(
     'div',
-    { className: 'dvb-panel dvb-write-panel' },
+    {
+      className: 'dvb-panel dvb-write-panel',
+      'aria-live': 'polite',
+      'aria-busy': busy ? 'true' : undefined,
+    },
     el('div', { className: 'dvb-panel-head' }, el('span', { className: 'dvb-panel-title' }, t('pendingWrites'))),
-    ...pending.map((req) =>
-      el(
+    ...pending.map((req) => {
+      const requestLabel = String(req.label || '')
+      return el(
         'div',
         { key: req.id, className: 'dvb-task' },
         el('span', { className: 'dvb-badge', 'data-source': 'agent' }, 'Agent'),
         el(
           'span',
           { className: 'dvb-hint' },
-          req.label +
+          requestLabel +
             (req.deviceName ? ' · ' + req.deviceName : '') +
             (req.endpointLabelStr ? ' · ' + req.endpointLabelStr : ''),
         ),
@@ -78,6 +84,8 @@ export function renderPendingPanel(el, t, ctx) {
           {
             type: 'button',
             className: 'dvb-btn dvb-btn-primary dvb-btn-write',
+            disabled: busy,
+            'aria-label': `${t('approveWrite')} ${requestLabel}`.trim(),
             onClick() {
               resolveWrite(req.id, true)
             },
@@ -89,13 +97,15 @@ export function renderPendingPanel(el, t, ctx) {
           {
             type: 'button',
             className: 'dvb-btn',
+            disabled: busy,
+            'aria-label': `${t('rejectWrite')} ${requestLabel}`.trim(),
             onClick() {
               resolveWrite(req.id, false)
             },
           },
           t('rejectWrite'),
         ),
-      ),
-    ),
+      )
+    }),
   )
 }
