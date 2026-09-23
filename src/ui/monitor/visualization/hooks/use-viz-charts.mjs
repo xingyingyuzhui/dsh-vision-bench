@@ -1,7 +1,6 @@
-import { TREND_WINDOW_MS, UPLOT_PROTO, trendDataForComponents } from '../../../../domain/modbus/trend-model.mjs'
+import { TREND_WINDOW_MS, trendDataForComponents } from '../../../../domain/modbus/trend-model.mjs'
 import { visualizationComponentStatus } from '../../../../domain/modbus/visualization-model.mjs'
 import { getEcharts } from '../../../vendor/echarts-runtime.mjs'
-import { vendorUPlot } from '../../../vendor/vendor-bridge.mjs'
 import {
   VIZ_COLORS,
   chartState,
@@ -10,7 +9,7 @@ import {
   latestFingerprint,
   optionFingerprint,
 } from '../viz-helpers.mjs'
-import { buildBarOption, buildLineOption, checkDark, darkAlpha, padLineYMax, resolveLineTimeRange } from './viz-chart-options.mjs'
+import { buildBarOption, buildLineOption, checkDark, readChartTokens } from './viz-chart-options.mjs'
 
 const sameChartState = (a, b) => a && b && a.series === b.series && a.data === b.data && a.option === b.option
 
@@ -90,32 +89,15 @@ function watchPlotReady(pendingRef, id, node, run) {
   pendingRef.current[id] = { disconnect, try: tryRun, _node: node }
 }
 
-function uplotAxis(show, stroke, showGrid, gridColor, dash) {
-  return { show, stroke, grid: { show: showGrid, stroke: gridColor, width: 1, dash } }
-}
-
-function uplotXScale(range) {
-  return { time: true, min: range.min / 1000, max: range.max / 1000 }
-}
-
-function uplotYRange(_u, min, max) {
-  const lo = Number.isFinite(min) && min >= 0 ? Math.min(0, min) : min
-  return [Number.isFinite(lo) ? lo : 0, padLineYMax(min, max)]
-}
-
-function applyUplotTimeRange(chart, settings, payload) {
-  const range = resolveLineTimeRange(settings || {}, payload)
-  try {
-    chart.setScale('x', { min: range.min / 1000, max: range.max / 1000 })
-  } catch {}
-  return range
+function chartLibraryMessage(t) {
+  return typeof t === 'function' ? t('vizChartUnavailable') : 'Chart library not loaded'
 }
 
 function setChartErr(setChartErrors, id, msg) {
   setChartErrors((prev) => (prev[id] === msg ? prev : { ...prev, [id]: msg }))
 }
 
-export function useVizCharts(React, { components, points, trendStore }) {
+export function useVizCharts(React, { components, points, trendStore, t }) {
   const useCallback = typeof React.useCallback === 'function' ? React.useCallback : (fn) => fn
   const [chartErrors, setChartErrors] = React.useState({})
   const clearErr = (id) =>
@@ -125,24 +107,20 @@ export function useVizCharts(React, { components, points, trendStore }) {
       delete n[id]
       return n
     })
-  const uplotRefs = React.useRef({})
   const echartRefs = React.useRef({})
   const pendingRef = React.useRef({})
 
   const destroyChart = useCallback((id) => {
     pendingRef.current[id]?.disconnect?.()
     delete pendingRef.current[id]
-    for (const refs of [uplotRefs, echartRefs]) {
-      const c = refs.current[id]
-      if (c) {
-        try {
-          c._ro?.disconnect()
-          c.destroy?.()
-          c.dispose?.()
-        } catch {}
-      }
-      delete refs.current[id]
+    const c = echartRefs.current[id]
+    if (c) {
+      try {
+        c._ro?.disconnect()
+        c.dispose?.()
+      } catch {}
     }
+    delete echartRefs.current[id]
   }, [])
 
   React.useEffect(() => {
@@ -152,22 +130,13 @@ export function useVizCharts(React, { components, points, trendStore }) {
         live.add(comp.id)
       }
     }
-    for (const refs of [uplotRefs, echartRefs]) {
-      for (const id of Object.keys(refs.current)) {
-        if (!live.has(id)) destroyChart(id)
-      }
+    for (const id of Object.keys(echartRefs.current)) {
+      if (!live.has(id)) destroyChart(id)
     }
   }, [components, points, destroyChart])
 
   React.useEffect(() => {
     const onResize = () => {
-      for (const u of Object.values(uplotRefs.current)) {
-        const box = plotBox(u?._node)
-        if (!box.ready) continue
-        try {
-          u.setSize({ width: box.width, height: box.height })
-        } catch {}
-      }
       for (const c of Object.values(echartRefs.current)) {
         const box = plotBox(c?._node)
         if (!box.ready) continue
@@ -191,7 +160,7 @@ export function useVizCharts(React, { components, points, trendStore }) {
       win?.removeEventListener('resize', onResize)
       for (const id of Object.keys(pendingRef.current)) pendingRef.current[id]?.disconnect?.()
       pendingRef.current = {}
-      for (const id of [...Object.keys(uplotRefs.current), ...Object.keys(echartRefs.current)]) destroyChart(id)
+      for (const id of Object.keys(echartRefs.current)) destroyChart(id)
     }
   }, [destroyChart])
 
@@ -206,92 +175,13 @@ export function useVizCharts(React, { components, points, trendStore }) {
     [points, trendStore],
   )
 
-  const ensureUplot = useCallback(
-    (node, comp) => {
-      if (!node) return
-      const UPlot = vendorUPlot()
-      if (!UPlot) {
-        setChartErr(setChartErrors, comp.id, '图表运行时不可用')
-        return
-      }
-      const payload = seriesOfComponent(comp)
-      if (!hasTrendSamples(payload)) {
-        destroyChart(comp.id)
-        return
-      }
-      const box = plotBox(node)
-      if (!box.ready) {
-        watchPlotReady(pendingRef, comp.id, node, () => ensureUplot(node, comp))
-        return
-      }
-      try {
-        if (echartRefs.current[comp.id]) destroyChart(comp.id)
-        const isDark = checkDark()
-        const existing = uplotRefs.current[comp.id]
-        const state = chartState(comp, payload, isDark, trendStore)
-        const s = comp.settings || {}
-        if (existing && existing._node === node) {
-          if (sameChartState(existing._state, state)) return
-          if (existing._state?.series === state.series && existing._state?.option === state.option) {
-            existing.setData(payload.data)
-            applyUplotTimeRange(existing, s, payload)
-            existing._state = state
-            return
-          }
-          destroyChart(comp.id)
-        } else if (existing) {
-          destroyChart(comp.id)
-        }
-        const lineType = s.xGridType || s.gridLineType || 'solid'
-        const dash = lineType === 'dashed' ? [4, 4] : lineType === 'dotted' ? [2, 2] : []
-        const gridColor = s.xGridColor || s.gridColor || darkAlpha(isDark, '.08')
-        const stroke = (k) => s[k] || (isDark ? 'rgba(255,255,255,.5)' : 'rgba(0,0,0,.5)')
-        const xRange = resolveLineTimeRange(s, payload)
-        const chart = new UPlot(
-          {
-            ...UPLOT_PROTO,
-            width: box.width,
-            height: box.height,
-            scales: { x: uplotXScale(xRange), y: { auto: true, range: uplotYRange } },
-            axes: [
-              uplotAxis(s.xShowLabel !== false, stroke('xAxisColor'), s.xShowGrid ?? s.showGrid !== false, gridColor, dash),
-              uplotAxis(s.yShowLabel !== false, stroke('yAxisColor'), s.yShowGrid ?? s.showGrid !== false, gridColor, dash),
-            ],
-            series: [{}].concat(
-              payload.meta.map((m, idx) => {
-                const color = s.lineColor || VIZ_COLORS[idx % VIZ_COLORS.length]
-                return {
-                  label: m.label,
-                  spanGaps: s.connectNulls !== false,
-                  stroke: color,
-                  width: Number(s.lineWidth) || 2,
-                  points: { show: s.showSymbol !== false, fill: color, stroke: color, size: 8 },
-                  fill: s.area ? 'rgba(79, 142, 247, 0.12)' : undefined,
-                }
-              }),
-            ),
-          },
-          payload.data,
-          node,
-        )
-        chart._node = node
-        chart._state = state
-        attachPlotResize(chart, node, (next) => chart.setSize({ width: next.width, height: next.height }))
-        uplotRefs.current[comp.id] = chart
-        clearErr(comp.id)
-      } catch (err) {
-        setChartErr(setChartErrors, comp.id, `曲线渲染失败: ${String(err?.message || err)}`)
-      }
-    },
-    [seriesOfComponent, destroyChart, trendStore],
-  )
-
   const ensureChart = useCallback(
     (node, comp) => {
       if (!node) return
       const echarts = getEcharts()
       if (!echarts) {
-        ensureUplot(node, comp)
+        destroyChart(comp.id)
+        setChartErr(setChartErrors, comp.id, chartLibraryMessage(t))
         return
       }
       const payload = seriesOfComponent(comp)
@@ -305,7 +195,6 @@ export function useVizCharts(React, { components, points, trendStore }) {
         return
       }
       try {
-        if (uplotRefs.current[comp.id]) destroyChart(comp.id)
         const chart = bindEchart(echarts, echartRefs, comp.id, node)
         attachPlotResize(chart, node, (next) => {
           try {
@@ -315,17 +204,20 @@ export function useVizCharts(React, { components, points, trendStore }) {
           }
         })
         const isDark = checkDark()
+        const tokens = readChartTokens(node)
+        const tokenKey = JSON.stringify(tokens)
         const state = chartState(comp, payload, isDark, trendStore)
-        if (sameChartState(chart._state, state)) return
-        chart.setOption(buildLineOption(comp.settings, payload, isDark), true)
+        if (sameChartState(chart._state, state) && chart._tokens === tokenKey) return
+        chart.setOption(buildLineOption(comp.settings, payload, isDark, false, undefined, tokens), true)
         chart.resize({ width: box.width, height: box.height })
         chart._state = state
+        chart._tokens = tokenKey
         clearErr(comp.id)
       } catch (err) {
         setChartErr(setChartErrors, comp.id, `曲线渲染失败: ${String(err?.message || err)}`)
       }
     },
-    [seriesOfComponent, destroyChart, ensureUplot, trendStore],
+    [seriesOfComponent, destroyChart, trendStore, t],
   )
 
   const ensureBarChart = useCallback((node, comp, latest) => {
@@ -364,7 +256,6 @@ export function useVizCharts(React, { components, points, trendStore }) {
     setChartErrors,
     destroyChart,
     seriesOfComponent,
-    ensureUplot,
     ensureChart,
     ensureBarChart,
   }

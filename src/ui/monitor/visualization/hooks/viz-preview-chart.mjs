@@ -2,7 +2,7 @@
 
 import { getEcharts } from '../../../vendor/echarts-runtime.mjs'
 import { VIZ_COLORS } from '../viz-helpers.mjs'
-import { buildBarOption, buildLineOption, checkDark } from './viz-chart-options.mjs'
+import { buildBarOption, buildLineOption, checkDark, readChartTokens } from './viz-chart-options.mjs'
 
 export function renderPreviewChart(node, editor) {
   if (!node || !editor || (editor.type !== 'line' && editor.type !== 'bar')) return
@@ -32,7 +32,7 @@ export function renderPreviewChart(node, editor) {
       const times = Array.from({ length: count }, (_, i) => (isCount ? i + 1 : t0 + step * i))
       const vals = Array.from({ length: count }, (_, i) => +(24 + Math.sin(i * 0.7) * 3 + Math.cos(i * 0.4) * 1.5).toFixed(1))
       const payload = { data: [times, vals], meta: [{ label: '温度' }], keys: ['temp'] }
-      chart.setOption(buildLineOption(s, payload, isDark, true, now), true)
+      chart.setOption(buildLineOption(s, payload, isDark, true, now, readChartTokens(node)), true)
     } else {
       const packBar = { names: ['A', 'B', 'C', 'D'], values: [65, 78, 54, 88], itemColors: VIZ_COLORS }
       chart.setOption(buildBarOption(s, packBar, isDark, true), true)

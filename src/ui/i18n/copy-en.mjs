@@ -247,6 +247,7 @@ export const COPY_EN = {
     vizNoMonitoredPoints: 'No available points — enable Monitor in the HMI point table first',
     vizNoCompatiblePoints: 'No monitored points compatible with this component type',
     vizWaitingSamples: 'No history samples yet — waiting for collection…',
+    vizChartUnavailable: 'Chart library not loaded',
     vizReadOnlyTitle: 'Visualization configuration is read-only',
     vizReadOnlyHint:
       'Components and live data can be viewed, but layouts, component settings, and component controls cannot be changed. Upgrade the plugin to edit this configuration.',
