@@ -4,8 +4,8 @@
 
 - 适配 DSH 0.1.7 声明式 Agent 预设：Vision模式 经 `agentPresets.register()` 注册为 `vision-bench` 声明，重新出现在预设选择器（旧版本仍走目录式 seed）。
 - 预设子插件清单改为随包快照重述 0.1.7 `standard` 并追加 `dsh-vision-bench/agent` 工具行；漂移由 `scripts/gen-standard-preset-snapshot.mjs --check` 把关。
-- 旧目录式预设在声明通过 roster 校验后整体改名备份到 `.vision-bench.backup.<ISO>`，不删除用户文件；旧会话记录的 `vision-bench` 身份重启后可解析。
-- 契约钉升至 `0.1.7-alpha.2`（Desktop 实测基线）。
+- 旧目录式预设在声明通过 roster 校验后整体改名备份到 `.vision-bench.backup.<ISO>`，不删除用户文件。旧会话 `vision-bench` 身份的 Desktop 复验待做（见 011 §7）。
+- 契约钉升至 `0.1.7-alpha.2`（静态契约核对 + lab 安装；Desktop 复验待做（见 011 §7））。
 
 ## 0.29.26
 

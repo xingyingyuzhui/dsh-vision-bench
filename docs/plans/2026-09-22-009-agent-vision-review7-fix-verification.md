@@ -1,6 +1,6 @@
 # Vision Agent × 插件：第七轮 Review 修复验证报告
 
-本报告记录 [2026-09-22-008-agent-vision-review7-fix-plan.md](./2026-09-22-008-agent-vision-review7-fix-plan.md) 的实际执行证据。所有命令在 `dsh-vision-bench/` 内执行，结果为实测输出；未执行的验收在 §8 明确列出，不计入通过。
+本报告记录 [2026-09-22-008-agent-vision-review7-fix-plan.md](../archive/2026-09-22-008-agent-vision-review7-fix-plan.md) 的实际执行证据。所有命令在 `dsh-vision-bench/` 内执行，结果为实测输出；未执行的验收在 §8 明确列出，不计入通过。
 
 ## 1. 提交与工作区
 
