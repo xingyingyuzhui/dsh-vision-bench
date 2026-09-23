@@ -143,7 +143,7 @@ export const modbusWrite = async (home, cwd, body, opts = {}) => {
       pointIds: targetPointIds.slice(),
       endpoint: { ...endpointFingerprint(conn, devForWrite), configVersion: pack.configVersion || 1 },
     })
-    if (request.ok === false) return { ok: false, errorCode: request.errorCode, error: request.error }
+    if (!('id' in request)) return { ok: false, errorCode: request.errorCode, error: request.error }
     return {
       ok: false,
       needsConfirm: true,
