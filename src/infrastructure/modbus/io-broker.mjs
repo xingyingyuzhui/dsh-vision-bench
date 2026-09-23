@@ -1,3 +1,4 @@
+// @ts-check
 import { spawn } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,7 +15,14 @@ import {
   sanitizeIoError,
 } from '../../domain/modbus/io-contract.mjs'
 import { killProcessTree } from '../process/run-command.mjs'
-import { settlePending } from './io-broker-settle.mjs'
+import { asMessage, settlePending, thrownText } from './io-broker-settle.mjs'
+
+/** @typedef {import('../../types/io-broker.d.ts').IoWorkerProcess} IoWorkerProcess */
+/** @typedef {import('../../types/io-broker.d.ts').IoMessage} IoMessage */
+/** @typedef {import('../../types/io-broker.d.ts').PendingEntry} PendingEntry */
+/** @typedef {import('../../types/io-broker.d.ts').IoErrorShape} IoErrorShape */
+/** @typedef {import('../../types/io-broker.d.ts').IoRequestOpts} IoRequestOpts */
+/** @typedef {import('../../types/io-broker.d.ts').IoBrokerOptions} IoBrokerOptions */
 
 const DEFAULT_WORKER = join(dirname(fileURLToPath(import.meta.url)), '../../../runtime/vision-io-worker.mjs')
 /** Driver timeout and this deadline used to be equal, so the broker cancel closed the shared port before the driver could report MODBUS_TIMEOUT. */
@@ -23,29 +31,30 @@ const OUTBOUND_CAP = 32
 const RESTART_WINDOW_MS = 60_000
 const STDERR_CAP = 4000
 
+/** @param {IoBrokerOptions} [options] */
 export function createVisionIoBroker(options = {}) {
   const workerPath = options.workerPath || DEFAULT_WORKER
   const execPath = options.execPath || process.execPath
   const env = options.env || process.env
-  let child = null
+  let child = /** @type {IoWorkerProcess | null} */ (null)
   let state = 'idle'
   let workerEpoch = 0
   let seq = 0
   let stdoutBuf = ''
   let stderrTail = ''
-  let lastError = null
+  let lastError = /** @type {IoErrorShape | null} */ (null)
   let cachedCaps = idleIoSnapshot().capabilities
-  const pending = new Map()
-  const startingQueue = []
-  const outbound = []
+  const pending = /** @type {Map<string, PendingEntry>} */ (new Map())
+  const startingQueue = /** @type {PendingEntry[]} */ ([])
+  const outbound = /** @type {string[]} */ ([])
   let draining = false
   let lastCrashAt = 0
-  let healthCache = null
-  let stopping = null
+  let healthCache = /** @type {Record<string, unknown> | null} */ (null)
+  let stopping = /** @type {Promise<void> | null} */ (null)
 
   const nextId = () => 'req-' + Date.now().toString(36) + '-' + ++seq
 
-  const writeStdin = (obj) => {
+  const writeStdin = (/** @type {Record<string, unknown>} */ obj) => {
     if (!child || !child.stdin || child.stdin.destroyed) return false
     const line = encodeNdjson(obj)
     if (draining || outbound.length) {
@@ -64,7 +73,7 @@ export function createVisionIoBroker(options = {}) {
       child.stdin.once('drain', () => {
         draining = false
         while (outbound.length && child && child.stdin && !child.stdin.destroyed) {
-          const next = outbound.shift()
+          const next = /** @type {string} */ (outbound.shift())
           let more = true
           try {
             more = child.stdin.write(next)
@@ -84,12 +93,12 @@ export function createVisionIoBroker(options = {}) {
     return true
   }
 
-  const sendCancel = (targetId) => {
+  const sendCancel = (/** @type {string} */ targetId) => {
     if (!targetId) return
     writeStdin({ v: IO_PROTOCOL_V, id: nextId(), op: 'cancel', targetId })
   }
 
-  const failAll = (error, withCancel = false) => {
+  const failAll = (/** @type {unknown} */ error, withCancel = false) => {
     const err = sanitizeIoError(error)
     lastError = err
     for (const [id, entry] of pending) {
@@ -102,13 +111,13 @@ export function createVisionIoBroker(options = {}) {
     outbound.length = 0
   }
 
-  const handleLine = (line) => {
+  const handleLine = (/** @type {string} */ line) => {
     const parsed = decodeNdjsonLine(line)
     if (!parsed.ok) {
       killWorker(ioError('PROTOCOL_VIOLATION', parsed.error.message))
       return
     }
-    const msg = parsed.value
+    const msg = asMessage(parsed.value)
     if (!msg || typeof msg.id !== 'string') return
     const entry = pending.get(msg.id)
     if (!entry) return
@@ -126,7 +135,7 @@ export function createVisionIoBroker(options = {}) {
     }
   }
 
-  const onStdout = (chunk) => {
+  const onStdout = (/** @type {unknown} */ chunk) => {
     stdoutBuf += String(chunk || '')
     let idx
     while ((idx = stdoutBuf.indexOf('\n')) >= 0) {
@@ -143,7 +152,7 @@ export function createVisionIoBroker(options = {}) {
     }
   }
 
-  const killWorker = (error) => {
+  const killWorker = (/** @type {unknown} */ error) => {
     const childRef = child
     child = null
     state = error ? 'unhealthy' : 'stopped'
@@ -171,24 +180,20 @@ export function createVisionIoBroker(options = {}) {
       state = 'starting'
       workerEpoch += 1
       const epoch = workerEpoch
-      let proc
+      let proc = /** @type {IoWorkerProcess | undefined} */ (undefined)
       try {
-        proc = spawn(execPath, [workerPath], {
-          stdio: ['pipe', 'pipe', 'pipe'],
-          windowsHide: true,
-          env,
-        })
+        proc = /** @type {IoWorkerProcess} */ (spawn(execPath, [workerPath], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env }))
       } catch (error) {
         state = 'unhealthy'
         lastCrashAt = Date.now()
-        lastError = ioError('IO_RUNTIME_UNAVAILABLE', String((error && error.message) || error))
+        lastError = ioError('IO_RUNTIME_UNAVAILABLE', thrownText(error))
         reject(lastError)
         return
       }
       child = proc
       proc.stdin.on('error', (error) => {
         if (workerEpoch !== epoch) return
-        lastError = ioError('IO_RUNTIME_UNAVAILABLE', String((error && error.message) || error))
+        lastError = ioError('IO_RUNTIME_UNAVAILABLE', thrownText(error))
         killWorker(lastError)
       })
       if (typeof options.onWorker === 'function') options.onWorker(proc)
@@ -199,13 +204,13 @@ export function createVisionIoBroker(options = {}) {
       proc.stdout.setEncoding('utf8')
       proc.stdout.on('data', onStdout)
       proc.stderr.setEncoding('utf8')
-      proc.stderr.on('data', (chunk) => {
+      proc.stderr.on('data', (/** @type {unknown} */ chunk) => {
         stderrTail = (stderrTail + String(chunk || '')).slice(-STDERR_CAP)
       })
       proc.on('error', (error) => {
         if (workerEpoch !== epoch) return
         lastCrashAt = Date.now()
-        lastError = ioError('IO_RUNTIME_UNAVAILABLE', String((error && error.message) || error))
+        lastError = ioError('IO_RUNTIME_UNAVAILABLE', thrownText(error))
         killWorker(lastError)
       })
       proc.on('exit', () => {
@@ -222,7 +227,8 @@ export function createVisionIoBroker(options = {}) {
         reject(lastError)
       }, IO_HANDSHAKE_MS)
       pending.set(handshakeId, {
-        resolve: (msg) => {
+        resolve: (value) => {
+          const msg = asMessage(value)
           clearTimeout(timer)
           const data = msg && msg.data ? msg.data : {}
           if (Number(data.protocol) !== IO_PROTOCOL_V || Number(msg.v) !== IO_PROTOCOL_V) {
@@ -240,7 +246,7 @@ export function createVisionIoBroker(options = {}) {
           const queued = startingQueue.splice(0)
           for (const item of queued) item.resolve()
         },
-        reject: (error) => {
+        reject: (/** @type {unknown} */ error) => {
           clearTimeout(timer)
           lastCrashAt = Date.now()
           state = 'unhealthy'
@@ -279,7 +285,7 @@ export function createVisionIoBroker(options = {}) {
     return spawnWorker()
   }
 
-  const request = async (payload, opts = {}) => {
+  const request = async (/** @type {Record<string, unknown>} */ payload, /** @type {IoRequestOpts} */ opts = {}) => {
     await ensureReady()
     if (state !== 'ready' || !child) {
       throw ioError('IO_RUNTIME_UNAVAILABLE', 'I/O 运行时不可用')
@@ -287,7 +293,7 @@ export function createVisionIoBroker(options = {}) {
     if (pending.size >= OUTBOUND_CAP) {
       throw ioError('IO_BACKPRESSURE', 'I/O 队列已满')
     }
-    const id = payload.id || nextId()
+    const id = /** @type {string} */ (payload.id || nextId())
     const timeoutMs = clampTimeoutMs(opts.timeoutMs, payload.timeoutMs || 8000) + BROKER_GRACE_MS
     const signal = opts.signal
     const epoch = workerEpoch
@@ -301,7 +307,7 @@ export function createVisionIoBroker(options = {}) {
       const abortCleanup = () => {
         if (signal) signal.removeEventListener('abort', onAbort)
       }
-      const finish = (error, code) => {
+      const finish = (/** @type {string} */ error, /** @type {string} */ code) => {
         if (entry.settled) return
         pending.delete(id)
         sendCancelOnce()
@@ -310,7 +316,7 @@ export function createVisionIoBroker(options = {}) {
       const onAbort = () => finish('已取消', 'CANCELLED')
       const timer = setTimeout(() => finish('I/O 超时', 'MODBUS_TIMEOUT'), timeoutMs)
       const entry = {
-        resolve: (msg) => resolve(msg),
+        resolve: (/** @type {unknown} */ value) => resolve(asMessage(value)),
         reject,
         timer,
         abortCleanup,
@@ -344,11 +350,11 @@ export function createVisionIoBroker(options = {}) {
         await new Promise((resolve) => {
           const t = setTimeout(() => {
             if (proc.pid) killProcessTree(proc.pid)
-            resolve()
+            resolve(undefined)
           }, 1500)
           proc.once('exit', () => {
             clearTimeout(t)
-            resolve()
+            resolve(undefined)
           })
         })
       }
@@ -389,8 +395,8 @@ export function createVisionIoBroker(options = {}) {
   }
 }
 
-let singleton = null
-
+let singleton = /** @type {ReturnType<typeof createVisionIoBroker> | null} */ (null)
+/** @param {IoBrokerOptions & { broker?: NonNullable<typeof singleton> }} [options] */
 export function getVisionIoBroker(options = {}) {
   if (options.broker) return options.broker
   if (!singleton) singleton = createVisionIoBroker(options)
