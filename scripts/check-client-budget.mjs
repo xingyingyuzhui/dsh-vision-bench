@@ -2,8 +2,8 @@
 import { createHash } from 'node:crypto'
 
 export const CLIENT_BYTE_BASELINE = 567475
-/** Stage-1 cap 595849; 0.24 ECharts 1048576; 0.25 adds CodeMirror; 0.28 frames resizer; journal and alarms redesign; runtime exec-line decorations; P3/P4 src module-boundary tax; 0.29.1 locale tick in workspace tabs; 0.29.2 viz keep-alive + plotBox; 0.29.3 line time origin; review8 alarm deadband editor + dialog focus trap + i18n copy (temporary until the uPlot line renderer moves onto ECharts). */
-export const CLIENT_BYTE_LIMIT = 1680000
+/** Stage-1 cap 595849; 0.24 ECharts 1048576; 0.25 adds CodeMirror; 0.28 frames resizer; journal and alarms redesign; runtime exec-line decorations; P3/P4 src module-boundary tax; 0.29.1 locale tick in workspace tabs; 0.29.2 viz keep-alive + plotBox; 0.29.3 line time origin; review8 alarm deadband editor + dialog focus trap + i18n copy; review8 uPlot removed; line charts on ECharts. */
+export const CLIENT_BYTE_LIMIT = 1640000
 
 const REACT_SOURCE = /node_modules[/\\]react[/\\]/
 const REACT_DOM_REQUIRE = /require\(['"]react-dom['"]\)/

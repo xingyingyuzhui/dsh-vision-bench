@@ -82,13 +82,13 @@ test('generated client is valid JavaScript', async () => {
   }
 })
 
-test('generated client embeds real vendor runtime (uPlot + Virtualizer)', async () => {
+test('generated client embeds ECharts and Virtualizer without uPlot', async () => {
   assert.match(src, /var DvbVendor = /)
   assert.match(src, /DvbVendorCss/)
-  // no reliance on host globals for chart creation
-  assert.doesNotMatch(src, /(?:window|globalThis)\.uPlot/)
-  // uPlot official CSS present (not a hand-written substitute)
-  assert.match(src, /\.u-legend|\.uplot|\.u-axis|u-legend-name/)
+  assert.match(src, /echarts:/)
+  assert.match(src, /grid-stack/)
+  assert.doesNotMatch(src, /(?:window|globalThis)\.(?:uPlot|echarts)/)
+  assert.doesNotMatch(src, /uPlot|\.uplot|u-legend/)
 })
 
 test('generated client contains exactly one ModuleLoader registration and no second React', async () => {

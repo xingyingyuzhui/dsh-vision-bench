@@ -78,12 +78,10 @@ function resolveOptions(options = {}) {
 async function loadVendorModules() {
   if (!vendorModulesPromise) {
     vendorModulesPromise = (async () => {
-      const uPlot = (await import('uplot')).default
       const vcore = await import('@tanstack/virtual-core')
       const rv = await import('@tanstack/react-virtual')
       const table = await import('@tanstack/table-core')
       return {
-        uPlot,
         Virtualizer: vcore.Virtualizer,
         elementScroll: vcore.elementScroll,
         observeElementRect: vcore.observeElementRect,

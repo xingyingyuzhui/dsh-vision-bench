@@ -1,5 +1,5 @@
 // Minimal browser DOM globals for tests that eval the generated client bundle.
-// The bundle now legitimately embeds browser-only vendor libs (uPlot /
+// The bundle now legitimately embeds browser-only vendor libs (ECharts /
 // virtual-core) that read `document`/`window` at init, mirroring the real DSH
 // web loader where these always exist.
 export function installDomStub() {
@@ -85,7 +85,7 @@ export function installDomStub() {
       unobserve() {}
       disconnect() {}
     },
-    // uPlot's minified code reads some bare browser globals directly
+    // Bundled chart and grid code reads some bare browser globals directly
     devicePixelRatio: 1,
     screen: { width: 1920, height: 1080 },
     getComputedStyle: () => ({ getPropertyValue: () => '', setProperty() {}, removeProperty() {} }),
