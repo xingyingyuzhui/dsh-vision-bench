@@ -374,6 +374,7 @@
     "src/types/write-file-atomic.d.ts",
     "src/types/workspace.d.ts",
     "src/types/modbus.d.ts",
+    "src/types/io-broker.d.ts",
     "src/types/io-protocol.d.ts",
     "src/types/agent-tool.d.ts",
     "src/types/http-api.d.ts",
