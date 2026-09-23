@@ -4,6 +4,7 @@ import test from 'node:test'
 import { DEBUG_EVENT_TYPES } from '../../src/shared/debug-events.mjs'
 import { createDebugToolbar } from '../../src/ui/debug/runtime/debug-toolbar.mjs'
 import { normalizeDebugEventType, useDebugEvents } from '../../src/ui/debug/runtime/use-debug-events.mjs'
+import { translate } from '../../bench-i18n.mjs'
 import { createMockReact } from '../helpers/mock-react.mjs'
 
 // Simple mock React for testing hook lifecycle
@@ -19,7 +20,7 @@ test('PR-4: normalizeDebugEventType maps legacy event strings to canonical DEBUG
 
 test('PR-4: DebugToolbar renders transient state labels for pendingControl', () => {
   const React = createMockReact()
-  const Toolbar = createDebugToolbar(React, (k) => k)
+  const Toolbar = createDebugToolbar(React, (key, params) => translate('zh', key, params))
 
   // 1. When pausing
   const pausingBar = Toolbar({

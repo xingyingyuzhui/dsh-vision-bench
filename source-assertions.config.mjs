@@ -74,6 +74,12 @@ export default {
       targets: ['host.js', 'package.json', 'tools.js'],
     },
     {
+      file: 'test/ui/cjk-literal-ratchet.test.mjs',
+      purpose: 'architecture-boundary',
+      reason: 'src/ui 除 i18n 外的中文字面量棘轮',
+      targets: ['src/ui/'],
+    },
+    {
       file: 'test/ui/i18n.test.mjs',
       purpose: 'architecture-boundary',
       reason: 'i18n 数据与 Client 入口边界',

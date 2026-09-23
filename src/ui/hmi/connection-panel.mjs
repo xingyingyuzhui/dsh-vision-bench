@@ -47,8 +47,8 @@ export function renderConnectionPanel(el, t, ctx) {
     el(
       'div',
       { className: 'dvb-panel-head dvb-conn-section-head' },
-      el('span', { className: 'dvb-panel-title' }, t('connBar') || '全部连接'),
-      el('span', { className: 'dvb-tag' }, connections.length + ' 个连接'),
+      el('span', { className: 'dvb-panel-title' }, t('connBar')),
+      el('span', { className: 'dvb-tag' }, t('connCount', { n: connections.length })),
       el(
         'button',
         {
@@ -57,7 +57,7 @@ export function renderConnectionPanel(el, t, ctx) {
           disabled: !cwd,
           onClick: addConnection,
         },
-        '＋连接',
+        t('connAdd'),
       ),
       activeConnObj?.conn?.sim ? el('span', { className: 'dvb-badge', 'data-kind': 'warn' }, t('simOn')) : null,
       el(
@@ -68,7 +68,7 @@ export function renderConnectionPanel(el, t, ctx) {
           disabled: !cwd || !activeConnObj,
           onClick: toggleSim,
         },
-        activeConnObj?.conn?.sim ? '切为真实' : '切为仿真',
+        activeConnObj?.conn?.sim ? t('connUseReal') : t('connUseSim'),
       ),
     ),
     connections.length
@@ -96,7 +96,7 @@ export function renderConnectionPanel(el, t, ctx) {
               connections.map((c) => {
                 const isActive = c.id === activeConnId
                 const roleLabel =
-                  c.role === 'server' || c.role === 'slave' ? t('roleSlave') || '从机' : t('roleMaster') || '主机'
+                  c.role === 'server' || c.role === 'slave' ? t('roleSlave') : t('roleMaster')
                 const cm = connectionStates.find((x) => x.connectionId === c.id)
                 const st = cm ? cm.status || 'disconnected' : 'disconnected'
                 const occupiedPort =
@@ -116,7 +116,7 @@ export function renderConnectionPanel(el, t, ctx) {
                       {
                         type: 'button',
                         className: 'dvb-btn' + (isActive ? ' is-on dvb-btn-primary' : ''),
-                        title: isActive ? '当前连接' : '切换到此连接',
+                        title: isActive ? t('connCurrent') : t('connSwitch'),
                         onClick() {
                           selectConnection(c.id)
                         },
@@ -133,7 +133,7 @@ export function renderConnectionPanel(el, t, ctx) {
                     'td',
                     {
                       className: 'dvb-col-endpoint',
-                      title: occupiedPort ? '已被 ' + occupiedPort + ' 占用' : '',
+                      title: occupiedPort ? t('connOccupied', { name: occupiedPort }) : '',
                     },
                     el(
                       'span',
@@ -144,19 +144,19 @@ export function renderConnectionPanel(el, t, ctx) {
                           st === 'connected' ? 'live' : st === 'connecting' || st === 'disconnecting' ? 'warn' : 'err',
                         title:
                           st === 'connected'
-                            ? t('connLive') || '已连接'
+                            ? t('connLive')
                             : st === 'connecting'
-                              ? t('connConnecting') || '连接中'
+                              ? t('connConnecting')
                               : st === 'disconnecting'
-                                ? t('connDisconnecting') || '断开中'
+                                ? t('connDisconnecting')
                                 : st === 'error'
-                                  ? t('connErr') || '连接异常'
-                                  : t('connIdle') || '未连接',
+                                  ? t('connErr')
+                                  : t('connIdle'),
                       }),
                       el(
                         'span',
                         { className: 'dvb-conn-endpoint-text' },
-                        connLabel(c.conn || {}) + (occupiedPort ? ' · 已被 ' + occupiedPort + ' 占用' : ''),
+                        connLabel(c.conn || {}) + (occupiedPort ? t('connOccupiedSuffix', { name: occupiedPort }) : ''),
                       ),
                     ),
                   ),
@@ -184,14 +184,14 @@ export function renderConnectionPanel(el, t, ctx) {
                           },
                         },
                         st === 'connected'
-                          ? t('connUnlink') || '断开'
+                          ? t('connUnlink')
                           : st === 'connecting'
-                            ? t('connConnecting') || '连接中'
+                            ? t('connConnecting')
                             : st === 'disconnecting'
-                              ? t('connDisconnecting') || '断开中'
+                              ? t('connDisconnecting')
                               : st === 'error'
-                                ? t('connRetry') || '重试'
-                                : t('connLink') || '连接',
+                                ? t('connRetry')
+                                : t('connLink'),
                       ),
                       el(
                         'button',
@@ -202,15 +202,15 @@ export function renderConnectionPanel(el, t, ctx) {
                             openConnEdit(c)
                           },
                         },
-                        '编辑',
+                        t('connEdit'),
                       ),
                       el(
                         'button',
                         {
                           type: 'button',
                           className: 'dvb-btn dvb-btn-sm dvb-ai-btn',
-                          title: '复制结构化引用（稳定 ID+配置版本）并让 Agent 分析',
-                          'aria-label': '让 Agent 分析连接 ' + c.name,
+                          title: t('connAgentTitle'),
+                          'aria-label': t('connAgentLabel', { name: c.name }),
                           onClick() {
                             sendToAgent('connection', { connectionId: c.id, name: c.name })
                           },
@@ -223,12 +223,12 @@ export function renderConnectionPanel(el, t, ctx) {
                           type: 'button',
                           className: 'dvb-btn dvb-btn-danger-hover',
                           disabled: connections.length <= 1,
-                          title: connections.length <= 1 ? '至少保留一个连接' : '',
+                          title: connections.length <= 1 ? t('connKeepOne') : '',
                           onClick() {
                             setPendingDeleteId(c.id)
                           },
                         },
-                        t('removeDevice') || '删除',
+                        t('removeDevice'),
                       ),
                     ),
                   ),
@@ -237,17 +237,15 @@ export function renderConnectionPanel(el, t, ctx) {
             ),
           ),
         )
-      : el('div', { className: 'dvb-empty' }, '暂无连接，点击「＋连接」创建'),
+      : el('div', { className: 'dvb-empty' }, t('connEmpty')),
     deletingConn && ModalDialog
       ? el(ModalDialog, {
           open: true,
           kind: 'confirm',
-          title: t('deleteConnConfirmTitle') || '删除连接',
-          message: (
-            t('deleteConnConfirmText') || '确定要删除连接“{name}”吗？此操作将移除该连接及其下关联的配置，不可撤销。'
-          ).replace('{name}', deletingConn.name || deletingConn.id),
-          cancelText: t('csvCancel') || '取消',
-          confirmText: t('removeDevice') || '确认删除',
+          title: t('deleteConnConfirmTitle'),
+          message: t('deleteConnConfirmText', { name: deletingConn.name || deletingConn.id }),
+          cancelText: t('csvCancel'),
+          confirmText: t('removeDevice'),
           danger: true,
           onCancel() {
             setPendingDeleteId('')
