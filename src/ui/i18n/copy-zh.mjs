@@ -216,6 +216,8 @@ export const COPY_ZH = {
     ptUnit: '单位',
     ptAlarmMin: '告警下限',
     ptAlarmMax: '告警上限',
+    ptAlarmDeadband: '告警回差',
+    ptAlarmDeadbandHint: '空 = 阈值的 1%；0 = 无回差',
     savePoint: '保存',
     cancelEdit: '取消编辑',
     editing: '编辑中',

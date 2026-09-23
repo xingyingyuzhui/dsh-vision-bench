@@ -47,7 +47,8 @@ export function renderCsvPanel(el, t, ctx) {
       value: csvText,
       rows: 5,
       spellCheck: false,
-      placeholder: 'name,function,address,scale,offset,unit,alarmMin,alarmMax,trendEnabled',
+      placeholder:
+        'name,function,address,scale,offset,unit,monitorEnabled,alarmEnabled,alarmMin,alarmMax,alarmDeadband',
       onChange: (event) => {
         setCsvText(event.target.value)
       },

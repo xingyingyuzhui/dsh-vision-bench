@@ -181,6 +181,30 @@ test('CSV round-trip preserves per-point metadata (monitorEnabled/alarmEnabled)'
   assert.equal(csvToPoints('a,b\n1,2').ok, false)
 })
 
+test('CSV round-trip keeps alarmDeadband; a legacy file without the column stays unset', () => {
+  const points = [
+    {
+      name: '温度',
+      function: 3,
+      address: 0,
+      scale: 0.1,
+      alarmEnabled: true,
+      alarmMax: 85,
+      alarmDeadband: 0.02,
+    },
+    { name: '开关', function: 1, address: 9, alarmDeadband: 0 },
+  ]
+  const back = csvToPoints(pointsToCsv(points))
+  assert.equal(back.ok, true, back.error)
+  assert.equal(back.points[0].alarmDeadband, 0.02)
+  assert.equal(back.points[1].alarmDeadband, 0)
+  const legacy = csvToPoints('name,function,address,alarmMax\n旧点,3,5,10\n')
+  assert.equal(legacy.ok, true, legacy.error)
+  assert.equal(legacy.points[0].alarmDeadband, null, 'missing column uses the 1% default, not an explicit 0')
+  const bad = csvToPoints('name,function,address,alarmDeadband\n坏点,3,1,-1\n')
+  assert.equal(bad.ok, false)
+})
+
 test('pointIdOf is stable for write lookups', async () => {
   assert.equal(pointIdOf(3, 42), normalizePoint({ function: 3, address: 42 }).id)
 })

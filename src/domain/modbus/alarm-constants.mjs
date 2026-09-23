@@ -14,6 +14,9 @@ export const COND_ACTIVE = 'active'
 export const COND_RECOVERED = 'recovered'
 export const ALARM_CONDITION = { ACTIVE: COND_ACTIVE, RECOVERED: COND_RECOVERED }
 
+/** Default hysteresis is |threshold| × this ratio when alarmDeadband is unset. Explicit 0 disables it. */
+export const DEFAULT_ALARM_DEADBAND_RATIO = 0.01
+
 export const ALLOWED_STATUS = new Set([ACTIVE, RECOVERED, ACKED])
 export const ALLOWED_GROUP = new Set([PROCESS, COMM])
 export const ALLOWED_COND = new Set([COND_ACTIVE, COND_RECOVERED])

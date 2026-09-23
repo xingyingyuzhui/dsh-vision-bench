@@ -5,6 +5,7 @@ import {
   COMM,
   COND_ACTIVE,
   COND_RECOVERED,
+  DEFAULT_ALARM_DEADBAND_RATIO,
   PROCESS,
   RECOVERED,
   capAlarm,
@@ -17,12 +18,42 @@ import { evaluateAlarm } from './point-alarm.mjs'
 import { normalizeAlarmState } from './alarm-lifecycle.mjs'
 
 /**
+ * An explicit opts.deadband (including 0) overrides the ratio default.
+ * Omitted / blank leaves the ratio path open.
+ * @param {any} opts
+ * @returns {{ explicit: boolean, value: number }}
+ */
+function optsDeadband(opts) {
+  if (!opts || !Object.prototype.hasOwnProperty.call(opts, 'deadband')) return { explicit: false, value: 0 }
+  if (opts.deadband == null || opts.deadband === '') return { explicit: false, value: 0 }
+  const n = Number(opts.deadband)
+  return { explicit: true, value: Number.isFinite(n) && n > 0 ? n : 0 }
+}
+
+/**
+ * Per-point alarmDeadband wins over both the caller deadband and the ratio default.
+ * @param {any} point
+ * @param {string} kind
+ * @param {{ explicit: boolean, value: number }} fromOpts
+ */
+function deadbandFor(point, kind, fromOpts) {
+  const custom = point?.alarmDeadband
+  if (custom != null && custom !== '' && Number.isFinite(Number(custom)) && Number(custom) >= 0) {
+    return Number(custom)
+  }
+  if (fromOpts.explicit) return fromOpts.value
+  const threshold = kind === 'min' ? point?.alarmMin : point?.alarmMax
+  const abs = Math.abs(Number(threshold))
+  return Number.isFinite(abs) ? abs * DEFAULT_ALARM_DEADBAND_RATIO : 0
+}
+
+/**
  * @param {any} [arg0]
  * @returns {any}
  */
 export function evaluateAlarms({ points, values, prevState, pollingByConnection, connections, opts } = {}) {
   const now = opts && Number(opts.now) > 0 ? Number(opts.now) : nowMs()
-  const deadband = Number(opts && opts.deadband) > 0 ? Number(opts.deadband) : 0
+  const fromOpts = optsDeadband(opts)
   const delayMs = Number(opts && opts.delayMs) >= 0 ? Number(opts.delayMs) : 0
   const suppressMs = Number(opts && opts.suppressWindowMs) >= 0 ? Number(opts.suppressWindowMs) : defaultSuppressMs
   const prev = normalizeAlarmState(prevState)
@@ -77,11 +108,12 @@ export function evaluateAlarms({ points, values, prevState, pollingByConnection,
     const engVal = decodeValue(p, rec.raw)
     // TaskP3/0.20.0: 阈值/死区/恢复比较统一使用工程值（不再混用 raw）
     let breachKind = evaluateAlarm(p, engVal)
-    if (!breachKind && prevRec && prevRec.condition === COND_ACTIVE && deadband > 0) {
+    if (!breachKind && prevRec && prevRec.condition === COND_ACTIVE) {
+      const deadband = deadbandFor(p, prevRec.kind === 'min' ? 'min' : 'max', fromOpts)
       const n = Number(engVal)
-      if (prevRec.kind === 'max' && p.alarmMax != null && Number.isFinite(n)) {
+      if (deadband > 0 && prevRec.kind === 'max' && p.alarmMax != null && Number.isFinite(n)) {
         if (n > p.alarmMax - deadband) breachKind = 'max'
-      } else if (prevRec.kind === 'min' && p.alarmMin != null && Number.isFinite(n)) {
+      } else if (deadband > 0 && prevRec.kind === 'min' && p.alarmMin != null && Number.isFinite(n)) {
         if (n < p.alarmMin + deadband) breachKind = 'min'
       }
     }

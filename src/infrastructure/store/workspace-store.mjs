@@ -273,6 +273,12 @@ export const applyWorkspacePatch = (prev, input) => {
               : Number.isFinite(Number(raw.alarmMax))
                 ? Number(raw.alarmMax)
                 : null,
+          alarmDeadband:
+            raw.alarmDeadband === null || raw.alarmDeadband === undefined || raw.alarmDeadband === ''
+              ? null
+              : Number.isFinite(Number(raw.alarmDeadband)) && Number(raw.alarmDeadband) >= 0
+                ? Number(raw.alarmDeadband)
+                : null,
         }
       })
       mergedModbus.points = kept.concat(newPts)

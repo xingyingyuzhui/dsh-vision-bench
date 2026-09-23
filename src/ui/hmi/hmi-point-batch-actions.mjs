@@ -53,6 +53,7 @@ export function createHmiPointBatchActions(ctx, core, deps) {
           alarmEnabled: pt.alarmEnabled === true,
           alarmMin: pt.alarmMin == null ? '' : String(pt.alarmMin),
           alarmMax: pt.alarmMax == null ? '' : String(pt.alarmMax),
+          alarmDeadband: pt.alarmDeadband == null ? '' : String(pt.alarmDeadband),
           trendEnabled: pt.trendEnabled === true,
         }
       }
@@ -89,6 +90,7 @@ export function createHmiPointBatchActions(ctx, core, deps) {
         alarmEnabled: false,
         alarmMin: '',
         alarmMax: '',
+        alarmDeadband: '',
         trendEnabled: false,
       })
     }

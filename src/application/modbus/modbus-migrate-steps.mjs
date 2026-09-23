@@ -140,6 +140,12 @@ export function migrateV2ToV3(v2) {
           : Number.isFinite(Number(p.alarmMax))
             ? Number(p.alarmMax)
             : null,
+      alarmDeadband:
+        !p || p.alarmDeadband === null || p.alarmDeadband === undefined || p.alarmDeadband === ''
+          ? null
+          : Number.isFinite(Number(p.alarmDeadband)) && Number(p.alarmDeadband) >= 0
+            ? Number(p.alarmDeadband)
+            : null,
     })
   }
   const oldValues = Array.isArray(v2.values) ? v2.values : []

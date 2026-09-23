@@ -1,3 +1,4 @@
+import { parseAlarmDeadband } from '../../domain/modbus/point-model.mjs'
 import { AREA_BY_FN_EDIT, hmiGenId } from './hmi-ids.mjs'
 
 /**
@@ -76,6 +77,7 @@ export function createHmiPointDraftActions(ctx, core) {
         unit: pt.unit || '',
         alarmMin: pt.alarmMin == null ? '' : String(pt.alarmMin),
         alarmMax: pt.alarmMax == null ? '' : String(pt.alarmMax),
+        alarmDeadband: pt.alarmDeadband == null ? '' : String(pt.alarmDeadband),
       }
     }
     setPointDraftsById(drafts)
@@ -126,6 +128,7 @@ export function createHmiPointDraftActions(ctx, core) {
           alarmEnabled: pt.alarmEnabled === true,
           alarmMin: pt.alarmMin == null ? '' : String(pt.alarmMin),
           alarmMax: pt.alarmMax == null ? '' : String(pt.alarmMax),
+          alarmDeadband: pt.alarmDeadband == null ? '' : String(pt.alarmDeadband),
           trendEnabled: pt.trendEnabled === true,
         }
       }
@@ -155,6 +158,7 @@ export function createHmiPointDraftActions(ctx, core) {
       alarmEnabled: false,
       alarmMin: '',
       alarmMax: '',
+      alarmDeadband: '',
       trendEnabled: true,
     }
     setPointDraftsById({ ...currentDrafts, [id]: newDraft })
@@ -184,6 +188,11 @@ export function createHmiPointDraftActions(ctx, core) {
     const alarmOn = d.alarmEnabled === true
     const min = alarmOn && d.alarmMin !== '' ? Number(d.alarmMin) : null
     const max = alarmOn && d.alarmMax !== '' ? Number(d.alarmMax) : null
+    const deadband = parseAlarmDeadband(d.alarmDeadband)
+    if (!deadband.ok) {
+      setError('告警回差必须是非负有限数或空')
+      return
+    }
     if (alarmOn && min != null && max != null && !(min < max)) {
       setError('下限必须小于上限')
       return
@@ -205,6 +214,7 @@ export function createHmiPointDraftActions(ctx, core) {
           alarmEnabled: alarmOn,
           alarmMin: Number.isFinite(min) ? min : null,
           alarmMax: Number.isFinite(max) ? max : null,
+          alarmDeadband: deadband.value,
           trendEnabled: d.monitorEnabled === true,
           area:
             fnNum === 1 ? 'coil' : fnNum === 2 ? 'discreteInput' : fnNum === 4 ? 'inputRegister' : 'holdingRegister',
@@ -269,6 +279,10 @@ export function createHmiPointDraftActions(ctx, core) {
 
       const min = dr.alarmMin !== '' && dr.alarmMin != null ? Number(dr.alarmMin) : null
       const max = dr.alarmMax !== '' && dr.alarmMax != null ? Number(dr.alarmMax) : null
+      if (!parseAlarmDeadband(dr.alarmDeadband).ok) {
+        setError('告警回差必须是非负有限数或空')
+        return
+      }
       if (dr.alarmEnabled === true && min != null && max != null && !(min < max)) {
         setError('下限必须小于上限: ' + (dr.name || '点位'))
         return
@@ -283,6 +297,7 @@ export function createHmiPointDraftActions(ctx, core) {
         const addrNum = Math.trunc(Number(dr.address))
         const min = dr.alarmMin !== '' && dr.alarmMin != null ? Number(dr.alarmMin) : null
         const max = dr.alarmMax !== '' && dr.alarmMax != null ? Number(dr.alarmMax) : null
+        const deadband = parseAlarmDeadband(dr.alarmDeadband)
         const alarmOn = dr.alarmEnabled === true
         const monitorOn = dr.monitorEnabled === true
         return {
@@ -304,6 +319,7 @@ export function createHmiPointDraftActions(ctx, core) {
           alarmEnabled: alarmOn,
           alarmMin: Number.isFinite(min) ? min : null,
           alarmMax: Number.isFinite(max) ? max : null,
+          alarmDeadband: deadband.ok ? deadband.value : null,
           trendEnabled: dr.trendEnabled !== undefined ? dr.trendEnabled === true : monitorOn,
         }
       })

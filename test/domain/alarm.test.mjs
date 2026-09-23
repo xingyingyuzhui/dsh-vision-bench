@@ -150,3 +150,61 @@ test('evaluateAlarms comm grouping and acknowledge transitions to acked', async 
   const allAcked = acknowledgeAlarm(withProc, 'all')
   assert.ok(Object.values(allAcked).every((v) => v.status === ACKED))
 })
+
+test('small-scale alarms use a 1% threshold deadband unless the point overrides it', () => {
+  const point = (extra = {}) => ({
+    id: 'p1',
+    connectionId: 'c1',
+    deviceId: 'd1',
+    name: 'Tiny',
+    function: 3,
+    address: 0,
+    scale: 0.01,
+    offset: 0,
+    alarmEnabled: true,
+    alarmMax: 0.55,
+    alarmMin: null,
+    ...extra,
+  })
+  const step = (points, raw, prev, opts = {}) =>
+    evaluateAlarms({
+      points,
+      values: [{ pointId: 'p1', raw, ok: true }],
+      prevState: prev,
+      opts: { now: (prev?.p1?.lastAt || 0) + 1000, ...opts },
+    })
+
+  // Default band is |0.55| × 1% = 0.0055, so 0.545 stays and 0.54 recovers.
+  const base = [point()]
+  let cur = step(base, 58, {})
+  assert.equal(cur.fired.length, 1, '0.58 engineering units trips alarmMax 0.55')
+  cur = step(base, 54.5, cur.next)
+  assert.equal(cur.recovered.length, 0, '0.545 stays inside the default 0.0055 band')
+  assert.equal(cur.next.p1.condition, 'active')
+  cur = step(base, 54, cur.next)
+  assert.equal(cur.recovered.length, 1, '0.54 recovers under the default band')
+
+  const wide = [point({ alarmDeadband: 0.02 })]
+  cur = step(wide, 58, {})
+  assert.equal(cur.fired.length, 1)
+  cur = step(wide, 54, cur.next)
+  assert.equal(cur.recovered.length, 0, 'explicit 0.02 keeps 0.54 active')
+  assert.equal(cur.next.p1.condition, 'active')
+  cur = step(wide, 52, cur.next)
+  assert.equal(cur.recovered.length, 1, '0.52 recovers once it clears the 0.02 band')
+
+  const none = [point({ alarmDeadband: 0 })]
+  cur = step(none, 58, {})
+  cur = step(none, 54.9, cur.next)
+  assert.equal(cur.recovered.length, 1, 'explicit 0 disables hysteresis')
+
+  const fromOpts = [point()]
+  cur = step(fromOpts, 58, {}, { deadband: 0.02 })
+  cur = step(fromOpts, 54, cur.next, { deadband: 0.02 })
+  assert.equal(cur.recovered.length, 0, 'an explicit opts.deadband overrides the 1% default')
+
+  const pointWins = [point({ alarmDeadband: 0 })]
+  cur = step(pointWins, 58, {}, { deadband: 0.02 })
+  cur = step(pointWins, 54.9, cur.next, { deadband: 0.02 })
+  assert.equal(cur.recovered.length, 1, 'per-point alarmDeadband wins over opts.deadband')
+})

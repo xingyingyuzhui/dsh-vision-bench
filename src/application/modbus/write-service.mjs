@@ -10,14 +10,15 @@ import { endpointFingerprint, sameEndpoint } from '../../domain/modbus/endpoint.
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { findPointV3 } from '../../domain/modbus/function-code.mjs'
 import { deviceDisabledOf, targetRequired } from '../../domain/modbus/validation.mjs'
-import { entryLabel } from './modbus-runtime-context.mjs'
-import { createPendingWrite, takePendingWrite } from './write-approval-service.mjs'
+import { entryLabel, writeLocks } from './modbus-runtime-context.mjs'
+import { createPendingWrite, restorePendingWrite, takePendingWrite } from './write-approval-service.mjs'
 import { executeApprovedWrite } from './write-execute.mjs'
 
 /**
  * @typedef {import('../../types/modbus.js').ModbusCommandBody} ModbusCommandBody
  * @typedef {import('../../types/modbus.js').ModbusOperationOptions} ModbusOperationOptions
  * @typedef {import('../../types/modbus.js').ModbusWorkspace} ModbusWorkspace
+ * @typedef {{ configVersion?: number, pointIds?: string[], endpoint?: object }} ApprovedWriteExpectation
  */
 
 /**
@@ -68,8 +69,8 @@ export const modbusWrite = async (home, cwd, body, opts = {}) => {
   if (!check.ok) return { ok: false, error: check.error, errorCode: ERROR_CODES.TARGET_REQUIRED }
   const writeValues = Array.isArray(check.values) ? check.values : []
   const count = writeValues.length
-  if (hasRunning(workspace, 'write')) {
-    return { ok: false, error: '已有写入任务进行中' }
+  if (writeLocks.has(room.cwd) || hasRunning(workspace, 'write')) {
+    return { ok: false, errorCode: ERROR_CODES.WRITE_BUSY, error: '已有写入任务进行中' }
   }
   /** @type {string[]} */
   const targetPointIds = []
@@ -93,6 +94,39 @@ export const modbusWrite = async (home, cwd, body, opts = {}) => {
         }
     }
     targetPointIds.push(hit.id)
+  }
+  const rawExpected = opts && opts.expected
+  /** @type {ApprovedWriteExpectation | null} */
+  const expected =
+    rawExpected && typeof rawExpected === 'object' ? /** @type {ApprovedWriteExpectation} */ (rawExpected) : null
+  if (expected) {
+    const expectedVersion = Number(expected.configVersion)
+    if (expectedVersion > 0 && (pack.configVersion || 1) !== expectedVersion) {
+      return {
+        ok: false,
+        errorCode: ERROR_CODES.CONFIG_DRIFT,
+        error: `配置版本已漂移（v${expectedVersion}→v${pack.configVersion || 1}），原批准已失效，请让 Agent 重新发起请求`,
+      }
+    }
+    const expectedIds = Array.isArray(expected.pointIds) ? expected.pointIds.map((id) => String(id)) : null
+    if (
+      expectedIds &&
+      (expectedIds.length !== targetPointIds.length || expectedIds.some((id, index) => id !== targetPointIds[index]))
+    ) {
+      return {
+        ok: false,
+        errorCode: ERROR_CODES.CONFIG_DRIFT,
+        error: '点表在批准前发生了变化，原批准已失效，请让 Agent 重新发起请求',
+      }
+    }
+    const devForExpected = pack.devices.find((item) => item.id === targetDid)
+    if (expected.endpoint && !sameEndpoint(endpointFingerprint(conn, devForExpected), expected.endpoint)) {
+      return {
+        ok: false,
+        errorCode: ERROR_CODES.ENDPOINT_DRIFT,
+        error: '设备连接已变更，原批准已失效，请让 Agent 重新发起请求',
+      }
+    }
   }
   if (origin.source === 'agent' && !(body && body.confirm === true)) {
     const devForWrite = pack.devices.find((d) => d.id === targetDid)
@@ -118,25 +152,30 @@ export const modbusWrite = async (home, cwd, body, opts = {}) => {
     }
   }
 
-  return executeApprovedWrite({
-    home,
-    roomCwd: room.cwd,
-    sessionId,
-    pack,
-    origin,
-    signal,
-    opts,
-    targetCid,
-    targetDid,
-    targetConnObj,
-    conn,
-    fn,
-    address,
-    writeValues,
-    count,
-    check,
-    targetPointIds,
-  })
+  writeLocks.add(room.cwd)
+  try {
+    return await executeApprovedWrite({
+      home,
+      roomCwd: room.cwd,
+      sessionId,
+      pack,
+      origin,
+      signal,
+      opts,
+      targetCid,
+      targetDid,
+      targetConnObj,
+      conn,
+      fn,
+      address,
+      writeValues,
+      count,
+      check,
+      targetPointIds,
+    })
+  } finally {
+    writeLocks.delete(room.cwd)
+  }
 }
 
 /**
@@ -217,7 +256,7 @@ export const resolvePendingWrite = async (home, cwd, id, approved, opts = {}) =>
       errorCode: ERROR_CODES.CONFIG_DRIFT,
     }
   }
-  return modbusWrite(
+  const wrote = await modbusWrite(
     home,
     room.cwd,
     {
@@ -225,6 +264,15 @@ export const resolvePendingWrite = async (home, cwd, id, approved, opts = {}) =>
       source: 'agent',
       confirm: true,
     },
-    opts,
+    {
+      ...opts,
+      expected: {
+        configVersion: boundConfigVersion,
+        pointIds: entry.params.pointIds,
+        endpoint: entry.params.endpoint,
+      },
+    },
   )
+  if (wrote && 'errorCode' in wrote && wrote.errorCode === ERROR_CODES.WRITE_BUSY) restorePendingWrite(entry)
+  return wrote
 }

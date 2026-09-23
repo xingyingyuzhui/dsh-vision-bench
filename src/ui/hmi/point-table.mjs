@@ -45,6 +45,7 @@ export function renderPointThead(el, t, ctx) {
       renderTh('alarm', t('alarmOn') || '告警'),
       renderTh('min', t('ptAlarmMin')),
       renderTh('max', t('ptAlarmMax')),
+      renderTh('deadband', t('ptAlarmDeadband')),
       showOps
         ? el(
             'th',

@@ -217,6 +217,8 @@ export const COPY_EN = {
     ptUnit: 'Unit',
     ptAlarmMin: 'Alarm low',
     ptAlarmMax: 'Alarm high',
+    ptAlarmDeadband: 'Alarm deadband',
+    ptAlarmDeadbandHint: 'Empty = 1% of the threshold; 0 = no hysteresis',
     savePoint: 'Save',
     cancelEdit: 'Cancel edit',
     editing: 'Editing',

@@ -229,8 +229,8 @@ test('suppress-window re-fire via commitPollResult yields distinct eventIds; red
     return commitPollResult(home, cwd, {
       baseConfigVersion: ws.modbus.configVersion,
       pointValues: [{ key: 'p1', pointId: 'p1', raw, value: raw, ok: true, at: Date.now() }],
-      pollingByConnection: {
-        c1: { enabled: true, intervalMs: 1000, lastAt: Date.now(), lastOk: true, error: '' },
+      pollingRuntime: {
+        c1: { lastAt: Date.now(), lastOk: true, error: '' },
       },
     })
   }

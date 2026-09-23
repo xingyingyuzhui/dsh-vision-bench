@@ -1,7 +1,8 @@
 // @ts-check
 import { decodeValue, isWritableFunction, pointIdOf } from './point-math.mjs'
+import { coercedAlarmDeadband, finiteOrNull, parseAlarmDeadband } from './point-alarm-field.mjs'
 
-export { pointIdOf, isWritableFunction, decodeValue }
+export { pointIdOf, isWritableFunction, decodeValue, parseAlarmDeadband }
 
 export const MAX_POINTS = 256
 export const MAX_VALUES = 512
@@ -86,12 +87,6 @@ export const writeTargetOf = (/** @type {any} */ fn) => {
   return target ? { writable: true, ...target } : { writable: false, single: 0, multi: 0, kind: '', maxMulti: 0 }
 }
 
-const finiteOrNull = (/** @type {any} */ value) => {
-  if (value === null || value === undefined || value === '') return null
-  const n = Number(value)
-  return Number.isFinite(n) ? n : null
-}
-
 /** @param {any} input */
 export const normalizePoint = (input) => {
   const raw = input && typeof input === 'object' ? input : {}
@@ -120,6 +115,7 @@ export const normalizePoint = (input) => {
     trendEnabled: raw.monitorEnabled !== undefined ? raw.monitorEnabled === true : raw.trendEnabled === true,
     alarmMin: min,
     alarmMax: max,
+    alarmDeadband: coercedAlarmDeadband(raw.alarmDeadband),
   }
   return point
 }
@@ -356,6 +352,7 @@ export const normalizePointV3 = (input) => {
     unit,
     alarmMin: finiteOrNull(raw.alarmMin),
     alarmMax: finiteOrNull(raw.alarmMax),
+    alarmDeadband: coercedAlarmDeadband(raw.alarmDeadband),
     monitorEnabled: raw.monitorEnabled !== undefined ? raw.monitorEnabled === true : raw.trendEnabled === true,
     alarmEnabled:
       raw.alarmEnabled !== undefined ? raw.alarmEnabled === true : raw.alarmMin != null || raw.alarmMax != null,

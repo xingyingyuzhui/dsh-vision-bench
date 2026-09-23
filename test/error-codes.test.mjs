@@ -34,6 +34,7 @@ test('ERROR_CODES covers the Stage 4 unified set and is shared via facade', asyn
     'ENDPOINT_DRIFT',
     'PORT_IN_USE',
     'WRITE_OUTCOME_UNKNOWN',
+    'WRITE_BUSY',
     'WRITE_READBACK_MISMATCH',
     'IO_RUNTIME_UNAVAILABLE',
   ]

@@ -14,26 +14,14 @@ import {
   sanitizeIoError,
 } from '../../domain/modbus/io-contract.mjs'
 import { killProcessTree } from '../process/run-command.mjs'
+import { settlePending } from './io-broker-settle.mjs'
 
 const DEFAULT_WORKER = join(dirname(fileURLToPath(import.meta.url)), '../../../runtime/vision-io-worker.mjs')
+/** Driver timeout and this deadline used to be equal, so the broker cancel closed the shared port before the driver could report MODBUS_TIMEOUT. */
+export const BROKER_GRACE_MS = 1500
 const OUTBOUND_CAP = 32
 const RESTART_WINDOW_MS = 60_000
 const STDERR_CAP = 4000
-
-const settlePending = (entry, result) => {
-  if (!entry || entry.settled) return
-  entry.settled = true
-  if (entry.timer) clearTimeout(entry.timer)
-  if (entry.abortCleanup) entry.abortCleanup()
-  if (result.ok) entry.resolve(result)
-  else {
-    const error = result.error || ioError('IO_RUNTIME_CRASHED', 'I/O 运行时失败')
-    if (result.frames) error.frames = result.frames
-    if (result.transactionId) error.transactionId = result.transactionId
-    if (result.durationMs != null) error.durationMs = result.durationMs
-    entry.reject(error)
-  }
-}
 
 export function createVisionIoBroker(options = {}) {
   const workerPath = options.workerPath || DEFAULT_WORKER
@@ -198,6 +186,12 @@ export function createVisionIoBroker(options = {}) {
         return
       }
       child = proc
+      proc.stdin.on('error', (error) => {
+        if (workerEpoch !== epoch) return
+        lastError = ioError('IO_RUNTIME_UNAVAILABLE', String((error && error.message) || error))
+        killWorker(lastError)
+      })
+      if (typeof options.onWorker === 'function') options.onWorker(proc)
       stdoutBuf = ''
       stderrTail = ''
       draining = false
@@ -294,7 +288,7 @@ export function createVisionIoBroker(options = {}) {
       throw ioError('IO_BACKPRESSURE', 'I/O 队列已满')
     }
     const id = payload.id || nextId()
-    const timeoutMs = clampTimeoutMs(opts.timeoutMs, payload.timeoutMs || 8000)
+    const timeoutMs = clampTimeoutMs(opts.timeoutMs, payload.timeoutMs || 8000) + BROKER_GRACE_MS
     const signal = opts.signal
     const epoch = workerEpoch
     return new Promise((resolve, reject) => {

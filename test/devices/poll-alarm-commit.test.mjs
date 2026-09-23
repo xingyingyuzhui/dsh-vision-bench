@@ -46,8 +46,8 @@ test('commitPollResult computes alarmActive and returns fired only after success
   const committed = await commitPollResult(home, cwd, {
     baseConfigVersion: seeded.modbus.configVersion,
     pointValues: [{ key: 'p1', pointId: 'p1', raw: 90, value: 90, ok: true, at: Date.now() }],
-    pollingByConnection: {
-      c1: { enabled: true, intervalMs: 1000, lastAt: Date.now(), lastOk: true, error: '' },
+    pollingRuntime: {
+      c1: { lastAt: Date.now(), lastOk: true, error: '' },
     },
   })
   assert.equal(committed.ok, true)
@@ -63,8 +63,8 @@ test('commitPollResult computes alarmActive and returns fired only after success
   const again = await commitPollResult(home, cwd, {
     baseConfigVersion: ws.modbus.configVersion,
     pointValues: [{ key: 'p1', pointId: 'p1', raw: 91, value: 91, ok: true, at: Date.now() }],
-    pollingByConnection: {
-      c1: { enabled: true, intervalMs: 1000, lastAt: Date.now(), lastOk: true, error: '' },
+    pollingRuntime: {
+      c1: { lastAt: Date.now(), lastOk: true, error: '' },
     },
   })
   assert.equal(again.ok, true)
@@ -91,8 +91,8 @@ test('config drift commit suppresses fired notifications and skips stale value m
   const drifted = await commitPollResult(home, cwd, {
     baseConfigVersion: Number(seeded.modbus.configVersion) - 1,
     pointValues: [{ key: 'p1', pointId: 'p1', raw: 99, value: 99, ok: true, at: Date.now() }],
-    pollingByConnection: {
-      c1: { enabled: true, intervalMs: 1000, lastAt: Date.now(), lastOk: true, error: '' },
+    pollingRuntime: {
+      c1: { lastAt: Date.now(), lastOk: true, error: '' },
     },
   })
   assert.equal(drifted.ok, true)
@@ -127,8 +127,8 @@ test('deleted alarm point is pruned from alarmActive on next poll commit', async
   const committed = await commitPollResult(home, cwd, {
     baseConfigVersion: seeded.modbus.configVersion,
     pointValues: [{ key: 'p1', pointId: 'p1', raw: 90, value: 90, ok: true, at: Date.now() }],
-    pollingByConnection: {
-      c1: { enabled: true, intervalMs: 1000, lastAt: Date.now(), lastOk: true, error: '' },
+    pollingRuntime: {
+      c1: { lastAt: Date.now(), lastOk: true, error: '' },
     },
   })
   assert.equal(committed.ok, true)

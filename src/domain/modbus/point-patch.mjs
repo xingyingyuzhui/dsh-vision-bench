@@ -1,5 +1,5 @@
 // @ts-check
-import { AREA_BY_FN, FN_BY_AREA, VALID_AREAS } from './point-model.mjs'
+import { AREA_BY_FN, FN_BY_AREA, VALID_AREAS, parseAlarmDeadband } from './point-model.mjs'
 import { ERROR_CODES } from './errors.mjs'
 
 const PATCHABLE = new Set([
@@ -14,6 +14,7 @@ const PATCHABLE = new Set([
   'alarmEnabled',
   'alarmMin',
   'alarmMax',
+  'alarmDeadband',
 ])
 
 const FROZEN = ['id', 'connectionId', 'deviceId']
@@ -70,6 +71,20 @@ export function applyPointPatch(existingPoint, patch) {
 
   const alias = validateMonitorAlias(src)
   if (!alias.ok) return alias
+  /** @type {number | null | undefined} */
+  let deadband
+  const hasDeadband = Object.prototype.hasOwnProperty.call(src, 'alarmDeadband') && src.alarmDeadband !== undefined
+  if (hasDeadband) {
+    const parsed = parseAlarmDeadband(src.alarmDeadband)
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        errorCode: ERROR_CODES.INVALID_FIELD,
+        error: 'alarmDeadband 必须是非负有限数或空',
+      }
+    }
+    deadband = parsed.value
+  }
   const hasMonitor = alias.hasMonitor
   const hasTrendAlias = alias.hasTrendAlias
 
@@ -100,6 +115,7 @@ export function applyPointPatch(existingPoint, patch) {
   if (src.alarmEnabled !== undefined) {
     next.alarmEnabled = src.alarmEnabled === true
   }
+  if (hasDeadband) next.alarmDeadband = deadband
   // Always mirror legacy field for UI compatibility
   if (next.monitorEnabled !== undefined) {
     next.trendEnabled = next.monitorEnabled === true

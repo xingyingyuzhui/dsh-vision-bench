@@ -123,6 +123,20 @@ export function renderNewPointRow(el, t, ctx) {
     ),
     el(
       'td',
+      { className: 'dvb-col-deadband' },
+      el('input', {
+        className: 'dvb-input dvb-input-mono',
+        type: 'number',
+        min: 0,
+        step: 'any',
+        placeholder: t('ptAlarmDeadbandHint'),
+        title: t('ptAlarmDeadbandHint'),
+        value: newPointDraft.alarmDeadband,
+        onChange: (e) => setNewPointDraft((prev) => ({ ...prev, alarmDeadband: e.target.value })),
+      }),
+    ),
+    el(
+      'td',
       { className: 'dvb-col-ops' },
       el(
         'div',
