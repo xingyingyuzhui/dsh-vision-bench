@@ -111,7 +111,7 @@ export function validateAgentToolArgs(args, _opts = {}) {
     const hasAlarmId = typeof args?.alarmId === 'string' && args.alarmId.trim()
     const hasTrendKey = typeof args?.trendKey === 'string' && args.trendKey.trim()
     if (action === 'alarm' && hasAlarmId) {
-      if (!cid) missing.push('connectionId')
+      // The Host resolves a lone alarmId and reports ambiguity with the same envelope.
     } else if (action === 'trend' && hasTrendKey) {
       const parsed = parseTrendKey(args.trendKey)
       if (!parsed.ok) {

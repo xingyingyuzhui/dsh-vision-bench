@@ -20,12 +20,11 @@ test('vision_bench production module does not import the workspace store or host
   assert.equal(sources.some((item) => item.includes('host-command-service')), false)
 })
 
-test('alarmId-only preflight is schema-level and does not prove uniqueness', () => {
-  const miss = validateAgentToolArgs({ action: 'alarm', alarmId: 'shared' }, { pack: null })
+test('alarmId-only preflight defers uniqueness to the Host', () => {
+  assert.equal(validateAgentToolArgs({ action: 'alarm', alarmId: 'shared' }, { pack: null }), null)
+  const miss = validateAgentToolArgs({ action: 'alarm' }, { pack: null })
   assert.ok(miss)
-  assert.equal(miss.errorCode, 'TARGET_REQUIRED')
   assert.deepEqual(miss.missingFields, ['connectionId'])
-  assert.match(String(miss.hint || ''), /connectionId/)
 })
 
 test('Host alarmId without a unique connection returns the preflight error shape', async (t) => {
@@ -72,6 +71,11 @@ test('Host alarmId without a unique connection returns the preflight error shape
     { source: 'user', sessionId: 's1' },
   )
   assert.equal(ok.ok, true, ok.error)
+  const unique = await runVisionBench(home, { action: 'alarm', alarmId: 'shared' }, cwd, {
+    source: 'user',
+    sessionId: 's1',
+  })
+  assert.equal(unique.ok, true, unique.error)
 })
 
 test('Host trendKey that cannot be resolved returns missingFields and hint', async (t) => {
