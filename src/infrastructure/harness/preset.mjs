@@ -4,6 +4,18 @@ import {
   loadOfficialPersonaConfig,
   resolveShippedStandardDir,
 } from './dsh-contract.mjs'
+import {
+  AGENT_PLUGIN_SPEC,
+  HOST_PLUGIN_NAME,
+  PRESET_DESCRIPTION,
+  PRESET_ID,
+  PRESET_TITLE,
+  REBUILD_INSTRUCTIONS_DECLARATIVE,
+  activateVisionPresetDeclaration,
+  getDeclarationState,
+  isDeclarativeRegistry,
+  userPresetDir,
+} from './preset-declaration.mjs'
 import { validateManagedVisionComposition } from './preset-validate.mjs'
 import {
   MARKER,
@@ -57,18 +69,22 @@ export async function resolveOfficialHealthConfig() {
   }
 }
 
-export const PRESET_ID = 'vision-bench'
-export const PRESET_TITLE = 'Vision模式'
-const HOST_PLUGIN_NAME = 'dsh-vision-bench'
+export {
+  AGENT_PLUGIN_SPEC,
+  HOST_PLUGIN_NAME,
+  PRESET_ID,
+  PRESET_TITLE,
+  REBUILD_INSTRUCTIONS_DECLARATIVE,
+  getDeclarationState,
+  isDeclarativeRegistry,
+  userPresetDir,
+}
 
 export { LEGACY_VISION_PERSONAS, PRESET_PERSONA, STANDARD_PERSONA, VISION_GUIDANCE }
 
-/** Preset composition `name` — a package subpath, not the host plugin id. */
-export const AGENT_PLUGIN_SPEC = 'dsh-vision-bench/agent'
-
 export const PRESET_METADATA = [
   'name: ' + PRESET_TITLE,
-  'description: 标准编码能力，外加 Vision 调试与上位机接口：查询现场工程、编译、Modbus 读点和受控写点。',
+  'description: ' + PRESET_DESCRIPTION,
   '',
 ].join('\n')
 
@@ -89,7 +105,46 @@ export const ensurePresetOverlay = (dir, options = {}) =>
     rebuildInstructions: REBUILD_INSTRUCTIONS,
   })
 
+/**
+ * Health of the declarative (DSH 0.1.7+) registration: the roster row is the
+ * product, not a directory on disk.
+ *
+ * @param {import('./preset-declaration.mjs').DeclarationState} state
+ */
+function declarativePresetHealth(state) {
+  const base = {
+    id: PRESET_ID,
+    title: PRESET_TITLE,
+    via: state.via,
+    generation: state.at,
+    warning: state.migrationWarning,
+    backupDir: state.backupDir,
+    appliesOnNewSession: true,
+  }
+  if (state.phase === 'registered' && !state.error) {
+    return {
+      ...base,
+      ok: true,
+      error: '',
+      nextStep: '新建 Session 后生效。已打开的 Session 保持原 generation，不会热更新。',
+      unchanged: true,
+    }
+  }
+  return {
+    ...base,
+    ok: false,
+    error:
+      state.phase === 'pending'
+        ? 'Vision预设声明注册中（等待 agentPresets 服务）'
+        : state.error || 'Vision预设声明未生效',
+    nextStep: REBUILD_INSTRUCTIONS_DECLARATIVE,
+    unchanged: false,
+  }
+}
+
 export async function inspectPresetHealth(home, options = {}) {
+  const declaration = getDeclarationState()
+  if (declaration.mode === 'declarative') return declarativePresetHealth(declaration)
   const seed = getLastPresetSeed()
   const dir = userPresetDir(home)
   const composition = join(dir, 'agent.cordis.yml')
@@ -141,8 +196,6 @@ export async function inspectPresetHealth(home, options = {}) {
   }
 }
 
-export const userPresetDir = (home) => join(home, '.agent-presets', PRESET_ID)
-
 const inFlightSeeds = new Map()
 
 async function copyStandardSource(agentPresets, dir, options) {
@@ -177,6 +230,25 @@ async function copyStandardSource(agentPresets, dir, options) {
 }
 
 async function _seedVisionBenchPresetInternal(agentPresets, home, dir, options) {
+  // DSH 0.1.7+: the preset is a registered declaration, and the caller keeps
+  // the returned disposer (registration is process-local — a standalone script
+  // cannot seed a harness that is not its own process).
+  if (isDeclarativeRegistry(agentPresets)) {
+    const activation = await activateVisionPresetDeclaration(agentPresets, home, options)
+    const result = {
+      ok: activation.ok,
+      via: activation.via,
+      dir,
+      error: activation.ok ? '' : activation.error || 'Vision预设声明未生效',
+      migrated: activation.migration.migrated === true,
+      backupDir: activation.migration.backupDir || '',
+      dispose: activation.dispose,
+      rebuildHelp: activation.ok ? undefined : REBUILD_INSTRUCTIONS_DECLARATIVE,
+    }
+    const { dispose, ...recorded } = result
+    lastPresetSeed = recorded
+    return result
+  }
   const composition = join(dir, 'agent.cordis.yml')
   const marker = join(dir, MARKER)
   const finish = (result) => {

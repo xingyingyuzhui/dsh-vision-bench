@@ -72,7 +72,7 @@ Prefer rolling back the plugin `name@version` in the profile over relying on Des
 
 ## Contract pin
 
-`SUPPORTED_DSH_CONTRACT` remains `0.1.5-rc.1` until a measured lower bound is re-verified on release Desktop; local harness may be `0.1.6-alpha.1`.
+`SUPPORTED_DSH_CONTRACT` is `0.1.7-alpha.2`, re-measured against release Desktop `0.1.7-alpha.2` (declarative agent presets). The preset path is dual-track: DSH `0.1.5-rc.1`–`0.1.6` keep the `$DSH_HOME/.agent-presets` directory seed, `0.1.7+` uses `agentPresets.register()` declarations.
 
 ## Repro (automated slice)
 

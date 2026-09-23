@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.29.27
+
+- 适配 DSH 0.1.7 声明式 Agent 预设：Vision模式 经 `agentPresets.register()` 注册为 `vision-bench` 声明，重新出现在预设选择器（旧版本仍走目录式 seed）。
+- 预设子插件清单改为随包快照重述 0.1.7 `standard` 并追加 `dsh-vision-bench/agent` 工具行；漂移由 `scripts/gen-standard-preset-snapshot.mjs --check` 把关。
+- 旧目录式预设在声明通过 roster 校验后整体改名备份到 `.vision-bench.backup.<ISO>`，不删除用户文件；旧会话记录的 `vision-bench` 身份重启后可解析。
+- 契约钉升至 `0.1.7-alpha.2`（Desktop 实测基线）。
+
 ## 0.29.26
 
 - 共享发布/撤销时同层重复 deviceId 被明确拒绝并给出冲突明细，不再静默去重丢设备。
