@@ -288,7 +288,7 @@ export function visionBenchTool(home) {
     output: {
       schema: { type: 'object', additionalProperties: true },
       render(/** @type {any} */ _args, /** @type {any} */ value) {
-        return [{ type: 'text', text: JSON.stringify(value, null, 2) }]
+        return [{ type: 'text', text: JSON.stringify(value) }]
       },
     },
     timeoutMs: 620000,
