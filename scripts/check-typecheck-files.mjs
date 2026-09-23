@@ -15,6 +15,7 @@ export const CORE_TYPECHECK_DIRS = [
   'src/infrastructure/modbus',
   'src/infrastructure/process',
   'src/infrastructure/store',
+  'src/infrastructure/harness',
   'src/interfaces',
 ]
 

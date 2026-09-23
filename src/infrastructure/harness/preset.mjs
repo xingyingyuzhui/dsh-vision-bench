@@ -1,3 +1,4 @@
+// @ts-check
 import { join } from 'node:path'
 import { LEGACY_VISION_PERSONAS, PRESET_PERSONA, STANDARD_PERSONA, VISION_GUIDANCE } from './guidance.mjs'
 import {
@@ -28,6 +29,7 @@ import {
   _readFileSync,
   copyDirRecursive,
   isAlreadyExistsError,
+  thrownMessage,
   writeAtomic,
 } from './preset-transaction.mjs'
 import {
@@ -43,7 +45,20 @@ import {
 export { PRESET_BACKUP_FAILED, PRESET_WRITE_FAILED, PRESET_RESTORE_FAILED }
 export { parseCompositionDocument }
 
-/** @type {{ ok: boolean, error?: string }} */
+/**
+ * @typedef {{
+ *   ok: boolean,
+ *   error?: string,
+ *   rebuildHelp?: string,
+ *   unchanged?: boolean,
+ *   dir?: string,
+ *   via?: string,
+ *   backupDir?: string | null,
+ *   migrated?: boolean,
+ * }} PresetSeedRecord
+ * @typedef {{ dshPaths?: string[], personaConfig?: any, standardDir?: string, epoch?: number }} PresetCallOptions
+ */
+/** @type {PresetSeedRecord} */
 let lastPresetSeed = { ok: true }
 
 export function getLastPresetSeed() {
@@ -163,6 +178,7 @@ function declarativePresetHealth(state) {
   }
 }
 
+/** @param {string} home @param {PresetCallOptions} [options] */
 export async function inspectPresetHealth(home, options = {}) {
   const declaration = getDeclarationState()
   if (declaration.mode === 'declarative') {
@@ -173,8 +189,9 @@ export async function inspectPresetHealth(home, options = {}) {
   const dir = userPresetDir(home)
   const composition = join(dir, 'agent.cordis.yml')
   const ownership = _existsSync(dir) ? checkOwnership(dir) : { exists: false }
-  const generation = ownership.payload && ownership.payload.lastManagedAt ? String(ownership.payload.lastManagedAt) : ''
-  const fail = (error) => ({
+  const payload = 'payload' in ownership ? ownership.payload : undefined
+  const generation = payload && payload.lastManagedAt ? String(payload.lastManagedAt) : ''
+  const fail = (/** @type {string} */ error) => ({
     ok: false,
     id: PRESET_ID,
     title: PRESET_TITLE,
@@ -197,11 +214,14 @@ export async function inspectPresetHealth(home, options = {}) {
       if (parsed.errors && parsed.errors.length) {
         parseError = String(parsed.errors[0].message || parsed.errors[0])
       } else {
-        const contract = validateManagedVisionComposition(parsed.contents, personaConfig)
+        const contract = validateManagedVisionComposition(
+          /** @type {{ items?: unknown[] } | null | undefined} */ (parsed.contents),
+          personaConfig,
+        )
         if (!contract.ok) parseError = contract.error
       }
     } catch (error) {
-      parseError = String((error && error.message) || error)
+      parseError = thrownMessage(error)
     }
   } else if (!seed.error) {
     parseError = 'Vision预设尚未安装'
@@ -222,6 +242,7 @@ export async function inspectPresetHealth(home, options = {}) {
 
 const inFlightSeeds = new Map()
 
+/** @param {any} agentPresets @param {string} dir @param {PresetCallOptions} options */
 async function copyStandardSource(agentPresets, dir, options) {
   if (agentPresets && typeof agentPresets.copy === 'function') {
     try {
@@ -231,7 +252,7 @@ async function copyStandardSource(agentPresets, dir, options) {
       if (!isAlreadyExistsError(error)) {
         return {
           ok: false,
-          error: '从 standard 复制失败：' + String((error && error.message) || error),
+          error: '从 standard 复制失败：' + thrownMessage(error),
         }
       }
     }
@@ -240,7 +261,7 @@ async function copyStandardSource(agentPresets, dir, options) {
   try {
     standardDir = resolveShippedStandardDir(options.standardDir, options.dshPaths)
   } catch (error) {
-    return { ok: false, error: String((error && error.message) || error) }
+    return { ok: false, error: thrownMessage(error) }
   }
   if (!_existsSync(standardDir)) {
     return { ok: false, error: '找不到 DSH standard 预设: ' + standardDir }
@@ -249,10 +270,11 @@ async function copyStandardSource(agentPresets, dir, options) {
     copyDirRecursive(standardDir, dir)
     return { ok: true, via: 'shipped-standard', standardDir }
   } catch (error) {
-    return { ok: false, error: '复制 shipped standard 失败：' + String((error && error.message) || error) }
+    return { ok: false, error: '复制 shipped standard 失败：' + thrownMessage(error) }
   }
 }
 
+/** @param {any} agentPresets @param {string} home @param {string} dir @param {PresetCallOptions} options */
 async function _seedVisionBenchPresetInternal(agentPresets, home, dir, options) {
   // DSH 0.1.7+: the preset is a registered declaration, and the caller keeps
   // the returned disposer (registration is process-local — a standalone script
@@ -275,7 +297,7 @@ async function _seedVisionBenchPresetInternal(agentPresets, home, dir, options) 
   }
   const composition = join(dir, 'agent.cordis.yml')
   const marker = join(dir, MARKER)
-  const finish = (result) => {
+  const finish = (/** @type {PresetSeedRecord} */ result) => {
     lastPresetSeed = result && typeof result === 'object' ? result : { ok: false, error: String(result) }
     return lastPresetSeed
   }
@@ -314,7 +336,7 @@ async function _seedVisionBenchPresetInternal(agentPresets, home, dir, options) 
     } catch (error) {
       return finish({
         ok: false,
-        error: String((error && error.message) || error),
+        error: thrownMessage(error),
         rebuildHelp: REBUILD_INSTRUCTIONS,
       })
     }
@@ -322,6 +344,7 @@ async function _seedVisionBenchPresetInternal(agentPresets, home, dir, options) 
   return finish(ensurePresetOverlay(dir, { personaConfig }))
 }
 
+/** @param {any} agentPresets @param {string} home @param {PresetCallOptions} [options] */
 export async function seedVisionBenchPreset(agentPresets, home, options = {}) {
   const dir = userPresetDir(home)
   if (inFlightSeeds.has(dir)) {
@@ -351,5 +374,5 @@ export const _internal = {
   templateFieldsMatch,
   writeAtomic,
   copyDirRecursive,
-  isVisionToolRow: (id, name) => isVisionToolRow(id, name, HOST_PLUGIN_NAME, AGENT_PLUGIN_SPEC),
+  isVisionToolRow: (/** @type {unknown} */ id, /** @type {unknown} */ name) => isVisionToolRow(id, name, HOST_PLUGIN_NAME, AGENT_PLUGIN_SPEC),
 }

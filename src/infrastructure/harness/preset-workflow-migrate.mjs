@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Rewrite obsolete DSH workflow-worker-thread rows to workflow-ptc.
  * Cordis `cordis:group` stores children under `config:` as a YAML sequence.
@@ -14,7 +15,7 @@ export const CURRENT_WORKFLOW_PTC = '@deepseek-ai/dsh-workflow-ptc'
 export function migrateObsoleteWorkflowWorkerRows(seq) {
   if (!seq || !Array.isArray(seq.items)) return false
   let changed = false
-  const visit = (items) => {
+  const visit = (/** @type {unknown} */ items) => {
     if (!Array.isArray(items)) return
     for (const item of items) {
       if (!item || typeof item.get !== 'function') continue
