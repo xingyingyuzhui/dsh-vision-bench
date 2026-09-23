@@ -1,5 +1,6 @@
 // @ts-check
 
+import { translate } from '../../i18n/translate.mjs'
 import { createUseGraphCamera } from '../graph/graph-camera.mjs'
 import { computeNeighborhood } from '../graph/graph-focus.mjs'
 import { polylinePath, renderCommonSvgMarkers } from '../graph/graph-svg-primitives.mjs'
@@ -7,12 +8,32 @@ import { buildGraphFromProgramModel, layoutRuntimeProgramGraph } from './runtime
 
 export { buildGraphFromProgramModel, layoutRuntimeProgramGraph }
 
+const GRAPH = {
+  canvas: 'var(--dvb-bg-muted)',
+  surface: 'var(--dvb-bg-surface)',
+  muted: 'var(--dvb-bg-muted)',
+  border: 'var(--dvb-color-border)',
+  fg: 'var(--dvb-color-fg)',
+  fgMuted: 'var(--dvb-color-fg-muted)',
+  fgSubtle: 'var(--dvb-color-fg-subtle)',
+  info: 'var(--dvb-color-info)',
+  danger: 'var(--dvb-color-danger)',
+  success: 'var(--dvb-color-success)',
+  warning: 'var(--dvb-color-warning)',
+  brand: 'var(--dvb-color-brand)',
+  onAccent: 'var(--dsw-alias-bg-base,#fff)',
+}
+
+function tint(token, percent) {
+  return `color-mix(in srgb, ${token} ${percent}%, transparent)`
+}
+
 /**
  * Factory for RuntimeProgramGraph React component.
  *
  * @param {any} React
  */
-export function createRuntimeProgramGraph(React) {
+export function createRuntimeProgramGraph(React, t = (key, params) => translate('zh', key, params)) {
   const el = React.createElement
   const useGraphCamera = createUseGraphCamera(React)
 
@@ -72,7 +93,7 @@ export function createRuntimeProgramGraph(React) {
           width: '100%',
           height: '100%',
           overflow: 'hidden',
-          backgroundColor: 'var(--dvb-bg-canvas, #0d1117)',
+          backgroundColor: GRAPH.canvas,
           userSelect: 'none',
         },
         onPointerDown: camera.onPointerDown,
@@ -106,8 +127,8 @@ export function createRuntimeProgramGraph(React) {
                 height: c.h,
                 rx: 8,
                 ry: 8,
-                fill: 'rgba(22, 27, 34, 0.65)',
-                stroke: 'var(--dvb-border-subtle, #30363d)',
+                fill: GRAPH.muted,
+                stroke: GRAPH.border,
                 strokeWidth: 1,
               }),
               el('rect', {
@@ -117,14 +138,14 @@ export function createRuntimeProgramGraph(React) {
                 height: c.headerH,
                 rx: 8,
                 ry: 8,
-                fill: 'rgba(33, 38, 45, 0.85)',
+                fill: GRAPH.surface,
               }),
               el(
                 'text',
                 {
                   x: c.x + 10,
                   y: c.y + 17,
-                  fill: 'var(--dvb-text-secondary, #8b949e)',
+                  fill: GRAPH.fgMuted,
                   fontSize: 11,
                   fontWeight: 600,
                   fontFamily: 'monospace',
@@ -139,28 +160,28 @@ export function createRuntimeProgramGraph(React) {
             const isActive = activeEdgeSet.has(edge.id)
             const isDimmed = selectedId && !isSelected
 
-            let strokeColor = 'var(--dvb-border-subtle, #3b4252)'
+            let strokeColor = GRAPH.border
             let markerUrl = 'url(#dvb-arrow-default)'
             let strokeWidth = 1.5
             let strokeDash = undefined
 
             if (isActive) {
-              strokeColor = 'var(--dvb-accent-cyan, #58a6ff)'
+              strokeColor = GRAPH.info
               markerUrl = 'url(#dvb-arrow-active)'
               strokeWidth = 2.5
             } else if (edge.kind === 'write') {
-              strokeColor = 'var(--dvb-accent-red, #f85149)'
+              strokeColor = GRAPH.danger
               markerUrl = 'url(#dvb-arrow-data-write)'
             } else if (edge.kind === 'read') {
-              strokeColor = 'var(--dvb-accent-green, #3fb950)'
+              strokeColor = GRAPH.success
               markerUrl = 'url(#dvb-arrow-data-read)'
               strokeDash = '4,3'
             } else if (isSelected) {
-              strokeColor = 'var(--dvb-accent-gold, #e3b341)'
+              strokeColor = GRAPH.warning
               markerUrl = 'url(#dvb-arrow-highlight)'
               strokeWidth = 2
             } else if (isDimmed) {
-              strokeColor = 'rgba(255, 255, 255, 0.08)'
+              strokeColor = GRAPH.fgSubtle
               markerUrl = 'url(#dvb-arrow-dim)'
             }
 
@@ -184,27 +205,27 @@ export function createRuntimeProgramGraph(React) {
             const isException = node.id === exceptionNodeId
             const liveValue = valuesByNode[node.id]
 
-            let borderColor = 'var(--dvb-border-subtle, #30363d)'
-            let bgColor = node.kind === 'variable' ? '#161b22' : '#21262d'
+            let borderColor = GRAPH.border
+            let bgColor = node.kind === 'variable' ? GRAPH.muted : GRAPH.surface
             let strokeWidth = 1.5
 
             if (isException) {
-              borderColor = 'var(--dvb-accent-red, #f85149)'
-              bgColor = 'rgba(248, 81, 73, 0.25)'
+              borderColor = GRAPH.danger
+              bgColor = tint(GRAPH.danger, 25)
               strokeWidth = 2.5
             } else if (isPC) {
-              borderColor = 'var(--dvb-accent-cyan, #58a6ff)'
-              bgColor = 'rgba(56, 139, 253, 0.25)'
+              borderColor = GRAPH.info
+              bgColor = tint(GRAPH.info, 25)
               strokeWidth = 2.5
             } else if (isWatchpointHit) {
-              borderColor = 'var(--dvb-accent-purple, #bc8cff)'
-              bgColor = 'rgba(188, 140, 255, 0.25)'
+              borderColor = GRAPH.brand
+              bgColor = tint(GRAPH.brand, 25)
               strokeWidth = 2.5
             } else if (inStack) {
-              borderColor = 'var(--dvb-accent-cyan, #58a6ff)'
+              borderColor = GRAPH.info
               strokeWidth = 2
             } else if (isSelected) {
-              borderColor = 'var(--dvb-accent-gold, #e3b341)'
+              borderColor = GRAPH.warning
               strokeWidth = 2
             }
 
@@ -237,7 +258,7 @@ export function createRuntimeProgramGraph(React) {
                 {
                   x: node.x + 10,
                   y: node.y + 20,
-                  fill: isPC ? '#ffffff' : 'var(--dvb-text-primary, #c9d1d9)',
+                  fill: GRAPH.fg,
                   fontSize: 12,
                   fontWeight: isPC || inStack ? 700 : 500,
                   fontFamily: 'monospace',
@@ -250,7 +271,7 @@ export function createRuntimeProgramGraph(React) {
                 {
                   x: node.x + 10,
                   y: node.y + 36,
-                  fill: 'var(--dvb-text-muted, #8b949e)',
+                  fill: GRAPH.fgMuted,
                   fontSize: 10,
                 },
                 liveValue != null ? `${node.label} = ${liveValue}` : node.detail || '',
@@ -260,22 +281,22 @@ export function createRuntimeProgramGraph(React) {
                 el(
                   'g',
                   { transform: `translate(${node.x + node.w - 32}, ${node.y + 6})` },
-                  el('rect', { width: 24, height: 14, rx: 3, fill: '#1f6feb' }),
-                  el('text', { x: 12, y: 10, fill: '#fff', fontSize: 9, fontWeight: 700, textAnchor: 'middle' }, 'PC'),
+                  el('rect', { width: 24, height: 14, rx: 3, fill: GRAPH.info }),
+                  el('text', { x: 12, y: 10, fill: GRAPH.onAccent, fontSize: 9, fontWeight: 700, textAnchor: 'middle' }, 'PC'),
                 ),
               hasBreakpoint &&
                 el('circle', {
                   cx: node.x + 8,
                   cy: node.y + 8,
                   r: 4,
-                  fill: '#f85149',
+                  fill: GRAPH.danger,
                 }),
               isWatchpointHit &&
                 el(
                   'g',
                   { transform: `translate(${node.x + node.w - 32}, ${node.y + 6})` },
-                  el('rect', { width: 24, height: 14, rx: 3, fill: '#8957e5' }),
-                  el('text', { x: 12, y: 10, fill: '#fff', fontSize: 8, fontWeight: 700, textAnchor: 'middle' }, 'WP'),
+                  el('rect', { width: 24, height: 14, rx: 3, fill: GRAPH.brand }),
+                  el('text', { x: 12, y: 10, fill: GRAPH.onAccent, fontSize: 8, fontWeight: 700, textAnchor: 'middle' }, 'WP'),
                 ),
             )
           }),
@@ -299,19 +320,19 @@ export function createRuntimeProgramGraph(React) {
           {
             type: 'button',
             className: 'dvb-btn-icon',
-            title: '适应视口',
+            title: t('graphFit'),
             onClick: camera.fit,
             style: {
-              background: 'rgba(33, 38, 45, 0.8)',
-              border: '1px solid var(--dvb-border-subtle, #30363d)',
-              color: '#c9d1d9',
+              background: GRAPH.surface,
+              border: `1px solid ${GRAPH.border}`,
+              color: GRAPH.fg,
               padding: '4px 8px',
               borderRadius: 4,
               fontSize: 11,
               cursor: 'pointer',
             },
           },
-          '适应视口',
+          t('graphFit'),
         ),
       ),
     )

@@ -29,8 +29,9 @@ function kv(el, label, value) {
 /**
  * @param {any} React
  */
-export function createFramesDetailDrawer(React) {
+export function createFramesDetailDrawer(React, t) {
   const el = React.createElement
+  const label = (key, params) => (typeof t === 'function' ? t(key, params) || key : key)
   return function FramesDetailDrawer({ frame, connections, sendToAgent }) {
     if (!frame) {
       return el(
@@ -39,11 +40,11 @@ export function createFramesDetailDrawer(React) {
         el(
           'div',
           { className: 'dvb-frames-detail-head' },
-          el('span', { className: 'dvb-frames-detail-title' }, '报文详情'),
+          el('span', { className: 'dvb-frames-detail-title' }, label('framesDetailTitle')),
         ),
         renderEmptyState(el, {
           kind: 'empty',
-          detail: '选择一条报文查看详情',
+          detail: label('framesDetailEmpty'),
           className: 'dvb-frames-detail-empty',
         }),
       )
@@ -59,14 +60,14 @@ export function createFramesDetailDrawer(React) {
       el(
         'div',
         { className: 'dvb-frames-detail-head' },
-        el('span', { className: 'dvb-frames-detail-title' }, '报文详情'),
+        el('span', { className: 'dvb-frames-detail-title' }, label('framesDetailTitle')),
         el(
           'button',
           {
             type: 'button',
             className: 'dvb-btn dvb-btn-sm dvb-ai-btn',
-            title: '让 Agent 分析此报文',
-            'aria-label': '让 Agent 分析报文',
+            title: label('framesAgentTitle'),
+            'aria-label': label('framesAgentLabel'),
             onClick() {
               sendToAgent?.(frame)
             },
@@ -74,29 +75,29 @@ export function createFramesDetailDrawer(React) {
           'AI',
         ),
       ),
-      kv(el, '时间', formatFrameClock(frame.t || frame.at)),
-      kv(el, '端口', formatPortName(frame, connections)),
+      kv(el, label('framesTime'), formatFrameClock(frame.t || frame.at)),
+      kv(el, label('framesPort'), formatPortName(frame, connections)),
       kv(
         el,
-        '方向',
-        el('span', { className: 'dvb-frames-dir', 'data-dir': rx ? 'rx' : 'tx' }, rx ? 'RX 接收' : 'TX 发送'),
+        label('framesDir'),
+        el('span', { className: 'dvb-frames-dir', 'data-dir': rx ? 'rx' : 'tx' }, rx ? label('framesRx') : label('framesTx')),
       ),
-      kv(el, '长度', `${frameByteCount(frame)} 字节`),
+      kv(el, label('framesBytes'), label('framesLen', { n: frameByteCount(frame) })),
       el('div', { className: 'dvb-frames-box-label' }, 'HEX'),
       el(
         'div',
         { className: 'dvb-frames-box' },
         el('pre', { className: 'dvb-frames-pre' }, hexView || '—'),
-        el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: () => copyText(hexView) }, '复制'),
+        el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: () => copyText(hexView) }, label('framesCopy')),
       ),
       el('div', { className: 'dvb-frames-box-label' }, 'Text (UTF-8)'),
       el(
         'div',
         { className: 'dvb-frames-box' },
         el('pre', { className: 'dvb-frames-pre' }, textView || '—'),
-        el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: () => copyText(textView) }, '复制'),
+        el('button', { type: 'button', className: 'dvb-btn dvb-btn-sm', onClick: () => copyText(textView) }, label('framesCopy')),
       ),
-      el('div', { className: 'dvb-hint' }, 'Text 为容错预览，原始字节以 HEX 为准。'),
+      el('div', { className: 'dvb-hint' }, label('framesTextHint')),
     )
   }
 }

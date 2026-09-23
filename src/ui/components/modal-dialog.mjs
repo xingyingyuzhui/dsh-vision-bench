@@ -1,8 +1,6 @@
-function resolveI18n(t, key, fallback) {
-  if (typeof t !== 'function') return fallback
-  const val = t(key)
-  if (!val || val === key) return fallback
-  return val
+function resolveI18n(t, key) {
+  if (typeof t !== 'function') return key
+  return t(key) || key
 }
 
 function renderDialogIcon(el, kind) {
@@ -117,48 +115,57 @@ export function renderModalDialog(el, t, props) {
     onConfirm,
     onCancel,
     onClose = onCancel || onConfirm,
-    maskClosable = true,
+    maskClosable: maskClosableProp,
     width,
     loading = false,
     confirmLoading = false,
+    confirmDisabled = false,
+    showIcon = true,
+    maskClassName = '',
+    dialogClassName = '',
     titleId,
     confirmButtonRef,
+    cancelButtonRef,
     maskRef,
     children,
   } = props
 
+  const allowMaskClose = maskClosableProp !== undefined ? Boolean(maskClosableProp) : !danger
+
   const isErr = kind === 'err' || kind === 'error'
   const isWarn = kind === 'warn' || kind === 'warning'
   const defaultTitle = isErr
-    ? resolveI18n(t, 'dialogTitleError', '操作提示')
+    ? resolveI18n(t, 'dialogTitleError')
     : isWarn
-      ? resolveI18n(t, 'dialogTitleWarn', '警告')
+      ? resolveI18n(t, 'dialogTitleWarn')
       : kind === 'confirm'
-        ? resolveI18n(t, 'dialogTitleConfirm', '确认')
-        : resolveI18n(t, 'dialogTitleNotice', '提示')
+        ? resolveI18n(t, 'dialogTitleConfirm')
+        : resolveI18n(t, 'dialogTitleNotice')
   const finalTitle = title || defaultTitle
 
   const finalConfirmText =
-    confirmText || (danger ? resolveI18n(t, 'confirm', '确认') : resolveI18n(t, 'dialogOk', '确定'))
-  const finalCancelText = cancelText || resolveI18n(t, 'cancel', '取消')
+    confirmText || (danger ? resolveI18n(t, 'confirm') : resolveI18n(t, 'dialogOk'))
+  const finalCancelText = cancelText || resolveI18n(t, 'cancel')
 
   return el(
     'div',
     {
-      className: 'dvb-mask',
+      className: ['dvb-mask', maskClassName].filter(Boolean).join(' '),
       ref: maskRef,
       role: 'dialog',
       'aria-modal': 'true',
       'aria-labelledby': titleId,
       'aria-busy': loading ? 'true' : undefined,
       onClick() {
-        if (maskClosable && typeof onClose === 'function') onClose()
+        if (allowMaskClose && typeof onClose === 'function') onClose()
       },
     },
     el(
       'div',
       {
-        className: `dvb-dialog${isErr ? ' is-error' : isWarn ? ' is-warn' : ''}`,
+        className: [`dvb-dialog${isErr ? ' is-error' : isWarn ? ' is-warn' : ''}`, dialogClassName]
+          .filter(Boolean)
+          .join(' '),
         style: width ? { width } : null,
         onClick(e) {
           e.stopPropagation()
@@ -170,7 +177,7 @@ export function renderModalDialog(el, t, props) {
         el(
           'div',
           { className: 'dvb-dialog-title-wrap' },
-          renderDialogIcon(el, kind),
+          showIcon ? renderDialogIcon(el, kind) : null,
           el('span', { className: 'dvb-dialog-title', id: titleId }, finalTitle),
         ),
         onClose
@@ -180,7 +187,7 @@ export function renderModalDialog(el, t, props) {
                 type: 'button',
                 className: 'dvb-dialog-close',
                 disabled: loading,
-                'aria-label': resolveI18n(t, 'pickerClose', '关闭'),
+                'aria-label': resolveI18n(t, 'pickerClose'),
                 onClick() {
                   onClose()
                 },
@@ -212,6 +219,7 @@ export function renderModalDialog(el, t, props) {
               'button',
               {
                 type: 'button',
+                ref: cancelButtonRef,
                 className: 'dvb-btn dvb-dialog-btn dvb-dialog-btn-cancel',
                 disabled: loading,
                 onClick() {
@@ -229,7 +237,7 @@ export function renderModalDialog(el, t, props) {
             ref: confirmButtonRef,
             'aria-busy': confirmLoading ? 'true' : undefined,
             className: `dvb-btn dvb-dialog-btn ${danger ? 'dvb-dialog-btn-danger dvb-btn-danger-solid' : 'dvb-dialog-btn-primary dvb-btn-primary'}`,
-            disabled: loading || confirmLoading,
+            disabled: loading || confirmLoading || confirmDisabled,
             onClick() {
               if (typeof onConfirm === 'function') onConfirm()
               else if (typeof onClose === 'function') onClose()
@@ -240,6 +248,50 @@ export function renderModalDialog(el, t, props) {
       ),
     ),
   )
+}
+
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'textarea:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',')
+
+function tabbableNodes(root) {
+  if (!root || typeof root.querySelectorAll !== 'function') return []
+  return Array.from(root.querySelectorAll(FOCUSABLE_SELECTOR)).filter((node) => {
+    if (node.closest && node.closest('[hidden]')) return false
+    if (node.getAttribute && node.getAttribute('aria-hidden') === 'true') return false
+    const style = node.style
+    if (style && (style.display === 'none' || style.visibility === 'hidden')) return false
+    return true
+  })
+}
+
+let trappingTab = false
+
+function trapTab(event, root) {
+  if (trappingTab || !root || event.key !== 'Tab') return
+  const items = tabbableNodes(root)
+  if (!items.length) {
+    event.preventDefault?.()
+    return
+  }
+  const active = root.ownerDocument && root.ownerDocument.activeElement
+  const first = items[0]
+  const last = items[items.length - 1]
+  const index = items.indexOf(active)
+  const wrapTo = event.shiftKey ? (index <= 0 ? last : null) : index < 0 || index === items.length - 1 ? first : null
+  if (!wrapTo) return
+  event.preventDefault?.()
+  trappingTab = true
+  try {
+    wrapTo.focus?.()
+  } finally {
+    trappingTab = false
+  }
 }
 
 let fallbackDialogId = 0
@@ -258,6 +310,7 @@ export function createModalDialog(React, t) {
     const open = Boolean(props && props.open)
     const maskRef = React.useRef(null)
     const confirmRef = React.useRef(null)
+    const cancelRef = React.useRef(null)
     const restoreRef = React.useRef(null)
     const latestRef = React.useRef(props)
     const generated = typeof React.useId === 'function' ? React.useId() : `dvb-dialog-${(fallbackDialogId += 1)}`
@@ -277,7 +330,8 @@ export function createModalDialog(React, t) {
       restoreRef.current = previous && previous !== ownerDocument.body ? previous : null
 
       const current = latestRef.current || {}
-      const initial = (current.initialFocusRef && current.initialFocusRef.current) || confirmRef.current
+      const explicit = current.initialFocusRef && current.initialFocusRef.current
+      const initial = explicit || (current.danger ? cancelRef.current : null) || confirmRef.current
       if (initial && typeof initial.focus === 'function') {
         try {
           initial.focus()
@@ -285,6 +339,10 @@ export function createModalDialog(React, t) {
       }
 
       const onKeyDown = (event) => {
+        if (event.key === 'Tab') {
+          trapTab(event, node)
+          return
+        }
         if (event.key !== 'Escape') return
         event.preventDefault?.()
         event.stopPropagation?.()
@@ -307,7 +365,13 @@ export function createModalDialog(React, t) {
     }, [open])
 
     if (!props || !props.open) return null
-    return renderModalDialog(el, t, { ...props, titleId, maskRef, confirmButtonRef: confirmRef })
+    return renderModalDialog(el, t, {
+      ...props,
+      titleId,
+      maskRef,
+      confirmButtonRef: confirmRef,
+      cancelButtonRef: cancelRef,
+    })
   }
 }
 

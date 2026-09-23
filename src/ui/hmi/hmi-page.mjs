@@ -124,7 +124,7 @@ export function createHmiView(React, t, post) {
       workspace.focus,
       sessionId,
     )
-    const { resolveWrite } = usePendingWrites(
+    const { resolveWrite, resolvingId } = usePendingWrites(
       React,
       post,
       cwd,
@@ -374,7 +374,7 @@ export function createHmiView(React, t, post) {
       resetColWidth,
       totalTableWidth,
     })
-    const pendingPanel = renderPendingPanel(el, t, { pending, resolveWrite })
+    const pendingPanel = renderPendingPanel(el, t, { pending, resolveWrite, resolvingId })
     const tabBar = renderConnectionTabs(el, t, {
       pack: d.pack,
       pending,

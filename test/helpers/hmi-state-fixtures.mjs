@@ -157,6 +157,8 @@ export const t = (k) =>
     noPoints: '暂无点位',
     writing: '写入中…',
     quickWrite: '写入',
+    connAdd: '＋连接',
+    connBar: '全部连接',
   })[k] || k
 
 export const makePost = (mb = MB) => {

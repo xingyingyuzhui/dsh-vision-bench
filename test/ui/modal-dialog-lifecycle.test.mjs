@@ -69,6 +69,29 @@ test('an explicit initialFocusRef wins over the confirm button', () => {
   assert.equal(document.activeElement, ref.current, 'caller-provided ref receives focus')
 })
 
+function keyTab(node, shiftKey = false) {
+  node.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true, shiftKey }))
+}
+
+test('danger dialog focuses Cancel, and Tab loops inside the dialog', () => {
+  const view = open({ danger: true, kind: 'confirm', showCancel: true, onClose() {} })
+  const cancel = view.container.querySelector('.dvb-dialog-btn-cancel')
+  const confirm = view.confirm()
+  const close = view.container.querySelector('.dvb-dialog-close')
+  assert.equal(document.activeElement, cancel, 'cancel receives initial focus')
+
+  confirm.focus()
+  keyTab(confirm)
+  assert.equal(document.activeElement, close, 'Tab from the last control wraps to the first')
+
+  keyTab(close, true)
+  assert.equal(document.activeElement, confirm, 'Shift+Tab from the first control wraps to the last')
+
+  cancel.focus()
+  keyTab(cancel)
+  assert.equal(document.activeElement, cancel, 'Tab in the middle does not steal focus')
+})
+
 test('aria-labelledby points at the rendered title id', () => {
   const view = open()
   const mask = view.mask()

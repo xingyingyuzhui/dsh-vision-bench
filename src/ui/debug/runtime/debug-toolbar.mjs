@@ -33,37 +33,37 @@ export function createDebugToolbar(React, t) {
     const isFailed = status === 'failed' && !pendingControl
 
     // Status chip color
-    let statusColor = 'var(--dsw-alias-label-muted, #888)'
-    let statusText = '空闲'
+    let statusColor = 'var(--dsw-alias-label-tertiary, #888)'
+    let statusText = t('dbgIdle')
     if (pendingControl === 'starting' || status === 'starting') {
       statusColor = 'var(--dsw-alias-label-warning, #f59e0b)'
-      statusText = '正在启动…'
+      statusText = t('dbgStarting')
     } else if (pendingControl === 'pausing') {
       statusColor = 'var(--dsw-alias-label-warning, #f59e0b)'
-      statusText = '正在暂停…'
+      statusText = t('dbgPausing')
     } else if (pendingControl === 'stepping') {
       statusColor = 'var(--dsw-alias-label-warning, #f59e0b)'
-      statusText = '正在单步…'
+      statusText = t('dbgStepping')
     } else if (pendingControl === 'resetting') {
       statusColor = 'var(--dsw-alias-label-warning, #f59e0b)'
-      statusText = '正在复位…'
+      statusText = t('dbgResetting')
     } else if (pendingControl === 'stopping') {
       statusColor = 'var(--dsw-alias-label-warning, #f59e0b)'
-      statusText = '正在停止…'
+      statusText = t('dbgStopping')
     } else if (isRunning) {
       statusColor = 'var(--dsw-alias-label-success, #2e7d32)'
-      statusText = '运行中'
+      statusText = t('dbgRunning')
     } else if (isPaused) {
       statusColor = 'var(--dsw-alias-label-warning, #f59e0b)'
-      statusText = '已暂停'
+      statusText = t('dbgPaused')
     } else if (isFailed) {
       statusColor = 'var(--dsw-alias-label-danger, #c62828)'
-      statusText = '异常中断'
+      statusText = t('dbgFailed')
     }
 
     const filePart = location?.file ? String(location.file).split(/[\\/]/).pop() : ''
     const locShort = filePart ? `${filePart}${location.line ? `:${location.line}` : ''}` : location?.address || ''
-    const locText = isPaused && locShort ? `命中断点 · ${locShort}` : locShort || null
+    const locText = isPaused && locShort ? t('dbgHit', { loc: locShort }) : locShort || null
 
     return el(
       'div',
@@ -94,7 +94,7 @@ export function createDebugToolbar(React, t) {
                 disabled: isBusy,
                 onClick: () => onStart && onStart(),
               },
-              isStarting ? '启动中…' : '▶ 启动调试',
+              isStarting ? t('dbgStarting') : t('dbgStart'),
             )
           : null,
         isPaused
@@ -106,7 +106,7 @@ export function createDebugToolbar(React, t) {
                 disabled: isBusy,
                 onClick: () => onRun && onRun(),
               },
-              '▶ 继续',
+              t('dbgContinue'),
             )
           : null,
         isRunning
@@ -118,7 +118,7 @@ export function createDebugToolbar(React, t) {
                 disabled: isBusy,
                 onClick: () => onPause && onPause(),
               },
-              '⏸ 暂停',
+              t('dbgPause'),
             )
           : null,
         isPaused
@@ -127,11 +127,11 @@ export function createDebugToolbar(React, t) {
               {
                 type: 'button',
                 className: 'dvb-btn dvb-btn-sm',
-                title: '单步跳过 (Step Over)',
+                title: t('dbgStepOver'),
                 disabled: isBusy,
                 onClick: () => onStep && onStep('over'),
               },
-              '⤸ 单步跳过',
+              t('dbgStepOver'),
             )
           : null,
         isPaused
@@ -140,11 +140,11 @@ export function createDebugToolbar(React, t) {
               {
                 type: 'button',
                 className: 'dvb-btn dvb-btn-sm',
-                title: '单步进入 (Step Into)',
+                title: t('dbgStepInto'),
                 disabled: isBusy,
                 onClick: () => onStep && onStep('into'),
               },
-              '↓ 单步进入',
+              t('dbgStepInto'),
             )
           : null,
         isPaused
@@ -153,11 +153,11 @@ export function createDebugToolbar(React, t) {
               {
                 type: 'button',
                 className: 'dvb-btn dvb-btn-sm',
-                title: '单步跳出 (Step Out)',
+                title: t('dbgStepOut'),
                 disabled: isBusy,
                 onClick: () => onStep && onStep('out'),
               },
-              '↑ 单步跳出',
+              t('dbgStepOut'),
             )
           : null,
         !isIdle
@@ -169,7 +169,7 @@ export function createDebugToolbar(React, t) {
                 disabled: isBusy,
                 onClick: () => onStop && onStop(),
               },
-              '■ 停止',
+              t('dbgStop'),
             )
           : null,
       ),

@@ -1,4 +1,5 @@
 import { hasHarnessInput } from '../../common/agent-reference.mjs'
+import { renderEmptyState } from '../../components/empty-state.mjs'
 import { formatErrorMessage } from '../../common/ui-format.mjs'
 import { vendorUseVirtualizer, vendorVirtualizer } from '../../vendor/vendor-bridge.mjs'
 import { createDataTable } from '../../components/data-table.mjs'
@@ -14,6 +15,21 @@ export const FRAMES_TAB_ID = 'dsh-vision-bench:frames'
 
 const OVERS_CAN = 10
 
+export function framesQueryActive(page) {
+  if (String(page?.search || '').trim()) return true
+  const filters = page?.filters || {}
+  return Boolean(filters.deviceId || filters.functionCode || filters.status || filters.source || filters.direction)
+}
+
+export function renderFramesListEmpty(el, t, queryActive) {
+  return renderEmptyState(el, {
+    kind: 'empty',
+    className: 'dvb-frames-list-empty',
+    title: queryActive ? t('framesEmptyFiltered') : t('framesEmpty'),
+    detail: queryActive ? t('framesEmptyFilteredHint') : null,
+  })
+}
+
 // Task2/0.18.2: official React virtualizer adapter. `useViz` is stable across
 // renders (module scope), so this is a legal unconditional hook call.
 // lazy: vendor only exists after the ModuleLoader factory runs (or late global install in tests)
@@ -26,7 +42,7 @@ export function createFramesPage(React, t, post, hooks) {
   const DataTable = createDataTable(React)
   const FramesToolsToolbar = createFramesToolsToolbar(React, t)
   const FramesFilterToolbar = createFramesFilterToolbar(React, t)
-  const FramesDetailDrawer = createFramesDetailDrawer(React)
+  const FramesDetailDrawer = createFramesDetailDrawer(React, t)
   return function FramesPage(props) {
     const el = React.createElement
     const { colWidths, onStartResize, resetColWidth, totalTableWidth } = useFrameColWidths(React)
@@ -64,7 +80,7 @@ export function createFramesPage(React, t, post, hooks) {
             el(
               'div',
               null,
-              `${page.sel.port || page.sel.connectionId} ${t('framesDisconnected') || '已断开，已停止接收新报文。历史报文仍可查看。'}`,
+              `${page.sel.port || page.sel.connectionId} ${t('framesDisconnected')}`,
             ),
             el(
               'button',
@@ -75,7 +91,7 @@ export function createFramesPage(React, t, post, hooks) {
                   page.setSelection('all')
                 },
               },
-              t('framesPickOther') || '选择其他串口',
+              t('framesPickOther'),
             ),
           )
         : null,
@@ -98,7 +114,7 @@ export function createFramesPage(React, t, post, hooks) {
       page.error ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, formatErrorMessage(page.error)) : null,
       page.copied ? el('div', { className: 'dvb-hint' }, page.copied) : null,
       !page.filtered.length && vendorVirtualizer() === null
-        ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, '虚拟列表依赖未加载')
+        ? el('div', { className: 'dvb-msg', 'data-kind': 'err' }, t('framesVirtualMissing'))
         : null,
       el(
         'div',
@@ -106,7 +122,9 @@ export function createFramesPage(React, t, post, hooks) {
         el(
           'div',
           { className: 'dvb-frames-main' },
-          el(DataTable, {
+          !page.filtered.length
+            ? renderFramesListEmpty(el, t, framesQueryActive(page))
+            : el(DataTable, {
             data: page.filtered,
             columns: frameColumns,
             getRowId: (f) => String(f.frameId || f.id || ''),

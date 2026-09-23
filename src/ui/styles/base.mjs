@@ -315,3 +315,11 @@ export const BASE_CSS = [
   'body[' + ATTR + '] .dvb-badge.dvb-status[data-kind="live"]{color:var(--dsw-alias-label-success,#2e7d32)}',
   '@media (max-width:720px){body[' + ATTR + '] .dvb-split{grid-template-columns:1fr}}',
 ]
+
+const PAGE = `body[${ATTR}]`
+
+export function scopePageCss(css) {
+  const text = String(css || '').trim()
+  if (!text || text.startsWith(`${PAGE}{`)) return text
+  return `${PAGE}{${text}}`
+}

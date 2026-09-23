@@ -2,9 +2,14 @@ import { formatErrorMessage, pickJournal } from '../../common/ui-format.mjs'
 import { ERROR_CODES } from '../../../domain/modbus/errors.mjs'
 
 export function usePendingWrites(React, post, cwd, sessionId, setPending, setJournal, setWorkspace, setError, t) {
-  void React
   const sid = sessionId ? String(sessionId) : ''
+  const [resolvingId, setResolvingId] = React.useState('')
+  const resolvingRef = React.useRef('')
   function resolveWrite(id, approved) {
+    const requestId = String(id || '')
+    if (!requestId || resolvingRef.current) return
+    resolvingRef.current = requestId
+    setResolvingId(requestId)
     post('/dsh-vision-bench/modbus/write/approve', { cwd, sessionId: sid, id, approved }, 120000)
       .then((data) => {
         if (data && data.ok === false && data.errorCode === ERROR_CODES.SESSION_MISMATCH) {
@@ -28,6 +33,12 @@ export function usePendingWrites(React, post, cwd, sessionId, setPending, setJou
       .catch((err) => {
         setError(String(err?.message || t('fail')))
       })
+      .finally(() => {
+        if (resolvingRef.current === requestId) {
+          resolvingRef.current = ''
+          setResolvingId('')
+        }
+      })
   }
-  return { resolveWrite }
+  return { resolveWrite, resolvingId }
 }

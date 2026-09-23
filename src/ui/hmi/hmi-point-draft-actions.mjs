@@ -190,7 +190,7 @@ export function createHmiPointDraftActions(ctx, core) {
     const max = alarmOn && d.alarmMax !== '' ? Number(d.alarmMax) : null
     const deadband = parseAlarmDeadband(d.alarmDeadband)
     if (!deadband.ok) {
-      setError('告警回差必须是非负有限数或空')
+      setError(t('ptAlarmDeadbandInvalid'))
       return
     }
     if (alarmOn && min != null && max != null && !(min < max)) {
@@ -280,7 +280,7 @@ export function createHmiPointDraftActions(ctx, core) {
       const min = dr.alarmMin !== '' && dr.alarmMin != null ? Number(dr.alarmMin) : null
       const max = dr.alarmMax !== '' && dr.alarmMax != null ? Number(dr.alarmMax) : null
       if (!parseAlarmDeadband(dr.alarmDeadband).ok) {
-        setError('告警回差必须是非负有限数或空')
+        setError(t('ptAlarmDeadbandInvalid'))
         return
       }
       if (dr.alarmEnabled === true && min != null && max != null && !(min < max)) {

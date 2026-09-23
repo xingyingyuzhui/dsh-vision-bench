@@ -93,7 +93,7 @@ export function renderCommonSvgMarkers(React) {
         markerHeight: 6,
         orient: 'auto-start-reverse',
       },
-      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'var(--dvb-border-subtle, #3b4252)' }),
+      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'var(--dvb-color-border)' }),
     ),
     // Active (e.g. current call stack) arrow
     el(
@@ -107,7 +107,7 @@ export function renderCommonSvgMarkers(React) {
         markerHeight: 7,
         orient: 'auto-start-reverse',
       },
-      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'var(--dvb-accent-cyan, #58a6ff)' }),
+      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'var(--dvb-color-info)' }),
     ),
     // Highlighted edge arrow
     el(
@@ -121,7 +121,7 @@ export function renderCommonSvgMarkers(React) {
         markerHeight: 7,
         orient: 'auto-start-reverse',
       },
-      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'var(--dvb-accent-gold, #e3b341)' }),
+      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'var(--dvb-color-warning)' }),
     ),
     // Watchpoint hit / modified edge arrow
     el(
@@ -135,7 +135,7 @@ export function renderCommonSvgMarkers(React) {
         markerHeight: 7,
         orient: 'auto-start-reverse',
       },
-      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'var(--dvb-accent-purple, #bc8cff)' }),
+      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'var(--dvb-color-brand)' }),
     ),
     // Data read edge arrow
     el(
@@ -149,7 +149,7 @@ export function renderCommonSvgMarkers(React) {
         markerHeight: 6,
         orient: 'auto-start-reverse',
       },
-      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'var(--dvb-accent-green, #3fb950)' }),
+      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'var(--dvb-color-success)' }),
     ),
     // Data write edge arrow
     el(
@@ -163,7 +163,7 @@ export function renderCommonSvgMarkers(React) {
         markerHeight: 6,
         orient: 'auto-start-reverse',
       },
-      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'var(--dvb-accent-red, #f85149)' }),
+      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'var(--dvb-color-danger)' }),
     ),
     // Dimmed edge arrow
     el(
@@ -177,7 +177,7 @@ export function renderCommonSvgMarkers(React) {
         markerHeight: 5,
         orient: 'auto-start-reverse',
       },
-      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'rgba(255, 255, 255, 0.12)' }),
+      el('path', { d: 'M 0 1.5 L 8 5 L 0 8.5 z', fill: 'var(--dvb-color-fg-subtle)' }),
     ),
   )
 }

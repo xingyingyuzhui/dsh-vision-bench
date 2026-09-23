@@ -11,6 +11,7 @@ import { createStackPanel } from '../../src/ui/debug/runtime/stack-panel.mjs'
 import { createVariablesPanel } from '../../src/ui/debug/runtime/variables-panel.mjs'
 import { createDebugWorkspace } from '../../src/ui/workspace/debug-workspace.mjs'
 import { DEBUG_SECTIONS, focusKindOf, isDebugSection, routeForKind } from '../../src/ui/workspace/vision-route.mjs'
+import { translate } from '../../bench-i18n.mjs'
 
 // Simple mock React for testing pure component render output
 const mockReact = {
@@ -113,7 +114,7 @@ test('vision-route: handles RUNTIME section, focusKindOf, and routeForKind', () 
 })
 
 test('debug-toolbar: renders correct action buttons according to status', () => {
-  const Toolbar = createDebugToolbar(mockReact, mockT)
+  const Toolbar = createDebugToolbar(mockReact, (key, params) => translate('zh', key, params))
 
   // Idle state: Start button available, Continue/Step/Pause/Reset unavailable
   const idleTree = Toolbar({ status: 'idle' })
