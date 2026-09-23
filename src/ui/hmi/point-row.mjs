@@ -271,6 +271,22 @@ export function renderPointRow(el, t, ctx) {
           })
         : el('span', { className: 'dvb-val' }, point.alarmMax == null ? '—' : String(point.alarmMax)),
     ),
+    el(
+      'td',
+      { className: 'dvb-col-deadband' },
+      editing
+        ? el('input', {
+            className: 'dvb-input dvb-input-mono',
+            type: 'number',
+            min: 0,
+            step: 'any',
+            placeholder: t('ptAlarmDeadbandHint'),
+            title: t('ptAlarmDeadbandHint'),
+            value: draft ? draft.alarmDeadband : point.alarmDeadband == null ? '' : point.alarmDeadband,
+            onChange: (e) => patchDraft(point.id, { alarmDeadband: e.target.value }),
+          })
+        : el('span', { className: 'dvb-val' }, point.alarmDeadband == null ? '—' : String(point.alarmDeadband)),
+    ),
     editing
       ? el(
           'td',

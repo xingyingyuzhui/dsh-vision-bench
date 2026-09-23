@@ -10,6 +10,7 @@ export const DEFAULT_POINT_COL_WIDTHS = {
   alarm: 70,
   min: 85,
   max: 85,
+  deadband: 96,
   ops: 70,
 }
 
@@ -25,6 +26,7 @@ export const MIN_POINT_COL_WIDTHS = {
   alarm: 50,
   min: 55,
   max: 55,
+  deadband: 64,
   ops: 50,
 }
 

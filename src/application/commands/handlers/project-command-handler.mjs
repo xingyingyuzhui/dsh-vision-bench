@@ -145,6 +145,7 @@ export async function handleProjectCommand(home, args, room, origin, opts) {
             unit: p.unit,
             alarmMin: p.alarmMin,
             alarmMax: p.alarmMax,
+            alarmDeadband: p.alarmDeadband == null ? null : p.alarmDeadband,
             monitorEnabled: p.monitorEnabled === true,
             alarmEnabled: p.alarmEnabled === true,
             trendEnabled: p.monitorEnabled === true,

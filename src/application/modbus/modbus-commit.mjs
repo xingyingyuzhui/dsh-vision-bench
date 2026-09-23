@@ -206,7 +206,6 @@ const commit = (home, cwd, input, kind) =>
       prevState: pack.alarmState || pack.alarmActive,
       pollingByConnection,
       connections,
-      opts: { deadband: 1 },
     })
     const alarmState = pruneAlarmStateForPoints(alarmEval.next, points)
     const alarmActive = alarmActiveFromState(alarmState, points)

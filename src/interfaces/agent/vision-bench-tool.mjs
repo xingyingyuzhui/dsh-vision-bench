@@ -219,8 +219,12 @@ export function visionBenchTool(home) {
               scale: { type: 'number' },
               offset: { type: 'number' },
               unit: { type: 'string' },
-              alarmMin: { type: 'number' },
-              alarmMax: { type: 'number' },
+            alarmMin: { type: 'number' },
+            alarmMax: { type: 'number' },
+            alarmDeadband: {
+              type: 'number',
+              description: '告警回差（工程单位，≥0）。缺省为 |阈值|×1%；显式 0 表示无回差',
+            },
               monitorEnabled: {
                 type: 'boolean',
                 description: '规范监视开关',

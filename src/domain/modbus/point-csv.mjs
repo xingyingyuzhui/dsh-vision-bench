@@ -1,5 +1,5 @@
 // @ts-check
-import { functionTag, normalizePoints } from './point-model.mjs'
+import { functionTag, normalizePoints, parseAlarmDeadband } from './point-model.mjs'
 
 const CSV_HEADER = [
   'name',
@@ -12,6 +12,7 @@ const CSV_HEADER = [
   'alarmEnabled',
   'alarmMin',
   'alarmMax',
+  'alarmDeadband',
 ]
 
 /** @param {any} value */
@@ -61,6 +62,7 @@ export const pointsToCsv = (points) =>
           item.alarmEnabled === true ? 'true' : '',
           item.alarmMin,
           item.alarmMax,
+          item.alarmDeadband,
         ]
           .map(csvCell)
           .join(','),
@@ -91,6 +93,8 @@ export const csvToPoints = (input) => {
     const cells = csvSplit(lines[i])
     const pick = (/** @type {string} */ key) => (idx[key] >= 0 ? cells[idx[key]] : '')
     if (pick('address') === '') continue
+    const deadband = parseAlarmDeadband(pick('alarmDeadband'))
+    if (!deadband.ok) return { ok: false, error: 'alarmDeadband 必须是非负有限数或空' }
     points.push({
       name: pick('name'),
       function: Number(pick('function')),
@@ -100,6 +104,7 @@ export const csvToPoints = (input) => {
       unit: pick('unit'),
       alarmMin: pick('alarmMin') === '' ? null : Number(pick('alarmMin')),
       alarmMax: pick('alarmMax') === '' ? null : Number(pick('alarmMax')),
+      alarmDeadband: deadband.value,
       monitorEnabled:
         pick('monitorEnabled') === 'true' ||
         pick('monitorEnabled') === '1' ||

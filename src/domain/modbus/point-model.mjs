@@ -92,6 +92,20 @@ const finiteOrNull = (/** @type {any} */ value) => {
   return Number.isFinite(n) ? n : null
 }
 
+/**
+ * Alarm hysteresis in engineering units.
+ * Blank stays null so evaluation uses |threshold| × DEFAULT_ALARM_DEADBAND_RATIO.
+ * Explicit 0 is preserved (no hysteresis). Negative and non-finite values are rejected.
+ * @param {any} value
+ * @returns {{ ok: true, value: number | null } | { ok: false }}
+ */
+export const parseAlarmDeadband = (value) => {
+  if (value === null || value === undefined || value === '') return { ok: true, value: null }
+  const n = Number(value)
+  if (!Number.isFinite(n) || n < 0) return { ok: false }
+  return { ok: true, value: n }
+}
+
 /** @param {any} input */
 export const normalizePoint = (input) => {
   const raw = input && typeof input === 'object' ? input : {}
@@ -107,6 +121,7 @@ export const normalizePoint = (input) => {
   const unit = text(raw.unit, '').slice(0, 12)
   const min = finiteOrNull(raw.alarmMin)
   const max = finiteOrNull(raw.alarmMax)
+  const deadband = parseAlarmDeadband(raw.alarmDeadband)
   const point = {
     id: text(raw.id, '') || pointIdOf(fn, addrRaw),
     name: name || fallbackName,
@@ -120,6 +135,7 @@ export const normalizePoint = (input) => {
     trendEnabled: raw.monitorEnabled !== undefined ? raw.monitorEnabled === true : raw.trendEnabled === true,
     alarmMin: min,
     alarmMax: max,
+    alarmDeadband: deadband.ok ? deadband.value : null,
   }
   return point
 }
@@ -343,6 +359,7 @@ export const normalizePointV3 = (input) => {
   const offset = Number(raw.offset)
   const name = devText(raw.name, '').slice(0, 40)
   const unit = devText(raw.unit, '').slice(0, 12)
+  const deadband = parseAlarmDeadband(raw.alarmDeadband)
   return {
     id,
     connectionId,
@@ -356,6 +373,7 @@ export const normalizePointV3 = (input) => {
     unit,
     alarmMin: finiteOrNull(raw.alarmMin),
     alarmMax: finiteOrNull(raw.alarmMax),
+    alarmDeadband: deadband.ok ? deadband.value : null,
     monitorEnabled: raw.monitorEnabled !== undefined ? raw.monitorEnabled === true : raw.trendEnabled === true,
     alarmEnabled:
       raw.alarmEnabled !== undefined ? raw.alarmEnabled === true : raw.alarmMin != null || raw.alarmMax != null,

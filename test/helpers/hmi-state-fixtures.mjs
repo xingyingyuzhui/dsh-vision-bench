@@ -141,6 +141,8 @@ export const t = (k) =>
     alarmOn: '告警',
     ptAlarmMin: '下限',
     ptAlarmMax: '上限',
+    ptAlarmDeadband: '回差',
+    ptAlarmDeadbandHint: '空 = 阈值的 1%；0 = 无回差',
     savePoint: '保存',
     csvCancel: '取消',
     csvImport: '导入 CSV',

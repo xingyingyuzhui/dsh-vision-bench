@@ -42,6 +42,8 @@ export type Point = {
   unit?: string
   alarmMin?: number | null
   alarmMax?: number | null
+  /** Engineering-unit hysteresis. Null/omitted uses |threshold| × 1%. Explicit 0 disables it. */
+  alarmDeadband?: number | null
   monitorEnabled?: boolean
   alarmEnabled?: boolean
   /** @deprecated use monitorEnabled */
