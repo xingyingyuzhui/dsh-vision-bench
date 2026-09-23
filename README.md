@@ -1,6 +1,6 @@
 # dsh-vision-bench · Vision 模式
 
-当前版本 **0.29.25**。需要 DSH `0.1.5-rc.1` 及以上（契约钉在 `src/infrastructure/harness/dsh-contract.mjs`；本机对齐 `0.1.6-alpha.1`）。
+版本见 [CHANGELOG.md](CHANGELOG.md)。支持 DSH `0.1.5-rc.1` – `0.1.7-alpha.2`（双轨）。
 
 会话区里的调试 / 上位机 / 监控工作台。跟 Claw 无关。同一份现场状态同时给界面和当前 Session 的 Agent 用。
 
@@ -12,14 +12,7 @@
 
 验收矩阵：[`docs/ACCEPTANCE_NATIVE_WEB_DESKTOP.md`](docs/ACCEPTANCE_NATIVE_WEB_DESKTOP.md)。
 
-## 0.29.5 相对 0.29.0
-
-- 监控 / 调试二级 tab 在渲染时再取文案，不再被浏览器临时英文冻成 Charts / Alarms / Serial Frames。
-- 切走监控二级 tab 时可视化页保持挂载；折线图等容器有真实宽高再 `init`，时间轴从第一条样本往右长。
-- 编辑组件弹窗和 Keil 工程选择器挂到 `document.body`，不再被会话区 `container-type` 和底部输入框盖住；弹窗内类型卡 / 配置卡 / 预览线框仍在。
-- 写点回读进入同一条事务报文；串口原始流按 feed epoch 复位游标。
-
-更早的 0.29.0 是结构与测试重构收口。完整条目见 [CHANGELOG.md](CHANGELOG.md)。
+完整变更见 [CHANGELOG.md](CHANGELOG.md)。支持 DSH `0.1.5-rc.1` – `0.1.7-alpha.2`（双轨）。
 
 ## 安装
 
@@ -40,7 +33,7 @@ dsh plugin --profile web add ./dsh-vision-bench-*.tgz
 
 ### Desktop
 
-官方产品安装只认打包应用里的 **应用 → 桌面插件…**，填 npm 包名 `dsh-vision-bench` 或 `dsh-vision-bench@0.29.4`。当前包还没上 npmjs.org，这条路径还不可用。
+官方产品安装只认打包应用里的 **应用 → 桌面插件…**，填 npm 包名 `dsh-vision-bench`（版本见 [CHANGELOG.md](CHANGELOG.md)）。当前包还没上 npmjs.org，这条路径还不可用。
 
 本机实验室（先 **Cmd+Q** 完全退出 DeepSeek Harness）：
 
@@ -74,7 +67,7 @@ Desktop 在 **桌面插件…** 里移除。绑定写在 `$DSH_HOME/vision-bench
 
 宿主 `dsh-vision-bench` 顶层只注入 `connection`，UI 发 `POST /api/vision-bench/dispatch`。旧 `/vision-bench` RPC 与 Agent HTTP 命令桥仅在有 `webServer` 时挂载。Agent 工具是另一条 loader：`dsh-vision-bench/agent`（`export name` 为 `dsh-vision-bench-tools`），由 **Vision模式** 预设插入，不和宿主同名。
 
-预设是安装物，不在宿主 `apply()` 里 seed。首次安装或升级后执行 `node scripts/seed-preset.mjs`（或设置页重建），写入 `$DSH_HOME/.agent-presets/vision-bench/`。**新建 Session 后生效**。
+DSH `0.1.5-rc.1`–`0.1.6` 的 Vision模式是目录式预设：首次安装或升级后执行 `node scripts/seed-preset.mjs`（或设置页重建），写入 `$DSH_HOME/.agent-presets/vision-bench/`。DSH `0.1.7+` 由 Host 自动声明注册，无需 seed。**新建 Session 后生效**。
 
 `vision_bench` 只出现在这个预设里。Agent 需要时自己调用，不把现场状态塞进每一轮系统提示。
 

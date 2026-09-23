@@ -2,7 +2,7 @@
 /**
  * Session-private Modbus/HMI config scope.
  *
- * Product rules (docs/plans/2026-09-03-001-session-private-modbus-share-requirements.md):
+ * Product rules (docs/archive/2026-09-03-001-session-private-modbus-share-requirements.md):
  *   - connections+devices, points, visualization are SESSION-private by default
  *   - Settings: master "share to workspace" + per-category checkboxes
  *   - category ON  → live shared editing of ONE workspace slice

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test, { beforeEach } from 'node:test'
+import { STANDARD_PRESET_SNAPSHOT_CONTRACT } from '../../src/infrastructure/harness/standard-preset-snapshot.mjs'
 import {
   PRESET_ID,
   REBUILD_INSTRUCTIONS_DECLARATIVE,
@@ -57,6 +58,33 @@ test('declarative health warns but passes when only migration failed', async () 
   const health = await inspectPresetHealth('/unused/home')
   assert.equal(health.ok, true)
   assert.match(String(health.warning), /EPERM/)
+})
+
+test('declarative health warns when the standard snapshot predates the installed DSH', async () => {
+  setDeclarationState({
+    mode: 'declarative',
+    phase: 'registered',
+    via: 'agentPresets.register',
+    at: '2026-09-23T08:00:00.000Z',
+    migrationWarning: '旧目录预设迁移失败：EPERM',
+  })
+  const root = await mkdtemp(join(tmpdir(), 'dvb-dsh-ver-'))
+  const pkgDir = join(root, 'node_modules', '@deepseek-ai', 'dsh')
+  await mkdir(pkgDir, { recursive: true })
+  await writeFile(join(pkgDir, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '9.9.9' }))
+  try {
+    const health = await inspectPresetHealth('/unused/home', { dshPaths: [root] })
+    assert.equal(health.ok, true)
+    assert.match(
+      String(health.warning),
+      new RegExp(
+        `标准预设快照（${STANDARD_PRESET_SNAPSHOT_CONTRACT.replaceAll('.', '\\.')}）早于已安装 DSH（9\\.9\\.9），如 roster 行 broken 请升级插件`,
+      ),
+    )
+    assert.match(String(health.warning), /EPERM/)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 })
 
 test('legacy mode keeps the directory health contract', async () => {

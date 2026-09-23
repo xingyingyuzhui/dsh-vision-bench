@@ -1,12 +1,12 @@
 # Vision / DSH 兼容基线（0.29.27）
 
-记录日期：2026-09-23（自 0.29.0 / 2026-09-19 基线修订，随 DSH Desktop 0.1.7-alpha.2 实测抬钉）。后续每步验收对照本文件，不把空闲低 CPU 单独当成修复成功。跨平台矩阵见 [`ACCEPTANCE_NATIVE_WEB_DESKTOP.md`](./ACCEPTANCE_NATIVE_WEB_DESKTOP.md)。
+记录日期：2026-09-23（自 0.29.0 / 2026-09-19 基线修订。契约钉依据静态契约核对 + lab 安装；Desktop 复验待做（见 011 §7））。后续每步验收对照本文件，不把空闲低 CPU 单独当成修复成功。跨平台矩阵见 [`ACCEPTANCE_NATIVE_WEB_DESKTOP.md`](./ACCEPTANCE_NATIVE_WEB_DESKTOP.md)。
 
 ## 安装与加载
 
 | 项 | 值 |
 |---|---|
-| DSH CLI（契约钉） | `@deepseek-ai/dsh@0.1.7-alpha.2`（`SUPPORTED_DSH_CONTRACT`，Desktop 0.1.7-alpha.2 实测抬钉）；`0.1.5-rc.1`–`0.1.6` 走旧目录契约仍受支持 |
+| DSH CLI（契约钉） | `@deepseek-ai/dsh@0.1.7-alpha.2`（`SUPPORTED_DSH_CONTRACT`；静态契约核对 + lab 安装；Desktop 复验待做（见 011 §7））；`0.1.5-rc.1`–`0.1.6` 走旧目录契约仍受支持 |
 | 本机 Web profile | `~/.dsh/profiles/web`（开发可用 `link:` / tgz） |
 | Desktop 产品安装 | 仅 registry `dsh-vision-bench@<exact>`；`link:` / 本地 tgz 不算产品验收 |
 | Vision 加载路径（开发） | `link:/Users/qin/DSH/plugins/dsh-vision-suite/dsh-vision-bench` |
@@ -20,6 +20,14 @@
 - Agent：`tools.js`，export `./agent`，`name: dsh-vision-bench-tools`；缺 Host → `HOST_UNAVAILABLE`（不猜 `:3080`）
 - 预设（双轨）：0.1.7+ 由宿主经 `agentPresets.register()` 注册声明 `{ id: vision-bench, name: Vision模式, plugins: standard 快照 + dsh-vision-bench/agent }`；≤0.1.6 写 `$DSH_HOME/.agent-presets/vision-bench`（工具行 `dsh-vision-bench/agent`，persona 用 `prefix`）
 - Desktop 能力：UI / TCP / 仿真可宣称；**完整 RTU native** 待 `serialport` 进入官方 `allowBuilds` 或可选 RTU 包
+
+## Agent HTTP 命令桥（D-1）
+
+命令桥等同用户权限，不另走人工批准。`src/interfaces/http/vision-command-routes.mjs` 的 `source` / `confirm` 语义不改：经桥进入的命令与用户侧命令同一权限。
+
+- **仅 Web 模式。** 桥挂在 `inject(['webServer'])` 的 Web 兼容层（`POST /dsh-vision-bench/command`）。Desktop Host 顶层只有 `connection`，不挂这条桥。
+- **凭密钥访问。** 请求须带 `x-dsh-vision-capability`，与 Host 签发的密钥一致，并限制 loopback。
+- **密钥留在进程环境（D-1，保持现状）。** 密钥放在 `process.env.VISION_BENCH_CAPABILITY`（`host.js` 签发）。Keil、OpenOCD、GDB 子进程在信任边界内，可以继承该环境变量。
 
 ## Agent 预设契约（0.1.7 声明式）
 
