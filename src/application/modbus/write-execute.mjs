@@ -79,12 +79,14 @@ export async function executeApprovedWrite(ctx) {
     sessionId: origin.sessionId,
     summary: label,
   })
+  let finished = false
   /**
    * @param {boolean} ok
    * @param {string} summaryText
    * @param {WriteCompletionExtra} [extra]
    */
   const done = async (ok, summaryText, extra = {}) => {
+    finished = true
     await finishTask(home, roomCwd, task.id, {
       ok,
       summary: summaryText,
@@ -178,13 +180,137 @@ export async function executeApprovedWrite(ctx) {
     }
   }
 
-  if (conn.sim) {
-    const at = Date.now()
+  try {
+    if (conn.sim) {
+      const at = Date.now()
+      let vals = pack.values
+      for (let i = 0; i < count; i++) {
+        const addr = address + i
+        const point = findPointV3(pack.points, fn, addr, targetCid, targetDid)
+        const target = point || {
+          id: pointIdOf(fn, addr),
+          function: fn,
+          address: addr,
+          scale: 1,
+          offset: 0,
+          connectionId: targetCid,
+          deviceId: targetDid,
+        }
+        vals = setPointValue(vals, target, writeValues[i], { ok: true, at })
+      }
+      const nextConns = pack.connections.map((c) => (c.id === targetCid ? { ...c, conn: { ...c.conn, sim: false } } : c))
+      const saved = await saveSessionModbusPatch(home, roomCwd, sessionId, {
+        modbus: { connections: nextConns, values: vals, version: 3 },
+      })
+      if (saved && saved.ok === false) {
+        return done(false, saved.error || '仿真写入保存失败', { errorCode: saved.errorCode })
+      }
+      return done(true, `${label}（本地生效，回读一致）`, {
+        values: vals,
+        simulated: true,
+        readback: writeValues.slice(),
+        pointValues: vals.filter((rec) => targetPointIds.includes(rec.pointId || rec.key)),
+      })
+    }
+
+    const writeReq = toWriteRequest({
+      cwd: roomCwd,
+      connection: targetConnObj,
+      device: pack.devices.find((d) => d.id === targetDid) || { id: targetDid, unitId: 1 },
+      point: { address, function: fn },
+      values: writeValues,
+      timeoutMs: 20000,
+      configVersion: pack.configVersion,
+      fc: check.fc,
+      source: origin.source,
+    })
+    const ran = await transport.write(writeReq, { signal, sim: false })
+    if (ran?.error && ran.error.code === 'CANCELLED') {
+      finished = true
+      await finishTask(home, roomCwd, task.id, { cancelled: true, summary: '写入已取消' })
+      return { ok: false, cancelled: true, taskId: task.id, source: origin.source, error: '已取消' }
+    }
+    if (!ran || ran.ok === false) {
+      const frames = ran?.frames
+      const code = ran?.error?.code
+      if (code === 'MODBUS_TIMEOUT') {
+        return done(false, '写入响应超时，设备是否已执行未知；请先读取回读值，不要直接重试', {
+          frames,
+          frame: createTransactionFrame(label, frames || {}, {
+            connectionId: targetCid,
+            deviceId: targetDid,
+            taskId: task.id,
+            source: origin.source,
+            unitId: writeReq.unitId,
+            functionCode: check.fc,
+            durationMs: ran?.durationMs || 0,
+            transactionId: ran?.transactionId,
+            status: 'error',
+            error: 'WRITE_OUTCOME_UNKNOWN',
+            at: Date.now(),
+          }),
+          transactionId: ran?.transactionId,
+          durationMs: ran?.durationMs,
+          errorCode: ERROR_CODES.WRITE_OUTCOME_UNKNOWN,
+          transportErrorCode: 'MODBUS_TIMEOUT',
+          outcomeUnknown: true,
+          retryable: false,
+        })
+      }
+      return done(false, `写入失败 ${(ran?.error?.message) || (ran?.error) || ''}`, {
+        frames,
+        frame:
+          frames || ran?.transactionId
+            ? createTransactionFrame(label, frames || {}, {
+                connectionId: targetCid,
+                deviceId: targetDid,
+                taskId: task.id,
+                source: origin.source,
+                unitId: writeReq.unitId,
+                functionCode: check.fc,
+                durationMs: ran?.durationMs || 0,
+                transactionId: ran?.transactionId,
+                status: 'error',
+                error: ran?.error?.message || '',
+                at: Date.now(),
+              })
+            : null,
+        transactionId: ran?.transactionId,
+        durationMs: ran?.durationMs,
+        errorCode: code || ERROR_CODES.TARGET_REQUIRED,
+      })
+    }
+    const writeFrame = createTransactionFrame(label, ran.frames || {}, {
+      connectionId: targetCid,
+      deviceId: targetDid,
+      taskId: task.id,
+      source: origin.source,
+      unitId: writeReq.unitId,
+      functionCode: check.fc,
+      durationMs: ran.durationMs || 0,
+      transactionId: ran.transactionId,
+      status: 'ok',
+      at: Date.now(),
+    })
+    const readbackRan = await runReadTx(
+      transport,
+      pack,
+      targetConnObj,
+      pack.devices.find((d) => d.id === targetDid) || { id: targetDid, unitId: writeReq.unitId },
+      { fc: fn, address, count, connectionId: targetCid, deviceId: targetDid },
+      roomCwd,
+      20000,
+      signal,
+    )
+    const raw =
+      readbackRan.ok && readbackRan.result && readbackRan.result.details && Array.isArray(readbackRan.result.details.raw)
+        ? readbackRan.result.details.raw.slice(0, count)
+        : []
+    const readbackOk = readbackRan.ok && raw.length === count
     let vals = pack.values
     for (let i = 0; i < count; i++) {
       const addr = address + i
-      const point = findPointV3(pack.points, fn, addr, targetCid, targetDid)
-      const target = point || {
+      const pseudo = findPointV3(pack.points, fn, addr, targetCid, targetDid) || {
         id: pointIdOf(fn, addr),
         function: fn,
         address: addr,
@@ -193,170 +319,53 @@ export async function executeApprovedWrite(ctx) {
         connectionId: targetCid,
         deviceId: targetDid,
       }
-      vals = setPointValue(vals, target, writeValues[i], { ok: true, at })
-    }
-    const nextConns = pack.connections.map((c) => (c.id === targetCid ? { ...c, conn: { ...c.conn, sim: false } } : c))
-    const saved = await saveSessionModbusPatch(home, roomCwd, sessionId, {
-      modbus: { connections: nextConns, values: vals, version: 3 },
-    })
-    if (saved && saved.ok === false) return saved
-    return done(true, `${label}（本地生效，回读一致）`, {
-      values: vals,
-      simulated: true,
-      readback: writeValues.slice(),
-      pointValues: vals.filter((rec) => targetPointIds.includes(rec.pointId || rec.key)),
-    })
-  }
-
-  const writeReq = toWriteRequest({
-    cwd: roomCwd,
-    connection: targetConnObj,
-    device: pack.devices.find((d) => d.id === targetDid) || { id: targetDid, unitId: 1 },
-    point: { address, function: fn },
-    values: writeValues,
-    timeoutMs: 20000,
-    configVersion: pack.configVersion,
-    fc: check.fc,
-    source: origin.source,
-  })
-  const ran = await transport.write(writeReq, { signal, sim: false })
-  if (ran?.error && ran.error.code === 'CANCELLED') {
-    await finishTask(home, roomCwd, task.id, { cancelled: true, summary: '写入已取消' })
-    return { ok: false, cancelled: true, taskId: task.id, source: origin.source, error: '已取消' }
-  }
-  if (!ran || ran.ok === false) {
-    const frames = ran?.frames
-    const code = ran?.error?.code
-    if (code === 'MODBUS_TIMEOUT') {
-      return done(false, '写入响应超时，设备是否已执行未知；请先读取回读值，不要直接重试', {
-        frames,
-        frame: createTransactionFrame(label, frames || {}, {
-          connectionId: targetCid,
-          deviceId: targetDid,
-          taskId: task.id,
-          source: origin.source,
-          unitId: writeReq.unitId,
-          functionCode: check.fc,
-          durationMs: ran?.durationMs || 0,
-          transactionId: ran?.transactionId,
-          status: 'error',
-          error: 'WRITE_OUTCOME_UNKNOWN',
-          at: Date.now(),
-        }),
-        transactionId: ran?.transactionId,
-        durationMs: ran?.durationMs,
-        errorCode: ERROR_CODES.WRITE_OUTCOME_UNKNOWN,
-        transportErrorCode: 'MODBUS_TIMEOUT',
-        outcomeUnknown: true,
-        retryable: false,
+      vals = setPointValue(vals, pseudo, raw[i] !== undefined ? raw[i] : null, {
+        ok: readbackOk,
+        error: readbackOk ? '' : readbackRan.error || '',
       })
     }
-    return done(false, `写入失败 ${(ran?.error?.message) || (ran?.error) || ''}`, {
-      frames,
-      frame:
-        frames || ran?.transactionId
-          ? createTransactionFrame(label, frames || {}, {
-              connectionId: targetCid,
-              deviceId: targetDid,
-              taskId: task.id,
-              source: origin.source,
-              unitId: writeReq.unitId,
-              functionCode: check.fc,
-              durationMs: ran?.durationMs || 0,
-              transactionId: ran?.transactionId,
-              status: 'error',
-              error: ran?.error?.message || '',
-              at: Date.now(),
-            })
-          : null,
-      transactionId: ran?.transactionId,
-      durationMs: ran?.durationMs,
-      errorCode: code || ERROR_CODES.TARGET_REQUIRED,
-    })
-  }
-  const writeFrame = createTransactionFrame(label, ran.frames || {}, {
-    connectionId: targetCid,
-    deviceId: targetDid,
-    taskId: task.id,
-    source: origin.source,
-    unitId: writeReq.unitId,
-    functionCode: check.fc,
-    durationMs: ran.durationMs || 0,
-    transactionId: ran.transactionId,
-    status: 'ok',
-    at: Date.now(),
-  })
-  const readbackRan = await runReadTx(
-    transport,
-    pack,
-    targetConnObj,
-    pack.devices.find((d) => d.id === targetDid) || { id: targetDid, unitId: writeReq.unitId },
-    { fc: fn, address, count, connectionId: targetCid, deviceId: targetDid },
-    roomCwd,
-    20000,
-    signal,
-  )
-  const raw =
-    readbackRan.ok && readbackRan.result && readbackRan.result.details && Array.isArray(readbackRan.result.details.raw)
-      ? readbackRan.result.details.raw.slice(0, count)
-      : []
-  const readbackOk = readbackRan.ok && raw.length === count
-  let vals = pack.values
-  for (let i = 0; i < count; i++) {
-    const addr = address + i
-    const pseudo = findPointV3(pack.points, fn, addr, targetCid, targetDid) || {
-      id: pointIdOf(fn, addr),
-      function: fn,
-      address: addr,
-      scale: 1,
-      offset: 0,
+    const mismatch = readbackOk && raw.some((value, i) => Number(value) !== Number(writeValues[i]))
+    const summary =
+      label +
+      (readbackOk
+        ? mismatch
+          ? `，回读不一致：${JSON.stringify(raw)}`
+          : '，回读一致'
+        : `，回读失败 ${readbackRan.error || ''}`)
+    const readbackStatus = !readbackOk ? 'error' : mismatch ? 'error' : 'ok'
+    const readbackError = !readbackOk
+      ? String(readbackRan.error || '回读失败')
+      : mismatch
+        ? `WRITE_READBACK_MISMATCH expected=${JSON.stringify(writeValues)} got=${JSON.stringify(raw)}`
+        : ''
+    const readbackFrame = createTransactionFrame(`回读 ${label}`, readbackRan.frames || {}, {
       connectionId: targetCid,
       deviceId: targetDid,
-    }
-    vals = setPointValue(vals, pseudo, raw[i] !== undefined ? raw[i] : null, {
-      ok: readbackOk,
-      error: readbackOk ? '' : readbackRan.error || '',
+      taskId: task.id,
+      source: origin.source,
+      unitId: writeReq.unitId,
+      functionCode: fn,
+      durationMs: readbackRan.durationMs || 0,
+      transactionId: `${writeFrame.transactionId}:readback`,
+      status: readbackStatus,
+      error: readbackError,
+      at: Date.now(),
     })
+    return done(readbackOk && !mismatch, summary, {
+      values: vals,
+      readback: readbackOk ? raw : [],
+      frame: writeFrame,
+      transactionFrames: [writeFrame, readbackFrame],
+      frames: ran.frames || readbackRan.frames,
+      transactionId: writeFrame.transactionId,
+      durationMs: writeFrame.durationMs,
+      pointValues: vals.filter((rec) => targetPointIds.includes(rec.pointId || rec.key)),
+      readbackOk,
+      readbackTried: true,
+      readbackMismatch: !!mismatch,
+      errorCode: !readbackOk ? ERROR_CODES.STALE_VALUE : mismatch ? ERROR_CODES.WRITE_READBACK_MISMATCH : undefined,
+    })
+  } finally {
+    if (!finished) await finishTask(home, roomCwd, task.id, { ok: false, summary: '写入中断' })
   }
-  const mismatch = readbackOk && raw.some((value, i) => Number(value) !== Number(writeValues[i]))
-  const summary =
-    label +
-    (readbackOk
-      ? mismatch
-        ? `，回读不一致：${JSON.stringify(raw)}`
-        : '，回读一致'
-      : `，回读失败 ${readbackRan.error || ''}`)
-  const readbackStatus = !readbackOk ? 'error' : mismatch ? 'error' : 'ok'
-  const readbackError = !readbackOk
-    ? String(readbackRan.error || '回读失败')
-    : mismatch
-      ? `WRITE_READBACK_MISMATCH expected=${JSON.stringify(writeValues)} got=${JSON.stringify(raw)}`
-      : ''
-  const readbackFrame = createTransactionFrame(`回读 ${label}`, readbackRan.frames || {}, {
-    connectionId: targetCid,
-    deviceId: targetDid,
-    taskId: task.id,
-    source: origin.source,
-    unitId: writeReq.unitId,
-    functionCode: fn,
-    durationMs: readbackRan.durationMs || 0,
-    transactionId: `${writeFrame.transactionId}:readback`,
-    status: readbackStatus,
-    error: readbackError,
-    at: Date.now(),
-  })
-  return done(readbackOk && !mismatch, summary, {
-    values: vals,
-    readback: readbackOk ? raw : [],
-    frame: writeFrame,
-    transactionFrames: [writeFrame, readbackFrame],
-    frames: ran.frames || readbackRan.frames,
-    transactionId: writeFrame.transactionId,
-    durationMs: writeFrame.durationMs,
-    pointValues: vals.filter((rec) => targetPointIds.includes(rec.pointId || rec.key)),
-    readbackOk,
-    readbackTried: true,
-    readbackMismatch: !!mismatch,
-    errorCode: !readbackOk ? ERROR_CODES.STALE_VALUE : mismatch ? ERROR_CODES.WRITE_READBACK_MISMATCH : undefined,
-  })
 }
