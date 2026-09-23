@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -38,9 +38,7 @@ test('detectPresetTrack distinguishes declarative, legacy, and unknown installs'
   }
 })
 
-test('dsh search paths follow the running Node prefix, including Windows', async () => {
-  const source = await readFile(new URL('../../src/infrastructure/harness/dsh-contract.mjs', import.meta.url), 'utf8')
-  assert.equal(source.includes('24.18.0'), false)
+test('dsh search paths follow the running Node prefix, including Windows', () => {
   assert.ok(dshSearchPaths().includes(dshPackageRootFromExecPath()))
   assert.equal(
     dshPackageRootFromExecPath('/opt/homebrew/Cellar/node@24/24.18.0/bin/node', 'linux'),

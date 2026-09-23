@@ -94,7 +94,7 @@ export default {
       file: 'test/package-contents.test.mjs',
       purpose: 'release-package',
       reason: '发布包内容与运行时资源清单',
-      targets: ['bench-guidance.mjs', 'bench-run.mjs', 'bench-visualization-model.mjs', 'bench-visualization-view.mjs', 'package.json', 'runtime/modbus_read.py', 'runtime/modbus_write.py', 'runtime/openocd_flash.py', 'runtime/serial_monitor.py', 'scripts/build-client.mjs', 'src/application/flash/flash-approval-service.mjs', 'src/application/flash/openocd-health-service.mjs', 'src/domain/flash/errors.mjs', 'src/infrastructure/files/firmware-snapshot.mjs', 'src/infrastructure/harness/preset-validate.mjs', 'src/infrastructure/store/dsh-home.mjs', 'src/ui/hmi/device-card.mjs', 'src/ui/settings/tool-status.mjs'],
+      targets: ['bench-guidance.mjs', 'bench-run.mjs', 'bench-visualization-model.mjs', 'bench-visualization-view.mjs', 'package.json', 'runtime/modbus_read.py', 'runtime/modbus_write.py', 'runtime/openocd_flash.py', 'runtime/serial_monitor.py', 'scripts/apply-live-preset.sh', 'scripts/build-client.mjs', 'scripts/check-client-budget.mjs', 'scripts/gen-standard-preset-snapshot.mjs', 'scripts/report-client-vendors.mjs', 'src/application/flash/flash-approval-service.mjs', 'src/application/flash/openocd-health-service.mjs', 'src/domain/flash/errors.mjs', 'src/infrastructure/files/firmware-snapshot.mjs', 'src/infrastructure/harness/preset-validate.mjs', 'src/infrastructure/store/dsh-home.mjs', 'src/ui/hmi/device-card.mjs', 'src/ui/settings/tool-status.mjs'],
     },
     {
       file: 'test/project/file-security.test.mjs',
