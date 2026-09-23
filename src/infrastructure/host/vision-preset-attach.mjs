@@ -110,7 +110,7 @@ export function createAgentPresetAttacher(ctx, deps) {
         let disposed = false
         /** @type {(() => Promise<void>) | null} */
         let unregister = null
-        /** @type {() => void} */
+        /** @type {(value?: void) => void} */
         let resolveMounted = () => {}
         const mounted = new Promise((resolve) => {
           resolveMounted = resolve
