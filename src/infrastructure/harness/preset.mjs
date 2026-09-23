@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { LEGACY_VISION_PERSONAS, PRESET_PERSONA, STANDARD_PERSONA, VISION_GUIDANCE } from './guidance.mjs'
 import {
   loadOfficialPersonaConfig,
+  readInstalledDshVersion,
   resolveShippedStandardDir,
 } from './dsh-contract.mjs'
 import {
@@ -17,6 +18,7 @@ import {
   userPresetDir,
 } from './preset-declaration.mjs'
 import { validateManagedVisionComposition } from './preset-validate.mjs'
+import { STANDARD_PRESET_SNAPSHOT_CONTRACT } from './standard-preset-snapshot.mjs'
 import {
   MARKER,
   PRESET_BACKUP_FAILED,
@@ -106,6 +108,25 @@ export const ensurePresetOverlay = (dir, options = {}) =>
   })
 
 /**
+ * @param {string} installed
+ * @returns {string}
+ */
+function snapshotDriftWarning(installed) {
+  if (!installed || installed === STANDARD_PRESET_SNAPSHOT_CONTRACT) return ''
+  return `标准预设快照（${STANDARD_PRESET_SNAPSHOT_CONTRACT}）早于已安装 DSH（${installed}），如 roster 行 broken 请升级插件`
+}
+
+/**
+ * @param {Record<string, any>} health
+ * @param {string} installed
+ */
+function withSnapshotDriftWarning(health, installed) {
+  const drift = snapshotDriftWarning(installed)
+  if (!drift) return health
+  return { ...health, warning: health.warning ? `${health.warning}；${drift}` : drift }
+}
+
+/**
  * Health of the declarative (DSH 0.1.7+) registration: the roster row is the
  * product, not a directory on disk.
  *
@@ -144,7 +165,10 @@ function declarativePresetHealth(state) {
 
 export async function inspectPresetHealth(home, options = {}) {
   const declaration = getDeclarationState()
-  if (declaration.mode === 'declarative') return declarativePresetHealth(declaration)
+  if (declaration.mode === 'declarative') {
+    const installed = readInstalledDshVersion(options.dshPaths || [])
+    return withSnapshotDriftWarning(declarativePresetHealth(declaration), installed)
+  }
   const seed = getLastPresetSeed()
   const dir = userPresetDir(home)
   const composition = join(dir, 'agent.cordis.yml')

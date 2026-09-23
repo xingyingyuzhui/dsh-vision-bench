@@ -1,4 +1,5 @@
 // @ts-check
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -98,6 +99,23 @@ export function detectPresetTrack(extraPaths = []) {
     registry: canResolve('@deepseek-ai/dsh-agent-preset-registry', fallback),
     presets: canResolve('@deepseek-ai/dsh-agent-presets', fallback),
   })
+}
+
+/**
+ * Installed `@deepseek-ai/dsh` version, or '' when the package cannot be read.
+ * `extraPaths` are searched first, ahead of the install prefixes.
+ *
+ * @param {string[]} [extraPaths]
+ * @returns {string}
+ */
+export function readInstalledDshVersion(extraPaths = []) {
+  try {
+    const pkgPath = resolveDshModule('@deepseek-ai/dsh/package.json', extraPaths)
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
+    return pkg && typeof pkg.version === 'string' ? pkg.version : ''
+  } catch {
+    return ''
+  }
 }
 
 /**
