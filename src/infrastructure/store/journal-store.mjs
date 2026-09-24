@@ -52,13 +52,18 @@ const pushEvent = (timeline, event) => trimTimeline(prepend(timeline, event, TIM
 /** @param {string} home @param {string} cwd @param {Record<string, unknown>} event @param {JournalSpec} [extra] */
 export const recordBenchEvent = async (home, cwd, event, extra = {}) => {
   const timelineEvent = normalizeTimelineEvent({
-    kind: event?.action,
+    kind: event?.kind || event?.action,
     source: extra.source || 'user',
     sessionId: extra.sessionId || '',
     taskId: extra.taskId || '',
     ok: event?.ok,
     summary: event?.summary,
   })
+  const logEvent = {
+    ...event,
+    kind: event?.kind || event?.action,
+    schemaVersion: 2,
+  }
   return workspaceRepository(home).update(cwd, null, async (/** @type {JournalWorkspace} */ current) => ({
     ok: true,
     workspace: normalizeWorkspace({
@@ -66,7 +71,7 @@ export const recordBenchEvent = async (home, cwd, event, extra = {}) => {
       ...extra,
       keil: { ...current.keil, ...(extra.keil || {}) },
       modbus: { ...current.modbus, ...(extra.modbus || {}) },
-      log: mergeLog(current.log, event),
+      log: mergeLog(current.log, logEvent),
       timeline: pushEvent(current.timeline, timelineEvent),
     }),
   }))

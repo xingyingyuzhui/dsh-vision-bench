@@ -78,6 +78,9 @@ export const compactLog = (log) => {
     at: item.at,
     ok: item.ok,
     action: item.action,
+    kind: item.kind,
+    schemaVersion: item.schemaVersion,
+    legacyTypeUnverified: item.legacyTypeUnverified === true ? true : undefined,
     summary: item.summary,
   }))
 }
