@@ -7,9 +7,9 @@ import { requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
 import { loadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { isScopePartitioned } from '../../domain/modbus/config-scope.mjs'
-import { compactPointRow } from '../../domain/modbus/point-value.mjs'
 import { normalizePointGetSelector } from '../../domain/modbus/point-get-selector.mjs'
 import { claimLegacyPrivate } from './config-scope-service.mjs'
+import { compactPointRowForQuery } from './point-query-value.mjs'
 import { claimWorkspaceSync, modbusForSession } from './workspace-session-view.mjs'
 
 export {
@@ -66,13 +66,17 @@ export async function getPoints(home, cwd, query) {
   }
 
   const byId = new Map(visible.map((/** @type {any} */ p) => [p.id, p]))
+  const valueCtx = {
+    workspaceModbus: viewSource.modbus,
+    values: workspace.modbus?.values,
+  }
   /** @type {any[]} */
   const found = []
   /** @type {string[]} */
   const missingIds = []
   for (const id of selector.ids) {
     const hit = byId.get(id)
-    if (hit) found.push(compactPointRow(hit, pack.values))
+    if (hit) found.push(compactPointRowForQuery(hit, valueCtx))
     else missingIds.push(id)
   }
 

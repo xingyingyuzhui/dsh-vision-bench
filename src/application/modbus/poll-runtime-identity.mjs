@@ -93,7 +93,7 @@ function sameObject(a, b) {
  * @param {string} pointId
  * @returns {{ effective: PointIdentity[], raw: PointIdentity[] }}
  */
-function identitiesForPoint(modbus, pointId) {
+export function identitiesForPoint(modbus, pointId) {
   const scMap = modbus.sessionConfigs && typeof modbus.sessionConfigs === 'object' ? modbus.sessionConfigs : {}
   const pointsShared = isCategoryShared(modbus.share, 'points')
   const partitioned = Object.keys(scMap).length > 0
@@ -162,7 +162,7 @@ function identitiesForPoint(modbus, pointId) {
  * @param {PointIdentity[]} effective
  * @returns {boolean}
  */
-function effectiveRowsConflict(effective) {
+export function effectiveRowsConflict(effective) {
   if (effective.length <= 1) return false
   const shared = effective.filter((r) => r.layer === 'shared')
   const others = effective.filter((r) => r.layer !== 'shared')
@@ -259,4 +259,19 @@ export function validatePollRuntimeIdentities(workspace, readTargets) {
     }
   }
   return { ok: true }
+}
+
+/**
+ * Thin read-only wrapper for query/list value isolation.
+ * Same effective-identity rules as poll — does not change poll allow/deny.
+ *
+ * @param {any} modbus layered workspace modbus (all owners)
+ * @param {string} pointId
+ * @returns {{ kind: 'unique' | 'ambiguous' | 'missing', identities: PointIdentity[] }}
+ */
+export function resolveEffectivePointIdentity(modbus, pointId) {
+  const { effective } = identitiesForPoint(modbus, pointId)
+  if (!effective.length) return { kind: 'missing', identities: [] }
+  if (effectiveRowsConflict(effective)) return { kind: 'ambiguous', identities: effective }
+  return { kind: 'unique', identities: effective }
 }

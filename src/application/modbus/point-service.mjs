@@ -25,6 +25,7 @@ import { compactPointRow, isStaleValue } from '../../domain/modbus/point-value.m
 import { stampPoints } from '../../domain/modbus/unit-id.mjs'
 import { connReady, deviceDisabledOf, pickConnPatch, targetRequired } from '../../domain/modbus/validation.mjs'
 import { applyPointPatch, validateMonitorAlias } from '../../domain/modbus/point-patch.mjs'
+import { compactPointRowForQuery } from './point-query-value.mjs'
 import {
   changedConnectionIds,
   createModbusTransport,
@@ -76,11 +77,16 @@ export const pointsOp = async (home, cwd, body) => {
     let list = pack.points
     if (cidArg) list = list.filter((p) => (p.connectionId || p.connId) === cidArg)
     if (didArg) list = list.filter((p) => p.deviceId === didArg)
+    const valueCtx = {
+      workspaceModbus: workspace.modbus,
+      values: workspace.modbus?.values,
+    }
     return {
       ok: true,
       action: 'points',
       configVersion: pack.configVersion || 1,
-      points: list.map((p) => compactPointRow(p, pack.values)),
+      // list caller applies identity-safe value selection (same as get).
+      points: list.map((p) => compactPointRowForQuery(p, valueCtx)),
     }
   }
   if (op === 'add' || op === 'update') {

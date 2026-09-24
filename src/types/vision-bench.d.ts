@@ -7,6 +7,9 @@ export type ConnectionId = string
 export type DeviceId = string
 export type PointId = string
 
+/** Runtime value attribution for points get/list rows. */
+export type PointValueStatus = 'available' | 'missing' | 'unavailable'
+
 export type VisionBenchErrorCode =
   | 'UNIT_ID_INVALID'
   | 'CONNECTION_NOT_FOUND'
