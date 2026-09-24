@@ -7,6 +7,7 @@ import {
   HOST_TIMEOUT,
   HOST_UNAUTHORIZED,
   HOST_UNAVAILABLE,
+  normalizeCommand,
 } from '../../application/commands/command-contract.mjs'
 import {
   finalizeAgentCommandResult,
@@ -215,7 +216,7 @@ async function tryHostHttp(cmd) {
  * @returns {Promise<AgentCommandResult>}
  */
 export async function dispatchHostCommand(cmd) {
-  const input = cmd && typeof cmd === 'object' ? cmd : { action: '' }
+  const input = normalizeCommand(cmd && typeof cmd === 'object' ? cmd : { action: '' })
   const source = input.source === 'agent' || input.source === 'system' ? input.source : 'user'
   const registered = hostRegistration
   if (registered?.handle && typeof registered.handle.dispatch === 'function') {

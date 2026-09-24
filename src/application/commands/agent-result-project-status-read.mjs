@@ -26,6 +26,8 @@ export function pickSafetyFields(result) {
     'approval',
     'source',
     'sessionId',
+    'idempotent',
+    'conflicts',
   ]) {
     if (result[key] !== undefined) out[key] = result[key]
   }

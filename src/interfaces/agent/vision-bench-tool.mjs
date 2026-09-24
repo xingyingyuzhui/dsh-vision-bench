@@ -1,4 +1,5 @@
 // @ts-check
+import { envelope, normalizeCommand } from '../../application/commands/command-contract.mjs'
 import { finalizeAgentCommandResult } from '../../application/commands/lossless-json.mjs'
 import { projectAgentResult } from '../../application/commands/agent-result-projection.mjs'
 import { attachConfigDriftRefresh } from '../../application/commands/config-drift-refresh.mjs'
@@ -295,37 +296,47 @@ export function visionBenchTool(home) {
     async execute(/** @type {any} */ args, /** @type {any} */ exec) {
       const agent = exec && exec.agent
       const signal = exec && exec.signal
-      if (signal && signal.aborted)
-        return finalizeAgentCommandResult({ ok: false, cancelled: true, error: '已取消' }, 'agent')
       const cwd = cwdOf(agent)
       const sessionId = sessionIdOf(agent)
-      const preflight = validateAgentToolArgs(args, { pack: null })
-      if (preflight) return finalizeAgentCommandResult(preflight, 'agent')
-      const dispatched = await dispatchVisionCommand({
+      const cmd = normalizeCommand({
         home,
         cwd,
+        sessionId,
+        source: 'agent',
         action: args && args.action,
         payload: args || {},
-        source: 'agent',
-        sessionId,
-        signal,
         commandId: args && args.commandId,
         expectedConfigVersion: args && (args.expectedConfigVersion ?? args.configVersion),
+        signal,
         requireHost: true,
       })
-      const withRefresh = attachConfigDriftRefresh(dispatched, {
-        action: args && args.action,
-        op: args && args.op,
-        operation: args && args.operation,
-        target: {
-          visualizationId: args && (args.visualizationId || args.id),
-          connectionId: args && (args.connectionId || args.connId),
-          deviceId: args && args.deviceId,
-          pointId: args && (args.pointId || args.id),
-        },
-      })
-      const projected = projectAgentResult(args || {}, withRefresh)
-      return finalizeAgentCommandResult(projected, 'agent')
+      const finish = (/** @type {any} */ result) => {
+        const enveloped = envelope(cmd, result)
+        const withRefresh = attachConfigDriftRefresh(enveloped, {
+          action: args && args.action,
+          op: args && args.op,
+          operation: args && args.operation,
+          target: {
+            visualizationId: args && (args.visualizationId || args.id),
+            connectionId: args && (args.connectionId || args.connId),
+            deviceId: args && args.deviceId,
+            pointId: args && (args.pointId || args.id),
+          },
+        })
+        return finalizeAgentCommandResult(projectAgentResult(args || {}, withRefresh), 'agent')
+      }
+      if (signal && signal.aborted) return finish({ ok: false, cancelled: true, error: '已取消' })
+      const preflight = validateAgentToolArgs(args, { pack: null })
+      if (preflight) return finish(preflight)
+      const payload =
+        args && typeof args === 'object' ? { ...args, commandId: cmd.commandId } : { commandId: cmd.commandId }
+      return finish(
+        await dispatchVisionCommand({
+          ...cmd,
+          payload,
+          commandId: cmd.commandId,
+        }),
+      )
     },
   }
 }
