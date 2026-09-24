@@ -158,4 +158,9 @@ test('WORKSPACE_CSS exports layout class tokens used by the workspace shell', as
     assert.ok(css.includes(token), `missing token ${token}`)
   }
   assert.doesNotMatch(css, /\.dvb-ws-pane\[data-active="false"\]\{[^}]*display:\s*none/)
+  // Inactive viz must keep a definite box (not height:auto) so charts cannot grow over alarms.
+  assert.match(css, /\.dvb-ws-pane\[data-active="false"\]\{[^}]*height:100%/)
+  assert.match(css, /\.dvb-ws-pane\[data-active="false"\]\{[^}]*z-index:-1/)
+  assert.doesNotMatch(css, /\.dvb-ws-pane\[data-active="false"\]\{[^}]*height:\s*auto/)
+  assert.doesNotMatch(css, /\.dvb-ws-pane\[data-active="false"\]>\.dvb-viz\{height:auto\}/)
 })

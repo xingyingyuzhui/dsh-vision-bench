@@ -20,6 +20,12 @@ export function plotBox(node) {
   return { width, height, ready: width >= 8 && height >= 8 }
 }
 
+/** True when the chart lives under a kept-mounted but inactive workspace pane. */
+export function plotPaneInactive(node) {
+  const pane = typeof node?.closest === 'function' ? node.closest('.dvb-ws-pane') : null
+  return pane?.getAttribute?.('data-active') === 'false'
+}
+
 function bindEchart(echarts, refs, id, node) {
   let chart = refs.current[id]
   if (!chart || chart._node !== node) {
@@ -37,6 +43,7 @@ function bindEchart(echarts, refs, id, node) {
 function attachPlotResize(chart, node, applySize) {
   if (!chart || chart._ro || typeof ResizeObserver === 'undefined' || !node) return
   const ro = new ResizeObserver(() => {
+    if (plotPaneInactive(node)) return
     const box = plotBox(node)
     if (!box.ready) return
     try {
@@ -138,6 +145,7 @@ export function useVizCharts(React, { components, points, trendStore, t }) {
   React.useEffect(() => {
     const onResize = () => {
       for (const c of Object.values(echartRefs.current)) {
+        if (plotPaneInactive(c?._node)) continue
         const box = plotBox(c?._node)
         if (!box.ready) continue
         try {
@@ -194,9 +202,11 @@ export function useVizCharts(React, { components, points, trendStore, t }) {
         watchPlotReady(pendingRef, comp.id, node, () => ensureChart(node, comp))
         return
       }
+      if (plotPaneInactive(node)) return
       try {
         const chart = bindEchart(echarts, echartRefs, comp.id, node)
         attachPlotResize(chart, node, (next) => {
+          if (plotPaneInactive(node)) return
           try {
             chart.resize({ width: next.width, height: next.height })
           } catch {
@@ -229,9 +239,11 @@ export function useVizCharts(React, { components, points, trendStore, t }) {
       watchPlotReady(pendingRef, comp.id, node, () => ensureBarChart(node, comp, latest))
       return
     }
+    if (plotPaneInactive(node)) return
     try {
       const chart = bindEchart(echarts, echartRefs, comp.id, node)
       attachPlotResize(chart, node, (next) => {
+        if (plotPaneInactive(node)) return
         try {
           chart.resize({ width: next.width, height: next.height })
         } catch {
