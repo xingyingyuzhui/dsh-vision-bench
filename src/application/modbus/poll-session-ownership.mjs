@@ -32,7 +32,7 @@ import { isCategoryShared, normalizeScopeSessionId } from '../../domain/modbus/c
  * @param {any} modbus
  * @returns {{ ownersByConnectionId: Map<string, string[]>, endpointsByConnectionId: Map<string, string> }}
  */
-function enumerateRawConnectionOwners(modbus) {
+export function enumerateRawConnectionOwners(modbus) {
   const scMap = modbus.sessionConfigs && typeof modbus.sessionConfigs === 'object' ? modbus.sessionConfigs : {}
   const connectionsShared = isCategoryShared(modbus.share, 'connections')
   /** @type {Map<string, string[]>} */
@@ -88,7 +88,7 @@ function endpointKey(conn) {
  * @param {{ boundId?: string }} [opts]
  * @returns {ResolvedPollTarget | { error: 'ambiguous-owner' | 'target-mismatch' | 'connection-not-found', owners: string[] }}
  */
-function resolveOneConnection(ownersByConnectionId, cid, sid, opts = {}) {
+export function resolveOneConnection(ownersByConnectionId, cid, sid, opts = {}) {
   const owners = ownersByConnectionId.get(cid) || []
   const privateOwners = owners.filter((o) => o !== '__shared__' && o !== '__toplevel__')
   const hasShared = owners.includes('__shared__')
@@ -240,6 +240,24 @@ export function resolvePollTargets(workspace, target) {
     }
   }
   return { ok: true, targets, conflicts: [] }
+}
+
+/**
+ * Global runtime slots (polling/alarm/trend) require a unique connection owner.
+ * Two private layers with the same connectionId → slot is ambiguous for every session.
+ *
+ * @param {any} modbus
+ * @param {string} connectionId
+ * @returns {boolean}
+ */
+export function isUniquelyOwnedConnection(modbus, connectionId) {
+  const cid = String(connectionId || '').trim()
+  if (!cid) return false
+  const { ownersByConnectionId } = enumerateRawConnectionOwners(modbus)
+  const owners = ownersByConnectionId.get(cid) || []
+  if (!owners.length) return false
+  const privateOwners = owners.filter((o) => o !== '__shared__' && o !== '__toplevel__')
+  return privateOwners.length <= 1
 }
 
 /**

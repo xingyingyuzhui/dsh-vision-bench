@@ -3,7 +3,13 @@ import { connLabel } from '../../../domain/modbus/connection-model.mjs'
 import { isScopePartitioned } from '../../../domain/modbus/config-scope.mjs'
 import { ERROR_CODES } from '../../../domain/modbus/errors.mjs'
 import { normalizeModbus } from '../../../domain/modbus/modbus-migration.mjs'
-import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
+import { loadSessionViewForRead } from '../../modbus/workspace-session-view.mjs'
+import {
+  filterAlarmStateForSession,
+  filterTasksForSession,
+  projectVisiblePolling,
+  redactAgentStatusLog,
+} from '../../modbus/agent-runtime-visibility.mjs'
 import { listWorkspaceDir as listDir } from '../../../infrastructure/files/project-fs.mjs'
 import { keilMap } from '../../keil/project-service.mjs'
 import { keilBuild } from '../../keil/build-service.mjs'
@@ -95,8 +101,9 @@ export async function handleProjectCommand(home, args, room, origin, opts) {
     /** @type {any} */
     let pack
     if (sessionId) {
-      workspace = await ensureWorkspaceClaimed(home, room.cwd, sessionId)
-      pack = modbusForSession(workspace, sessionId)
+      const view = loadSessionViewForRead(home, room.cwd, sessionId)
+      workspace = view.workspace
+      pack = view.pack
     } else {
       workspace = loadWorkspace(home, room.cwd)
       if (isScopePartitioned(workspace.modbus)) {
@@ -114,6 +121,20 @@ export async function handleProjectCommand(home, args, room, origin, opts) {
     const states = await listConnectionStates(home, room.cwd, opts)
     const connectionStates = states?.connectionStates || []
     const stateByConn = new Map(connectionStates.map((s) => [s.connectionId, s.status || '']))
+    const layered = workspace.modbus
+    const visiblePolling = projectVisiblePolling(
+      layered,
+      sessionId,
+      pack.connections,
+      pack.pollingByConnection,
+    )
+    const visibleAlarms = filterAlarmStateForSession(layered, sessionId, pack, pack.alarmState)
+    const isAgent = origin?.source === 'agent'
+    const scopedTasks = sessionId ? filterTasksForSession(journal.tasks, sessionId) : journal.tasks
+    const scopedRunning = sessionId ? filterTasksForSession(journal.running, sessionId) : journal.running
+    const logView = isAgent
+      ? redactAgentStatusLog(compactLog(workspace.log))
+      : { log: compactLog(workspace.log), logHiddenCount: 0 }
     return {
       ok: true,
       action,
@@ -154,17 +175,17 @@ export async function handleProjectCommand(home, args, room, origin, opts) {
             value: rec ? decodeValue(p, rec.raw) : null,
             ok: rec ? rec.ok : false,
             at: rec ? rec.at : 0,
-            runtimeStatus: pointRuntimeStatus(p, rec, pack.alarmState, stateByConn.get(p.connectionId) || '').label,
+            runtimeStatus: pointRuntimeStatus(p, rec, visibleAlarms, stateByConn.get(p.connectionId) || '').label,
           }
         }),
         values: pack.values,
         activeConnectionId: pack.activeConnectionId,
         activeDeviceId: pack.activeDeviceId,
-        pollingByConnection: pack.pollingByConnection,
+        pollingByConnection: visiblePolling,
         framesByConnection: pack.framesByConnection,
         polling: pack.polling,
-        alarmState: pack.alarmState,
-        alarmActive: pack.alarmActive,
+        alarmState: visibleAlarms,
+        alarmActive: visibleAlarms,
         conn: {
           mode: pack.conn.mode,
           port: pack.conn.port,
@@ -181,9 +202,10 @@ export async function handleProjectCommand(home, args, room, origin, opts) {
       },
       focus: workspace.focus || { request: null, prev: null, tempWatchIds: [], badgeOnly: false, evidence: [] },
       evidence: buildEvidenceRefs(home, room.cwd),
-      log: compactLog(workspace.log),
-      tasks: journal.tasks,
-      running: journal.running,
+      log: logView.log,
+      logHiddenCount: logView.logHiddenCount,
+      tasks: scopedTasks,
+      running: scopedRunning,
       timeline: journal.timeline,
     }
   }

@@ -76,6 +76,25 @@ export function claimWorkspaceSync(workspace, sessionId) {
 }
 
 /**
+ * Read-only session view: load + in-memory claim, never persist.
+ * Use for Agent status / list / alarm / trend queries that must not change disk.
+ *
+ * @param {string} home
+ * @param {string} cwd
+ * @param {string | undefined} sessionId
+ * @returns {{ workspace: any, pack: any }}
+ */
+export function loadSessionViewForRead(home, cwd, sessionId) {
+  const workspace = loadWorkspace(home, cwd)
+  const sid = normalizeScopeSessionId(sessionId)
+  let viewSource = workspace
+  if (sid && claimLegacyPrivate(workspace.modbus, sid).claimed) {
+    viewSource = claimWorkspaceSync(workspace, sid).workspace
+  }
+  return { workspace: viewSource, pack: modbusForSession(viewSource, sid) }
+}
+
+/**
  * Sync counterpart of `ensureWorkspaceClaimed` for hot paths that cannot await
  * (e.g. `listFrames`). Persists a first-opener claim the same way: topology moves
  * into sessionConfigs without bumping configVersion.

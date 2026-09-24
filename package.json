@@ -317,6 +317,7 @@
     "src/application/commands/handlers/config-command-handler.mjs",
     "src/application/commands/handlers/project-command-handler.mjs",
     "src/application/commands/handlers/live-command-handler.mjs",
+    "src/application/commands/handlers/live-trend-query.mjs",
     "src/application/commands/handlers/visualization-command-handler.mjs",
     "src/application/commands/handlers/evidence-command-handler.mjs",
     "src/application/commands/handlers/system-command-handler.mjs",
@@ -552,6 +553,7 @@
     "src/application/modbus/alarm-notify-retry.mjs",
     "src/application/modbus/poll-session-ownership.mjs",
     "src/application/modbus/poll-runtime-identity.mjs",
+    "src/application/modbus/agent-runtime-visibility.mjs",
     "src/application/modbus/poll-target-preparation.mjs"
   ],
   "repository": {

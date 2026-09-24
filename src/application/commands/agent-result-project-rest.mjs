@@ -157,6 +157,7 @@ function buildSeriesPage(series, keep) {
     samples,
     hasMore: count > samples.length,
     oldestReturnedAt: samples.length ? Number(samples[0][0]) || 0 : null,
+    ...(series.dataStatus ? { dataStatus: series.dataStatus } : {}),
   }
 }
 

@@ -199,6 +199,7 @@ export function projectStatus(_args, result) {
     tasks: summarizeTasks(tasks),
     running: summarizeTasks(running),
     log: log.slice(0, 20),
+    logHiddenCount: Number(result.logHiddenCount) || 0,
   }
   return enforceBudget(projected, AGENT_TEXT_CAPS.statusBytes, 'status 超预算：用 points/frames/alarm 分项查询', (p) => ({
     ...p,
