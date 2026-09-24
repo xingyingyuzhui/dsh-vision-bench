@@ -85,7 +85,7 @@ test('monitor tab labels resolve at render time, not factory time', () => {
   clearNavStore()
 })
 
-test('visualization pane stays mounted when another monitor section is active', () => {
+test('inactive monitor section is unmounted so viz canvas cannot cover alarms', () => {
   clearNavStore()
   navigate('s1', '/tmp', { viewId: VIEW_MONITOR, section: MONITOR_SECTIONS.ALARMS }, { source: 'manual' })
   const React = makeReact()
@@ -102,17 +102,16 @@ test('visualization pane stays mounted when another monitor section is active', 
   assert.equal(tree.props['data-section'], MONITOR_SECTIONS.ALARMS)
   const body = tree.children[1]
   const kids = (body.children || []).filter(Boolean)
-  const vizPane = kids.find((n) => n.props?.['data-section'] === MONITOR_SECTIONS.VISUALIZATION)
-  assert.ok(vizPane, 'visualization pane stays in the tree')
-  assert.equal(vizPane.props.className, 'dvb-ws-pane')
-  assert.equal(vizPane.props['data-active'], 'false')
-  assert.equal(vizPane.props['aria-hidden'], 'true')
-  assert.equal(vizPane.props.inert, true)
-  assert.ok(kids.length >= 2, 'alarms page still mounts beside the hidden viz pane')
+  assert.equal(kids.length, 1, 'only the active section mounts')
+  assert.equal(
+    kids.some((n) => n.props?.['data-section'] === MONITOR_SECTIONS.VISUALIZATION),
+    false,
+    'visualization must not stay mounted under alarms',
+  )
   clearNavStore()
 })
 
-test('active visualization pane is shown without the HTML hidden attribute', () => {
+test('active visualization mounts as the sole workspace body child', () => {
   clearNavStore()
   const React = makeReact()
   const Page = createMonitorWorkspace(
@@ -128,11 +127,7 @@ test('active visualization pane is shown without the HTML hidden attribute', () 
   const body = tree.children[1]
   const kids = (body.children || []).filter(Boolean)
   assert.equal(kids.length, 1)
-  const vizPane = kids[0]
-  assert.equal(vizPane.props['data-section'], MONITOR_SECTIONS.VISUALIZATION)
-  assert.equal(vizPane.props['data-active'], 'true')
-  assert.equal(vizPane.props['aria-hidden'], 'false')
-  assert.equal(vizPane.props.hidden, undefined)
+  assert.equal(tree.props['data-section'], MONITOR_SECTIONS.VISUALIZATION)
   clearNavStore()
 })
 

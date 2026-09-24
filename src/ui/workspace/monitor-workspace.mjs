@@ -68,7 +68,6 @@ export function createMonitorWorkspace(React, t, post, hooks) {
         if (nav && nav.viewId === VIEW_MONITOR && isMonitorSection(nav.section)) setSection(nav.section)
       })
     }, [sessionId, cwd])
-    const vizActive = section === MONITOR_SECTIONS.VISUALIZATION
     const Page = pages[section] || VizPage
     return el(
       'div',
@@ -90,18 +89,10 @@ export function createMonitorWorkspace(React, t, post, hooks) {
       el(
         'div',
         { className: 'dvb-ws-body' },
-        el(
-          'div',
-          {
-            className: 'dvb-ws-pane',
-            'data-section': MONITOR_SECTIONS.VISUALIZATION,
-            'data-active': vizActive ? 'true' : 'false',
-            'aria-hidden': vizActive ? 'false' : 'true',
-            inert: vizActive ? undefined : true,
-          },
-          el(VizPage, props),
-        ),
-        vizActive ? null : el(Page, props),
+        // Mount only the active section. Keeping Viz mounted under visibility:hidden let
+        // ECharts canvas paint over 告警/操作记录 on Desktop (black ring). Remount cost
+        // is acceptable; charts re-init against a real GridStack box when returning.
+        el(Page, props),
       ),
     )
   }
