@@ -230,34 +230,52 @@ export function projectTrend(args, result) {
 /**
  * @param {string} id
  * @param {any} row
+ * @param {{ detail?: boolean }} [opts]
  */
-function projectAlarmRow(id, row) {
+function projectAlarmRow(id, row, opts = {}) {
   const alarm = row && typeof row === 'object' ? row : {}
   const current = alarm.current ?? alarm.value ?? alarm.raw
   const trigger = alarm.trigger ?? alarm.triggerValue ?? alarm.threshold
-  return {
+  const group = String(alarm.group || '')
+  const isComm = group === 'comm' || String(id).startsWith('comm:')
+  const pointId = isComm ? '' : String(alarm.pointId || '')
+  /** @type {Record<string, unknown>} */
+  const base = {
     id,
-    condition: alarm.condition,
-    group: alarm.group,
-    pointId: alarm.pointId || id,
-    connectionId: alarm.connectionId,
-    deviceId: alarm.deviceId,
+    condition: alarm.condition ?? '',
+    group: group || '',
+    pointId,
+    connectionId: alarm.connectionId ?? '',
+    deviceId: alarm.deviceId ?? '',
     current,
     value: current,
     trigger,
     threshold: trigger,
-    severity: alarm.severity,
-    quality: alarm.quality,
-    status: alarm.status,
-    firstAt: alarm.firstAt,
-    lastAt: alarm.lastAt,
-    occurredAt: alarm.occurredAt || alarm.at || alarm.firedAt || alarm.eventAt || alarm.firstAt,
-    clearedAt: alarm.clearedAt || alarm.recoveredAt,
-    recoveredAt: alarm.recoveredAt,
+    severity: alarm.severity ?? '',
+    quality: alarm.quality ?? '',
+    status: alarm.status ?? '',
+    firstAt: alarm.firstAt ?? 0,
+    lastAt: alarm.lastAt ?? 0,
+    occurredAt: alarm.occurredAt || alarm.at || alarm.firedAt || alarm.eventAt || alarm.firstAt || 0,
+    clearedAt: alarm.clearedAt || alarm.recoveredAt || 0,
+    recoveredAt: alarm.recoveredAt ?? 0,
     frameId: alarm.frameId || '',
     transactionId: alarm.transactionId || '',
-    kind: alarm.kind,
+    kind: alarm.kind ?? '',
+    acknowledged: alarm.acknowledged === true,
+    ackedAt: Number(alarm.ackedAt) > 0 ? Number(alarm.ackedAt) : 0,
+    ackedBy: typeof alarm.ackedBy === 'string' ? alarm.ackedBy : '',
+    count: Number(alarm.count) > 0 ? Number(alarm.count) : 0,
   }
+  if (opts.detail) {
+    base.durationMs = Number(alarm.durationMs) > 0 ? Number(alarm.durationMs) : 0
+    base.suggestedAt = Number(alarm.suggestedAt) > 0 ? Number(alarm.suggestedAt) : 0
+    base.suggestedBy = typeof alarm.suggestedBy === 'string' ? alarm.suggestedBy : ''
+    base.taskId = typeof alarm.taskId === 'string' ? alarm.taskId : ''
+    base.suppressUntil = Number(alarm.suppressUntil) > 0 ? Number(alarm.suppressUntil) : 0
+    base.pendingSince = Number(alarm.pendingSince) > 0 ? Number(alarm.pendingSince) : 0
+  }
+  return base
 }
 
 /**
@@ -280,7 +298,7 @@ export function projectAlarm(args, result) {
   if (alarmId) {
     const hit = alarms[alarmId]
     if (hit) {
-      projectedAlarms = { [alarmId]: projectAlarmRow(alarmId, hit) }
+      projectedAlarms = { [alarmId]: projectAlarmRow(alarmId, hit, { detail: true }) }
       total = 1
       returned = 1
     } else {
