@@ -1,4 +1,4 @@
-# Vision / DSH 兼容基线（0.29.27）
+# Vision / DSH 兼容基线（0.29.28）
 
 记录日期：2026-09-23（自 0.29.0 / 2026-09-19 基线修订。契约钉依据静态契约核对 + lab 安装；Desktop 复验待做（见 011 §7））。后续每步验收对照本文件，不把空闲低 CPU 单独当成修复成功。跨平台矩阵见 [`ACCEPTANCE_NATIVE_WEB_DESKTOP.md`](./ACCEPTANCE_NATIVE_WEB_DESKTOP.md)。
 

@@ -1,4 +1,19 @@
-# Changelog
+## 0.29.28
+
+- Agent `points` get/list：分层运行值隔离；结果带 `valueStatus`（available|missing|unavailable）；`unavailable` 不授权改写。
+- get 超预算裁剪后 `returned === points.length`；预算丢弃进 `omittedIds`，不与配置缺失的 `missingIds` 混用。
+- get/list 只读：不持久化 workspace claim，不把点搬进会话私有层。
+- Host 进程内 throw/reject/非法响应统一为可关联的 `HOST_DISPATCH_FAILED`（含 `commandId`）。
+
+- 进行中的轮询只回写采集时间与成败，不再把已停止的连接重新打开，也不再覆盖采集间隔。
+- 告警回差默认改为触发阈值绝对值的 1%。点位可单独设置回差；显式填 0 表示无回差。原先隐式的 1 个工程单位回差不再使用。
+- 仿真写入保存失败或总线抛错时，写入任务会结束，不再挡住下一次写入。同一工作区已有写入时，后一次返回 `WRITE_BUSY`。
+- 一次从站超时不再关掉同一条串口上的其他设备。Host 退出后，I/O 进程会放开 COM 口。
+- 批准写入时会再核对点表与端点；对不上则原批准失效。总线忙时该请求仍留在待批准列表。
+- Agent 写点待批准返回 `APPROVAL_PENDING`，并说明等待界面批准、不要重试。相同未过期写点复用原批准。
+- DSH 0.1.7+ 上 `node scripts/seed-preset.mjs` 不再报错退出：Vision模式由 Host 声明注册。热重载后预设会等上一份 Host 注销完成再注册。
+- 模态框支持 Tab 焦点循环；危险确认默认聚焦取消，且默认不可点遮罩关闭。
+- 折线图改为只使用 ECharts。客户端不再打包 uPlot。
 
 ## 0.29.27
 
