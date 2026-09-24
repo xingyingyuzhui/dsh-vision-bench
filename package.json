@@ -337,6 +337,7 @@
     "src/application/modbus/result-mapper.mjs",
     "src/application/modbus/connection-service.mjs",
     "src/application/modbus/point-service.mjs",
+    "src/application/modbus/point-query-service.mjs",
     "src/application/modbus/read-service.mjs",
     "src/application/modbus/write-service.mjs",
     "src/application/modbus/write-execute.mjs",

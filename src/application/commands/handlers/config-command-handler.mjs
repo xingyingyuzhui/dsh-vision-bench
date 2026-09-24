@@ -1,5 +1,6 @@
 // @ts-check
 import { pointsOp } from '../../modbus/index.mjs'
+import { getPoints, isKnownPointsOp, unknownPointsOpResult } from '../../modbus/point-query-service.mjs'
 import { mutateConfig } from '../../config/config-mutation-service.mjs'
 
 /**
@@ -57,6 +58,18 @@ export async function handleConfigCommand(home, args, room, origin, opts) {
         sessionId: origin.sessionId,
       })
       return { action, ...ran }
+    }
+    if (op === 'get') {
+      const ran = await getPoints(home, room.cwd, {
+        ...args,
+        connectionId: cid,
+        deviceId: did,
+        sessionId: origin.sessionId,
+      })
+      return { action, ...ran }
+    }
+    if (!isKnownPointsOp(op)) {
+      return { action, ...unknownPointsOpResult() }
     }
     const ran = await mutateConfig({
       home,

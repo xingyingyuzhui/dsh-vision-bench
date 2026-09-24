@@ -5,7 +5,7 @@ import { notifyConnectionRelease } from '../../infrastructure/modbus/modbus-tran
 import { requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
 import { listConnectionStates } from '../../infrastructure/modbus/serial-monitor.mjs'
 import { normalizeWorkspace, workspaceKey } from '../../infrastructure/store/workspace-store.mjs'
-import { SESSION_SCOPED_SCOPES, parseOperation } from '../../domain/config/config-operation.mjs'
+import { CONFIG_OPERATIONS, SESSION_SCOPED_SCOPES, parseOperation } from '../../domain/config/config-operation.mjs'
 import { isScopePartitioned, isCategoryShared, normalizeScopeSessionId, omitSessionConfigs } from '../../domain/modbus/config-scope.mjs'
 import { ERROR_CODES, fail } from '../../domain/modbus/errors.mjs'
 import { createWorkspaceRepository } from '../../infrastructure/persistence/workspace-repository.mjs'
@@ -89,6 +89,17 @@ export function createConfigMutationService(deps = {}) {
     const { scope, op, raw } = parseOperation(spec.operation)
     if (!scope || !op) {
       return { ok: false, errorCode: 'UNKNOWN_OP', error: `未知配置操作: ${spec.operation || ''}` }
+    }
+    if (!CONFIG_OPERATIONS.has(raw)) {
+      if (raw === 'points.get') {
+        return {
+          ok: false,
+          errorCode: 'UNKNOWN_OP',
+          error: 'points.get 不是配置修改操作；只读查询请用 action=points op=get',
+          hint: '只读查询请用 action=points, op=get, ids[]（或 pointId/id）；不要走 config/operation=points.get',
+        }
+      }
+      return { ok: false, errorCode: 'UNKNOWN_OP', error: `未知配置操作: ${raw}` }
     }
     if (!Number.isInteger(spec.expectedConfigVersion) || spec.expectedConfigVersion <= 0) {
       return fail(ERROR_CODES.CONFIG_VERSION_REQUIRED, '配置修改必须携带当前 configVersion')

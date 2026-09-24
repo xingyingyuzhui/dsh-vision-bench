@@ -53,6 +53,9 @@ export type VisionBenchErrorCode =
   | 'HOST_HTTP_STATUS_ERROR'
   | 'WORKSPACE_WRITE_FAILED'
   | 'COMMAND_ID_REUSE'
+  | 'FIELD_CONFLICT'
+  | 'INVALID_FIELD'
+  | 'UNKNOWN_OP'
   | 'UNKNOWN_ACTION'
   | 'OP_REMOVED'
 

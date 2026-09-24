@@ -66,9 +66,9 @@ export function visionBenchTool(home) {
       'ls/select/build/map：工程与编译；' +
       'read/write：读点与受控写点（必须带 connectionId+deviceId；Agent 写点需界面批准）；' +
       'connect：仅打开或断开已保存连接（close=true 断开）。修改端点用 configureConnection，打开用 openConnection；' +
-      'points：op=list|add|update|remove|clear。一次调用可以批量：op=add 用 points[{name,function,address,connectionId,deviceId,...}] 数组一次写入多个点；op=update 同样用 points[]；op=remove 用 ids[] 或 pointId。不要逐个 add。address 是协议地址（保持寄存器 0 = 40001），不要填 40001。clear 必须带 connectionId+deviceId。监视开关用 monitorEnabled；trendEnabled 只是旧别名，同请求传相反值会 FIELD_CONFLICT。' +
+      'points：op=list|get|add|update|remove|clear。list 返回当前会话可见点表；get 按 ids[]（最多 32，去重保序）或 pointId/id 只读查询，返回 points/requested/returned/missingIds，部分缺失 ok+partial，全部缺失 POINT_NOT_FOUND。可选 connectionId/deviceId 只过滤可见集合。op=add 用 points[{name,function,address,connectionId,deviceId,...}] 数组一次写入多个点；op=update 同样用 points[]；op=remove 用 ids[] 或 pointId。不要逐个 add。address 是协议地址（保持寄存器 0 = 40001），不要填 40001。clear 必须带 connectionId+deviceId。监视开关用 monitorEnabled；trendEnabled 只是旧别名，同请求传相反值会 FIELD_CONFLICT。' +
       'visualization：op=list|get|add|update|remove|layout。get 必须带 visualizationId（缺 ID 不会默认取第一个组件）。layout 必须携带 expectedConfigVersion 与 items[{id,x,y,w,h}]；CONFIG_DRIFT 后按 refresh 提示重新 list/get 再提交。' +
-      '所有配置修改必须携带最近一次 status/list/get 返回的 configVersion（字段名 expectedConfigVersion；configVersion 为别名）。CONFIG_DRIFT 后必须重新读取配置，再基于新版本重试；不得把 actualVersion 当重试凭证。适用 config、configureConnection、points add/update/remove/clear、visualization add/update/remove/layout。status、points list、visualization list/get 不要求版本。' +
+      '所有配置修改必须携带最近一次 status/list/get 返回的 configVersion（字段名 expectedConfigVersion；configVersion 为别名）。CONFIG_DRIFT 后必须重新读取配置，再基于新版本重试；不得把 actualVersion 当重试凭证。适用 config、configureConnection、points add/update/remove/clear、visualization add/update/remove/layout。status、points list/get、visualization list/get 不要求版本。' +
       'frames/trend/alarm：需要 connectionId（alarm 仅有 alarmId、trend 仅有 trendKey 时可例外）；trend 的 limit 是每条序列的样本数；trend 分页用每条 series 的 hasMore/oldestReturnedAt（再查 pointIds:[id], end:oldestReturnedAt-1，沿用原 start；多序列分别翻页，不要用一条序列的边界过滤全部序列），不是 nextCursor。hasMore:false 时无后续翻页。' +
       'focus 会改变 UI 焦点；evidence[] 会追加日志——二者不是纯只读。' +
       'alarm 带 watch/followup=true 才订阅过程量告警跟进；watch/followup=false 取消本会话订阅（不需要 connectionId/alarmId）；二者同义，同时传且布尔值不同会 FIELD_CONFLICT。默认过程告警只记事件不唤醒 Agent。' +
@@ -174,7 +174,11 @@ export function visionBenchTool(home) {
           },
         },
         id: { type: 'string' },
-        ids: { type: 'array', items: { type: 'string' }, description: 'op=remove 一次删除多个点位' },
+        ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'points op=get 按 ID 只读查询（最多 32，去重保序）；op=remove 一次删除多个点位',
+        },
         text: { type: 'string' },
         frameId: { type: 'string' },
         trendKey: { type: 'string' },
