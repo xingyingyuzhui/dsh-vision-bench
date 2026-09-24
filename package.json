@@ -362,6 +362,7 @@
     "src/interfaces/rpc/verify-rpc-handler.mjs",
     "src/infrastructure/modbus/transport-adapter.mjs",
     "src/infrastructure/modbus/verify-telemetry-adapter.mjs",
+    "src/infrastructure/host/host-command-result.mjs",
     "src/infrastructure/host/vision-host-client.mjs",
     "src/infrastructure/modbus/io-broker-adapter.mjs",
     "src/interfaces/http/vision-command-routes.mjs",

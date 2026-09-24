@@ -9,11 +9,8 @@ import {
   HOST_UNAVAILABLE,
   normalizeCommand,
 } from '../../application/commands/command-contract.mjs'
-import {
-  finalizeAgentCommandResult,
-  losslessCommandResult,
-  toLosslessJson,
-} from '../../application/commands/lossless-json.mjs'
+import { toLosslessJson, losslessCommandResult } from '../../application/commands/lossless-json.mjs'
+import { finishHostResult, hostDispatchFailedResult } from './host-command-result.mjs'
 
 /**
  * @typedef {import('../../types/agent-tool.js').AgentCommandEnvelope} AgentCommandEnvelope
@@ -218,27 +215,50 @@ async function tryHostHttp(cmd) {
 export async function dispatchHostCommand(cmd) {
   const input = normalizeCommand(cmd && typeof cmd === 'object' ? cmd : { action: '' })
   const source = input.source === 'agent' || input.source === 'system' ? input.source : 'user'
-  const registered = hostRegistration
-  if (registered?.handle && typeof registered.handle.dispatch === 'function') {
+
+  if (input.signal && input.signal.aborted) {
     return /** @type {AgentCommandResult} */ (
-      finalizeAgentCommandResult(
-        await registered.handle.dispatch(/** @type {AgentCommandEnvelope} */ (input)),
+      finishHostResult(
+        input,
+        {
+          ok: false,
+          cancelled: true,
+          error: '命令已取消',
+          commandId: input.commandId,
+          action: input.action,
+        },
         source,
       )
     )
   }
+
+  const registered = hostRegistration
+  if (registered?.handle && typeof registered.handle.dispatch === 'function') {
+    try {
+      const raw = await registered.handle.dispatch(/** @type {AgentCommandEnvelope} */ (input))
+      return /** @type {AgentCommandResult} */ (finishHostResult(input, raw, source))
+    } catch {
+      return /** @type {AgentCommandResult} */ (hostDispatchFailedResult(input, source))
+    }
+  }
   if (input.requireHost === true) {
-    return /** @type {AgentCommandResult} */ (
-      finalizeAgentCommandResult(await tryHostHttp(/** @type {AgentCommandEnvelope} */ (input)), source)
-    )
+    try {
+      const raw = await tryHostHttp(/** @type {AgentCommandEnvelope} */ (input))
+      return /** @type {AgentCommandResult} */ (finishHostResult(input, raw, source))
+    } catch {
+      // HTTP helper already maps network failures; unexpected throw still correlates.
+      return /** @type {AgentCommandResult} */ (hostDispatchFailedResult(input, source))
+    }
   }
   return /** @type {AgentCommandResult} */ (
-    finalizeAgentCommandResult(
+    finishHostResult(
+      input,
       {
         ok: false,
         errorCode: HOST_UNAVAILABLE,
         error: 'Vision Host 不可用',
         commandId: input.commandId,
+        action: input.action,
         origin: hostOriginOf() || undefined,
       },
       source,
