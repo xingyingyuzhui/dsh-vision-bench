@@ -23,6 +23,7 @@
     "host.js",
     "tools.js",
     "client.js",
+    "build-info.json",
     "scripts/seed-preset.mjs",
     "bench-guidance.mjs",
     "bench-shared.mjs",
@@ -578,7 +579,8 @@
     "test:unit": "node scripts/run-tests.mjs",
     "test:coverage": "c8 --all --check-coverage --statements 83 --branches 68 --functions 74 --lines 83 --reporter=text-summary --reporter=html --reporter=json-summary node scripts/run-tests.mjs",
     "coverage:critical": "node scripts/check-coverage-critical.mjs",
-    "pack:check": "node scripts/check-package.mjs",
+    "pack:check": "node scripts/gen-build-info.mjs && node scripts/check-build-info.mjs && node scripts/check-package.mjs",
+    "build:info": "node scripts/gen-build-info.mjs",
     "quality": "npm run build:check && npm run lint && npm run typecheck && npm run deps:check && npm run facades:check && npm run ui:ownership:check && npm run structure:check && npm run assertions:check && npm run test:coverage && npm run coverage:critical && npm run pack:check",
     "test": "npm run build:check && npm run test:unit",
     "test:full": "npm run quality"
