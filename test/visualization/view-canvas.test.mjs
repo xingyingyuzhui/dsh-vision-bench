@@ -155,9 +155,14 @@ test('组件编辑弹窗锁在视口内，不把整页撑出滚动', async () =>
   const { VISUALIZATION_CSS } = await import('../../src/ui/styles/visualization.mjs')
   const css = VISUALIZATION_CSS.join('')
   assert.match(css, /\.dvb-viz-modal-mask\{[^}]*overflow:hidden/)
-  assert.match(css, /\.dvb-viz-modal\{[^}]*height:calc\(100vh - 32px\)/)
-  assert.match(css, /\.dvb-viz-modal\{[^}]*max-height:calc\(100vh - 32px\)/)
-  assert.match(css, /\.dvb-viz-modal\{[^}]*min-height:0/)
+  // Must beat body[…] .dvb-dialog { width:min(400px,…) } — editor dialog has both classes.
+  assert.match(
+    css,
+    /body\[data-dsh-vision-bench\] \.dvb-dialog\.dvb-viz-modal\{[^}]*width:min\(960px,calc\(100vw - 32px\)\)/,
+  )
+  assert.match(css, /\.dvb-dialog\.dvb-viz-modal\{[^}]*height:calc\(100vh - 32px\)/)
+  assert.match(css, /\.dvb-dialog\.dvb-viz-modal\{[^}]*max-height:calc\(100vh - 32px\)/)
+  assert.match(css, /\.dvb-dialog\.dvb-viz-modal\{[^}]*min-height:0/)
   assert.match(css, /\.dvb-viz-drawer-body\{[^}]*overflow:auto/)
   assert.doesNotMatch(css, /dvb-viz-picker-list\)\{border:1px/)
   assert.match(css, /body:has\(\.dvb-viz-modal-mask\)\{overflow:hidden\}/)
