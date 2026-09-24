@@ -155,9 +155,11 @@ export default {
         pathNot: [
           // journal-store.mjs + serial-monitor.mjs → config-scope-service.mjs (session projection of a stored pack).
           '(^|/)src/application/modbus/config-scope-service\\.mjs$',
-          // vision-host-client.mjs → command-contract.mjs + lossless-json.mjs (dispatch errors and result normalization).
+          // vision-host-client.mjs → command-contract / lossless-json / host-command-result
+          // (dispatch errors and correlated result normalization).
           '(^|/)src/application/commands/command-contract\\.mjs$',
           '(^|/)src/application/commands/lossless-json\\.mjs$',
+          '(^|/)src/application/commands/host-command-result\\.mjs$',
         ],
       },
     },
@@ -179,13 +181,13 @@ export default {
       name: 'infrastructure-application-edge-host-client',
       severity: 'error',
       comment:
-        'Only vision-host-client.mjs may import command-contract.mjs and lossless-json.mjs.',
+        'Only vision-host-client.mjs may import command-contract, lossless-json, and host-command-result.',
       from: {
         path: '(^|/)src/infrastructure/',
         pathNot: ['(^|/)src/infrastructure/host/vision-host-client\\.mjs$'],
       },
       to: {
-        path: '(^|/)src/application/commands/(command-contract|lossless-json)\\.mjs$',
+        path: '(^|/)src/application/commands/(command-contract|lossless-json|host-command-result)\\.mjs$',
       },
     },
     {

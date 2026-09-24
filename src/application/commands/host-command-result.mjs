@@ -6,11 +6,8 @@
 import {
   HOST_DISPATCH_FAILED,
   HOST_INVALID_RESPONSE,
-} from '../../application/commands/command-contract.mjs'
-import {
-  finalizeAgentCommandResult,
-  toLosslessJson,
-} from '../../application/commands/lossless-json.mjs'
+} from './command-contract.mjs'
+import { finalizeAgentCommandResult, toLosslessJson } from './lossless-json.mjs'
 
 /**
  * @param {any} cmd
@@ -40,26 +37,17 @@ export function finishHostResult(cmd, rawResult, source) {
   const action = String(cmd?.action || '').trim()
 
   if (rawResult == null || typeof rawResult !== 'object' || Array.isArray(rawResult)) {
-    return finalizeAgentCommandResult(
-      failResult(cmd, 'Host 响应无效', HOST_INVALID_RESPONSE),
-      source,
-    )
+    return finalizeAgentCommandResult(failResult(cmd, 'Host 响应无效'), source)
   }
 
   const cleaned = toLosslessJson(rawResult)
   if (!cleaned || typeof cleaned !== 'object' || Array.isArray(cleaned)) {
-    return finalizeAgentCommandResult(
-      failResult(cmd, 'Host 响应不是 lossless JSON', HOST_INVALID_RESPONSE),
-      source,
-    )
+    return finalizeAgentCommandResult(failResult(cmd, 'Host 响应不是 lossless JSON'), source)
   }
 
   const body = /** @type {Record<string, unknown>} */ (cleaned)
   if (typeof body.ok !== 'boolean') {
-    return finalizeAgentCommandResult(
-      failResult(cmd, 'Host 响应缺少 ok', HOST_INVALID_RESPONSE),
-      source,
-    )
+    return finalizeAgentCommandResult(failResult(cmd, 'Host 响应缺少 ok'), source)
   }
 
   const remoteId = typeof body.commandId === 'string' ? body.commandId.trim() : ''
@@ -72,12 +60,14 @@ export function finishHostResult(cmd, rawResult, source) {
     )
   }
 
-  const correlated = {
-    ...body,
-    commandId: remoteId || commandId,
-    action: typeof body.action === 'string' && body.action ? body.action : action,
-  }
-  return finalizeAgentCommandResult(correlated, source)
+  return finalizeAgentCommandResult(
+    {
+      ...body,
+      commandId: remoteId || commandId,
+      action: typeof body.action === 'string' && body.action ? body.action : action,
+    },
+    source,
+  )
 }
 
 /**
@@ -86,9 +76,5 @@ export function finishHostResult(cmd, rawResult, source) {
  * @param {string} [source]
  */
 export function hostDispatchFailedResult(cmd, source) {
-  return finishHostResult(
-    cmd,
-    failResult(cmd, '未能确认本次命令结果', HOST_DISPATCH_FAILED),
-    source,
-  )
+  return finishHostResult(cmd, failResult(cmd, '未能确认本次命令结果', HOST_DISPATCH_FAILED), source)
 }

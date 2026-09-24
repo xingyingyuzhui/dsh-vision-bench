@@ -9,8 +9,8 @@ import {
   HOST_UNAVAILABLE,
   normalizeCommand,
 } from '../../application/commands/command-contract.mjs'
-import { toLosslessJson, losslessCommandResult } from '../../application/commands/lossless-json.mjs'
-import { finishHostResult, hostDispatchFailedResult } from './host-command-result.mjs'
+import { finishHostResult, hostDispatchFailedResult } from '../../application/commands/host-command-result.mjs'
+import { losslessCommandResult, toLosslessJson } from '../../application/commands/lossless-json.mjs'
 
 /**
  * @typedef {import('../../types/agent-tool.js').AgentCommandEnvelope} AgentCommandEnvelope
