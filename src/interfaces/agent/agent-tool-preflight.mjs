@@ -5,7 +5,7 @@
  * A well-formed trendKey (connectionId:deviceId:pointId) satisfies the connection requirement.
  * alarmId alone does not: without the point table this side cannot prove a unique connection.
  */
-import { normalizePointGetSelector } from '../../application/modbus/point-query-service.mjs'
+import { normalizePointGetSelector } from '../../domain/modbus/point-get-selector.mjs'
 
 const NEEDS_CONNECTION = new Set(['frames', 'trend', 'alarm'])
 const NEEDS_CONNECTION_AND_DEVICE = new Set(['read', 'write'])

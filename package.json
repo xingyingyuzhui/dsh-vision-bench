@@ -178,6 +178,7 @@
     "src/domain/modbus/unit-id.mjs",
     "src/domain/modbus/function-code.mjs",
     "src/domain/modbus/point-value.mjs",
+    "src/domain/modbus/point-get-selector.mjs",
     "src/domain/modbus/validation.mjs",
     "src/domain/modbus/target-resolver.mjs",
     "src/domain/config/config-operation.mjs",
