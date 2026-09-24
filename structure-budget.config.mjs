@@ -61,8 +61,8 @@ export default {
         },
         {
           "file": "src/infrastructure/store/journal-store.mjs",
-          "max": 494,
-          "reason": "P5-4 debt ratchet; split in later P4/P6",
+          "max": 450,
+          "reason": "P5-4 debt ratchet after journal-session split; continue toward ≤400",
           "stage": "P6",
           "owner": "vision-bench"
         },
@@ -201,13 +201,6 @@ export default {
           "file": "test/debug/debug-approval-service.test.mjs",
           "max": 386,
           "reason": "P5-4 debt ratchet; split in later P4/P6",
-          "stage": "P4",
-          "owner": "vision-bench"
-        },
-        {
-          "file": "test/config/scope-wiring.test.mjs",
-          "max": 382,
-          "reason": "Session scope wiring coverage",
           "stage": "P4",
           "owner": "vision-bench"
         },

@@ -6,6 +6,7 @@ import { ERROR_CODES } from '../../src/domain/modbus/errors.mjs'
 import { visionBenchTool } from '../../src/interfaces/agent/vision-bench-tool.mjs'
 import { runVisionBench } from '../helpers/run-vision-bench.mjs'
 import { createBench, connection, pointSeries } from '../helpers/workspace-factory.mjs'
+import { ensureWorkspaceClaimed } from '../../src/application/modbus/workspace-session-view.mjs'
 import { agentOf, fingerprintOnDisk, pt, withRealHost } from './points-get-helpers.mjs'
 
 test('points get: cross-session private points look like missing; shared points visible', async (t) => {
@@ -97,6 +98,9 @@ test('points get: unpartitioned does not persist claim; partitioned without sess
   assert.deepEqual(fingerprintOnDisk(home, cwd), before, 'get must not persist claim')
 
   await runVisionBench(home, { action: 'status' }, cwd, { source: 'agent', sessionId: 'opener' })
+  assert.deepEqual(fingerprintOnDisk(home, cwd), before, 'status must not persist claim either')
+
+  await ensureWorkspaceClaimed(home, cwd, 'opener')
   const anon = await runVisionBench(
     home,
     { action: 'points', op: 'get', ids: ['p0'] },

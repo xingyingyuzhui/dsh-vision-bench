@@ -109,11 +109,11 @@ export async function timelineList(home, cwd, args, origin) {
       : TIMELINE_DEFAULT
   const all = Array.isArray(loaded.workspace.timeline) ? loaded.workspace.timeline : []
   // Newest-first. Hide unattributed legacy events (empty sessionId) from Agent.
-  const visible = all.filter((e) => e && String(e.sessionId || '') === sid)
+  const visible = all.filter((/** @type {any} */ e) => e && String(e.sessionId || '') === sid)
   const cursor = typeof args?.cursor === 'string' ? args.cursor.trim() : ''
   let start = 0
   if (cursor) {
-    const idx = visible.findIndex((e) => String(e?.id || '') === cursor)
+    const idx = visible.findIndex((/** @type {any} */ e) => String(e?.id || '') === cursor)
     if (idx < 0) {
       return {
         ok: false,

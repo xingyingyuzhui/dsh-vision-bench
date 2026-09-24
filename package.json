@@ -378,6 +378,7 @@
     "src/infrastructure/store/focus-store.mjs",
     "src/infrastructure/store/workspace-keil-select.mjs",
     "src/infrastructure/store/workspace-store.mjs",
+    "src/infrastructure/store/journal-session.mjs",
     "src/infrastructure/store/journal-store.mjs",
     "src/types/write-file-atomic.d.ts",
     "src/types/workspace.d.ts",

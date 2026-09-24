@@ -118,15 +118,17 @@ export const pointsOp = async (home, cwd, body) => {
         refresh: paged.refresh,
       }
     }
+    const listView = paged.view === 'summary' ? 'summary' : 'full'
+    const pageRows = Array.isArray(paged.points) ? paged.points : []
     return {
       ok: true,
       action: 'points',
       configVersion: paged.configVersion,
-      view: paged.view,
+      view: listView,
       sessionId,
       connectionId: cidArg,
       deviceId: didArg,
-      points: paged.points.map((/** @type {any} */ p) => projectPointListRow(p, paged.view)),
+      points: pageRows.map((/** @type {any} */ p) => projectPointListRow(p, listView)),
       total: paged.total,
       returned: paged.returned,
       nextCursor: paged.nextCursor,

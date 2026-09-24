@@ -62,6 +62,8 @@ export function decodeListCursor(cursor) {
 /**
  * @param {string} a
  * @param {string} b
+ * @param {string} c
+ * @param {string} d
  */
 function fingerprint(a, b, c, d) {
   return `${a}|${b}|${c}|${d}`

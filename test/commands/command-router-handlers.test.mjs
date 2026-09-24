@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { loadWorkspace, saveWorkspace } from '../../bench-store.mjs'
 import { runVisionBench } from '../../src/application/commands/vision-command-router.mjs'
 import { executeVisionCommand } from '../../src/application/commands/vision-command-service.mjs'
+import { ensureWorkspaceClaimed } from '../../src/application/modbus/workspace-session-view.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -52,6 +53,9 @@ test('project/config/visualization handlers cover happy and mismatch paths', asy
     assert.equal(status.ok, true)
     assert.equal(status.cwd, cwd)
     assert.equal(status.session.sessionId, 's1')
+    // status is read-only (no disk claim); persist claim before SESSION_REQUIRED checks.
+    await ensureWorkspaceClaimed(home, cwd, 's1')
+    assert.equal(loadWorkspace(home, cwd).modbus.privateClaimSessionId, 's1')
 
     const mismatch = await executeVisionCommand({
       home,
