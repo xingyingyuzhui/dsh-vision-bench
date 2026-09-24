@@ -77,7 +77,13 @@ function prefixUnscopedSelectors(css, prefix) {
         const selfScoped = parts.length > 0 && parts.every((part) => part.includes(ATTR))
         const next = scoped || selfScoped
         const rewritten = parts
-          .map((part) => (next || part.includes(ATTR) ? part : `${prefix}${part}`))
+          .map((part) => {
+            if (next || part.includes(ATTR)) return part
+            // Document-level hooks (e.g. body.dvb-resizing-col) must stay on <body>,
+            // not become body[ATTR] body.….
+            if (/^(html|body)([.#[:\s>]|$)/.test(part)) return part
+            return `${prefix}${part}`
+          })
           .join(',')
         out += `${rewritten}{`
         // Declarations (or nested rules) until the matching `}`.

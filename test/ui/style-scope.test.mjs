@@ -41,11 +41,13 @@ function unscopedSelectors(css) {
           parse(scoped)
         } else {
           const parts = splitSelectors(sel)
-          const selfScoped = parts.length > 0 && parts.every((part) => part.includes(ATTR))
+          const selfScoped =
+            parts.length > 0 &&
+            parts.every((part) => part.includes(ATTR) || /^(html|body)([.#[:\s>]|$)/.test(part))
           const next = scoped || selfScoped
           if (!next) {
             for (const part of parts) {
-              if (!part.includes(ATTR)) found.push(part)
+              if (!part.includes(ATTR) && !/^(html|body)([.#[:\s>]|$)/.test(part)) found.push(part)
             }
           }
           parse(next)
@@ -82,6 +84,11 @@ test('scopePageCss prefixes bare selectors instead of nest-wrapping', () => {
     scopePageCss('body[data-dsh-vision-bench]{.dvb-pill{color:red}}'),
     'body[data-dsh-vision-bench] .dvb-pill{color:red}',
   )
+  // Document-level body.* hooks stay on <body>.
+  assert.match(
+    scopePageCss('body.dvb-resizing-col,body.dvb-resizing-col *{cursor:col-resize!important}'),
+    /^body\.dvb-resizing-col,body\.dvb-resizing-col \*\{/,
+  )
 })
 
 test('sidebar and runtime style strings have no unscoped selectors', () => {
@@ -93,4 +100,21 @@ test('sidebar and runtime style strings have no unscoped selectors', () => {
   assert.match(SIDEBAR_CSS.join('\n'), /--dvb-color-info/)
   assert.match(SIDEBAR_CSS.join('\n'), /\.dvb-pill-fail,body\[data-dsh-vision-bench\] \.dvb-pill-severe,body\[data-dsh-vision-bench\] \.dvb-pill-active\{[^}]*background:/)
   assert.doesNotMatch(SIDEBAR_CSS.join('\n'), /#1d4ed8|#6d28d9|#059669/)
+})
+
+test('table CSS is page-scoped so grid beats live-row flex on monitor rows', async () => {
+  const { TABLE_CSS } = await import('../../src/ui/styles/table.mjs')
+  const { CSS } = await import('../../src/ui/styles/index.mjs')
+  for (const block of TABLE_CSS) {
+    assert.deepEqual(unscopedSelectors(block), [])
+    assert.match(block, /body\.dvb-resizing-col/)
+    assert.doesNotMatch(block, /body\[data-dsh-vision-bench\] body\.dvb-resizing-col/)
+  }
+  // Concat order: sidebar live-row flex, then table row grid — equal specificity, later wins.
+  const live = CSS.lastIndexOf('body[data-dsh-vision-bench] .dvb-live-row{')
+  const grid = CSS.lastIndexOf('body[data-dsh-vision-bench] .dvb-data-table-head,body[data-dsh-vision-bench] .dvb-data-table-row{display:grid')
+  assert.ok(live > 0, 'scoped live-row rule present')
+  assert.ok(grid > live, 'scoped data-table grid rule must follow live-row flex')
+  assert.match(CSS, /\.dvb-alarms-main \.dvb-data-table\{[^}]*display:flex;flex-direction:column/)
+  assert.match(CSS, /\.dvb-alarms-main \.dvb-data-table-scroll\{[^}]*flex:1;min-height:0/)
 })
