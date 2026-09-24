@@ -17,7 +17,7 @@ const POINT_OPS = new Set(['list', 'get', 'add', 'update', 'remove', 'clear'])
 
 /**
  * @param {unknown} value
- * @returns {string[]}
+ * @returns {unknown[]}
  */
 function collectRawIds(value) {
   if (value == null) return []
@@ -176,15 +176,15 @@ export async function getPoints(home, cwd, query) {
     viewSource = claimWorkspaceSync(workspace, sessionId).workspace
   }
   const pack = modbusForSession(viewSource, sessionId)
-  let visible = Array.isArray(pack.points) ? pack.points : []
+  let visible = Array.isArray(pack.points) ? /** @type {any[]} */ (pack.points) : []
   if (selector.connectionId) {
-    visible = visible.filter((p) => (p.connectionId || p.connId) === selector.connectionId)
+    visible = visible.filter((/** @type {any} */ p) => (p.connectionId || p.connId) === selector.connectionId)
   }
   if (selector.deviceId) {
-    visible = visible.filter((p) => p.deviceId === selector.deviceId)
+    visible = visible.filter((/** @type {any} */ p) => p.deviceId === selector.deviceId)
   }
 
-  const byId = new Map(visible.map((p) => [p.id, p]))
+  const byId = new Map(visible.map((/** @type {any} */ p) => [p.id, p]))
   /** @type {any[]} */
   const found = []
   /** @type {string[]} */
