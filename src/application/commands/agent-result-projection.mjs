@@ -96,6 +96,65 @@ function halveAt(root, path) {
 
 /**
  * @param {any} result
+ * @param {string[]} omittedIds
+ */
+function syncPointsGetCounts(result, omittedIds) {
+  const points = Array.isArray(result.points) ? result.points : []
+  /** @type {Record<string, unknown>} */
+  const next = {
+    ...result,
+    points,
+    returned: points.length,
+    truncated: true,
+  }
+  if (omittedIds.length) {
+    next.omittedIds = omittedIds
+    next.hint =
+      result.hint ||
+      '结果超预算：已截断 points；omittedIds 为因预算未返回的已找到点，可用更小 ids 批次重查；missingIds 仍表示配置不存在'
+  }
+  return next
+}
+
+/**
+ * points op=get: shrink points only; keep valueStatus; returned === points.length;
+ * budget-dropped ids go to omittedIds (never missingIds).
+ * @param {any} result
+ */
+function projectPointsGet(result) {
+  const base = stripWorkspace(result)
+  return enforceBudget(
+    base,
+    AGENT_TEXT_CAPS.listBytes,
+    '结果超预算：缩小 ids 批次后再查；omittedIds 是预算截断，不是配置缺失',
+    (projected) => {
+      let points = Array.isArray(projected.points) ? projected.points.slice() : []
+      /** @type {string[]} */
+      let omittedIds = Array.isArray(projected.omittedIds)
+        ? projected.omittedIds.map(String)
+        : []
+      let next = syncPointsGetCounts({ ...projected, points }, omittedIds)
+      for (let i = 0; i < 12; i += 1) {
+        if (utf8ByteLength(next) <= AGENT_TEXT_CAPS.listBytes) return next
+        if (points.length <= 1) break
+        const keep = Math.max(1, Math.ceil(points.length / 2))
+        const dropped = points.slice(keep)
+        points = points.slice(0, keep)
+        for (const row of dropped) {
+          const id = row && typeof row === 'object' ? String(row.id || '').trim() : ''
+          if (id) omittedIds.push(id)
+        }
+        // Preserve per-row valueStatus; only drop whole rows.
+        next = syncPointsGetCounts({ ...projected, points, missingIds: projected.missingIds }, omittedIds)
+      }
+      if (utf8ByteLength(next) <= AGENT_TEXT_CAPS.listBytes) return next
+      return next
+    },
+  )
+}
+
+/**
+ * @param {any} result
  */
 function projectList(result) {
   const base = stripWorkspace(result)
@@ -144,7 +203,15 @@ export function projectAgentResult(args, result) {
       return projectTrend(args, result)
     case 'alarm':
       return projectAlarm(args, result)
-    case 'points':
+    case 'points': {
+      const isMutation =
+        result.previousConfigVersion != null ||
+        (Array.isArray(result.changedPointIds) && result.changedPointIds.length > 0) ||
+        (Array.isArray(result.changedVisualizationIds) && result.changedVisualizationIds.length > 0)
+      if (isMutation) return projectConfig(result)
+      if (String(args?.op || '') === 'get') return projectPointsGet(result)
+      return projectList(result)
+    }
     case 'visualization': {
       const isMutation =
         result.previousConfigVersion != null ||

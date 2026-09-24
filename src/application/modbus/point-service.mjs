@@ -16,7 +16,9 @@ import { portKey } from '../../infrastructure/modbus/port-lock.mjs'
 import { finishTask, openTask, pruneBuildLogs, recordBenchEvent } from '../../infrastructure/store/journal-store.mjs'
 import { loadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
 import { normalizeFocusRequest, normalizeFocusState } from '../../infrastructure/store/focus-store.mjs'
-import { ensureWorkspaceClaimed, modbusForSession, saveSessionModbusPatch } from './workspace-session-view.mjs'
+import { ensureWorkspaceClaimed, claimWorkspaceSync, modbusForSession, saveSessionModbusPatch } from './workspace-session-view.mjs'
+import { claimLegacyPrivate } from './config-scope-service.mjs'
+import { isScopePartitioned } from '../../domain/modbus/config-scope.mjs'
 import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from '../../domain/modbus/target-resolver-service.mjs'
 import { endpointFingerprint, endpointLabelText, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
@@ -65,30 +67,46 @@ export const pointsOp = async (home, cwd, body) => {
   const room = /** @type {{ cwd: string, error?: string }} */ (requireWorkspaceCwd(cwd))
   if (room.error) return { ok: false, error: room.error }
   const sessionId = String(body?.sessionId || '')
-  const workspace = await ensureWorkspaceClaimed(home, room.cwd, sessionId)
-  const pack = /** @type {ModbusWorkspace} */ (modbusForSession(workspace, sessionId))
   const op = body?.op
   const cidArg = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
   const didArg = body?.deviceId ? String(body.deviceId).trim() : ''
-  const targetConnId = cidArg || pack.activeConnectionId || ''
-  const targetDevId =
-    didArg || pack.devices.find((d) => d.connectionId === targetConnId)?.id || pack.activeDeviceId || ''
+
+  // Read-only list: same in-memory claim as points get — never persist claim/migrate topology.
   if (op === 'list') {
+    const workspace = loadWorkspace(home, room.cwd)
+    if (isScopePartitioned(workspace.modbus) && !sessionId.trim()) {
+      return {
+        ok: false,
+        action: 'points',
+        errorCode: ERROR_CODES.SESSION_REQUIRED,
+        error: '该工作区已按会话隔离，points list 必须携带 sessionId',
+      }
+    }
+    let viewSource = workspace
+    if (sessionId && claimLegacyPrivate(workspace.modbus, sessionId).claimed) {
+      viewSource = claimWorkspaceSync(workspace, sessionId).workspace
+    }
+    const pack = /** @type {ModbusWorkspace} */ (modbusForSession(viewSource, sessionId))
     let list = pack.points
     if (cidArg) list = list.filter((p) => (p.connectionId || p.connId) === cidArg)
     if (didArg) list = list.filter((p) => p.deviceId === didArg)
     const valueCtx = {
-      workspaceModbus: workspace.modbus,
+      workspaceModbus: viewSource.modbus,
       values: workspace.modbus?.values,
     }
     return {
       ok: true,
       action: 'points',
       configVersion: pack.configVersion || 1,
-      // list caller applies identity-safe value selection (same as get).
       points: list.map((p) => compactPointRowForQuery(p, valueCtx)),
     }
   }
+
+  const workspace = await ensureWorkspaceClaimed(home, room.cwd, sessionId)
+  const pack = /** @type {ModbusWorkspace} */ (modbusForSession(workspace, sessionId))
+  const targetConnId = cidArg || pack.activeConnectionId || ''
+  const targetDevId =
+    didArg || pack.devices.find((d) => d.connectionId === targetConnId)?.id || pack.activeDeviceId || ''
   if (op === 'add' || op === 'update') {
     const inputs = Array.isArray(body.points) ? body.points : body.point ? [body.point] : []
     if (!inputs.length) return { ok: false, error: '缺少 points 或 point' }
