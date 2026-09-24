@@ -284,3 +284,31 @@ test('projectTrend keeps Host trend.limit when args.limit omitted', () => {
   )
   assert.equal(forced.trend.limit, 2)
 })
+
+test('projectTrend enforces limit even when Host over-returns samples', () => {
+  const fat = Array.from({ length: 600 }, (_, i) => [i + 1, i])
+  const projected = projectAgentResult(
+    { action: 'trend', limit: 5 },
+    {
+      ok: true,
+      action: 'trend',
+      trend: {
+        limit: 5,
+        series: [{ pointId: 'p1', name: 'P1', count: 600, samples: fat }],
+      },
+    },
+  )
+  const s = projected.trend.series[0]
+  assert.equal(s.samples.length, 5)
+  assert.equal(s.returned, 5)
+  assert.equal(s.count, 600)
+  assert.equal(s.hasMore, true)
+  assert.equal(s.samples[0][0], 596)
+  assert.equal(s.samples[4][0], 600)
+  // limit:0 must not mean "all" via slice(-0)
+  const zero = projectAgentResult(
+    { action: 'trend', limit: 0 },
+    { ok: true, action: 'trend', trend: { series: [{ pointId: 'p1', count: 3, samples: [[1, 1], [2, 2], [3, 3]] }] } },
+  )
+  assert.equal(zero.trend.series[0].samples.length, 3)
+})

@@ -200,10 +200,11 @@ export function projectTrend(args, result) {
       ? Math.trunc(hostLimit)
       : undefined
   const cap = AGENT_TEXT_CAPS.trendBytes
-  // Full candidate page first (newest continuous window as provided).
+  // Enforce per-series limit at projection (defense against a buggy Host over-return).
   const full = series.map((/** @type {any} */ s) => {
     const count = Number(s?.count) || (Array.isArray(s?.samples) ? s.samples.length : 0)
-    const samples = Array.isArray(s?.samples) ? s.samples : []
+    let samples = Array.isArray(s?.samples) ? s.samples : []
+    if (effectiveLimit != null) samples = samples.slice(-effectiveLimit)
     return { ...s, count, samples }
   })
   const maxKeep = Math.max(0, ...full.map((s) => s.samples.length))
