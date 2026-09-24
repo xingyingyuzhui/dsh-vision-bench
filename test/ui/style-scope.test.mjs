@@ -71,11 +71,26 @@ test('unscopedSelectors flags a bare class and ignores a page-prefixed rule', ()
   assert.deepEqual(unscopedSelectors('body[data-dsh-vision-bench]{.dvb-pill{color:red}}'), [])
 })
 
+test('scopePageCss prefixes bare selectors instead of nest-wrapping', () => {
+  const out = scopePageCss('.dvb-pill{color:red}.dvb-pill-severe{font-weight:600}')
+  assert.match(out, /^body\[data-dsh-vision-bench\] \.dvb-pill\{color:red\}/)
+  assert.match(out, /body\[data-dsh-vision-bench\] \.dvb-pill-severe\{font-weight:600\}/)
+  assert.doesNotMatch(out, /^body\[data-dsh-vision-bench\]\{/)
+  // Idempotent on already-prefixed / previously nest-wrapped input.
+  assert.equal(scopePageCss(out), out)
+  assert.equal(
+    scopePageCss('body[data-dsh-vision-bench]{.dvb-pill{color:red}}'),
+    'body[data-dsh-vision-bench] .dvb-pill{color:red}',
+  )
+})
+
 test('sidebar and runtime style strings have no unscoped selectors', () => {
   for (const block of [...SIDEBAR_CSS, ...RUNTIME_CSS]) {
     assert.deepEqual(unscopedSelectors(block), [])
     assert.equal(scopePageCss(block), block.trim())
+    assert.doesNotMatch(block, /^body\[data-dsh-vision-bench\]\{/)
   }
   assert.match(SIDEBAR_CSS.join('\n'), /--dvb-color-info/)
+  assert.match(SIDEBAR_CSS.join('\n'), /\.dvb-pill-fail,body\[data-dsh-vision-bench\] \.dvb-pill-severe,body\[data-dsh-vision-bench\] \.dvb-pill-active\{[^}]*background:/)
   assert.doesNotMatch(SIDEBAR_CSS.join('\n'), /#1d4ed8|#6d28d9|#059669/)
 })
