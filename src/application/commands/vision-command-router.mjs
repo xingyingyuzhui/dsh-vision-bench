@@ -22,6 +22,8 @@ export const ACTIONS = new Set([
   'points',
   'frames',
   'focus',
+  'focus.get',
+  'timeline.list',
   'trend',
   'visualization',
   'alarm',
@@ -70,7 +72,7 @@ function unknownAction(action) {
     action,
     errorCode: 'UNKNOWN_ACTION',
     error:
-      'action 必须是 status | ls | select | build | read | write | map | manual | connect | config | points | frames | focus | trend | visualization | alarm | evidence | configureConnection | openConnection | closeConnection | system.ping',
+      'action 必须是 status | ls | select | build | read | write | map | manual | connect | config | points | frames | focus | focus.get | timeline.list | trend | visualization | alarm | evidence | configureConnection | openConnection | closeConnection | system.ping',
   }
 }
 

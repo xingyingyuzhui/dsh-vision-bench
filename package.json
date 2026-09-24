@@ -310,6 +310,7 @@
     "src/application/commands/agent-result-project-status-read.mjs",
     "src/application/commands/agent-result-caps.mjs",
     "src/application/commands/agent-locator-error.mjs",
+    "src/application/commands/agent-observe-queries.mjs",
     "src/application/commands/config-drift-refresh.mjs",
     "src/application/commands/vision-command-service.mjs",
     "src/application/commands/host-command-service.mjs",

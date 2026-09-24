@@ -236,6 +236,8 @@ export function projectAgentResult(args, result) {
     case 'openConnection':
     case 'closeConnection':
     case 'focus':
+    case 'focus.get':
+    case 'timeline.list':
     case 'evidence':
     case 'system.ping':
       if ('workspace' in result) {

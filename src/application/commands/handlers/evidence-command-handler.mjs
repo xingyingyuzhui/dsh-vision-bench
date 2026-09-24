@@ -2,6 +2,7 @@
 import { buildEvidenceRefs, listFrames, requestFocus } from '../../modbus/index.mjs'
 import { appendEvidence } from '../../../infrastructure/store/journal-store.mjs'
 import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
+import { focusGet, timelineList } from '../agent-observe-queries.mjs'
 
 /**
  * @param {any} home
@@ -34,6 +35,14 @@ export async function handleEvidenceCommand(home, args, room, origin, _opts) {
       offset: args.offset,
     })
     return { action, ...ran }
+  }
+
+  if (action === 'focus.get') {
+    return focusGet(home, room.cwd, origin)
+  }
+
+  if (action === 'timeline.list') {
+    return timelineList(home, room.cwd, args, origin)
   }
 
   if (action === 'focus') {

@@ -20,6 +20,8 @@ export const ACTIONS = new Set([
   'points',
   'frames',
   'focus',
+  'focus.get',
+  'timeline.list',
   'trend',
   'visualization',
   'alarm',
