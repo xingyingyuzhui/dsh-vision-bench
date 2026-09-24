@@ -28,6 +28,7 @@ import { stampPoints } from '../../domain/modbus/unit-id.mjs'
 import { connReady, deviceDisabledOf, pickConnPatch, targetRequired } from '../../domain/modbus/validation.mjs'
 import { applyPointPatch, validateMonitorAlias } from '../../domain/modbus/point-patch.mjs'
 import { compactPointRowForQuery } from './point-query-value.mjs'
+import { pagePointsList, projectPointListRow } from './points-list-page.mjs'
 import {
   changedConnectionIds,
   createModbusTransport,
@@ -94,11 +95,42 @@ export const pointsOp = async (home, cwd, body) => {
       workspaceModbus: viewSource.modbus,
       values: workspace.modbus?.values,
     }
+    const rows = list.map((p) => compactPointRowForQuery(p, valueCtx))
+    const view = String(body?.view || '') === 'summary' ? 'summary' : 'full'
+    const isAgent = body?.source === 'agent'
+    const paged = pagePointsList({
+      points: rows,
+      configVersion: pack.configVersion || 1,
+      sessionId,
+      connectionId: cidArg,
+      deviceId: didArg,
+      view,
+      limit: body?.limit,
+      cursor: typeof body?.cursor === 'string' ? body.cursor : '',
+      isAgent,
+    })
+    if (!paged.ok) {
+      return {
+        ok: false,
+        action: 'points',
+        errorCode: paged.errorCode,
+        error: paged.error,
+        refresh: paged.refresh,
+      }
+    }
     return {
       ok: true,
       action: 'points',
-      configVersion: pack.configVersion || 1,
-      points: list.map((p) => compactPointRowForQuery(p, valueCtx)),
+      configVersion: paged.configVersion,
+      view: paged.view,
+      sessionId,
+      connectionId: cidArg,
+      deviceId: didArg,
+      points: paged.points.map((/** @type {any} */ p) => projectPointListRow(p, paged.view)),
+      total: paged.total,
+      returned: paged.returned,
+      nextCursor: paged.nextCursor,
+      truncated: paged.truncated,
     }
   }
 

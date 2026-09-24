@@ -11,6 +11,7 @@ import {
   projectTrend,
 } from './agent-result-project-rest.mjs'
 import { enforceBudget, projectRead, projectStatus } from './agent-result-project-status-read.mjs'
+import { encodeListCursor, pointSortKey } from '../modbus/points-list-page.mjs'
 
 export { AGENT_FRAMES_MAX_LIMIT, AGENT_TEXT_CAPS, utf8ByteLength }
 
@@ -161,12 +162,38 @@ function projectList(result) {
   return enforceBudget(base, AGENT_TEXT_CAPS.listBytes, '结果超预算：缩小范围或分页后再查', (projected) => {
     let next = { ...projected, truncated: true }
     for (let i = 0; i < 12; i += 1) {
-      if (utf8ByteLength(next) <= AGENT_TEXT_CAPS.listBytes) return next
+      if (utf8ByteLength(next) <= AGENT_TEXT_CAPS.listBytes) break
+      const points = Array.isArray(next.points) ? next.points : null
+      if (points && points.length > 1) {
+        const kept = points.slice(0, Math.max(1, Math.floor(points.length / 2)))
+        const last = kept[kept.length - 1]
+        /** @type {string | null} */
+        let nextCursor = next.nextCursor ?? null
+        if (last && next.configVersion != null) {
+          nextCursor = encodeListCursor({
+            configVersion: next.configVersion,
+            sessionId: String(next.sessionId || ''),
+            connectionId: String(next.connectionId || ''),
+            deviceId: String(next.deviceId || ''),
+            view: String(next.view || 'full'),
+            last: pointSortKey(last),
+          })
+        }
+        next = {
+          ...next,
+          points: kept,
+          returned: kept.length,
+          nextCursor,
+          truncated: true,
+        }
+        continue
+      }
       const hit = findLongestArray(next)
       if (!hit) break
       next = halveAt(next, hit.path)
       next.truncated = true
     }
+    if (Array.isArray(next.points)) next.returned = next.points.length
     return next
   })
 }

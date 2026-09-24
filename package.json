@@ -555,6 +555,7 @@
     "src/application/modbus/poll-session-ownership.mjs",
     "src/application/modbus/poll-runtime-identity.mjs",
     "src/application/modbus/agent-runtime-visibility.mjs",
+    "src/application/modbus/points-list-page.mjs",
     "src/application/modbus/poll-target-preparation.mjs"
   ],
   "repository": {
