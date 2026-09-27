@@ -73,7 +73,8 @@ export const listFrames = (home, cwd, body) => {
       errorCode: ERROR_CODES.SESSION_REQUIRED,
     }
   }
-  const { pack } = loadSessionViewForRead(home, room.cwd, origin.sessionId)
+  const view = loadSessionViewForRead(home, room.cwd, origin.sessionId)
+  const pack = /** @type {ModbusWorkspace} */ (view.pack)
   const cidArg = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
   const didArg = body?.deviceId ? String(body.deviceId).trim() : ''
   const frameId = body && (body.frameId || body.id) ? String(body.frameId || body.id).trim() : ''

@@ -94,12 +94,12 @@ export function rejectUnsupportedQueryField(args) {
  */
 function invalidField(action, field, supportedBy, hint) {
   return {
-    ok: false,
+    ok: /** @type {const} */ (false),
     action,
     errorCode: ERROR_CODES.INVALID_FIELD,
     error: `${field} 不适用于 ${action || '当前'} 查询`,
     hint,
-    retryable: false,
+    retryable: /** @type {const} */ (false),
     details: { field, action, supportedBy },
   }
 }

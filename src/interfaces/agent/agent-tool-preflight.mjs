@@ -67,8 +67,10 @@ function hintFor(action, missing) {
  *   action: string,
  *   errorCode: string,
  *   error: string,
- *   missingFields: string[],
+ *   missingFields?: string[],
  *   hint: string,
+ *   retryable?: false,
+ *   details?: { field: string, action: string, supportedBy: string[] },
  * }}
  */
 export function validateAgentToolArgs(args, _opts = {}) {
