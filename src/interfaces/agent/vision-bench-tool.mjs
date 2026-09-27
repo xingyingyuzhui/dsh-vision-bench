@@ -64,15 +64,15 @@ export function visionBenchTool(home) {
     name: 'vision_bench',
     description:
       'Vision 调试与上位机快速接口。查询或操作当前会话工作区的调试/上位机现场。' +
-      'status：已选工程、Target、多连接摘要与任务时间线（不含历史帧/全量值）；' +
+      'status：已选工程、Target 与多连接摘要（不含历史帧/全量值）。status.log 隐藏无会话归属的短日志，logHiddenCount 不是可读取条数也不是未读计数；会话事件用 timeline.list，status 不提供全量任务时间线。' +
       'ls/select/build/map：工程与编译；' +
       'read/write：读点与受控写点（必须带 connectionId+deviceId；Agent 写点需界面批准）；' +
       'connect：仅打开或断开已保存连接（close=true 断开）。修改端点用 configureConnection，打开用 openConnection；' +
-      'points：op=list|get|add|update|remove|clear。list 返回当前会话可见点表；get 按 ids[]（最多 32，去重保序）或 pointId/id 只读查询，返回 points/requested/returned/missingIds，部分缺失 ok+partial，全部缺失 POINT_NOT_FOUND。可选 connectionId/deviceId 只过滤可见集合。list/get 每条点必有 valueStatus=available|missing|unavailable：available 仅表示来源校验通过（新鲜度仍看 ok/at）；missing 无运行记录；unavailable 有记录但无法安全归属（同 pointId 多私有主人或 provenance 不匹配）——配置仍可见且计入 returned，不得据此自动改名、改设备绑定、采集或写设备。Agent 出口超预算时 get 会截断 points 并设 truncated/omittedIds（预算未返回的已找到 ID），returned 始终等于 points.length；missingIds 只表示配置不存在，二者不混用。op=add 用 points[{name,function,address,connectionId,deviceId,...}] 数组一次写入多个点；op=update 同样用 points[]；op=remove 用 ids[] 或 pointId。不要逐个 add。address 是协议地址（保持寄存器 0 = 40001），不要填 40001。clear 必须带 connectionId+deviceId。监视开关用 monitorEnabled；trendEnabled 只是旧别名，同请求传相反值会 FIELD_CONFLICT。' +
+      'points：op=list|get|add|update|remove|clear。list 返回当前会话可见点表；Agent 默认 limit 20、最大 50，用返回的 nextCursor 作为 cursor 续查（不要用 offset 当游标）。view=full（默认，含运行值）或 summary（不含运行值，仍有 valueStatus）。get 按 ids[]（最多 32，去重保序）或 pointId/id 只读查询，返回 points/requested/returned/missingIds，部分缺失 ok+partial，全部缺失 POINT_NOT_FOUND。可选 connectionId/deviceId 只过滤可见集合。list/get 每条点必有 valueStatus=available|missing|unavailable：available 仅表示来源校验通过（新鲜度仍看 ok/at）；missing 无运行记录；unavailable 有记录但无法安全归属（同 pointId 多私有主人或 provenance 不匹配）——配置仍可见且计入 returned，不得据此自动改名、改设备绑定、采集或写设备。Agent 出口超预算时 get 会截断 points 并设 truncated/omittedIds（预算未返回的已找到 ID），returned 始终等于 points.length；missingIds 只表示配置不存在，二者不混用。op=add 用 points[{name,function,address,connectionId,deviceId,...}] 数组一次写入多个点；op=update 同样用 points[]；op=remove 用 ids[] 或 pointId。不要逐个 add。address 是协议地址（保持寄存器 0 = 40001），不要填 40001。clear 必须带 connectionId+deviceId。监视开关用 monitorEnabled；trendEnabled 只是旧别名，同请求传相反值会 FIELD_CONFLICT。' +
       'visualization：op=list|get|add|update|remove|layout。get 必须带 visualizationId（缺 ID 不会默认取第一个组件）。layout 必须携带 expectedConfigVersion 与 items[{id,x,y,w,h}]；CONFIG_DRIFT 后按 refresh 提示重新 list/get 再提交。' +
       '所有配置修改必须携带最近一次 status/list/get 返回的 configVersion（字段名 expectedConfigVersion；configVersion 为别名）。CONFIG_DRIFT 后必须重新读取配置，再基于新版本重试；不得把 actualVersion 当重试凭证。适用 config、configureConnection、points add/update/remove/clear、visualization add/update/remove/layout。status、points list/get、visualization list/get 不要求版本。' +
       'frames/trend/alarm：需要 connectionId（alarm 仅有 alarmId、trend 仅有 trendKey 时可例外）；trend 的 limit 是每条序列的样本数；trend 分页用每条 series 的 hasMore/oldestReturnedAt（再查 pointIds:[id], end:oldestReturnedAt-1，沿用原 start；多序列分别翻页，不要用一条序列的边界过滤全部序列），不是 nextCursor。hasMore:false 时无后续翻页。' +
-      'focus 会改变 UI 焦点；evidence[] 会追加日志——二者不是纯只读。' +
+      'focus 会改变 UI 焦点；focus.get 与 timeline.list 是只读，不改焦点、不落盘 claim。timeline.list 默认 limit 20、最大 50，只含当前会话归属的结构化事件，用 nextCursor 作为 cursor 续查。evidence[] 会追加日志，不是纯只读。' +
       'alarm 带 watch/followup=true 才订阅过程量告警跟进；watch/followup=false 取消本会话订阅（不需要 connectionId/alarmId）；二者同义，同时传且布尔值不同会 FIELD_CONFLICT。默认过程告警只记事件不唤醒 Agent。' +
       'manual：请求用户完成现场操作；' +
       'system.ping：无副作用探活 Host（不读写串口、不启动采集）。' +
@@ -188,9 +188,24 @@ export function visionBenchTool(home) {
         kind: { type: 'string' },
         limit: {
           type: 'number',
-          description: 'frames 条数，或 trend 每条序列的样本数（不是跨序列总数）',
+          description:
+            'points list：Agent 默认 20、最大 50。timeline.list：默认 20、最大 50。alarm：页大小。frames：条数。trend：每条序列的样本数（不是跨序列总数）',
         },
-        offset: { type: 'number' },
+        offset: {
+          type: 'number',
+          description: 'frames 与 alarm 的数字偏移分页。不能当作 points list 或 timeline.list 的 cursor',
+        },
+        cursor: {
+          type: 'string',
+          description:
+            '只用于 points op=list 与 timeline.list：把上一页的 nextCursor 原样传回。其它 action 传 cursor 会 INVALID_FIELD。不要用 offset 代替它',
+        },
+        view: {
+          type: 'string',
+          enum: ['full', 'summary'],
+          description:
+            '只用于 points op=list。full 为默认并含运行值；summary 不含运行值，仍返回 valueStatus。其它 action 或 points 的非 list 操作传 view 会 INVALID_FIELD',
+        },
         start: { type: 'number' },
         end: { type: 'number' },
         pointIds: { type: 'array', items: { type: 'string' } },

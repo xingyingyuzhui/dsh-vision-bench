@@ -5,6 +5,7 @@
  * A well-formed trendKey (connectionId:deviceId:pointId) satisfies the connection requirement.
  * alarmId alone does not: without the point table this side cannot prove a unique connection.
  */
+import { rejectUnsupportedQueryField } from '../../application/commands/agent-query-fields.mjs'
 import { normalizePointGetSelector } from '../../domain/modbus/point-get-selector.mjs'
 
 const NEEDS_CONNECTION = new Set(['frames', 'trend', 'alarm'])
@@ -82,6 +83,9 @@ export function validateAgentToolArgs(args, _opts = {}) {
       hint: '每次调用必须携带 action',
     }
   }
+
+  const unsupported = rejectUnsupportedQueryField(args)
+  if (unsupported) return unsupported
 
   // Unsubscribe (alarm watch/followup false) only needs a valid session+cwd —
   // clear this session's watch first; no connectionId / alarmId required.
