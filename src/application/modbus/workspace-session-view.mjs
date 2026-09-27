@@ -9,7 +9,7 @@
  *   ensureWorkspaceClaimed → modbusForSession → (operate on flat view)
  */
 import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
-import { applyWorkspacePatch, loadWorkspace, saveWorkspace, workspaceRepository } from '../../infrastructure/store/workspace-store.mjs'
+import { applyWorkspacePatch, loadWorkspace, workspaceRepository } from '../../infrastructure/store/workspace-store.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { isScopePartitioned, normalizeScopeSessionId, omitSessionConfigs } from '../../domain/modbus/config-scope.mjs'
 import { claimLegacyPrivate, foldModbusFromSession, projectModbusForSession } from './config-scope-service.mjs'
@@ -61,7 +61,8 @@ export async function ensureWorkspaceClaimed(home, cwd, sessionId) {
 /**
  * Sync variant used by hot paths that already hold a freshly loaded workspace
  * and only need the claim without awaiting (caller persists if claimed.claimed).
- * Prefer `ensureWorkspaceClaimed` at service entry points.
+ * Prefer `ensureWorkspaceClaimed` at mutating service entry points.
+ * Read paths must use `loadSessionViewForRead` and must not call this to save.
  *
  * @param {any} workspace
  * @param {string | undefined} sessionId
@@ -92,25 +93,6 @@ export function loadSessionViewForRead(home, cwd, sessionId) {
     viewSource = claimWorkspaceSync(workspace, sid).workspace
   }
   return { workspace: viewSource, pack: modbusForSession(viewSource, sid) }
-}
-
-/**
- * Sync counterpart of `ensureWorkspaceClaimed` for hot paths that cannot await
- * (e.g. `listFrames`). Persists a first-opener claim the same way: topology moves
- * into sessionConfigs without bumping configVersion.
- *
- * @param {string} home
- * @param {string} cwd
- * @param {string | undefined} sessionId
- * @returns {any} layered workspace
- */
-export function ensureWorkspaceClaimedSync(home, cwd, sessionId) {
-  const sid = normalizeScopeSessionId(sessionId)
-  const workspace = loadWorkspace(home, cwd)
-  if (!sid || !claimLegacyPrivate(workspace.modbus, sid).claimed) return workspace
-  const claimed = claimLegacyPrivate(workspace.modbus, sid)
-  const saved = saveWorkspace(home, cwd, { modbus: claimed.modbus })
-  return saved?.ok ? saved.workspace : loadWorkspace(home, cwd)
 }
 
 /**

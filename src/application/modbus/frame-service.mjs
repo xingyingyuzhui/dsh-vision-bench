@@ -15,10 +15,12 @@ import { planScopedReadBatches } from '../../domain/modbus/poll-plan.mjs'
 import { portKey } from '../../infrastructure/modbus/port-lock.mjs'
 import { finishTask, openTask, pruneBuildLogs, recordBenchEvent } from '../../infrastructure/store/journal-store.mjs'
 import { normalizeFocusRequest, normalizeFocusState } from '../../infrastructure/store/focus-store.mjs'
-import { ensureWorkspaceClaimedSync, modbusForSession } from './workspace-session-view.mjs'
+import { loadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
+import { loadSessionViewForRead } from './workspace-session-view.mjs'
 import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from '../../domain/modbus/target-resolver-service.mjs'
 import { endpointFingerprint, endpointLabelText, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
+import { isScopePartitioned } from '../../domain/modbus/config-scope.mjs'
 import { findPointV3, fnOfPoint } from '../../domain/modbus/function-code.mjs'
 import { compactPointRow, isStaleValue } from '../../domain/modbus/point-value.mjs'
 import { stampPoints } from '../../domain/modbus/unit-id.mjs'
@@ -62,8 +64,16 @@ export const listFrames = (home, cwd, body) => {
   const room = /** @type {{ cwd: string, error?: string }} */ (requireWorkspaceCwd(cwd))
   if (room.error) return { ok: false, error: room.error, errorCode: ERROR_CODES.TARGET_REQUIRED }
   const origin = originOf(body)
-  const workspace = ensureWorkspaceClaimedSync(home, room.cwd, origin.sessionId)
-  const pack = /** @type {ModbusWorkspace} */ (modbusForSession(workspace, origin.sessionId))
+  const loaded = loadWorkspace(home, room.cwd)
+  if (isScopePartitioned(loaded.modbus) && !String(origin.sessionId || '').trim()) {
+    return {
+      ok: false,
+      action: 'frames',
+      error: '该工作区已按会话隔离，frames 必须携带 sessionId',
+      errorCode: ERROR_CODES.SESSION_REQUIRED,
+    }
+  }
+  const { pack } = loadSessionViewForRead(home, room.cwd, origin.sessionId)
   const cidArg = body && (body.connectionId || body.connId) ? String(body.connectionId || body.connId).trim() : ''
   const didArg = body?.deviceId ? String(body.deviceId).trim() : ''
   const frameId = body && (body.frameId || body.id) ? String(body.frameId || body.id).trim() : ''
