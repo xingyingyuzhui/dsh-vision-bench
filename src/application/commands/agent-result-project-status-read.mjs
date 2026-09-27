@@ -231,7 +231,7 @@ export function projectRead(args, result) {
   }))
 
   const pageLimit = Math.max(1, Math.min(READ_PAGE_MAX, Number(args?.limit) || READ_PAGE_DEFAULT))
-  const pageOffset = Math.max(0, Number(args?.offset) || Number(args?.cursor) || 0)
+  const pageOffset = Math.max(0, Number(args?.offset) || 0)
 
   /** @type {any[]} */
   let projectedValues = []

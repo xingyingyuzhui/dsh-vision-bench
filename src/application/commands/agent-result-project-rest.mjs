@@ -1,8 +1,53 @@
 // @ts-check
+import { createHash } from 'node:crypto'
 import { AGENT_FRAMES_MAX_LIMIT, AGENT_TEXT_CAPS, utf8ByteLength } from './agent-result-caps.mjs'
 import { enforceBudget, pickSafetyFields } from './agent-result-project-status-read.mjs'
 
 const ALARM_PAGE_DEFAULT = 40
+
+const RESULT_TOO_LARGE_HINT =
+  '单条记录超过 Agent 输出上限，当前查询无法完整返回；请到 Vision UI 查看/导出该记录'
+
+/**
+ * Keep an identifier inside the error body. Extreme ids become a short fingerprint.
+ * @param {string} id
+ */
+export function boundedRecordId(id) {
+  const text = String(id || '')
+  if (Buffer.byteLength(text, 'utf8') <= 96) return text
+  return createHash('sha256').update(text).digest('hex').slice(0, 16)
+}
+
+/**
+ * Single record does not fit the Agent output cap. The record is not consumed.
+ * @param {{
+ *   action: string,
+ *   commandId?: string,
+ *   total: number,
+ *   alarmId?: string,
+ *   eventId?: string,
+ * }} fields
+ */
+export function resultTooLarge(fields) {
+  /** @type {Record<string, unknown>} */
+  const out = {
+    ok: false,
+    action: fields.action,
+    errorCode: 'RESULT_TOO_LARGE',
+    error: RESULT_TOO_LARGE_HINT,
+    hint: RESULT_TOO_LARGE_HINT,
+    overrun: true,
+    truncated: true,
+    retryable: false,
+    returned: 0,
+    nextCursor: null,
+    total: fields.total,
+  }
+  if (fields.commandId) out.commandId = fields.commandId
+  if (fields.alarmId != null) out.alarmId = boundedRecordId(fields.alarmId)
+  if (fields.eventId != null) out.eventId = boundedRecordId(fields.eventId)
+  return out
+}
 
 /**
  * @param {any} result
@@ -287,35 +332,18 @@ export function projectAlarm(args, result) {
   const alarms = result.alarms && typeof result.alarms === 'object' ? result.alarms : {}
   const alarmId = typeof args?.alarmId === 'string' ? args.alarmId.trim() : ''
   const pageLimit = Math.max(1, Math.min(ALARM_PAGE_DEFAULT, Number(args?.limit) || ALARM_PAGE_DEFAULT))
-  const pageOffset = Math.max(0, Number(args?.offset) || Number(args?.cursor) || 0)
+  const pageOffset = Math.max(0, Number(args?.offset) || 0)
+  const cap = AGENT_TEXT_CAPS.alarmBytes
+  const commandId = typeof result.commandId === 'string' ? result.commandId : ''
 
-  /** @type {Record<string, ReturnType<typeof projectAlarmRow>>} */
-  let projectedAlarms = {}
-  let total = 0
-  let returned = 0
-  /** @type {string | null} */
-  let nextCursor = null
-
-  if (alarmId) {
-    const hit = alarms[alarmId]
-    if (hit) {
-      projectedAlarms = { [alarmId]: projectAlarmRow(alarmId, hit, { detail: true }) }
-      total = 1
-      returned = 1
-    } else {
-      total = Object.keys(alarms).length
-      returned = 0
-    }
-  } else {
-    const entries = Object.entries(alarms)
-    total = entries.length
-    const slice = entries.slice(pageOffset, pageOffset + pageLimit)
-    projectedAlarms = Object.fromEntries(slice.map(([id, row]) => [id, projectAlarmRow(id, row)]))
-    returned = slice.length
-    if (pageOffset + pageLimit < total) nextCursor = String(pageOffset + pageLimit)
-  }
-
-  const projected = {
+  /**
+   * @param {Record<string, ReturnType<typeof projectAlarmRow>>} projectedAlarms
+   * @param {number} total
+   * @param {number} returned
+   * @param {string | null} nextCursor
+   * @param {boolean} [truncated]
+   */
+  const build = (projectedAlarms, total, returned, nextCursor, truncated) => ({
     ...pickSafetyFields(result),
     connectionId: result.connectionId,
     configVersion: result.configVersion,
@@ -325,18 +353,38 @@ export function projectAlarm(args, result) {
     returned,
     nextCursor,
     subscription: result.subscription,
+    ...(truncated ? { truncated: true } : {}),
+  })
+
+  if (alarmId) {
+    const hit = alarms[alarmId]
+    if (!hit) {
+      return build({}, Object.keys(alarms).length, 0, null)
+    }
+    const projected = build({ [alarmId]: projectAlarmRow(alarmId, hit, { detail: true }) }, 1, 1, null)
+    if (utf8ByteLength(projected) <= cap) return projected
+    return resultTooLarge({ action: 'alarm', commandId, total: 1, alarmId })
   }
 
-  return enforceBudget(projected, AGENT_TEXT_CAPS.alarmBytes, 'alarm 超预算：用 alarmId 单查或减小 limit', (p) => {
-    const ids = Object.keys(p.alarms || {})
-    const keep = ids.slice(0, 10)
-    return {
-      ...p,
-      alarms: Object.fromEntries(keep.map((id) => [id, p.alarms[id]])),
-      returned: keep.length,
-      truncated: true,
-      nextCursor: p.nextCursor || String(keep.length),
-    }
+  const entries = Object.entries(alarms)
+  const total = entries.length
+  const slice = entries.slice(pageOffset, pageOffset + pageLimit)
+  if (!slice.length) return build({}, total, 0, null)
+
+  for (let k = slice.length; k >= 1; k -= 1) {
+    const kept = slice.slice(0, k)
+    const projectedAlarms = Object.fromEntries(kept.map(([id, row]) => [id, projectAlarmRow(id, row)]))
+    const nextCursor = pageOffset + k < total ? String(pageOffset + k) : null
+    const truncated = k < slice.length || nextCursor !== null
+    const projected = build(projectedAlarms, total, k, nextCursor, truncated)
+    if (utf8ByteLength(projected) <= cap) return projected
+  }
+
+  return resultTooLarge({
+    action: 'alarm',
+    commandId,
+    total,
+    alarmId: slice[0][0],
   })
 }
 
