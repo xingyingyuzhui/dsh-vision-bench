@@ -10,6 +10,7 @@ import {
   projectFrames,
   projectTrend,
 } from './agent-result-project-rest.mjs'
+import { projectTimelineList } from './agent-result-project-timeline.mjs'
 import { enforceBudget, projectRead, projectStatus } from './agent-result-project-status-read.mjs'
 import { encodeListCursor, pointSortKey } from '../modbus/points-list-page.mjs'
 
@@ -264,7 +265,6 @@ export function projectAgentResult(args, result) {
     case 'closeConnection':
     case 'focus':
     case 'focus.get':
-    case 'timeline.list':
     case 'evidence':
     case 'system.ping':
       if ('workspace' in result) {
@@ -273,6 +273,8 @@ export function projectAgentResult(args, result) {
         return rest
       }
       return result
+    case 'timeline.list':
+      return projectTimelineList(result)
     default: {
       if (CONFIG_ACTIONS.has(action)) return projectConfig(result)
       if ('workspace' in result) {
