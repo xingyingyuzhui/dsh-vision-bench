@@ -141,6 +141,18 @@ export function selectPointQueryValue(input) {
   return { status: 'available', record: matched[0], reason: 'matched' }
 }
 
+let queryValueSelects = 0
+
+/** Test seam: how many runtime-value selections list/get performed. */
+export function resetPointQuerySelectCount() {
+  queryValueSelects = 0
+}
+
+/** @returns {number} */
+export function pointQuerySelectCount() {
+  return queryValueSelects
+}
+
 /**
  * Build a compact point row with mandatory valueStatus for get/list.
  * Caller is responsible for identity checks via selectPointQueryValue.
@@ -149,6 +161,7 @@ export function selectPointQueryValue(input) {
  * @param {{ workspaceModbus: any, values: any }} ctx
  */
 export function compactPointRowForQuery(point, ctx) {
+  queryValueSelects += 1
   const selected = selectPointQueryValue({
     workspaceModbus: ctx.workspaceModbus,
     point,

@@ -95,11 +95,10 @@ export const pointsOp = async (home, cwd, body) => {
       workspaceModbus: viewSource.modbus,
       values: workspace.modbus?.values,
     }
-    const rows = list.map((p) => compactPointRowForQuery(p, valueCtx))
     const view = String(body?.view || '') === 'summary' ? 'summary' : 'full'
     const isAgent = body?.source === 'agent'
     const paged = pagePointsList({
-      points: rows,
+      points: list,
       configVersion: pack.configVersion || 1,
       sessionId,
       connectionId: cidArg,
@@ -128,7 +127,9 @@ export const pointsOp = async (home, cwd, body) => {
       sessionId,
       connectionId: cidArg,
       deviceId: didArg,
-      points: pageRows.map((/** @type {any} */ p) => projectPointListRow(p, listView)),
+      points: pageRows.map((/** @type {any} */ p) =>
+        projectPointListRow(compactPointRowForQuery(p, valueCtx), listView),
+      ),
       total: paged.total,
       returned: paged.returned,
       nextCursor: paged.nextCursor,
