@@ -163,7 +163,7 @@ export function createLogPage(React, t, post, helpers = {}) {
             postEvidence(post, cwd, evidenceFromRef(ref), (reason) => {
               setNote(reason)
               setTimeout(() => setNote(''), 4000)
-            })
+            }, { sessionId })
           }
           return
         } catch {}

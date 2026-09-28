@@ -320,7 +320,7 @@ export function useFramesPage(React, props, post) {
       try {
         copyAgentRef(ref)
       } catch {}
-    })
+    }, { sessionId })
   }
 
   function copyText(text, flag) {

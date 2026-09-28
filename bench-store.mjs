@@ -57,5 +57,5 @@ export {
   sweepStaleTasks,
   pruneBuildLogs,
   clearFramesByConnection,
-  appendEvidence,
 } from './src/infrastructure/store/journal-store.mjs'
+export { appendEvidence } from './src/application/modbus/evidence-append-service.mjs'

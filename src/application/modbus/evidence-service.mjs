@@ -1,108 +1,82 @@
 // @ts-check
-import { evaluateAlarms, normalizeAlarmState } from '../../domain/modbus/alarm-model.mjs'
-import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
-import { normalizePointV3 } from '../../domain/modbus/point-model.mjs'
-import { pickArtifact } from '../../infrastructure/files/project-fs.mjs'
-import { toEndpoint } from '../../domain/modbus/io-contract.mjs'
-import { aborted, hasRunning, originOf, signalOf } from '../../domain/modbus/journal-model.mjs'
-import { commitPollResult, commitReadResult, commitWriteResult } from './modbus-commit.mjs'
-import { notifyBenchEvent } from '../../infrastructure/host/notify.mjs'
-import { requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
-import { clampInt, fillSimValues, functionTag, normalizePoints, normalizeWriteValues, pointLabel, scatterBatch, setPointValue } from '../../domain/modbus/point-model.mjs'
-import { decodeValue, isWritableFunction, pointIdOf } from '../../domain/modbus/point-math.mjs'
-import { evaluateAlarm, evaluatePointAlarms } from '../../domain/modbus/point-alarm.mjs'
-import { planScopedReadBatches } from '../../domain/modbus/poll-plan.mjs'
-import { portKey } from '../../infrastructure/modbus/port-lock.mjs'
-import { finishTask, openTask, pruneBuildLogs, recordBenchEvent } from '../../infrastructure/store/journal-store.mjs'
-import { loadWorkspace, saveWorkspace } from '../../infrastructure/store/workspace-store.mjs'
-import { normalizeFocusRequest, normalizeFocusState } from '../../infrastructure/store/focus-store.mjs'
-import { TARGET_CODES, resolveTarget as resolveUnifiedTarget } from '../../domain/modbus/target-resolver-service.mjs'
-import { endpointFingerprint, endpointLabelText, sameEndpoint } from '../../domain/modbus/endpoint.mjs'
+import { isScopePartitioned } from '../../domain/modbus/config-scope.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
-import { findPointV3, fnOfPoint } from '../../domain/modbus/function-code.mjs'
-import { compactPointRow, isStaleValue } from '../../domain/modbus/point-value.mjs'
-import { stampPoints } from '../../domain/modbus/unit-id.mjs'
-import { connReady, deviceDisabledOf, pickConnPatch, targetRequired } from '../../domain/modbus/validation.mjs'
-import {
-  changedConnectionIds,
-  createModbusTransport,
-  notifyConnectionRelease,
-  toReadRequest,
-  toWriteRequest,
-} from '../../infrastructure/modbus/transport-adapter.mjs'
-import {
-  PENDING_TTL_MS,
-  POLL_BUDGET_MS,
-  alarmLabel,
-  alarmSummary,
-  createTransactionFrame,
-  entryLabel,
-  frameEntry,
-  framesOf,
-  pendingState,
-  pendingWrites,
-  pickModbusPatch,
-  pointBefore,
-  pointValuesOfBatch,
-  pollLocks,
-  prunePendingWrites,
-  runReadTx,
-  transportOf,
-} from './modbus-runtime-context.mjs'
-import { getSharedDebugRuntime } from '../debug/debug-runtime.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
+import { loadWorkspace } from '../../infrastructure/store/workspace-store.mjs'
+import { peekSharedDebugRuntime } from '../debug/debug-runtime.mjs'
+import { collectVisibleEvidenceRefs, projectVisibleFocus } from './evidence-scope.mjs'
+import { loadSessionViewForRead } from './workspace-session-view.mjs'
 
-/** @typedef {import('../../types/modbus.js').ModbusWorkspace} ModbusWorkspace */
-/** @typedef {import('../../types/workspace.js').VisionWorkspace} VisionWorkspace */
 /**
+ * Snapshot lookups from the host debug runtime, if one is running. Never creates it.
+ * @returns {import('./evidence-scope.mjs').DebugSnapshotResolver | null}
+ */
+export function hostDebugSnapshotResolver() {
+  const runtime = peekSharedDebugRuntime()
+  if (!runtime) return null
+  return {
+    latestOwnedSnapshotRef: runtime.latestOwnedSnapshotRef,
+    resolveOwnedSnapshotRef: runtime.resolveOwnedSnapshotRef,
+  }
+}
+
+/**
+ * @param {{ workspace: any, pack: any, sessionId?: string, cwd: string }} view
+ * @returns {import('./evidence-scope.mjs').EvidenceScope}
+ */
+export function evidenceScopeOf(view) {
+  return {
+    workspace: view.workspace,
+    pack: view.pack,
+    sessionId: String(view.sessionId || '').trim(),
+    cwd: view.cwd,
+    debug: hostDebugSnapshotResolver(),
+  }
+}
+
+/**
+ * Evidence refs for a view the caller already loaded (same snapshot as the response).
+ * @param {{ workspace: any, pack: any, sessionId?: string, cwd: string }} view
+ */
+export function evidenceRefsForView(view) {
+  return collectVisibleEvidenceRefs(evidenceScopeOf(view))
+}
+
+/**
+ * Focus as seen by this caller (foreign focus empty, unverifiable rows hidden).
+ * @param {{ workspace: any, pack: any, sessionId?: string, cwd: string }} view
+ */
+export function focusForView(view) {
+  return projectVisibleFocus(view.workspace, evidenceScopeOf(view))
+}
+
+/**
+ * Read-only session evidence view. Never persists a claim.
+ *
  * @param {string} home
  * @param {string} cwd
+ * @param {string} [sessionId] trusted origin session, never taken from evidence rows
+ * @returns {{ ok: true, evidence: any[], workspace: any, pack: any } | { ok: false, errorCode: string, error: string }}
  */
-export const buildEvidenceRefs = (home, cwd) => {
-  const workspace = /** @type {VisionWorkspace} */ (loadWorkspace(home, cwd))
-  const pack = /** @type {ModbusWorkspace} */ (normalizeModbus(workspace.modbus))
-  const refs = []
-  // compile evidence: latest build task
-  const latestBuild = (workspace.tasks || []).find((t) => t.type === 'build')
-  if (latestBuild)
-    refs.push({
-      kind: 'build',
-      id: latestBuild.id,
-      at: latestBuild.endedAt || latestBuild.startedAt,
-      version: pack.configVersion || 1,
-    })
-  // log evidence: last timeline
-  const lastLog = (workspace.timeline || [])[0]
-  if (lastLog) refs.push({ kind: 'log', id: lastLog.id, at: lastLog.at, version: pack.configVersion || 1 })
-
-  // debug snapshot evidence: latest snapshot if active
-  try {
-    const runtime = getSharedDebugRuntime()
-    const activeSession = runtime.findSession((s) => s.workspaceCwd === cwd)
-    const latestSnapshot = activeSession?.snapshots?.[activeSession.snapshots.length - 1]
-    if (latestSnapshot) {
-      refs.push({
-        kind: 'debug_snapshot',
-        id: latestSnapshot.id,
-        snapshotId: latestSnapshot.id,
-        debugSessionId: activeSession.debugSessionId,
-        reason: latestSnapshot.reason,
-        file: latestSnapshot.location?.file || '',
-        line: latestSnapshot.location?.line || 0,
-        firmwareHash: latestSnapshot.firmwareHash || '',
-        at: latestSnapshot.createdAt || Date.now(),
-        version: pack.configVersion || 1,
-      })
+export const buildEvidenceRefs = (home, cwd, sessionId = '') => {
+  const sid = String(sessionId || '').trim()
+  if (!sid) {
+    const workspace = loadWorkspace(home, cwd)
+    if (isScopePartitioned(workspace.modbus)) {
+      return {
+        ok: false,
+        errorCode: ERROR_CODES.SESSION_REQUIRED,
+        error: '该工作区已按会话隔离，evidence 必须携带 sessionId',
+      }
     }
-  } catch {}
-
-  // point/frame/trend slices
-  for (const p of pack.points.slice(0, 5))
-    refs.push({
-      kind: 'point',
-      id: p.id,
-      connectionId: p.connectionId,
-      deviceId: p.deviceId,
-      version: pack.configVersion || 1,
-    })
-  return refs
+    const pack = normalizeModbus(workspace.modbus)
+    return { ok: true, evidence: evidenceRefsForView({ workspace, pack, sessionId: '', cwd }), workspace, pack }
+  }
+  const view = loadSessionViewForRead(home, cwd, sid)
+  return {
+    ok: true,
+    evidence: evidenceRefsForView({ workspace: view.workspace, pack: view.pack, sessionId: sid, cwd }),
+    workspace: view.workspace,
+    pack: view.pack,
+  }
 }

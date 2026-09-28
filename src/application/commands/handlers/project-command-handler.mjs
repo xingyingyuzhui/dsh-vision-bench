@@ -13,7 +13,7 @@ import {
 import { listWorkspaceDir as listDir } from '../../../infrastructure/files/project-fs.mjs'
 import { keilMap } from '../../keil/project-service.mjs'
 import { keilBuild } from '../../keil/build-service.mjs'
-import { buildEvidenceRefs } from '../../modbus/index.mjs'
+import { evidenceRefsForView, focusForView } from '../../modbus/evidence-service.mjs'
 import { requireKeilProject } from '../../../shared/workspace-paths.mjs'
 import { decodeValue } from '../../../domain/modbus/point-math.mjs'
 import { pointRuntimeStatus } from '../../../domain/modbus/point-model.mjs'
@@ -203,8 +203,8 @@ export async function handleProjectCommand(home, args, room, origin, opts) {
         },
         configVersion,
       },
-      focus: workspace.focus || { request: null, prev: null, tempWatchIds: [], badgeOnly: false, evidence: [] },
-      evidence: buildEvidenceRefs(home, room.cwd),
+      focus: focusForView({ workspace, pack, sessionId, cwd: room.cwd }),
+      evidence: evidenceRefsForView({ workspace, pack, sessionId, cwd: room.cwd }),
       log: logView.log,
       logHiddenCount: logView.logHiddenCount,
       tasks: scopedTasks,

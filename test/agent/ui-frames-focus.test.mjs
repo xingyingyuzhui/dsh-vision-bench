@@ -89,10 +89,21 @@ test('Agent focus creates highlight with stable IDs, temp watch and badgeOnly', 
   })
   assert.equal(second.ok, true)
   assert.equal(second.prev.pointId, 'p1')
-  const frameMiss = await requestFocus(home, cwd, {
-    source: 'agent',
-    target: { connectionId: 'c1', frameId: 'nonexistent' },
-  })
+  const frameMiss = await requestFocus(
+    home,
+    cwd,
+    { target: { connectionId: 'c1', frameId: 'nonexistent' } },
+    { source: 'agent', sessionId: 's1' },
+  )
   assert.equal(frameMiss.ok, false)
   assert.equal(frameMiss.errorCode, ERROR_CODES.TARGET_MISMATCH)
+  const foreign = await requestFocus(
+    home,
+    cwd,
+    { target: { connectionId: 'c1', pointId: 'p1' } },
+    { source: 'user', sessionId: 's2' },
+  )
+  assert.equal(foreign.ok, false)
+  assert.equal(foreign.errorCode, ERROR_CODES.SESSION_MISMATCH)
+  assert.equal(loadWorkspace(home, cwd).focus.sessionId, 's1')
 })

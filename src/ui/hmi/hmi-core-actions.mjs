@@ -166,7 +166,7 @@ export function createHmiCoreActions(ctx) {
       })
       .catch(() => {})
     try {
-      postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setError(reason))
+      postEvidence(post, cwd, evidenceFromRef(ref), (reason) => setError(reason), { sessionId: sessionId || '' })
     } catch {}
     return ref
   }

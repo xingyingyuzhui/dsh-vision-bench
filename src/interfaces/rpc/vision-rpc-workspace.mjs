@@ -6,9 +6,12 @@
  * without changing endpoint contracts.
  */
 
-import { listPendingWrites, migrateLegacyDisabled } from '../../application/modbus/index.mjs'
+import { listPendingWrites, migrateLegacyDisabled, requestFocus } from '../../application/modbus/index.mjs'
+import { appendEvidence } from '../../application/modbus/evidence-append-service.mjs'
 import { claimLegacyPrivate, projectModbusForSession } from '../../application/modbus/config-scope-service.mjs'
 import { ensurePolling } from '../../application/modbus/polling-coordinator.mjs'
+import { focusForView } from '../../application/modbus/evidence-service.mjs'
+import { normalizeModbus } from '../../domain/modbus/modbus-migration.mjs'
 import { isScopePartitioned, omitSessionConfigs } from '../../domain/modbus/config-scope.mjs'
 import { inspectPresetHealth } from '../../infrastructure/harness/preset.mjs'
 import { getVisionIoBroker } from '../../infrastructure/modbus/io-broker.mjs'
@@ -108,15 +111,18 @@ export async function loadWorkspaceForSession(home, cwd, sessionId) {
 /**
  * Effective flat topology for the caller. Anonymous callers see the flat layer only while
  * the workspace is still unpartitioned; afterwards they see no private topology.
+ * Focus is projected for the same caller: another session's focus is empty and
+ * stored evidence rows that do not resolve for this caller are hidden.
  * @param {any} workspace layered workspace
  * @param {string} sessionId
+ * @param {string} [cwd] workspace cwd, needed to resolve debug snapshot rows
  */
-export function sessionWorkspaceView(workspace, sessionId) {
-  const modbus =
-    sessionId || isScopePartitioned(workspace.modbus)
-      ? projectModbusForSession(workspace.modbus, sessionId)
-      : workspace.modbus
-  return { ...workspace, modbus: omitSessionConfigs(modbus) }
+export function sessionWorkspaceView(workspace, sessionId, cwd = '') {
+  const scoped = Boolean(sessionId) || isScopePartitioned(workspace.modbus)
+  const modbus = scoped ? projectModbusForSession(workspace.modbus, sessionId) : workspace.modbus
+  const pack = scoped ? modbus : normalizeModbus(workspace.modbus)
+  const { evidenceHiddenCount, ...focus } = focusForView({ workspace, pack, sessionId, cwd })
+  return { ...workspace, modbus: omitSessionConfigs(modbus), focus, focusEvidenceHiddenCount: evidenceHiddenCount }
 }
 
 const migratedCwds = new Set()
@@ -166,7 +172,7 @@ export async function snapshot(home, cwd, sessionId) {
     }
     const session = String(sessionId || '').trim()
     const workspace = await loadWorkspaceForSession(home, workspaceCwd, session)
-    body.workspace = sessionWorkspaceView(workspace, session)
+    body.workspace = sessionWorkspaceView(workspace, session, workspaceCwd)
     body.journal = journalView(body.workspace)
     body.pendingWrites = listPendingWrites(workspaceCwd, sessionId)
     const sources = await listConnectedSerialSources(home, workspaceCwd)
@@ -178,4 +184,32 @@ export async function snapshot(home, cwd, sessionId) {
     body.connectionStates = states.connectionStates || []
   }
   return body
+}
+
+/**
+ * UI page scope, not an authenticated identity: `source` in the body is ignored and the
+ * page `sessionId` is the only session the write may act for.
+ * @param {string} home
+ * @param {any} body
+ */
+export function rpcRequestFocus(home, body) {
+  const src = body && typeof body === 'object' ? body : {}
+  return requestFocus(home, src.cwd, normalizeConnAlias(src), {
+    source: 'user',
+    sessionId: String(src.sessionId || '').trim(),
+  })
+}
+
+/**
+ * @param {string} home
+ * @param {any} body
+ */
+export function rpcAppendEvidence(home, body) {
+  const src = body && typeof body === 'object' ? body : {}
+  const room = requireWorkspaceCwd(src.cwd)
+  if (room.error) return { ok: false, error: room.error }
+  const ev = src.evidence || src.evidences || src.item
+  const list = Array.isArray(ev) ? ev : ev ? [ev] : []
+  if (!list.length) return { ok: false, error: '缺少 evidence' }
+  return appendEvidence(home, room.cwd, list, String(src.sessionId || '').trim())
 }

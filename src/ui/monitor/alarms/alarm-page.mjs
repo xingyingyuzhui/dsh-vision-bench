@@ -189,7 +189,7 @@ export function createAlarmPage(React, t, post, hooks) {
       await dispatchAgentRef(ref, agentBridge)
       if (cwd) {
         try {
-          postEvidence(post, cwd, evidenceFromRef(ref), () => {})
+          postEvidence(post, cwd, evidenceFromRef(ref), () => {}, { sessionId })
         } catch {}
       }
     }

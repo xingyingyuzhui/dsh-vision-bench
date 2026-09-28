@@ -17,9 +17,6 @@ import {
 } from '../../domain/modbus/journal-model.mjs'
 import { requireWorkspaceCwd } from '../../shared/workspace-paths.mjs'
 import { mergeLog } from '../../domain/prompt/prompt-log.mjs'
-import { resolveTarget } from '../../domain/modbus/target-resolver-service.mjs'
-import { projectModbusForSession } from '../../application/modbus/config-scope-service.mjs'
-import { isScopePartitioned } from '../../domain/modbus/config-scope.mjs'
 import { ERROR_CODES } from '../../domain/modbus/errors.mjs'
 import { createWorkspaceRepository } from '../persistence/workspace-repository.mjs'
 import { storeDir } from './bindings-store.mjs'
@@ -375,75 +372,4 @@ export const clearFramesByConnection = async (home, cwd, options) => {
   })
   if (!saved.ok) return saved
   return { ok: true, cleared: all ? 'all' : connId, workspace: saved.workspace }
-}
-
-/** @param {string} home @param {string | undefined} cwd @param {unknown} evidence @param {unknown} [sessionId] */
-export const appendEvidence = async (home, cwd, evidence, sessionId = '') => {
-  const room = requireWorkspaceCwd(cwd)
-  if (room.error) return { ok: false, error: room.error }
-  const ws = loadWorkspace(home, room.cwd)
-  const sid = typeof sessionId === 'string' ? sessionId.trim() : ''
-  const pack =
-    sid || isScopePartitioned(ws.modbus) ? projectModbusForSession(ws.modbus, sid) : normalizeModbus(ws.modbus)
-  const list = Array.isArray(evidence) ? evidence : evidence && typeof evidence === 'object' ? [evidence] : []
-  if (!list.length) return { ok: false, error: '缺少 evidence' }
-  for (const ev of list) {
-    if (!ev || typeof ev !== 'object') return { ok: false, error: 'invalid evidence' }
-    const kind = typeof ev.kind === 'string' ? ev.kind : ''
-    const pointId = kind === 'point' ? ev.pointId || ev.id : ev.pointId
-    const frameId = kind === 'frame' ? ev.frameId || ev.id : ev.frameId
-    const alarmId = kind === 'alarm' ? ev.alarmId || ev.id : ev.alarmId
-    const trendKey = kind === 'trend' ? ev.trendKey || ev.id : ev.trendKey
-    const visualizationId = kind === 'visualization' ? ev.visualizationId || ev.id : ev.visualizationId
-    const hasId =
-      ev.id ||
-      pointId ||
-      frameId ||
-      alarmId ||
-      trendKey ||
-      visualizationId ||
-      ev.connectionId ||
-      ev.deviceId ||
-      ev.connId
-    if (!hasId) return { ok: false, error: '证据缺少 ID', errorCode: 'TARGET_REQUIRED' }
-    const rt = resolveTarget(pack, {
-      connectionId: ev.connectionId || ev.connId,
-      deviceId: ev.deviceId,
-      pointId,
-      frameId,
-      alarmId,
-      trendKey,
-      visualizationId,
-    })
-    const isStrict =
-      kind === 'point' ||
-      kind === 'frame' ||
-      kind === 'alarm' ||
-      kind === 'trend' ||
-      kind === 'visualization' ||
-      ev.pointId ||
-      ev.frameId ||
-      ev.alarmId ||
-      ev.trendKey ||
-      ev.visualizationId
-    if (isStrict && !rt.ok) {
-      return {
-        ok: false,
-        error: rt.error,
-        errorCode: rt.errorCode || (kind === 'visualization' ? 'VIZ_NOT_FOUND' : undefined),
-      }
-    }
-    const evVer = Number(ev.version ?? ev.configVersion)
-    if (Number.isFinite(evVer) && evVer !== (pack.configVersion || 1)) {
-      return {
-        ok: false,
-        error: `版本漂移：证据基于 v${evVer} 当前 v${pack.configVersion || 1}`,
-        errorCode: 'CONFIG_DRIFT',
-      }
-    }
-  }
-  const nextEvidence = [...(ws.focus.evidence || []), ...list].slice(-20)
-  const saved = await saveWorkspaceAsync(home, room.cwd, { focus: { ...ws.focus, evidence: nextEvidence } })
-  if (!saved.ok) return saved
-  return { ok: true, evidence: saved.workspace.focus.evidence }
 }

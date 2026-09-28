@@ -10,7 +10,6 @@ import {
   modbusRead,
   modbusWrite,
   pointsOp,
-  requestFocus,
   resolvePendingWrite,
 } from '../../application/modbus/index.mjs'
 import { runSelfCheck } from '../../application/system/self-check.mjs'
@@ -29,7 +28,7 @@ import {
   setSimConnectionState,
 } from '../../infrastructure/modbus/serial-monitor.mjs'
 import { listSerialPorts } from '../../infrastructure/modbus/serial-ports.mjs'
-import { appendEvidence, journalView, resolveManualRequest } from '../../infrastructure/store/journal-store.mjs'
+import { journalView, resolveManualRequest } from '../../infrastructure/store/journal-store.mjs'
 import { loadBindings, probeBindings, saveBindings } from '../../infrastructure/store/bindings-store.mjs'
 import { loadGlobalShare, saveGlobalShare } from '../../infrastructure/store/global-share-store.mjs'
 import { loadWorkspace, saveWorkspaceAsync } from '../../infrastructure/store/workspace-store.mjs'
@@ -48,6 +47,8 @@ import {
   WORKSPACE_CONFIG_KEYS,
   loadWorkspaceForSession,
   normalizeConnAlias,
+  rpcAppendEvidence,
+  rpcRequestFocus,
   sessionWorkspaceView,
   snapshot,
   touchSessionFromPayload,
@@ -146,7 +147,7 @@ export function createVisionRpcRouter(deps) {
         const ws = loadWorkspace(home, room.cwd)
         return {
           ok: true,
-          workspace: sessionWorkspaceView(ws, sid),
+          workspace: sessionWorkspaceView(ws, sid, room.cwd),
           journal: journalView(ws),
         }
       }
@@ -188,7 +189,7 @@ export function createVisionRpcRouter(deps) {
         })
         if (!saved.ok) return { ok: false, error: saved.error, workspace: saved.workspace }
         notifyConnectionRelease(room.cwd, changedConnectionIds(prev.modbus, saved.workspace.modbus))
-        const viewWorkspace = sessionWorkspaceView(saved.workspace, sid)
+        const viewWorkspace = sessionWorkspaceView(saved.workspace, sid, room.cwd)
         return { ok: true, workspace: viewWorkspace, journal: journalView(saved.workspace) }
       }
       case 'fs/list':
@@ -326,15 +327,9 @@ export function createVisionRpcRouter(deps) {
         })
       }
       case 'focus':
-        return requestFocus(home, body.cwd, normalizeConnAlias(/** @type {any} */ (body)))
-      case 'evidence': {
-        const room = requireWorkspaceCwd(body && typeof body === 'object' ? body.cwd : undefined)
-        if (room.error) return { ok: false, error: room.error }
-        const ev = body && typeof body === 'object' ? body.evidence || body.evidences || body.item : undefined
-        const list = Array.isArray(ev) ? ev : ev ? [ev] : []
-        if (!list.length) return { ok: false, error: '缺少 evidence' }
-        return appendEvidence(home, room.cwd, list, String(body.sessionId || ''))
-      }
+        return rpcRequestFocus(home, body)
+      case 'evidence':
+        return rpcAppendEvidence(home, body)
       case 'manual/resolve': {
         const room = requireWorkspaceCwd(body && typeof body === 'object' ? body.cwd : undefined)
         if (room.error) return { ok: false, error: room.error }

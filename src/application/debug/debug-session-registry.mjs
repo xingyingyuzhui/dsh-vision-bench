@@ -19,6 +19,8 @@ const FAILED_SESSION_TTL_MS = 5 * 60 * 1000
  *   getFailedSession: (scope: { debugSessionId: string, ownerSessionId?: string }) => import('../../types/debug.d.ts').DebugSessionView | null,
  *   listFailedSessions: (scope?: { workspaceCwd?: string }) => import('../../types/debug.d.ts').DebugSessionView[],
  *   findOwnedSession: (scope: { ownerSessionId: string, workspaceCwd?: string, debugSessionId?: string }) => import('../../types/debug.d.ts').DebugSessionView | null,
+ *   latestOwnedSnapshotRef: (scope: { ownerSessionId: string, workspaceCwd: string }) => any,
+ *   resolveOwnedSnapshotRef: (scope: { ownerSessionId: string, workspaceCwd: string, debugSessionId?: string, snapshotId: string }) => any,
  *   findSession: (predicate: (session: import('../../types/debug.d.ts').DebugSessionView) => boolean) => import('../../types/debug.d.ts').DebugSessionView | null,
  *   listSessions: () => import('../../types/debug.d.ts').DebugSessionView[],
  *   waitForOwnerSession: (scope: { ownerSessionId?: string, workspaceCwd?: string }, options?: { signal?: AbortSignal, timeoutMs?: number }) => Promise<any>,
@@ -100,6 +102,37 @@ export function createDebugSessionRegistry() {
     }
   }
 
+  /**
+   * @param {string} owner
+   * @param {string} cwd
+   */
+  function* ownedSessions(owner, cwd) {
+    for (const session of sessions.values()) {
+      if (session.state === 'failed') continue
+      if (session.ownerSessionId !== owner) continue
+      if (!sameCwd(session.workspaceCwd, cwd)) continue
+      yield session
+    }
+  }
+
+  /**
+   * @param {any} session
+   * @param {any} snap
+   */
+  function snapshotRef(session, snap) {
+    return {
+      kind: 'debug_snapshot',
+      id: snap.id,
+      snapshotId: snap.id,
+      debugSessionId: session.debugSessionId,
+      reason: snap.reason || '',
+      file: snap.location?.file || '',
+      line: snap.location?.line || 0,
+      firmwareHash: snap.firmwareHash || '',
+      at: snap.createdAt || 0,
+    }
+  }
+
   return {
     sessions,
     failedSessions,
@@ -155,6 +188,44 @@ export function createDebugSessionRegistry() {
         if (!scope.workspaceCwd || sameCwd(session.workspaceCwd, scope.workspaceCwd)) {
           return toView(session)
         }
+      }
+      return null
+    },
+
+    /**
+     * Newest snapshot of an owned session, as a minimal evidence ref.
+     * @param {{ ownerSessionId: string, workspaceCwd: string }} scope
+     */
+    latestOwnedSnapshotRef(scope) {
+      const owner = String(scope?.ownerSessionId || '').trim()
+      const cwd = String(scope?.workspaceCwd || '').trim()
+      if (!owner || !cwd) return null
+      /** @type {any} */
+      let best = null
+      for (const session of ownedSessions(owner, cwd)) {
+        const snaps = Array.isArray(session.snapshots) ? session.snapshots : []
+        const snap = snaps[snaps.length - 1]
+        if (!snap) continue
+        if (!best || (Number(snap.createdAt) || 0) >= (Number(best.snap.createdAt) || 0)) best = { session, snap }
+      }
+      return best ? snapshotRef(best.session, best.snap) : null
+    },
+
+    /**
+     * Resolve one snapshot id only inside the caller's own sessions.
+     * @param {{ ownerSessionId: string, workspaceCwd: string, debugSessionId?: string, snapshotId: string }} scope
+     */
+    resolveOwnedSnapshotRef(scope) {
+      const owner = String(scope?.ownerSessionId || '').trim()
+      const cwd = String(scope?.workspaceCwd || '').trim()
+      const snapshotId = String(scope?.snapshotId || '').trim()
+      const debugSessionId = String(scope?.debugSessionId || '').trim()
+      if (!owner || !cwd || !snapshotId) return null
+      for (const session of ownedSessions(owner, cwd)) {
+        if (debugSessionId && session.debugSessionId !== debugSessionId) continue
+        const snaps = Array.isArray(session.snapshots) ? session.snapshots : []
+        const snap = snaps.find((/** @type {any} */ s) => s && s.id === snapshotId)
+        if (snap) return snapshotRef(session, snap)
       }
       return null
     },

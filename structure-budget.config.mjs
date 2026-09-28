@@ -60,13 +60,6 @@ export default {
           "owner": "vision-bench"
         },
         {
-          "file": "src/infrastructure/store/journal-store.mjs",
-          "max": 450,
-          "reason": "P5-4 debt ratchet after journal-session split; continue toward ≤400",
-          "stage": "P6",
-          "owner": "vision-bench"
-        },
-        {
           "file": "src/interfaces/rpc/vision-rpc-router.mjs",
           "max": 452,
           "reason": "P5-4 debt ratchet; split in later P4/P6",

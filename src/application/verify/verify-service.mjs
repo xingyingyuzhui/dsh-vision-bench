@@ -16,7 +16,7 @@ import { isTimeoutOrAborted, withTimeoutSignal } from './verify-timeout.mjs'
  *   debugRuntime?: any,
  *   telemetryReader?: any,
  *   workspaceLoader?: (cwd: string) => any,
- *   evidenceBuilder?: (cwd: string) => Array<Record<string, any>>,
+ *   evidenceBuilder?: (cwd: string, ownerSessionId: string) => Array<Record<string, any>>,
  *   onJournalEvent?: ((event: any) => Promise<void>) | null,
  * }} [deps]
  */
@@ -25,6 +25,9 @@ export function createVerifyService(deps = {}) {
   const workspaceLoader = deps.workspaceLoader || (() => null)
   const evidenceBuilder = deps.evidenceBuilder || (() => [])
   const onJournalEvent = deps.onJournalEvent || null
+
+  /** @param {any} ev */
+  const isSnapshotRef = (ev) => Boolean(ev && (ev.kind === 'debug_snapshot' || ev.snapshotId))
 
   return {
     /**
@@ -49,6 +52,26 @@ export function createVerifyService(deps = {}) {
     async runVerification(options) {
       const startTime = Date.now()
       const { scenario: rawScenario, workspaceCwd, ownerSessionId, signal } = options
+      /**
+       * Snapshot evidence must belong to this owner and workspace. Runtimes without the
+       * owned lookup (older fakes) keep the caller's own debug session only.
+       * @param {any} ev
+       */
+      const ownsSnapshot = (ev) => {
+        const snapshotId = String(ev?.snapshotId || ev?.id || '')
+        if (!snapshotId) return false
+        if (typeof debugRuntime?.resolveOwnedSnapshotRef === 'function') {
+          return Boolean(
+            debugRuntime.resolveOwnedSnapshotRef({
+              ownerSessionId,
+              workspaceCwd,
+              debugSessionId: ev?.debugSessionId || undefined,
+              snapshotId,
+            }),
+          )
+        }
+        return Boolean(ownerSessionId)
+      }
       const scenario = createScenario(rawScenario)
       const timeoutMs = options.timeoutMs || scenario.timeoutMs || 60000
 
@@ -188,7 +211,9 @@ export function createVerifyService(deps = {}) {
           assertionResults.push(evaluateAssertion(spec, actualValue))
         }
 
-        const evidence = evidenceBuilder(workspaceCwd) || []
+        const evidence = (evidenceBuilder(workspaceCwd, ownerSessionId) || []).filter(
+          (/** @type {any} */ ev) => !isSnapshotRef(ev) || ownsSnapshot(ev),
+        )
 
         if (debugRuntime && debugSessionId) {
           try {
@@ -201,7 +226,7 @@ export function createVerifyService(deps = {}) {
               combinedSignal,
             )
             checkDeadline()
-            if (snapRes?.snapshot?.id) {
+            if (snapRes?.snapshot?.id && ownsSnapshot({ snapshotId: snapRes.snapshot.id, debugSessionId })) {
               evidence.push({
                 kind: 'debug_snapshot',
                 id: snapRes.snapshot.id,

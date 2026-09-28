@@ -79,6 +79,8 @@ export function createDebugRuntime(deps = {}) {
     getFailedSession: registry.getFailedSession,
     listFailedSessions: registry.listFailedSessions,
     findOwnedSession: registry.findOwnedSession,
+    latestOwnedSnapshotRef: registry.latestOwnedSnapshotRef,
+    resolveOwnedSnapshotRef: registry.resolveOwnedSnapshotRef,
     findSession: registry.findSession,
     listSessions: registry.listSessions,
     waitForOwnerSession: registry.waitForOwnerSession,

@@ -1,6 +1,6 @@
 // @ts-check
 import { connectOp, modbusRead, modbusWrite } from '../../modbus/index.mjs'
-import { buildEvidenceRefs } from '../../modbus/index.mjs'
+import { evidenceRefsForView } from '../../modbus/evidence-service.mjs'
 import { createManualRequest } from '../../../infrastructure/store/journal-store.mjs'
 import { agentLocatorError } from '../agent-locator-error.mjs'
 import { resolveTarget } from '../../../domain/modbus/target-resolver-service.mjs'
@@ -266,7 +266,7 @@ export async function handleLiveCommand(home, args, room, origin, opts) {
       alarms: alarmsOut,
       connectionId: resolvedConnectionId || pack.activeConnectionId,
       configVersion: pack.configVersion || 1,
-      evidence: buildEvidenceRefs(home, room.cwd),
+      evidence: evidenceRefsForView({ workspace, pack, sessionId: origin.sessionId, cwd: room.cwd }),
       subscription,
     }
   }

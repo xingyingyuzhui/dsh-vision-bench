@@ -1,7 +1,8 @@
 // @ts-check
-import { buildEvidenceRefs, listFrames, requestFocus } from '../../modbus/index.mjs'
-import { appendEvidence } from '../../../infrastructure/store/journal-store.mjs'
-import { ensureWorkspaceClaimed, modbusForSession } from '../../modbus/workspace-session-view.mjs'
+import { ERROR_CODES } from '../../../domain/modbus/errors.mjs'
+import { appendEvidence } from '../../modbus/evidence-append-service.mjs'
+import { buildEvidenceRefs } from '../../modbus/evidence-service.mjs'
+import { listFrames, requestFocus } from '../../modbus/index.mjs'
 import { focusGet, timelineList } from '../agent-observe-queries.mjs'
 
 /**
@@ -57,27 +58,46 @@ export async function handleEvidenceCommand(home, args, room, origin, _opts) {
         visualizationId: args.visualizationId,
         kind: args.kind,
       }
-    const ran = await requestFocus(home, room.cwd, {
-      source: origin.source,
-      sessionId: origin.sessionId,
-      target,
-      tempWatchIds: args.tempWatchIds || args.tempWatch,
-      evidence: args.evidence,
-      badgeOnly: args.badgeOnly,
-      foreground: args.foreground,
-    })
+    const ran = await requestFocus(
+      home,
+      room.cwd,
+      {
+        target,
+        tempWatchIds: args.tempWatchIds || args.tempWatch,
+        evidence: args.evidence,
+        badgeOnly: args.badgeOnly,
+        foreground: args.foreground,
+      },
+      { source: origin.source, sessionId: origin.sessionId },
+    )
     return { action, ...ran }
   }
 
   if (action === 'evidence') {
-    const evidence = buildEvidenceRefs(home, room.cwd)
-    const workspace = await ensureWorkspaceClaimed(home, room.cwd, origin.sessionId)
-    const pack = modbusForSession(workspace, origin.sessionId)
-    if (Array.isArray(args.evidence) && args.evidence.length) {
-      const appended = await appendEvidence(home, room.cwd, args.evidence, origin.sessionId)
+    for (const field of ['kind', 'id']) {
+      if (args[field] != null && args[field] !== '') {
+        return {
+          ok: false,
+          action,
+          errorCode: ERROR_CODES.INVALID_FIELD,
+          error: `${field} 不适用于 evidence 顶层`,
+          hint: '查事件用 timeline.list；追加证据用 evidence:[{kind,id,...}]；不带 evidence 为只读列出引用',
+          retryable: false,
+          details: { field, action, supportedBy: ['evidence[].kind', 'evidence[].id'] },
+        }
+      }
+    }
+    const raw = args.evidence
+    if (raw !== undefined && !Array.isArray(raw)) {
+      return { ok: false, action, errorCode: ERROR_CODES.INVALID_FIELD, error: 'evidence 必须是数组' }
+    }
+    if (Array.isArray(raw) && raw.length) {
+      const appended = await appendEvidence(home, room.cwd, raw, origin.sessionId)
       if (!appended.ok) return { ok: false, action, error: appended.error, errorCode: appended.errorCode }
     }
-    return { ok: true, action, evidence, configVersion: pack.configVersion || 1 }
+    const listed = buildEvidenceRefs(home, room.cwd, origin.sessionId)
+    if (!listed.ok) return { action, ...listed }
+    return { ok: true, action, evidence: listed.evidence, configVersion: listed.pack.configVersion || 1 }
   }
 
   return null

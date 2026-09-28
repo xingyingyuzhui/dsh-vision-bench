@@ -230,7 +230,7 @@ export function useVizActions(_React, deps) {
     try {
       postEvidence(post, cwd, evidenceFromRef(ref), (reason) => {
         if (aliveRef.current) setNote(reason)
-      })
+      }, { sessionId: props?.sessionId || '' })
     } catch {}
   }
 

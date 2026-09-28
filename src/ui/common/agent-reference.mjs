@@ -163,11 +163,14 @@ export function evidenceFromRef(ref) {
 
 // Task4/0.18.2: evidence POST must surface CONFIG_DRIFT / TARGET_MISMATCH reasons,
 // never a silent .catch(() => {}). onFail receives the human reason.
-export function postEvidence(post, cwd, evidence, onFail) {
+// `options.sessionId` is the page session scope; partitioned workspaces require it.
+export function postEvidence(post, cwd, evidence, onFail, options = {}) {
   if (typeof post !== 'function' || !cwd) return Promise.resolve(null)
   const list = Array.isArray(evidence) ? evidence : evidence ? [evidence] : []
   if (!list.length) return Promise.resolve(null)
-  return post('/dsh-vision-bench/evidence', { cwd, evidence: list }, 15000)
+  const sessionId = typeof options?.sessionId === 'string' ? options.sessionId.trim() : ''
+  const body = sessionId ? { cwd, sessionId, evidence: list } : { cwd, evidence: list }
+  return post('/dsh-vision-bench/evidence', body, 15000)
     .then((data) => {
       if (data && data.ok === false) {
         if (typeof onFail === 'function') {

@@ -25,6 +25,7 @@
  *   file?: string,
  *   line?: number,
  *   firmwareHash?: string,
+ *   sessionId?: string,
  * }} FocusEvidence
  * @typedef {{
  *   sessionId: string,
@@ -162,6 +163,8 @@ export const normalizeFocusState = (input) => {
           version: Number(rowSrc.version) > 0 ? Number(rowSrc.version) : 0,
           timeRange,
         })
+        const owner = typeof rowSrc.sessionId === 'string' ? rowSrc.sessionId.trim().slice(0, 128) : ''
+        if (owner) row.sessionId = owner
         if (kind === 'visualization' || visualizationId) {
           row.visualizationId = visualizationId
           row.componentType = componentType
